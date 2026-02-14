@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 30;
+export const runtime = "edge";
 
 const OPENSKY_BASE = "https://opensky-network.org/api";
 const OPENSKY_TOKEN_URL =
   "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
-const TOKEN_TIMEOUT_MS = 5_000;
-const FETCH_TIMEOUT_MS = 20_000;
+const TOKEN_TIMEOUT_MS = 3_000;
+const FETCH_TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 25_000;
 const MAX_REQUESTS_PER_MINUTE = 20;
 const MAX_BBOX_SPAN = 20;
@@ -83,7 +83,7 @@ async function buildAuthHeaders(): Promise<HeadersInit> {
     const user = process.env.OPENSKY_USERNAME!;
     const pass = process.env.OPENSKY_PASSWORD!;
     return {
-      Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`,
+      Authorization: `Basic ${btoa(`${user}:${pass}`)}`,
     };
   }
 
