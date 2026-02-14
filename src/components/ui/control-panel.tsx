@@ -236,7 +236,7 @@ function PanelDialog({
               </a>
               <div className="border-t border-white/3 pt-2 px-2.5">
                 <p className="text-[10px] font-medium text-white/10 tracking-wide">
-                  v0.1 · OpenSky Network
+                  v0.1 \u00b7 OpenSky Network
                 </p>
               </div>
             </div>
@@ -298,7 +298,7 @@ function PanelDialog({
             </div>
           </div>
 
-          {/* Mobile tab bar — at bottom for thumb reach */}
+          {/* Mobile tab bar */}
           <div className="flex sm:hidden items-center gap-1 border-t border-white/6 px-3 pt-2 pb-3">
             <nav className="flex flex-1 gap-1">
               {TABS.map(({ id, icon: Icon, label }) => {
@@ -423,7 +423,7 @@ function SearchContent({
                   {city.name}
                 </p>
                 <p className="text-[11px] font-medium text-white/25">
-                  {city.iata} · {city.country}
+                  {city.iata} \u00b7 {city.country}
                 </p>
               </div>
               <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/12 transition-colors group-hover:text-white/25" />
@@ -457,7 +457,7 @@ function StyleContent({
       </div>
       <div className="border-t border-white/4 px-5 py-3">
         <p className="text-[11px] font-medium text-white/12">
-          Satellite &copy; Esri · Terrain &copy; OpenTopoMap · Base maps &copy;
+          Satellite \u00a9 Esri \u00b7 Terrain \u00a9 OpenTopoMap \u00b7 Base maps \u00a9
           CARTO
         </p>
       </div>
@@ -632,7 +632,7 @@ function OrbitSpeedSlider({
   const activeLabel =
     ORBIT_SPEED_PRESETS.find(
       (p) => Math.abs(p.value - value) < ORBIT_SNAP_THRESHOLD,
-    )?.label ?? `${value.toFixed(2)}×`;
+    )?.label ?? `${value.toFixed(2)}\u00d7`;
 
   function handleChange(vals: number[]) {
     let raw = vals[0];
@@ -666,7 +666,7 @@ function OrbitSpeedSlider({
             onValueChange={handleChange}
             aria-label="Orbit speed"
           />
-          <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-[2px]">
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-0.5">
             {ORBIT_SPEED_PRESETS.map((preset) => {
               const pct =
                 ((preset.value - ORBIT_SPEED_MIN) /

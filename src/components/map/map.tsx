@@ -96,7 +96,6 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     if (!mapInstance || !isLoaded) return;
     mapInstance.setStyle(mapStyle as maplibregl.StyleSpecification | string);
 
-    // Re-apply terrain/sky after style load (MapLibre can drop these on setStyle)
     const applyTerrain = () => {
       if (typeof mapStyle === "object" && "terrain" in mapStyle) {
         const spec = mapStyle as Record<string, unknown>;
@@ -138,3 +137,5 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     </MapContext.Provider>
   );
 });
+
+Map.displayName = "Map";

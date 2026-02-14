@@ -1,3 +1,8 @@
+/** @see https://openskynetwork.github.io/opensky-api/rest.html */
+
+const OPENSKY_API = "https://opensky-network.org/api";
+const FETCH_TIMEOUT_MS = 15_000;
+
 export type FlightState = {
   icao24: string;
   callsign: string | null;
@@ -15,11 +20,9 @@ export type FlightState = {
   positionSource: number;
 };
 
-export type OpenSkyResponse = {
+type OpenSkyResponse = {
   time: number;
   states: (string | number | boolean | null)[][] | null;
-  rateLimited?: boolean;
-  creditsRemaining?: number | null;
 };
 
 function parseStates(raw: OpenSkyResponse): FlightState[] {
@@ -57,7 +60,8 @@ export type FetchResult = {
   creditsRemaining: number | null;
 };
 
-/** Fetch flights via the server-side proxy. */
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
 export async function fetchFlightsByBbox(
   lamin: number,
   lamax: number,
@@ -65,29 +69,58 @@ export async function fetchFlightsByBbox(
   lomax: number,
   signal?: AbortSignal,
 ): Promise<FetchResult> {
-  const url = `/api/flights?lamin=${lamin}&lamax=${lamax}&lomin=${lomin}&lomax=${lomax}`;
+  const la0 = clamp(lamin, -90, 90);
+  const la1 = clamp(lamax, -90, 90);
+  const lo0 = clamp(lomin, -180, 180);
+  const lo1 = clamp(lomax, -180, 180);
 
-  const res = await fetch(url, { cache: "no-store", signal });
+  const url = `${OPENSKY_API}/states/all?lamin=${la0}&lamax=${la1}&lomin=${lo0}&lomax=${lo1}`;
 
-  if (!res.ok) {
-    // Don't throw — let the hook retry gracefully
-    console.warn(`[aeris] Flight API returned ${res.status}`);
-    return { flights: [], rateLimited: false, creditsRemaining: null };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const onExternalAbort = () => controller.abort();
+  signal?.addEventListener("abort", onExternalAbort);
+
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (res.status === 429) {
+      console.warn("[aeris] OpenSky rate limit hit (429), backing off");
+      return { flights: [], rateLimited: true, creditsRemaining: null };
+    }
+
+    if (!res.ok) {
+      console.warn(`[aeris] OpenSky returned ${res.status}`);
+      return { flights: [], rateLimited: false, creditsRemaining: null };
+    }
+
+    const data: OpenSkyResponse = await res.json();
+
+    const creditsRaw = res.headers.get("x-rate-limit-remaining");
+    const creditsRemaining =
+      creditsRaw !== null ? parseInt(creditsRaw, 10) : null;
+
+    const flights = parseStates(data);
+    return {
+      flights,
+      rateLimited: false,
+      creditsRemaining: Number.isNaN(creditsRemaining)
+        ? null
+        : creditsRemaining,
+    };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      if (signal?.aborted) throw err;
+      throw new Error("OpenSky request timed out");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onExternalAbort);
   }
-
-  const data: OpenSkyResponse = await res.json();
-
-  if (data.rateLimited) {
-    console.warn("[aeris] OpenSky rate limit hit, backing off");
-    return { flights: [], rateLimited: true, creditsRemaining: null };
-  }
-
-  const flights = parseStates(data);
-  return {
-    flights,
-    rateLimited: false,
-    creditsRemaining: data.creditsRemaining ?? null,
-  };
 }
 
 export function bboxFromCenter(

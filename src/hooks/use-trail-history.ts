@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useRef, useMemo } from "react";
 import type { FlightState } from "@/lib/opensky";
 
 type Position = [lng: number, lat: number];
@@ -32,7 +32,6 @@ function catmullRomSmooth(
     const p2 = points[i + 1];
     const p3 = points[Math.min(points.length - 1, i + 2)];
 
-    // Knot intervals
     const d01 = Math.pow(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), 0.5) || 1e-6;
     const d12 = Math.pow(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), 0.5) || 1e-6;
     const d23 = Math.pow(Math.hypot(p3[0] - p2[0], p3[1] - p2[1]), 0.5) || 1e-6;
@@ -45,7 +44,6 @@ function catmullRomSmooth(
     for (let s = 1; s <= samplesPerSegment; s++) {
       const t = t1 + (t2 - t1) * (s / samplesPerSegment);
 
-      // Barry-Goldman interpolation
       const a1x =
         ((t1 - t) / (t1 - t0)) * p0[0] + ((t - t0) / (t1 - t0)) * p1[0];
       const a1y =
@@ -143,6 +141,7 @@ class TrailStore {
 }
 
 export function useTrailHistory(flights: FlightState[]): TrailEntry[] {
-  const [store] = useState(() => new TrailStore());
-  return useMemo(() => store.update(flights), [store, flights]);
+  const storeRef = useRef<TrailStore>(null);
+  if (!storeRef.current) storeRef.current = new TrailStore();
+  return useMemo(() => storeRef.current!.update(flights), [flights]);
 }

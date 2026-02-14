@@ -150,9 +150,10 @@ function CameraController({ city }: { city: City }) {
       container.addEventListener(e, resetIdleTimer, { passive: true }),
     );
 
-    map.on("movestart", () => {
+    const onMoveStart = () => {
       if (isInteractingRef.current) stopOrbit();
-    });
+    };
+    map.on("movestart", onMoveStart);
 
     idleTimerRef.current = setTimeout(() => {
       isInteractingRef.current = false;
@@ -163,6 +164,7 @@ function CameraController({ city }: { city: City }) {
       stopOrbit();
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       events.forEach((e) => container.removeEventListener(e, resetIdleTimer));
+      map.off("movestart", onMoveStart);
     };
   }, [
     map,

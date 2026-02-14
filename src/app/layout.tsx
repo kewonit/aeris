@@ -61,8 +61,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="canonical" href={siteUrl} />
-        {GA_ID && (
+        {GA_ID && /^G-[A-Z0-9]+$/.test(GA_ID) && (
           <>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
