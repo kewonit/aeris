@@ -1,15 +1,4 @@
-/**
- * OpenSky Network — browser-side client
- *
- * Calls the REST API directly from the browser (CORS is supported)
- * so requests come from the user's IP, not a cloud provider IP that
- * OpenSky may block.
- *
- * Anonymous limits: 400 credits / day, 10 s resolution.
- * Authenticated (OAuth2): 4 000 credits / day, 5 s resolution.
- *
- * @see https://openskynetwork.github.io/opensky-api/rest.html
- */
+/** @see https://openskynetwork.github.io/opensky-api/rest.html */
 
 const OPENSKY_API = "https://opensky-network.org/api";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -71,17 +60,8 @@ export type FetchResult = {
   creditsRemaining: number | null;
 };
 
-/**
- * Fetch flights directly from the OpenSky REST API (browser-side).
- *
- * Because the request originates from the user's browser, it uses the
- * user's residential/mobile IP — not a cloud-provider IP that OpenSky
- * blocks.  CORS is supported (`Access-Control-Allow-Origin: *`).
- *
- * Custom response headers (X-Rate-Limit-Remaining) are not accessible
- * via CORS unless the server exposes them, so we detect rate-limits
- * from HTTP 429 status or network errors instead.
- */
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
 export async function fetchFlightsByBbox(
   lamin: number,
   lamax: number,
@@ -89,13 +69,15 @@ export async function fetchFlightsByBbox(
   lomax: number,
   signal?: AbortSignal,
 ): Promise<FetchResult> {
-  const url = `${OPENSKY_API}/states/all?lamin=${lamin}&lamax=${lamax}&lomin=${lomin}&lomax=${lomax}`;
+  const la0 = clamp(lamin, -90, 90);
+  const la1 = clamp(lamax, -90, 90);
+  const lo0 = clamp(lomin, -180, 180);
+  const lo1 = clamp(lomax, -180, 180);
 
-  // Create a timeout that works alongside any caller-provided signal
+  const url = `${OPENSKY_API}/states/all?lamin=${la0}&lamax=${la1}&lomin=${lo0}&lomax=${lo1}`;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  // If the caller aborts, abort our controller too
   const onExternalAbort = () => controller.abort();
   signal?.addEventListener("abort", onExternalAbort);
 
@@ -117,7 +99,6 @@ export async function fetchFlightsByBbox(
 
     const data: OpenSkyResponse = await res.json();
 
-    // Try reading credits header (may be null due to CORS restrictions)
     const creditsRaw = res.headers.get("x-rate-limit-remaining");
     const creditsRemaining =
       creditsRaw !== null ? parseInt(creditsRaw, 10) : null;
@@ -131,11 +112,8 @@ export async function fetchFlightsByBbox(
         : creditsRemaining,
     };
   } catch (err) {
-    // Re-throw abort errors so the hook can distinguish them
     if (err instanceof Error && err.name === "AbortError") {
-      // If external signal triggered the abort, propagate it
       if (signal?.aborted) throw err;
-      // Otherwise it was our timeout
       throw new Error("OpenSky request timed out");
     }
     throw err;
