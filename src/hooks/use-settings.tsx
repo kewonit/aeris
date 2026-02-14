@@ -20,6 +20,7 @@ export type Settings = {
   showTrails: boolean;
   showShadows: boolean;
   showAltitudeColors: boolean;
+  globeView: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -29,10 +30,11 @@ const DEFAULT_SETTINGS: Settings = {
   showTrails: true,
   showShadows: true,
   showAltitudeColors: true,
+  globeView: true,
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 const WRITE_DEBOUNCE_MS = 300;
 
 type StorageEnvelope = {
@@ -51,7 +53,8 @@ function isValidSettings(obj: unknown): obj is Settings {
       s.orbitDirection === "counter-clockwise") &&
     typeof s.showTrails === "boolean" &&
     typeof s.showShadows === "boolean" &&
-    typeof s.showAltitudeColors === "boolean"
+    typeof s.showAltitudeColors === "boolean" &&
+    typeof s.globeView === "boolean"
   );
 }
 

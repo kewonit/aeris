@@ -34,6 +34,7 @@ type MapProps = {
   children?: ReactNode;
   className?: string;
   mapStyle?: MapStyleSpec;
+  globeView?: boolean;
   center?: [number, number];
   zoom?: number;
   pitch?: number;
@@ -49,11 +50,12 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     children,
     className,
     mapStyle = DEFAULT_STYLE.style,
+    globeView = true,
     center = [0, 20],
     zoom = 2.5,
     pitch = 49,
     bearing = -20,
-    minZoom = 2,
+    minZoom = 0,
     maxZoom = 16,
   },
   ref,
@@ -91,6 +93,12 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!mapInstance || !isLoaded) return;
+    const type = globeView ? "globe" : "mercator";
+    (mapInstance as unknown as { setProjection: (opts: { type: string }) => void }).setProjection({ type });
+  }, [mapInstance, isLoaded, globeView]);
 
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;

@@ -228,7 +228,7 @@ function FlightTrackerInner() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
-      <Map mapStyle={mapStyle.style}>
+      <Map mapStyle={mapStyle.style} globeView={settings.globeView}>
         <CameraController city={activeCity} />
         <FlightLayers
           flights={flights}

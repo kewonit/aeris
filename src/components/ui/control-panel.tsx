@@ -17,6 +17,7 @@ import {
   Palette,
   ArrowLeftRight,
   Github,
+  Globe,
 } from "lucide-react";
 import { CITIES, type City } from "@/lib/cities";
 import { MAP_STYLES, type MapStyle } from "@/lib/map-styles";
@@ -593,6 +594,16 @@ function SettingsContent() {
             />
           </>
         )}
+
+        <div className="mx-3 my-2 h-px bg-white/4" />
+
+        <SettingRow
+          icon={<Globe className="h-4 w-4" />}
+          title="Globe view"
+          description="Display the Earth as a 3D sphere"
+          checked={settings.globeView}
+          onChange={(v) => update("globeView", v)}
+        />
 
         <div className="mx-3 my-2 h-px bg-white/4" />
 
