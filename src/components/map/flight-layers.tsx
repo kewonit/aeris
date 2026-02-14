@@ -11,6 +11,28 @@ import type { PickingInfo } from "@deck.gl/core";
 
 const ANIM_DURATION_MS = 30_000;
 const TELEPORT_THRESHOLD = 0.3; // degrees
+const TRAIL_BELOW_AIRCRAFT_METERS = 20;
+const STARTUP_TRAIL_POLLS = 3;
+const STARTUP_TRAIL_STEP_SEC = 12;
+
+function buildStartupFallbackTrail(f: FlightState): [number, number][] {
+  if (f.longitude == null || f.latitude == null) return [];
+
+  const heading = ((f.trueTrack ?? 0) * Math.PI) / 180;
+  const speed = f.velocity ?? 200;
+  const degPerSecond = speed / 111_320;
+
+  const path: [number, number][] = [];
+  for (let i = STARTUP_TRAIL_POLLS; i >= 1; i--) {
+    const distDeg = Math.min(degPerSecond * STARTUP_TRAIL_STEP_SEC * i, 0.08);
+    path.push([
+      f.longitude - Math.sin(heading) * distDeg,
+      f.latitude - Math.cos(heading) * distDeg,
+    ]);
+  }
+  path.push([f.longitude, f.latitude]);
+  return path;
+}
 
 type Snapshot = { lng: number; lat: number; alt: number; track: number };
 
@@ -296,18 +318,49 @@ export function FlightLayers({
         }
 
         if (showTrailsRef.current) {
+          const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
+          const handledIds = new Set<string>();
+          const trailData: TrailEntry[] = [];
+
+          for (const f of interpolated) {
+            if (f.longitude == null || f.latitude == null) continue;
+
+            const existing = trailMap.get(f.icao24);
+            handledIds.add(f.icao24);
+
+            if (existing && existing.path.length >= 2) {
+              trailData.push(existing);
+              continue;
+            }
+
+            const startupPath = buildStartupFallbackTrail(f);
+
+            trailData.push({
+              icao24: f.icao24,
+              path: startupPath,
+              baroAltitude: existing?.baroAltitude ?? f.baroAltitude,
+            });
+          }
+
+          for (const d of currentTrails) {
+            if (!handledIds.has(d.icao24)) {
+              trailData.push(d);
+            }
+          }
+
           layers.push(
             new PathLayer<TrailEntry>({
               id: "flight-trails",
-              data: currentTrails,
+              data: trailData,
               updateTriggers: { getPath: elapsed },
               getPath: (d) => {
                 const animFlight = interpolatedMap.get(d.icao24);
                 const alt = altitudeToElevation(
                   animFlight?.baroAltitude ?? d.baroAltitude,
                 );
+                const trailAlt = Math.max(0, alt - TRAIL_BELOW_AIRCRAFT_METERS);
                 const basePath = d.path.map(
-                  (p) => [p[0], p[1], alt] as [number, number, number],
+                  (p) => [p[0], p[1], trailAlt] as [number, number, number],
                 );
                 if (
                   animFlight &&
@@ -318,20 +371,27 @@ export function FlightLayers({
                   const ax = animFlight.longitude;
                   const ay = animFlight.latitude;
 
-                  const heading = ((animFlight.trueTrack ?? 0) * Math.PI) / 180;
-                  const fdx = Math.sin(heading);
-                  const fdy = Math.cos(heading);
+                  if (
+                    animFlight.trueTrack != null &&
+                    basePath.length > STARTUP_TRAIL_POLLS + 3 &&
+                    (animFlight.velocity ?? 0) > 40
+                  ) {
+                    const heading = (animFlight.trueTrack * Math.PI) / 180;
+                    const fdx = Math.sin(heading);
+                    const fdy = Math.cos(heading);
 
-                  for (let i = basePath.length - 1; i >= 0; i--) {
-                    const vx = basePath[i][0] - ax;
-                    const vy = basePath[i][1] - ay;
-                    if (vx * fdx + vy * fdy > 0) {
-                      basePath[i] = [ax, ay, alt];
-                    } else {
-                      break;
+                    for (let i = basePath.length - 1; i >= 0; i--) {
+                      const vx = basePath[i][0] - ax;
+                      const vy = basePath[i][1] - ay;
+                      if (vx * fdx + vy * fdy > 0) {
+                        basePath[i] = [ax, ay, trailAlt];
+                      } else {
+                        break;
+                      }
                     }
                   }
-                  basePath[basePath.length - 1] = [ax, ay, alt];
+
+                  basePath[basePath.length - 1] = [ax, ay, trailAlt];
                 }
                 return basePath;
               },
@@ -346,14 +406,15 @@ export function FlightLayers({
                     base[0],
                     base[1],
                     base[2],
-                    Math.round(tVal * tVal * 100),
+                    Math.round(70 + tVal * 130),
                   ];
                 }) as [number, number, number, number][];
               },
-              getWidth: 2,
+              getWidth: 3,
               widthUnits: "pixels",
-              widthMinPixels: 1,
-              widthMaxPixels: 4,
+              widthMinPixels: 2,
+              widthMaxPixels: 6,
+              billboard: true,
               capRounded: true,
               jointRounded: true,
             }),

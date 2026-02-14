@@ -6,6 +6,9 @@ import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 
 const IDLE_TIMEOUT_MS = 5_000;
+const DEFAULT_ZOOM = 9.2;
+const DEFAULT_PITCH = 49;
+const DEFAULT_BEARING = 27.4;
 
 export function CameraController({ city }: { city: City }) {
   const { map, isLoaded } = useMap();
@@ -22,12 +25,43 @@ export function CameraController({ city }: { city: City }) {
     prevCityRef.current = city.id;
     map.flyTo({
       center: city.coordinates,
-      zoom: 9.2,
-      pitch: 49,
-      bearing: 27.4,
+      zoom: DEFAULT_ZOOM,
+      pitch: DEFAULT_PITCH,
+      bearing: DEFAULT_BEARING,
       duration: 2800,
       essential: true,
     });
+  }, [map, isLoaded, city]);
+
+  useEffect(() => {
+    if (!map || !isLoaded || !city) return;
+
+    const onNorthUp = () => {
+      map.easeTo({
+        bearing: 0,
+        duration: 650,
+        essential: true,
+      });
+    };
+
+    const onResetView = () => {
+      map.flyTo({
+        center: city.coordinates,
+        zoom: DEFAULT_ZOOM,
+        pitch: DEFAULT_PITCH,
+        bearing: DEFAULT_BEARING,
+        duration: 1200,
+        essential: true,
+      });
+    };
+
+    window.addEventListener("aeris:north-up", onNorthUp);
+    window.addEventListener("aeris:reset-view", onResetView);
+
+    return () => {
+      window.removeEventListener("aeris:north-up", onNorthUp);
+      window.removeEventListener("aeris:reset-view", onResetView);
+    };
   }, [map, isLoaded, city]);
 
   useEffect(() => {

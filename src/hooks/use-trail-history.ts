@@ -12,9 +12,11 @@ export type TrailEntry = {
 };
 
 const MAX_POINTS = 40;
-const SYNTHETIC_COUNT = 12;
 const JUMP_THRESHOLD_DEG = 0.3;
 export const SAMPLES_PER_SEGMENT = 8;
+const HISTORICAL_BOOTSTRAP_POLLS = 3;
+const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
+const BOOTSTRAP_UPDATES = 3;
 
 // Centripetal Catmull-Rom spline (Barry-Goldman algorithm, α = 0.5).
 // Produces smooth C1 curves that pass through every control point.
@@ -72,30 +74,39 @@ function catmullRomSmooth(
   return result;
 }
 
-function synthesizeTail(f: FlightState): Position[] {
-  const lng = f.longitude!;
-  const lat = f.latitude!;
+function synthesizeHistoricalPolls(f: FlightState): Position[] {
+  if (f.longitude == null || f.latitude == null) return [];
+  const lng = f.longitude;
+  const lat = f.latitude;
   const heading = ((f.trueTrack ?? 0) * Math.PI) / 180;
   const speed = f.velocity ?? 200;
-  const step = Math.min((speed * 10) / 111_320, 0.02);
+  const degPerSecond = speed / 111_320;
 
-  const pts: Position[] = [];
-  for (let i = SYNTHETIC_COUNT; i >= 1; i--) {
-    const d = step * i;
-    pts.push([lng - Math.sin(heading) * d, lat - Math.cos(heading) * d]);
+  const polls: Position[] = [];
+  for (let i = HISTORICAL_BOOTSTRAP_POLLS; i >= 1; i--) {
+    const tSec = HISTORICAL_BOOTSTRAP_STEP_SEC * i;
+    const decay = 1 - (HISTORICAL_BOOTSTRAP_POLLS - i) * 0.08;
+    const distanceDeg = Math.min(degPerSecond * tSec * decay, 0.06);
+    polls.push([
+      lng - Math.sin(heading) * distanceDeg,
+      lat - Math.cos(heading) * distanceDeg,
+    ]);
   }
-  return pts;
+  return polls;
 }
 
 class TrailStore {
   private trails = new Map<string, Position[]>();
   private seen = new Set<string>();
+  private bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
 
   update(flights: FlightState[]): TrailEntry[] {
     const current = new Set<string>();
+    let processedFlightCount = 0;
 
     for (const f of flights) {
-      if (f.longitude === null || f.latitude === null) continue;
+      if (f.longitude == null || f.latitude == null) continue;
+      processedFlightCount += 1;
       const id = f.icao24;
       current.add(id);
 
@@ -103,8 +114,14 @@ class TrailStore {
       let trail = this.trails.get(id);
 
       if (!trail) {
-        trail = synthesizeTail(f);
+        trail =
+          this.bootstrapUpdatesRemaining > 0 ? synthesizeHistoricalPolls(f) : [];
         this.trails.set(id, trail);
+      }
+
+      if (trail.length === 0) {
+        trail.push(pos);
+        continue;
       }
 
       const last = trail[trail.length - 1];
@@ -125,13 +142,17 @@ class TrailStore {
     }
     this.seen = current;
 
+    if (this.bootstrapUpdatesRemaining > 0 && processedFlightCount > 0) {
+      this.bootstrapUpdatesRemaining -= 1;
+    }
+
     const result: TrailEntry[] = [];
     for (const f of flights) {
       const trail = this.trails.get(f.icao24);
       if (trail && trail.length >= 2) {
         result.push({
           icao24: f.icao24,
-          path: trail.length >= 3 ? catmullRomSmooth(trail) : [...trail],
+          path: trail.length >= 5 ? catmullRomSmooth(trail) : [...trail],
           baroAltitude: f.baroAltitude,
         });
       }

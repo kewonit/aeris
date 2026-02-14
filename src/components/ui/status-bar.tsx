@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { Plane, Radio, ShieldAlert } from "lucide-react";
+import { Compass, Plane, Radio, ShieldAlert } from "lucide-react";
 
 type StatusBarProps = {
   flightCount: number;
@@ -9,6 +9,8 @@ type StatusBarProps = {
   loading: boolean;
   rateLimited?: boolean;
   retryIn?: number;
+  onNorthUp?: () => void;
+  onResetView?: () => void;
 };
 
 export function StatusBar({
@@ -17,6 +19,8 @@ export function StatusBar({
   loading,
   rateLimited = false,
   retryIn = 0,
+  onNorthUp,
+  onResetView,
 }: StatusBarProps) {
   return (
     <div className="flex flex-col items-start gap-2">
@@ -46,66 +50,104 @@ export function StatusBar({
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          type: "spring",
-          stiffness: 300,
-          damping: 24,
-          delay: 0.4,
-        }}
-        className="flex items-center gap-3 rounded-xl border px-3.5 py-2 backdrop-blur-2xl"
-        style={{
-          borderColor: "rgb(var(--ui-fg) / 0.06)",
-          backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-        }}
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Radio
-              className={`h-3 w-3 ${rateLimited ? "text-amber-400/80" : "text-emerald-400/80"}`}
-            />
+      <div className="flex items-center gap-2">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            type: "spring",
+            stiffness: 300,
+            damping: 24,
+            delay: 0.4,
+          }}
+          className="flex items-center gap-3 rounded-xl border px-3.5 py-2 backdrop-blur-2xl"
+          style={{
+            borderColor: "rgb(var(--ui-fg) / 0.06)",
+            backgroundColor: "rgb(var(--ui-bg) / 0.5)",
+          }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Radio
+                className={`h-3 w-3 ${rateLimited ? "text-amber-400/80" : "text-emerald-400/80"}`}
+              />
+            </div>
+            <span
+              className="text-[11px] font-medium tracking-wide"
+              style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+            >
+              {rateLimited ? "Paused" : loading ? "Scanning..." : "Live"}
+            </span>
           </div>
+
+          <div
+            className="h-3 w-px"
+            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+          />
+
+          <div className="flex items-center gap-1.5">
+            <Plane
+              className="h-3 w-3"
+              style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
+            />
+            <span
+              className="text-[11px] font-semibold tracking-wide"
+              style={{ color: "rgb(var(--ui-fg) / 0.6)" }}
+            >
+              {flightCount}
+            </span>
+          </div>
+
+          <div
+            className="h-3 w-px"
+            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+          />
           <span
             className="text-[11px] font-medium tracking-wide"
             style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+            title={cityName}
           >
-            {rateLimited ? "Paused" : loading ? "Scanning..." : "Live"}
+            {cityName}
           </span>
-        </div>
+        </motion.div>
 
-        <div
-          className="h-3 w-px"
-          style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
-        />
-
-        <div className="flex items-center gap-1.5">
-          <Plane
-            className="h-3 w-3"
-            style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
-          />
-          <span
-            className="text-[11px] font-semibold tracking-wide"
-            style={{ color: "rgb(var(--ui-fg) / 0.6)" }}
-          >
-            {flightCount}
-          </span>
-        </div>
-
-        <div
-          className="h-3 w-px"
-          style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
-        />
-        <span
-          className="text-[11px] font-medium tracking-wide"
-          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            type: "spring",
+            stiffness: 300,
+            damping: 24,
+            delay: 0.48,
+          }}
+          className="flex items-center gap-1 rounded-xl border px-1.5 py-1.5 backdrop-blur-2xl"
+          style={{
+            borderColor: "rgb(var(--ui-fg) / 0.06)",
+            backgroundColor: "rgb(var(--ui-bg) / 0.5)",
+          }}
         >
-          {cityName}
-        </span>
-      </motion.div>
+          <button
+            type="button"
+            onClick={onNorthUp}
+            aria-label="North up"
+            title="North up"
+            className="rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-wide transition-colors"
+            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+          >
+            <Compass className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onResetView}
+            className="rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-wide transition-colors"
+            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+          >
+            Reset
+          </button>
+        </motion.div>
+      </div>
     </div>
   );
 }

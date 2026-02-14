@@ -138,6 +138,14 @@ function FlightTrackerInner() {
     }
   }, []);
 
+  const handleNorthUp = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("aeris:north-up"));
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("aeris:reset-view"));
+  }, []);
+
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
@@ -182,6 +190,8 @@ function FlightTrackerInner() {
             loading={loading}
             rateLimited={rateLimited}
             retryIn={retryIn}
+            onNorthUp={handleNorthUp}
+            onResetView={handleResetView}
           />
         </div>
 
