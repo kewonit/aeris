@@ -24,7 +24,7 @@ export type Settings = {
 
 const DEFAULT_SETTINGS: Settings = {
   autoOrbit: true,
-  orbitSpeed: 0.15,
+  orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
   showShadows: true,

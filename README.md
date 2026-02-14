@@ -4,6 +4,8 @@ Real-time 3D flight tracking — altitude-aware, visually stunning.
 
 Aeris renders live air traffic over the world's busiest airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold. Select a city, and the camera glides to that airspace with spring-eased animation.
 
+**[Live Demo](https://aeris.edbn.me)**
+
 ## Stack
 
 | Layer     | Technology                                      |
@@ -15,6 +17,7 @@ Aeris renders live air traffic over the world's busiest airspaces on a premium d
 | WebGL     | Deck.gl 9 (IconLayer, PathLayer, MapboxOverlay) |
 | Animation | Motion (Framer Motion)                          |
 | Data      | OpenSky Network API                             |
+| Hosting   | Vercel                                          |
 
 ## Getting Started
 
@@ -46,9 +49,10 @@ src/
 │       ├── control-panel.tsx  Tabbed dialog — search, map style, settings
 │       ├── flight-card.tsx    Hover card with flight details
 │       ├── scroll-area.tsx    Custom scrollbar
+│       ├── slider.tsx         Orbit speed slider (Radix)
 │       └── status-bar.tsx     Live status indicator
 ├── hooks/
-│   ├── use-flights.ts         Polling hook for OpenSky API
+│   ├── use-flights.ts         Adaptive polling hook with credit-aware throttling
 │   ├── use-settings.tsx       Settings context with localStorage persistence
 │   └── use-trail-history.ts   Trail accumulation + Catmull-Rom smoothing
 └── lib/
@@ -66,16 +70,19 @@ src/
 - **Smooth animation**: Catmull-Rom spline trails, per-frame interpolation between polls
 - **Glassmorphism**: `backdrop-blur-2xl`, `bg-black/60`, `border-white/[0.08]`
 - **Spring physics**: All UI transitions use spring easing
+- **Responsive**: Desktop sidebar dialog, mobile bottom-sheet with thumb-zone tab bar
+- **API efficiency**: Adaptive polling (30 s → 5 min) based on remaining credits, Page Visibility pause, grid-snapped cache
 - **Persistence**: Settings + map style in localStorage, `?city=IATA` URL deep links
 
 ## Environment Variables
 
-| Variable                | Required | Description                    |
-| ----------------------- | -------- | ------------------------------ |
-| `OPENSKY_CLIENT_ID`     | No       | OAuth2 client ID (recommended) |
-| `OPENSKY_CLIENT_SECRET` | No       | OAuth2 client secret           |
-| `OPENSKY_USERNAME`      | No       | Basic auth username (legacy)   |
-| `OPENSKY_PASSWORD`      | No       | Basic auth password (legacy)   |
+| Variable                | Required | Description                     |
+| ----------------------- | -------- | ------------------------------- |
+| `OPENSKY_CLIENT_ID`     | No       | OAuth2 client ID (recommended)  |
+| `OPENSKY_CLIENT_SECRET` | No       | OAuth2 client secret            |
+| `OPENSKY_USERNAME`      | No       | Basic auth username (legacy)    |
+| `OPENSKY_PASSWORD`      | No       | Basic auth password (legacy)    |
+| `NEXT_PUBLIC_GA_ID`     | No       | Google Analytics measurement ID |
 
 Without credentials, anonymous access is used (~10 requests/minute).
 

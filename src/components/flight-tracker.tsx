@@ -90,7 +90,7 @@ function CameraController({ city }: { city: City }) {
     prevCityRef.current = city.id;
     map.flyTo({
       center: city.coordinates,
-      zoom: 11,
+      zoom: 9.2,
       pitch: 49,
       bearing: 27.4,
       duration: 2800,

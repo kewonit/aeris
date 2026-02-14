@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 10;
+export const maxDuration = 30;
 
 const OPENSKY_BASE = "https://opensky-network.org/api";
 const OPENSKY_TOKEN_URL =
   "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
-const TOKEN_TIMEOUT_MS = 3_000;
-const FETCH_TIMEOUT_MS = 5_000;
-const CACHE_TTL_MS = 10_000;
+const TOKEN_TIMEOUT_MS = 5_000;
+const FETCH_TIMEOUT_MS = 20_000;
+const CACHE_TTL_MS = 25_000;
 const MAX_REQUESTS_PER_MINUTE = 20;
 const MAX_BBOX_SPAN = 20;
-
-// --- OAuth2 token cache ---
+const CACHE_GRID_STEP = 0.5;
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
@@ -58,8 +57,6 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-// --- Auth ---
-
 type AuthMode = "oauth2" | "basic" | "anonymous";
 let authDisabled = false;
 let authLoggedOnce = false;
@@ -99,8 +96,6 @@ function logAuthOnce() {
   console.info(`[aeris] Auth mode: ${detectAuthMode()}`);
 }
 
-// --- Per-IP rate limiter ---
-
 const requestLog = new Map<string, number[]>();
 
 function isRateLimited(ip: string): boolean {
@@ -119,8 +114,6 @@ function isRateLimited(ip: string): boolean {
 
   return recent.length > MAX_REQUESTS_PER_MINUTE;
 }
-
-// --- Response cache ---
 
 let responseCache: {
   key: string;
@@ -143,8 +136,6 @@ function setCache(key: string, data: unknown): void {
   responseCache = { key, data, expiresAt: Date.now() + CACHE_TTL_MS };
 }
 
-// --- Fetch with timeout ---
-
 async function fetchOpenSky(
   url: string,
   useAuth: boolean,
@@ -163,8 +154,6 @@ async function fetchOpenSky(
   }
 }
 
-// --- Utilities ---
-
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
@@ -179,8 +168,6 @@ function json(
     headers: { "Cache-Control": "no-store", ...extra },
   });
 }
-
-// --- Route handler ---
 
 export async function GET(request: NextRequest) {
   const ip =
@@ -228,8 +215,18 @@ export async function GET(request: NextRequest) {
 
   logAuthOnce();
 
-  const url = `${OPENSKY_BASE}/states/all?lamin=${coords.lamin}&lamax=${coords.lamax}&lomin=${coords.lomin}&lomax=${coords.lomax}`;
-  const cacheKey = `${coords.lamin},${coords.lamax},${coords.lomin},${coords.lomax}`;
+  // Snap bbox to grid so nearby viewports share cache entries
+  const snap = (v: number) =>
+    Math.round(v / CACHE_GRID_STEP) * CACHE_GRID_STEP;
+  const snapped = {
+    lamin: snap(coords.lamin),
+    lamax: snap(coords.lamax),
+    lomin: snap(coords.lomin),
+    lomax: snap(coords.lomax),
+  };
+
+  const url = `${OPENSKY_BASE}/states/all?lamin=${snapped.lamin}&lamax=${snapped.lamax}&lomin=${snapped.lomin}&lomax=${snapped.lomax}`;
+  const cacheKey = `${snapped.lamin},${snapped.lamax},${snapped.lomin},${snapped.lomax}`;
 
   const cached = getCached(cacheKey);
   if (cached) {
@@ -273,12 +270,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const creditsRaw = res.headers.get("X-Rate-Limit-Remaining");
+    const creditsRemaining =
+      creditsRaw !== null ? parseInt(creditsRaw, 10) : null;
+
     let data;
     try {
       data = await res.json();
     } catch {
       console.error("[aeris] OpenSky returned non-JSON response");
       return json({ error: "Upstream returned invalid response" }, 502);
+    }
+
+    if (creditsRemaining !== null && !Number.isNaN(creditsRemaining)) {
+      data.creditsRemaining = creditsRemaining;
     }
 
     setCache(cacheKey, data);

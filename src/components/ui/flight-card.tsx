@@ -30,12 +30,12 @@ export function FlightCard({ flight, x, y }: FlightCardProps) {
             damping: 28,
             mass: 0.8,
           }}
-          className="pointer-events-none fixed z-50 w-72"
+          className="pointer-events-none fixed z-50 w-64 sm:w-72"
           role="status"
           aria-live="polite"
           style={{
-            left: `min(${x + 16}px, calc(100vw - 304px))`,
-            top: `min(${y - 8}px, calc(100vh - 280px))`,
+            left: `clamp(8px, ${x + 16}px, calc(100vw - 272px))`,
+            top: `clamp(8px, ${y - 8}px, calc(100vh - 280px))`,
           }}
         >
           <div className="rounded-2xl border border-white/8 bg-black/60 p-4 shadow-2xl shadow-black/40 backdrop-blur-2xl">

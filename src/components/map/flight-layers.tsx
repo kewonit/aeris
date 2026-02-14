@@ -6,13 +6,10 @@ import { IconLayer, PathLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
-import {
-  SAMPLES_PER_SEGMENT,
-  type TrailEntry,
-} from "@/hooks/use-trail-history";
+import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
-const ANIM_DURATION_MS = 15_000;
+const ANIM_DURATION_MS = 30_000;
 const TELEPORT_THRESHOLD = 0.3; // degrees
 
 type Snapshot = { lng: number; lat: number; alt: number; track: number };
@@ -312,7 +309,6 @@ export function FlightLayers({
                 const basePath = d.path.map(
                   (p) => [p[0], p[1], alt] as [number, number, number],
                 );
-                // Reveal spline points progressively to match the animated position
                 if (
                   animFlight &&
                   animFlight.longitude != null &&
@@ -321,15 +317,26 @@ export function FlightLayers({
                 ) {
                   const ax = animFlight.longitude;
                   const ay = animFlight.latitude;
-                  const segLen = Math.min(
-                    SAMPLES_PER_SEGMENT,
-                    basePath.length - 1,
-                  );
-                  const reveal = Math.floor(tPos * segLen);
-                  const collapseFrom = basePath.length - segLen + reveal;
 
-                  for (let i = collapseFrom; i < basePath.length; i++) {
-                    basePath[i] = [ax, ay, alt];
+                  const curr = currSnapshotsRef.current.get(d.icao24);
+                  const prev = prevSnapshotsRef.current.get(d.icao24);
+
+                  if (curr && prev) {
+                    // Direction from prev → curr
+                    const fdx = curr.lng - prev.lng;
+                    const fdy = curr.lat - prev.lat;
+
+                    // Walk backward; collapse points that are ahead of the
+                    // animated position (positive projection along flight dir)
+                    for (let i = basePath.length - 1; i >= 0; i--) {
+                      const vx = basePath[i][0] - ax;
+                      const vy = basePath[i][1] - ay;
+                      if (vx * fdx + vy * fdy > 0) {
+                        basePath[i] = [ax, ay, alt];
+                      } else {
+                        break;
+                      }
+                    }
                   }
                   basePath[basePath.length - 1] = [ax, ay, alt];
                 }

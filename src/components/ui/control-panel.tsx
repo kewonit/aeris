@@ -15,7 +15,6 @@ import {
   Route,
   Layers,
   Palette,
-  Gauge,
   ArrowLeftRight,
   Github,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import { CITIES, type City } from "@/lib/cities";
 import { MAP_STYLES, type MapStyle } from "@/lib/map-styles";
 import { useSettings, type OrbitDirection } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 
 type TabId = "search" | "style" | "settings";
 
@@ -52,7 +52,6 @@ export function ControlPanel({
 
   return (
     <>
-      {/* Trigger buttons */}
       {TABS.map(({ id, icon: Icon, label }) => (
         <motion.button
           key={id}
@@ -72,7 +71,6 @@ export function ControlPanel({
         </motion.button>
       ))}
 
-      {/* Dialog */}
       <AnimatePresence>
         {openTab && (
           <PanelDialog
@@ -158,7 +156,6 @@ function PanelDialog({
 
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -168,7 +165,6 @@ function PanelDialog({
         onClick={onClose}
       />
 
-      {/* Panel */}
       <motion.div
         ref={dialogRef}
         initial={{ opacity: 0, scale: 0.94, y: 16 }}
@@ -180,14 +176,14 @@ function PanelDialog({
           damping: 30,
           mass: 0.8,
         }}
-        className="fixed left-1/2 top-1/2 z-90 w-full max-w-180 -translate-x-1/2 -translate-y-1/2 px-4"
+        className="fixed inset-x-3 bottom-3 top-auto z-90 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-180 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby="panel-dialog-title"
       >
-        <div className="flex overflow-hidden rounded-3xl border border-white/8 bg-[#0c0c0e]/92 shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-3xl backdrop-saturate-[1.8]">
-          {/* Sidebar */}
-          <div className="flex w-52 shrink-0 flex-col border-r border-white/6 py-5 px-3">
+        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-white/8 bg-[#0c0c0e]/92 shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-3xl backdrop-saturate-[1.8] h-[75vh] sm:h-auto sm:max-h-[85vh]">
+          {/* Desktop sidebar (hidden on mobile) */}
+          <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-white/6 py-5 px-3">
             <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-white/20">
               Controls
             </p>
@@ -246,9 +242,18 @@ function PanelDialog({
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex flex-1 flex-col h-120">
-            <div className="flex items-center justify-between px-5 pt-5 pb-2">
+          <div className="flex flex-1 flex-col min-h-0 sm:h-120">
+            {/* Mobile header */}
+            <div className="flex sm:hidden items-center justify-between px-4 pt-4 pb-2">
+              <h2
+                id="panel-dialog-title"
+                className="text-[14px] font-semibold tracking-tight text-white/90"
+              >
+                {TABS.find((t) => t.id === activeTab)?.label}
+              </h2>
+            </div>
+            {/* Desktop header */}
+            <div className="hidden sm:flex items-center justify-between px-5 pt-5 pb-2">
               <h2
                 id="panel-dialog-title"
                 className="text-[15px] font-semibold tracking-tight text-white/90"
@@ -266,7 +271,6 @@ function PanelDialog({
               </motion.button>
             </div>
 
-            {/* Content */}
             <div className="relative flex-1 overflow-hidden">
               <AnimatePresence mode="wait" initial={false}>
                 {activeTab === "search" && (
@@ -292,6 +296,50 @@ function PanelDialog({
                 )}
               </AnimatePresence>
             </div>
+          </div>
+
+          {/* Mobile tab bar — at bottom for thumb reach */}
+          <div className="flex sm:hidden items-center gap-1 border-t border-white/6 px-3 pt-2 pb-3">
+            <nav className="flex flex-1 gap-1">
+              {TABS.map(({ id, icon: Icon, label }) => {
+                const active = id === activeTab;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onTabChange(id)}
+                    className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center transition-colors ${
+                      active
+                        ? "text-white/90"
+                        : "text-white/35 active:bg-white/6"
+                    }`}
+                  >
+                    {active && (
+                      <motion.div
+                        layoutId="panel-tab-bg-mobile"
+                        className="absolute inset-0 rounded-lg bg-white/8"
+                        transition={{
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }}
+                      />
+                    )}
+                    <Icon className="relative h-3.5 w-3.5 shrink-0" />
+                    <span className="relative text-[12px] font-semibold">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+            <motion.button
+              onClick={onClose}
+              className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/6 transition-colors active:bg-white/12"
+              whileTap={{ scale: 0.9 }}
+              aria-label="Close"
+            >
+              <X className="h-3.5 w-3.5 text-white/40" />
+            </motion.button>
           </div>
         </div>
       </motion.div>
@@ -396,7 +444,7 @@ function StyleContent({
 }) {
   return (
     <ScrollArea className="h-full">
-      <div className="grid grid-cols-2 gap-3 p-5 pt-2">
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-2.5 sm:gap-3 p-4 sm:p-5 pt-2">
         {MAP_STYLES.map((style, i) => (
           <StyleTile
             key={style.id}
@@ -501,11 +549,15 @@ function StyleTile({
   );
 }
 
-const ORBIT_SPEEDS = [
+const ORBIT_SPEED_PRESETS = [
   { label: "Slow", value: 0.06 },
   { label: "Normal", value: 0.15 },
   { label: "Fast", value: 0.35 },
 ];
+
+const ORBIT_SPEED_MIN = 0.02;
+const ORBIT_SPEED_MAX = 0.5;
+const ORBIT_SNAP_THRESHOLD = 0.025;
 
 const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
   { label: "Clockwise", value: "clockwise" },
@@ -528,10 +580,7 @@ function SettingsContent() {
 
         {settings.autoOrbit && (
           <>
-            <SegmentRow
-              icon={<Gauge className="h-4 w-4" />}
-              title="Orbit speed"
-              options={ORBIT_SPEEDS}
+            <OrbitSpeedSlider
               value={settings.orbitSpeed}
               onChange={(v) => update("orbitSpeed", v)}
             />
@@ -570,6 +619,75 @@ function SettingsContent() {
         />
       </div>
     </ScrollArea>
+  );
+}
+
+function OrbitSpeedSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const activeLabel =
+    ORBIT_SPEED_PRESETS.find(
+      (p) => Math.abs(p.value - value) < ORBIT_SNAP_THRESHOLD,
+    )?.label ?? `${value.toFixed(2)}×`;
+
+  function handleChange(vals: number[]) {
+    let raw = vals[0];
+    for (const preset of ORBIT_SPEED_PRESETS) {
+      if (Math.abs(raw - preset.value) < ORBIT_SNAP_THRESHOLD) {
+        raw = preset.value;
+        break;
+      }
+    }
+    onChange(raw);
+  }
+
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/35 ring-1 ring-white/6">
+        <RotateCw className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-white/80">Orbit speed</p>
+          <span className="text-[11px] font-semibold text-white/40 tabular-nums">
+            {activeLabel}
+          </span>
+        </div>
+        <div className="relative">
+          <Slider
+            min={ORBIT_SPEED_MIN}
+            max={ORBIT_SPEED_MAX}
+            step={0.01}
+            value={[value]}
+            onValueChange={handleChange}
+            aria-label="Orbit speed"
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-[2px]">
+            {ORBIT_SPEED_PRESETS.map((preset) => {
+              const pct =
+                ((preset.value - ORBIT_SPEED_MIN) /
+                  (ORBIT_SPEED_MAX - ORBIT_SPEED_MIN)) *
+                100;
+              const isActive =
+                Math.abs(preset.value - value) < ORBIT_SNAP_THRESHOLD;
+              return (
+                <span
+                  key={preset.label}
+                  className={`absolute h-1.5 w-1.5 rounded-full -translate-x-1/2 -translate-y-1/2 transition-colors ${
+                    isActive ? "bg-white/50" : "bg-white/15"
+                  }`}
+                  style={{ left: `${pct}%` }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

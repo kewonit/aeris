@@ -19,6 +19,7 @@ export type OpenSkyResponse = {
   time: number;
   states: (string | number | boolean | null)[][] | null;
   rateLimited?: boolean;
+  creditsRemaining?: number | null;
 };
 
 function parseStates(raw: OpenSkyResponse): FlightState[] {
@@ -53,6 +54,7 @@ function parseStates(raw: OpenSkyResponse): FlightState[] {
 export type FetchResult = {
   flights: FlightState[];
   rateLimited: boolean;
+  creditsRemaining: number | null;
 };
 
 /** Fetch flights via the server-side proxy. */
@@ -70,18 +72,22 @@ export async function fetchFlightsByBbox(
   if (!res.ok) {
     // Don't throw — let the hook retry gracefully
     console.warn(`[aeris] Flight API returned ${res.status}`);
-    return { flights: [], rateLimited: false };
+    return { flights: [], rateLimited: false, creditsRemaining: null };
   }
 
   const data: OpenSkyResponse = await res.json();
 
   if (data.rateLimited) {
     console.warn("[aeris] OpenSky rate limit hit, backing off");
-    return { flights: [], rateLimited: true };
+    return { flights: [], rateLimited: true, creditsRemaining: null };
   }
 
   const flights = parseStates(data);
-  return { flights, rateLimited: false };
+  return {
+    flights,
+    rateLimited: false,
+    creditsRemaining: data.creditsRemaining ?? null,
+  };
 }
 
 export function bboxFromCenter(

@@ -8,8 +8,27 @@ import {
 } from "@/lib/opensky";
 import type { City } from "@/lib/cities";
 
-const POLL_INTERVAL_MS = 15_000;
+const BASE_POLL_MS = 30_000;
+const CONSERVATIVE_POLL_MS = 60_000;
+const CAUTIOUS_POLL_MS = 120_000;
+const EMERGENCY_POLL_MS = 300_000;
+
+// Credit thresholds (out of 4 000 daily for authenticated users)
+const CREDIT_TIER_CONSERVATIVE = 2_000; // < 50 % remaining
+const CREDIT_TIER_CAUTIOUS = 800; // < 20 %
+const CREDIT_TIER_EMERGENCY = 200; // < 5 %
+
 const RATE_LIMIT_BACKOFF_MS = 30_000;
+const VISIBILITY_RESUME_STALE_MS = 60_000;
+
+/** Choose a poll interval based on how many API credits remain today. */
+function adaptiveInterval(creditsRemaining: number | null): number {
+  if (creditsRemaining === null) return BASE_POLL_MS; // unknown → default
+  if (creditsRemaining < CREDIT_TIER_EMERGENCY) return EMERGENCY_POLL_MS;
+  if (creditsRemaining < CREDIT_TIER_CAUTIOUS) return CAUTIOUS_POLL_MS;
+  if (creditsRemaining < CREDIT_TIER_CONSERVATIVE) return CONSERVATIVE_POLL_MS;
+  return BASE_POLL_MS;
+}
 
 export function useFlights(city: City | null) {
   const [flights, setFlights] = useState<FlightState[]>([]);
@@ -17,9 +36,13 @@ export function useFlights(city: City | null) {
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const creditsRef = useRef<number | null>(null);
+  const lastFetchRef = useRef(0);
 
   const clearCountdown = useCallback(() => {
     if (countdownRef.current) {
@@ -43,9 +66,16 @@ export function useFlights(city: City | null) {
     [clearCountdown],
   );
 
+  const clearSchedule = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
   const scheduleNext = useCallback(
     (target: City, delayMs: number) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clearSchedule();
       timerRef.current = setTimeout(() => fetchData(target), delayMs);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,6 +91,7 @@ export function useFlights(city: City | null) {
       try {
         setLoading(true);
         setError(null);
+
         const bbox = bboxFromCenter(
           target.coordinates[0],
           target.coordinates[1],
@@ -78,11 +109,19 @@ export function useFlights(city: City | null) {
         setRateLimited(false);
         clearCountdown();
         setFlights(result.flights);
-        scheduleNext(target, POLL_INTERVAL_MS);
+        lastFetchRef.current = Date.now();
+
+        if (result.creditsRemaining !== null) {
+          creditsRef.current = result.creditsRemaining;
+        }
+
+        const nextInterval = adaptiveInterval(creditsRef.current);
+        scheduleNext(target, nextInterval);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Unknown error");
         setFlights([]);
+        // After an error, back off longer to avoid hammering a sick upstream
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
       } finally {
         setLoading(false);
@@ -92,10 +131,40 @@ export function useFlights(city: City | null) {
   );
 
   useEffect(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    if (!city) return;
+
+    const activeCity = city;
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        // Tab just became visible — decide whether to fetch now or schedule
+        const elapsed = Date.now() - lastFetchRef.current;
+
+        if (elapsed >= VISIBILITY_RESUME_STALE_MS) {
+          // Data is stale after being hidden for a while; fetch immediately
+          clearSchedule();
+          fetchData(activeCity);
+        } else {
+          // Data is still fresh — schedule for the remaining time
+          const interval = adaptiveInterval(creditsRef.current);
+          const remaining = Math.max(1_000, interval - elapsed);
+          clearSchedule();
+          scheduleNext(activeCity, remaining);
+        }
+      } else {
+        // Tab hidden — cancel scheduled poll to save credits
+        clearSchedule();
+      }
     }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [city, fetchData, scheduleNext, clearSchedule]);
+
+  useEffect(() => {
+    clearSchedule();
 
     if (!city) {
       setFlights([]);
@@ -109,11 +178,11 @@ export function useFlights(city: City | null) {
     fetchData(city);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clearSchedule();
       abortRef.current?.abort();
       clearCountdown();
     };
-  }, [city, fetchData, clearCountdown]);
+  }, [city, fetchData, clearCountdown, clearSchedule]);
 
   return { flights, loading, error, rateLimited, retryIn };
 }
