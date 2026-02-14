@@ -1,25 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 10;
+
 const OPENSKY_BASE = "https://opensky-network.org/api";
 const OPENSKY_TOKEN_URL =
   "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
+const TOKEN_TIMEOUT_MS = 3_000;
+const FETCH_TIMEOUT_MS = 5_000;
+const CACHE_TTL_MS = 10_000;
+const MAX_REQUESTS_PER_MINUTE = 20;
+const MAX_BBOX_SPAN = 20;
 
-// OAuth2 token cache
+// --- OAuth2 token cache ---
+
 let cachedToken: string | null = null;
-let tokenExpiresAt = 0; // epoch ms
+let tokenExpiresAt = 0;
 
 async function getAccessToken(): Promise<string | null> {
   const clientId = process.env.OPENSKY_CLIENT_ID;
   const clientSecret = process.env.OPENSKY_CLIENT_SECRET;
-
   if (!clientId || !clientSecret) return null;
 
-  // Reuse token if still valid (with 60s margin)
-  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) {
-    return cachedToken;
-  }
+  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) return cachedToken;
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TOKEN_TIMEOUT_MS);
     const res = await fetch(OPENSKY_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -29,12 +35,11 @@ async function getAccessToken(): Promise<string | null> {
         client_secret: clientSecret,
       }),
       cache: "no-store",
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
-      console.error(
-        `[aeris] OAuth2 token request failed: ${res.status} ${res.statusText}`,
-      );
+      console.error(`[aeris] Token request failed: ${res.status}`);
       cachedToken = null;
       return null;
     }
@@ -42,20 +47,18 @@ async function getAccessToken(): Promise<string | null> {
     const data = await res.json();
     cachedToken = data.access_token;
     tokenExpiresAt = Date.now() + (data.expires_in ?? 1800) * 1000;
-
-    if (process.env.NODE_ENV === "development") {
-      console.info(
-        `[aeris] OAuth2 token acquired, expires in ${data.expires_in}s`,
-      );
-    }
-
     return cachedToken;
   } catch (err) {
-    console.error("[aeris] OAuth2 token error:", err);
+    console.error(
+      "[aeris] Token error:",
+      err instanceof Error ? err.message : err,
+    );
     cachedToken = null;
     return null;
   }
 }
+
+// --- Auth ---
 
 type AuthMode = "oauth2" | "basic" | "anonymous";
 let authDisabled = false;
@@ -76,7 +79,7 @@ async function buildAuthHeaders(): Promise<HeadersInit> {
   if (mode === "oauth2") {
     const token = await getAccessToken();
     if (token) return { Authorization: `Bearer ${token}` };
-    return {}; // token fetch failed — fall through
+    return {};
   }
 
   if (mode === "basic") {
@@ -90,69 +93,94 @@ async function buildAuthHeaders(): Promise<HeadersInit> {
   return {};
 }
 
-function logAuthStatus() {
+function logAuthOnce() {
   if (authLoggedOnce) return;
   authLoggedOnce = true;
-
-  const mode = detectAuthMode();
-  const isDev = process.env.NODE_ENV === "development";
-
-  if (isDev) {
-    console.info("┌───────────────────────────────────────────────────┐");
-    if (mode === "oauth2") {
-      console.info("│  ✓ OpenSky: OAuth2 client credentials             │");
-      console.info(
-        `│    Client: ${(process.env.OPENSKY_CLIENT_ID ?? "").slice(0, 37).padEnd(39)}│`,
-      );
-    } else if (mode === "basic") {
-      console.info("│  ✓ OpenSky: Basic auth (legacy)                   │");
-      console.info(
-        `│    User: ${(process.env.OPENSKY_USERNAME ?? "").slice(0, 38).padEnd(40)}│`,
-      );
-    } else {
-      console.info("│  ✗ OpenSky: Anonymous mode (rate-limited)         │");
-      console.info("│    Set OPENSKY_CLIENT_ID & OPENSKY_CLIENT_SECRET  │");
-      console.info("│    in .env.local for authenticated access          │");
-    }
-    console.info("└───────────────────────────────────────────────────┘");
-  } else {
-    console.info(`[aeris] Proxy: ${mode} mode`);
-  }
+  console.info(`[aeris] Auth mode: ${detectAuthMode()}`);
 }
 
-// Per-IP rate limiter
+// --- Per-IP rate limiter ---
+
 const requestLog = new Map<string, number[]>();
-const MAX_REQUESTS_PER_MINUTE = 20;
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
-  const windowMs = 60_000;
+  const window = 60_000;
   const timestamps = requestLog.get(ip) ?? [];
-  const recent = timestamps.filter((t) => now - t < windowMs);
+  const recent = timestamps.filter((t) => now - t < window);
   recent.push(now);
   requestLog.set(ip, recent);
 
-  // Clean up stale entries periodically
   if (requestLog.size > 500) {
     for (const [key, val] of requestLog) {
-      if (val.every((t) => now - t > windowMs)) requestLog.delete(key);
+      if (val.every((t) => now - t > window)) requestLog.delete(key);
     }
   }
 
   return recent.length > MAX_REQUESTS_PER_MINUTE;
 }
 
-function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val));
+// --- Response cache ---
+
+let responseCache: {
+  key: string;
+  data: unknown;
+  expiresAt: number;
+} | null = null;
+
+function getCached(key: string): unknown | null {
+  if (
+    responseCache &&
+    responseCache.key === key &&
+    Date.now() < responseCache.expiresAt
+  ) {
+    return responseCache.data;
+  }
+  return null;
 }
 
-async function fetchFromOpenSky(
+function setCache(key: string, data: unknown): void {
+  responseCache = { key, data, expiresAt: Date.now() + CACHE_TTL_MS };
+}
+
+// --- Fetch with timeout ---
+
+async function fetchOpenSky(
   url: string,
   useAuth: boolean,
 ): Promise<Response> {
   const headers = useAuth ? await buildAuthHeaders() : {};
-  return fetch(url, { headers, cache: "no-store" });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
+
+// --- Utilities ---
+
+function clamp(val: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, val));
+}
+
+function json(
+  body: unknown,
+  status: number,
+  extra?: Record<string, string>,
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...extra },
+  });
+}
+
+// --- Route handler ---
 
 export async function GET(request: NextRequest) {
   const ip =
@@ -161,10 +189,7 @@ export async function GET(request: NextRequest) {
     "unknown";
 
   if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { time: 0, states: null, rateLimited: true },
-      { status: 200, headers: { "Cache-Control": "no-store" } },
-    );
+    return json({ time: 0, states: null, rateLimited: true }, 200);
   }
 
   const { searchParams } = request.nextUrl;
@@ -174,23 +199,16 @@ export async function GET(request: NextRequest) {
   const lomax = searchParams.get("lomax");
 
   if (!lamin || !lamax || !lomin || !lomax) {
-    return NextResponse.json(
-      { error: "Missing required bbox parameters" },
-      { status: 400 },
-    );
+    return json({ error: "Missing required bbox parameters" }, 400);
   }
 
   const raw = { lamin: +lamin, lamax: +lamax, lomin: +lomin, lomax: +lomax };
   for (const [key, val] of Object.entries(raw)) {
     if (Number.isNaN(val)) {
-      return NextResponse.json(
-        { error: `Invalid parameter: ${key}` },
-        { status: 400 },
-      );
+      return json({ error: `Invalid parameter: ${key}` }, 400);
     }
   }
 
-  // Clamp to valid geographic ranges and limit bbox size
   const coords = {
     lamin: clamp(raw.lamin, -90, 90),
     lamax: clamp(raw.lamax, -90, 90),
@@ -198,73 +216,87 @@ export async function GET(request: NextRequest) {
     lomax: clamp(raw.lomax, -180, 180),
   };
 
-  const latSpan = Math.abs(coords.lamax - coords.lamin);
-  const lonSpan = Math.abs(coords.lomax - coords.lomin);
-  if (latSpan > 20 || lonSpan > 20) {
-    return NextResponse.json(
-      { error: "Bounding box too large (max 20° per axis)" },
-      { status: 400 },
+  if (
+    Math.abs(coords.lamax - coords.lamin) > MAX_BBOX_SPAN ||
+    Math.abs(coords.lomax - coords.lomin) > MAX_BBOX_SPAN
+  ) {
+    return json(
+      { error: `Bounding box too large (max ${MAX_BBOX_SPAN}° per axis)` },
+      400,
     );
   }
 
-  if (!authLoggedOnce) logAuthStatus();
+  logAuthOnce();
 
   const url = `${OPENSKY_BASE}/states/all?lamin=${coords.lamin}&lamax=${coords.lamax}&lomin=${coords.lomin}&lomax=${coords.lomax}`;
+  const cacheKey = `${coords.lamin},${coords.lamax},${coords.lomin},${coords.lomax}`;
+
+  const cached = getCached(cacheKey);
+  if (cached) {
+    return json(cached, 200, { "X-Cache": "HIT" });
+  }
+
   const useAuth = detectAuthMode() !== "anonymous";
 
   try {
-    let res = await fetchFromOpenSky(url, useAuth);
+    let res = await fetchOpenSky(url, useAuth);
 
-    // On 401, invalidate token/auth and retry anonymously
     if (res.status === 401 && useAuth) {
       cachedToken = null;
       tokenExpiresAt = 0;
       authDisabled = true;
-      console.warn(
-        "[aeris] Auth rejected (401). Falling back to anonymous. Check credentials in .env.local",
-      );
-      res = await fetchFromOpenSky(url, false);
+      console.warn("[aeris] Auth rejected (401), falling back to anonymous");
+      res = await fetchOpenSky(url, false);
     }
 
     if (res.status === 429) {
-      const retryAfter = res.headers.get("X-Rate-Limit-Retry-After-Seconds");
-      return NextResponse.json(
+      const retryAfter = res.headers.get(
+        "X-Rate-Limit-Retry-After-Seconds",
+      );
+      return json(
         {
           time: 0,
           states: null,
           rateLimited: true,
           retryAfter: retryAfter ? parseInt(retryAfter, 10) : null,
         },
-        { status: 200, headers: { "Cache-Control": "no-store" } },
+        200,
       );
     }
 
     if (!res.ok) {
-      console.error(`[aeris] OpenSky error: ${res.status} ${res.statusText}`);
-      return NextResponse.json(
-        { error: "Upstream data source error" },
-        { status: 502 },
+      const body = await res.text().catch(() => "");
+      console.error(`[aeris] OpenSky ${res.status}: ${body.slice(0, 300)}`);
+      return json(
+        { error: "Upstream data source error", status: res.status },
+        502,
       );
     }
 
-    const data = await res.json();
-
-    // Log remaining credits in dev
-    if (process.env.NODE_ENV === "development") {
-      const remaining = res.headers.get("X-Rate-Limit-Remaining");
-      if (remaining) {
-        console.info(`[aeris] API credits remaining: ${remaining}`);
-      }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      console.error("[aeris] OpenSky returned non-JSON response");
+      return json({ error: "Upstream returned invalid response" }, 502);
     }
 
-    return NextResponse.json(data, {
-      headers: { "Cache-Control": "no-store" },
-    });
+    setCache(cacheKey, data);
+    return json(data, 200, { "X-Cache": "MISS" });
   } catch (err) {
-    console.error("[aeris] OpenSky proxy error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch flight data" },
-      { status: 502 },
+    if (err instanceof DOMException && err.name === "AbortError") {
+      console.error(`[aeris] OpenSky timed out (${FETCH_TIMEOUT_MS}ms)`);
+      return json(
+        { error: "Upstream request timed out", timeout: true },
+        504,
+      );
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[aeris] Proxy error: ${msg}`);
+    return json(
+      { error: "Failed to fetch flight data", detail: msg },
+      502,
     );
   }
 }

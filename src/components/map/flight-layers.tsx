@@ -22,8 +22,8 @@ function lerpAngle(a: number, b: number, t: number): number {
   return a + delta * t;
 }
 
-function easeOut(t: number): number {
-  return 1 - (1 - t) * (1 - t);
+function smoothStep(t: number): number {
+  return t * t * (3 - 2 * t);
 }
 
 function createAircraftAtlas(): HTMLCanvasElement {
@@ -113,7 +113,8 @@ export function FlightLayers({
   // Capture current animated position as new "prev" on each data update
   useEffect(() => {
     const elapsed = performance.now() - dataTimestampRef.current;
-    const oldT = easeOut(Math.min(elapsed / ANIM_DURATION_MS, 1));
+    const oldLinearT = Math.min(elapsed / ANIM_DURATION_MS, 1);
+    const oldAngleT = smoothStep(oldLinearT);
 
     const newPrev = new Map<string, Snapshot>();
     for (const f of flights) {
@@ -127,10 +128,10 @@ export function FlightLayers({
         const dy = oldCurr.lat - oldPrev.lat;
         if (dx * dx + dy * dy <= TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
           newPrev.set(id, {
-            lng: oldPrev.lng + dx * oldT,
-            lat: oldPrev.lat + dy * oldT,
-            alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldT,
-            track: lerpAngle(oldPrev.track, oldCurr.track, oldT),
+            lng: oldPrev.lng + dx * oldLinearT,
+            lat: oldPrev.lat + dy * oldLinearT,
+            alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldLinearT,
+            track: lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
           });
         } else {
           newPrev.set(id, oldCurr);
@@ -207,7 +208,8 @@ export function FlightLayers({
       try {
         const elapsed = performance.now() - dataTimestampRef.current;
         const rawT = elapsed / ANIM_DURATION_MS;
-        const t = easeOut(Math.min(rawT, 1));
+        const tPos = Math.min(rawT, 1);
+        const tAngle = smoothStep(tPos);
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
@@ -248,14 +250,15 @@ export function FlightLayers({
           if (rawT <= 1) {
             return {
               ...f,
-              longitude: prev.lng + dx * t,
-              latitude: prev.lat + dy * t,
-              baroAltitude: prev.alt + (curr.alt - prev.alt) * t,
-              trueTrack: lerpAngle(prev.track, curr.track, t),
+              longitude: prev.lng + dx * tPos,
+              latitude: prev.lat + dy * tPos,
+              baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
+              trueTrack: lerpAngle(prev.track, curr.track, tAngle),
             };
           }
 
-          // Extrapolate when the next poll is delayed
+          // Extrapolate when the next poll is delayed (velocity-continuous
+          // with the linear interpolation above)
           const heading = (curr.track * Math.PI) / 180;
           const speed = f.velocity ?? 200;
           const extraSec = ((rawT - 1) * ANIM_DURATION_MS) / 1000;
@@ -322,7 +325,7 @@ export function FlightLayers({
                     SAMPLES_PER_SEGMENT,
                     basePath.length - 1,
                   );
-                  const reveal = Math.floor(t * segLen);
+                  const reveal = Math.floor(tPos * segLen);
                   const collapseFrom = basePath.length - segLen + reveal;
 
                   for (let i = collapseFrom; i < basePath.length; i++) {

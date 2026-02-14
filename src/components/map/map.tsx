@@ -95,6 +95,31 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
     mapInstance.setStyle(mapStyle as maplibregl.StyleSpecification | string);
+
+    // Re-apply terrain/sky after style load (MapLibre can drop these on setStyle)
+    const applyTerrain = () => {
+      if (typeof mapStyle === "object" && "terrain" in mapStyle) {
+        const spec = mapStyle as Record<string, unknown>;
+        try {
+          mapInstance.setTerrain(
+            spec.terrain as maplibregl.TerrainSpecification,
+          );
+        } catch {
+          /* terrain source not yet loaded */
+        }
+      } else {
+        try {
+          mapInstance.setTerrain(null);
+        } catch {
+          /* no terrain to remove */
+        }
+      }
+    };
+    mapInstance.once("style.load", applyTerrain);
+
+    return () => {
+      mapInstance.off("style.load", applyTerrain);
+    };
   }, [mapInstance, isLoaded, mapStyle]);
 
   const ctx = useMemo(

@@ -347,7 +347,7 @@ function SearchContent({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search airspace..."
           aria-label="Search cities by name, IATA code, or country"
-          className="flex-1 bg-transparent text-[14px] font-medium text-white/90 placeholder:text-white/20 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40 focus-visible:rounded"
+          className="flex-1 bg-transparent text-[14px] font-medium text-white/90 placeholder:text-white/20 outline-none"
         />
       </div>
 
