@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Deploy in Frankfurt — closest Vercel region to OpenSky's EU servers
+export const preferredRegion = "fra1";
+
 const OPENSKY_BASE = "https://opensky-network.org/api";
 const OPENSKY_TOKEN_URL =
   "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
-const TOKEN_TIMEOUT_MS = 5_000;
-const FETCH_TIMEOUT_MS = 8_000;
+const TOKEN_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS = 15_000;
+const FETCH_RETRY_COUNT = 1;
+const FETCH_RETRY_DELAY_MS = 500;
 const CACHE_TTL_MS = 25_000;
 const MAX_REQUESTS_PER_MINUTE = 20;
 const MAX_BBOX_SPAN = 20;
@@ -138,18 +143,35 @@ async function fetchOpenSky(
   url: string,
   useAuth: boolean,
 ): Promise<Response> {
-  const headers = useAuth ? await buildAuthHeaders() : {};
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      headers,
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= FETCH_RETRY_COUNT; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, FETCH_RETRY_DELAY_MS * attempt));
+    }
+
+    const headers = useAuth ? await buildAuthHeaders() : {};
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      return res;
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `[aeris] OpenSky fetch attempt ${attempt + 1} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  throw lastError;
 }
 
 function clamp(val: number, min: number, max: number) {
