@@ -118,7 +118,9 @@ export function useFlights(city: City | null) {
         const nextInterval = adaptiveInterval(creditsRef.current);
         scheduleNext(target, nextInterval);
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
+        const isAbort =
+          err instanceof Error && err.name === "AbortError";
+        if (isAbort) return;
         setError(err instanceof Error ? err.message : "Unknown error");
         setFlights([]);
         // After an error, back off longer to avoid hammering a sick upstream
