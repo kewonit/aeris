@@ -318,24 +318,17 @@ export function FlightLayers({
                   const ax = animFlight.longitude;
                   const ay = animFlight.latitude;
 
-                  const curr = currSnapshotsRef.current.get(d.icao24);
-                  const prev = prevSnapshotsRef.current.get(d.icao24);
+                  const heading = ((animFlight.trueTrack ?? 0) * Math.PI) / 180;
+                  const fdx = Math.sin(heading);
+                  const fdy = Math.cos(heading);
 
-                  if (curr && prev) {
-                    // Direction from prev → curr
-                    const fdx = curr.lng - prev.lng;
-                    const fdy = curr.lat - prev.lat;
-
-                    // Walk backward; collapse points that are ahead of the
-                    // animated position (positive projection along flight dir)
-                    for (let i = basePath.length - 1; i >= 0; i--) {
-                      const vx = basePath[i][0] - ax;
-                      const vy = basePath[i][1] - ay;
-                      if (vx * fdx + vy * fdy > 0) {
-                        basePath[i] = [ax, ay, alt];
-                      } else {
-                        break;
-                      }
+                  for (let i = basePath.length - 1; i >= 0; i--) {
+                    const vx = basePath[i][0] - ax;
+                    const vy = basePath[i][1] - ay;
+                    if (vx * fdx + vy * fdy > 0) {
+                      basePath[i] = [ax, ay, alt];
+                    } else {
+                      break;
                     }
                   }
                   basePath[basePath.length - 1] = [ax, ay, alt];

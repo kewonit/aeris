@@ -60,7 +60,8 @@ export type FetchResult = {
   creditsRemaining: number | null;
 };
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.min(Math.max(v, lo), hi);
 
 export async function fetchFlightsByBbox(
   lamin: number,
@@ -88,24 +89,20 @@ export async function fetchFlightsByBbox(
     });
 
     if (res.status === 429) {
-      console.warn("[aeris] OpenSky rate limit hit (429), backing off");
       return { flights: [], rateLimited: true, creditsRemaining: null };
     }
 
     if (!res.ok) {
-      console.warn(`[aeris] OpenSky returned ${res.status}`);
       return { flights: [], rateLimited: false, creditsRemaining: null };
     }
 
     const data: OpenSkyResponse = await res.json();
-
     const creditsRaw = res.headers.get("x-rate-limit-remaining");
     const creditsRemaining =
       creditsRaw !== null ? parseInt(creditsRaw, 10) : null;
 
-    const flights = parseStates(data);
     return {
-      flights,
+      flights: parseStates(data),
       rateLimited: false,
       creditsRemaining: Number.isNaN(creditsRemaining)
         ? null

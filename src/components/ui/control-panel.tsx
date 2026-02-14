@@ -19,6 +19,7 @@ import {
   Github,
 } from "lucide-react";
 import { CITIES, type City } from "@/lib/cities";
+import { searchAirports, airportToCity } from "@/lib/airports";
 import { MAP_STYLES, type MapStyle } from "@/lib/map-styles";
 import { useSettings, type OrbitDirection } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -375,15 +376,31 @@ function SearchContent({
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return CITIES.filter(
+  const { featured, airports } = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    if (!q)
+      return {
+        featured: CITIES,
+        airports: [] as ReturnType<typeof searchAirports>,
+      };
+
+    const featured = CITIES.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.iata.toLowerCase().includes(q) ||
         c.country.toLowerCase().includes(q),
     );
+
+    const featuredIatas = new Set(CITIES.map((c) => c.iata));
+    const airports = searchAirports(q).filter(
+      (a) => !featuredIatas.has(a.iata),
+    );
+
+    return { featured, airports };
   }, [query]);
+
+  const hasResults = featured.length > 0 || airports.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -393,45 +410,108 @@ function SearchContent({
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search airspace..."
-          aria-label="Search cities by name, IATA code, or country"
+          placeholder="Search airports..."
+          aria-label="Search airports by name, IATA code, city, or country"
           className="flex-1 bg-transparent text-[14px] font-medium text-white/90 placeholder:text-white/20 outline-none"
         />
+        {query && (
+          <button
+            onClick={() => setQuery("")}
+            className="shrink-0 text-white/20 hover:text-white/40 transition-colors"
+            aria-label="Clear search"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {filtered.length === 0 && (
+          {!hasResults && (
             <p className="py-8 text-center text-[12px] text-white/25">
-              No cities found
+              No airports found
             </p>
           )}
-          {filtered.map((city) => (
-            <button
-              key={city.id}
-              onClick={() => onSelect(city)}
-              aria-current={activeCity?.id === city.id ? "true" : undefined}
-              className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/4 ${
-                activeCity?.id === city.id ? "bg-white/6" : ""
-              }`}
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/4">
-                <MapPin className="h-3.5 w-3.5 text-white/40" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-[14px] font-medium text-white/80">
-                  {city.name}
+
+          {featured.length > 0 && (
+            <>
+              {query && (
+                <p className="px-3 pt-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/15">
+                  Featured
                 </p>
-                <p className="text-[11px] font-medium text-white/25">
-                  {city.iata} \u00b7 {city.country}
-                </p>
-              </div>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/12 transition-colors group-hover:text-white/25" />
-            </button>
-          ))}
+              )}
+              {featured.map((city) => (
+                <LocationRow
+                  key={city.id}
+                  name={city.name}
+                  detail={`${city.iata} \u00b7 ${city.country}`}
+                  isActive={activeCity?.id === city.id}
+                  onClick={() => onSelect(city)}
+                />
+              ))}
+            </>
+          )}
+
+          {airports.length > 0 && (
+            <>
+              <p
+                className={`px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/15 ${
+                  featured.length > 0 ? "pt-3" : "pt-2"
+                }`}
+              >
+                Airports
+              </p>
+              {airports.map((airport) => (
+                <LocationRow
+                  key={airport.iata}
+                  name={airport.name}
+                  detail={`${airport.iata} \u00b7 ${airport.city}, ${airport.country}`}
+                  isActive={activeCity?.iata === airport.iata}
+                  onClick={() => onSelect(airportToCity(airport))}
+                />
+              ))}
+            </>
+          )}
+
+          {!query && (
+            <p className="px-3 pt-3 pb-1 text-center text-[10px] font-medium text-white/10">
+              Search 400+ airports worldwide
+            </p>
+          )}
         </div>
       </ScrollArea>
     </div>
+  );
+}
+
+function LocationRow({
+  name,
+  detail,
+  isActive,
+  onClick,
+}: {
+  name: string;
+  detail: string;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={isActive ? "true" : undefined}
+      className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/4 ${
+        isActive ? "bg-white/6" : ""
+      }`}
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/4">
+        <MapPin className="h-3.5 w-3.5 text-white/40" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="truncate text-[14px] font-medium text-white/80">{name}</p>
+        <p className="text-[11px] font-medium text-white/25">{detail}</p>
+      </div>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/12 transition-colors group-hover:text-white/25" />
+    </button>
   );
 }
 
@@ -457,8 +537,8 @@ function StyleContent({
       </div>
       <div className="border-t border-white/4 px-5 py-3">
         <p className="text-[11px] font-medium text-white/12">
-          Satellite \u00a9 Esri \u00b7 Terrain \u00a9 OpenTopoMap \u00b7 Base maps \u00a9
-          CARTO
+          Satellite \u00a9 Esri \u00b7 Terrain \u00a9 OpenTopoMap \u00b7 Base
+          maps \u00a9 CARTO
         </p>
       </div>
     </ScrollArea>

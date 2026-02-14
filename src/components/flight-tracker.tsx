@@ -1,14 +1,10 @@
 "use client";
 
-import {
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  useSyncExternalStore,
-} from "react";
+import { useState, useCallback, useSyncExternalStore } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { Map, useMap } from "@/components/map/map";
+import { Map } from "@/components/map/map";
+import { CameraController } from "@/components/map/camera-controller";
+import { AirportLayer } from "@/components/map/airport-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FlightCard } from "@/components/ui/flight-card";
 import { ControlPanel } from "@/components/ui/control-panel";
@@ -19,28 +15,47 @@ import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
 import { CITIES, type City } from "@/lib/cities";
+import { findByIata, airportToCity } from "@/lib/airports";
 import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
 
-const IDLE_TIMEOUT_MS = 5_000;
-const DEFAULT_CITY_ID = "sfo";
+const DEFAULT_CITY_ID = "mia";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
 
 const subscribeNoop = () => () => {};
 
+let _cachedInitialCity: City | null = null;
+
 function resolveInitialCity(): City {
+  if (_cachedInitialCity) return _cachedInitialCity;
   try {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("city")?.trim().toUpperCase();
-    if (!code) return DEFAULT_CITY;
-    return (
-      CITIES.find(
-        (c) => c.iata.toUpperCase() === code || c.id === code.toLowerCase(),
-      ) ?? DEFAULT_CITY
+    if (!code) {
+      _cachedInitialCity = DEFAULT_CITY;
+      return DEFAULT_CITY;
+    }
+
+    const preset = CITIES.find(
+      (c) => c.iata.toUpperCase() === code || c.id === code.toLowerCase(),
     );
+    if (preset) {
+      _cachedInitialCity = preset;
+      return preset;
+    }
+
+    const airport = findByIata(code);
+    if (airport) {
+      _cachedInitialCity = airportToCity(airport);
+      return _cachedInitialCity;
+    }
+
+    _cachedInitialCity = DEFAULT_CITY;
+    return DEFAULT_CITY;
   } catch {
+    _cachedInitialCity = DEFAULT_CITY;
     return DEFAULT_CITY;
   }
 }
@@ -73,109 +88,6 @@ function saveMapStyle(style: MapStyle): void {
   } catch {
     /* blocked */
   }
-}
-
-function CameraController({ city }: { city: City }) {
-  const { map, isLoaded } = useMap();
-  const { settings } = useSettings();
-  const prevCityRef = useRef<string | null>(null);
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const orbitFrameRef = useRef<number | null>(null);
-  const isInteractingRef = useRef(false);
-
-  useEffect(() => {
-    if (!map || !isLoaded || !city) return;
-    if (city.id === prevCityRef.current) return;
-
-    prevCityRef.current = city.id;
-    map.flyTo({
-      center: city.coordinates,
-      zoom: 9.2,
-      pitch: 49,
-      bearing: 27.4,
-      duration: 2800,
-      essential: true,
-    });
-  }, [map, isLoaded, city]);
-
-  useEffect(() => {
-    if (!map || !isLoaded || !city || !settings.autoOrbit) {
-      if (orbitFrameRef.current) cancelAnimationFrame(orbitFrameRef.current);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      return;
-    }
-
-    const prefersReducedMotion =
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    if (prefersReducedMotion) return;
-
-    const directionMultiplier =
-      settings.orbitDirection === "clockwise" ? 1 : -1;
-    const speed = settings.orbitSpeed * directionMultiplier;
-
-    function startOrbit() {
-      if (!map || isInteractingRef.current) return;
-
-      function tick() {
-        if (!map || isInteractingRef.current) return;
-        const bearing = map.getBearing() + speed;
-        map.setBearing(bearing % 360);
-        orbitFrameRef.current = requestAnimationFrame(tick);
-      }
-
-      orbitFrameRef.current = requestAnimationFrame(tick);
-    }
-
-    function stopOrbit() {
-      if (orbitFrameRef.current) {
-        cancelAnimationFrame(orbitFrameRef.current);
-        orbitFrameRef.current = null;
-      }
-    }
-
-    function resetIdleTimer() {
-      isInteractingRef.current = true;
-      stopOrbit();
-
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => {
-        isInteractingRef.current = false;
-        startOrbit();
-      }, IDLE_TIMEOUT_MS);
-    }
-
-    const events = ["mousedown", "wheel", "touchstart"] as const;
-    const container = map.getContainer();
-    events.forEach((e) =>
-      container.addEventListener(e, resetIdleTimer, { passive: true }),
-    );
-
-    const onMoveStart = () => {
-      if (isInteractingRef.current) stopOrbit();
-    };
-    map.on("movestart", onMoveStart);
-
-    idleTimerRef.current = setTimeout(() => {
-      isInteractingRef.current = false;
-      startOrbit();
-    }, IDLE_TIMEOUT_MS);
-
-    return () => {
-      stopOrbit();
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      events.forEach((e) => container.removeEventListener(e, resetIdleTimer));
-      map.off("movestart", onMoveStart);
-    };
-  }, [
-    map,
-    isLoaded,
-    city,
-    settings.autoOrbit,
-    settings.orbitSpeed,
-    settings.orbitDirection,
-  ]);
-
-  return null;
 }
 
 function FlightTrackerInner() {
@@ -228,8 +140,13 @@ function FlightTrackerInner() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
-      <Map mapStyle={mapStyle.style}>
+      <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
         <CameraController city={activeCity} />
+        <AirportLayer
+          activeCity={activeCity}
+          onSelectAirport={setActiveCity}
+          isDark={mapStyle.dark}
+        />
         <FlightLayers
           flights={flights}
           trails={trails}

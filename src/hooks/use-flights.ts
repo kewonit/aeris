@@ -34,6 +34,7 @@ export function useFlights(city: City | null) {
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
+  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -111,6 +112,7 @@ export function useFlights(city: City | null) {
 
         if (result.creditsRemaining !== null) {
           creditsRef.current = result.creditsRemaining;
+          setCreditsRemaining(result.creditsRemaining);
         }
 
         const nextInterval = adaptiveInterval(creditsRef.current);
@@ -169,14 +171,16 @@ export function useFlights(city: City | null) {
 
     setRateLimited(false);
     clearCountdown();
-    fetchData(city);
+
+    const deferred = setTimeout(() => fetchData(city), 0);
 
     return () => {
+      clearTimeout(deferred);
       clearSchedule();
       abortRef.current?.abort();
       clearCountdown();
     };
   }, [city, fetchData, clearCountdown, clearSchedule]);
 
-  return { flights, loading, error, rateLimited, retryIn };
+  return { flights, loading, error, rateLimited, retryIn, creditsRemaining };
 }

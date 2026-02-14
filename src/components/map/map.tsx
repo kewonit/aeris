@@ -34,6 +34,7 @@ type MapProps = {
   children?: ReactNode;
   className?: string;
   mapStyle?: MapStyleSpec;
+  isDark?: boolean;
   center?: [number, number];
   zoom?: number;
   pitch?: number;
@@ -49,6 +50,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     children,
     className,
     mapStyle = DEFAULT_STYLE.style,
+    isDark = true,
     center = [0, 20],
     zoom = 2.5,
     pitch = 49,
@@ -92,11 +94,14 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isDarkRef = useRef(isDark);
+  isDarkRef.current = isDark;
+
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
     mapInstance.setStyle(mapStyle as maplibregl.StyleSpecification | string);
 
-    const applyTerrain = () => {
+    const onStyleLoad = () => {
       if (typeof mapStyle === "object" && "terrain" in mapStyle) {
         const spec = mapStyle as Record<string, unknown>;
         try {
@@ -113,11 +118,13 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
           /* no terrain to remove */
         }
       }
+
+      addAerowayLayers(mapInstance, isDarkRef.current);
     };
-    mapInstance.once("style.load", applyTerrain);
+    mapInstance.once("style.load", onStyleLoad);
 
     return () => {
-      mapInstance.off("style.load", applyTerrain);
+      mapInstance.off("style.load", onStyleLoad);
     };
   }, [mapInstance, isLoaded, mapStyle]);
 
@@ -139,3 +146,83 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
 });
 
 Map.displayName = "Map";
+
+function findVectorSource(map: maplibregl.Map): string | null {
+  const style = map.getStyle();
+  if (!style?.sources) return null;
+  for (const [name, source] of Object.entries(style.sources)) {
+    if (
+      source &&
+      typeof source === "object" &&
+      "type" in source &&
+      source.type === "vector"
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function addAerowayLayers(map: maplibregl.Map, dark: boolean): void {
+  const source = findVectorSource(map);
+  if (!source) return;
+
+  const runwayColor = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
+  const taxiwayColor = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+
+  try {
+    if (!map.getLayer("aeroway-runway")) {
+      map.addLayer({
+        id: "aeroway-runway",
+        type: "line",
+        source,
+        "source-layer": "aeroway",
+        filter: ["==", "class", "runway"],
+        minzoom: 10,
+        layout: { "line-cap": "round" },
+        paint: {
+          "line-color": runwayColor,
+          "line-width": [
+            "interpolate",
+            ["exponential", 1.5],
+            ["zoom"],
+            10,
+            1,
+            14,
+            30,
+            18,
+            100,
+          ],
+        },
+      });
+    }
+
+    if (!map.getLayer("aeroway-taxiway")) {
+      map.addLayer({
+        id: "aeroway-taxiway",
+        type: "line",
+        source,
+        "source-layer": "aeroway",
+        filter: ["==", "class", "taxiway"],
+        minzoom: 12,
+        layout: { "line-cap": "round" },
+        paint: {
+          "line-color": taxiwayColor,
+          "line-width": [
+            "interpolate",
+            ["exponential", 1.5],
+            ["zoom"],
+            12,
+            0.5,
+            14,
+            6,
+            18,
+            20,
+          ],
+        },
+      });
+    }
+  } catch {
+    /* aeroway source-layer may not exist in this tileset */
+  }
+}

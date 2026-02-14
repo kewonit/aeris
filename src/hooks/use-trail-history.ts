@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import type { FlightState } from "@/lib/opensky";
 
 type Position = [lng: number, lat: number];
@@ -141,7 +141,6 @@ class TrailStore {
 }
 
 export function useTrailHistory(flights: FlightState[]): TrailEntry[] {
-  const storeRef = useRef<TrailStore>(null);
-  if (!storeRef.current) storeRef.current = new TrailStore();
-  return useMemo(() => storeRef.current!.update(flights), [flights]);
+  const [store] = useState(() => new TrailStore());
+  return useMemo(() => store.update(flights), [flights, store]);
 }

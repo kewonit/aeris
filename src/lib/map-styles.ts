@@ -88,9 +88,7 @@ const SHADED_RELIEF_STYLE: Record<string, unknown> = {
     "sky-horizon-blend": 0.5,
     "horizon-fog-blend": 0.1,
   },
-  layers: [
-    { id: "satellite-base", type: "raster", source: "esri-satellite" },
-  ],
+  layers: [{ id: "satellite-base", type: "raster", source: "esri-satellite" }],
 };
 
 export const MAP_STYLES: MapStyle[] = [
