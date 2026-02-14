@@ -1,0 +1,45 @@
+{
+  "name": "aeris",
+  "version": "0.1.0",
+  "description": "Real-time 3D flight tracking — altitude-aware, visually stunning.",
+  "author": "kewonit",
+  "license": "AGPL-3.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@deck.gl/core": "^9.2.7",
+    "@deck.gl/geo-layers": "^9.2.7",
+    "@deck.gl/layers": "^9.2.7",
+    "@deck.gl/mapbox": "^9.2.7",
+    "@deck.gl/mesh-layers": "^9.2.7",
+    "@deck.gl/react": "^9.2.7",
+    "@loaders.gl/core": "^4.3.4",
+    "@loaders.gl/gltf": "^4.3.4",
+    "@luma.gl/core": "^9.2.6",
+    "@luma.gl/webgl": "^9.2.6",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.564.0",
+    "maplibre-gl": "^5.18.0",
+    "motion": "^12.34.0",
+    "next": "16.1.6",
+    "next-themes": "^0.4.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
