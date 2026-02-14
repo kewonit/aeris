@@ -14,6 +14,7 @@ const TELEPORT_THRESHOLD = 0.3; // degrees
 const TRAIL_BELOW_AIRCRAFT_METERS = 20;
 const STARTUP_TRAIL_POLLS = 3;
 const STARTUP_TRAIL_STEP_SEC = 12;
+const TRACK_DAMPING = 0.18;
 
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
@@ -164,11 +165,16 @@ export function FlightLayers({
     const next = new Map<string, Snapshot>();
     for (const f of flights) {
       if (f.longitude != null && f.latitude != null) {
+        const prev = newPrev.get(f.icao24);
+        const rawTrack = f.trueTrack ?? 0;
         next.set(f.icao24, {
           lng: f.longitude,
           lat: f.latitude,
           alt: f.baroAltitude ?? 0,
-          track: f.trueTrack ?? 0,
+          track:
+            prev != null
+              ? lerpAngle(prev.track, rawTrack, TRACK_DAMPING)
+              : rawTrack,
         });
       }
     }
@@ -228,7 +234,7 @@ export function FlightLayers({
         const elapsed = performance.now() - dataTimestampRef.current;
         const rawT = elapsed / ANIM_DURATION_MS;
         const tPos = Math.min(rawT, 1);
-        const tAngle = smoothStep(tPos);
+        const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
@@ -402,11 +408,12 @@ export function FlightLayers({
                   : defaultColor;
                 return Array.from({ length: len }, (_, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
+                  const fade = Math.pow(tVal, 2.4);
                   return [
-                    base[0],
-                    base[1],
-                    base[2],
-                    Math.round(70 + tVal * 130),
+                    Math.min(255, base[0] + 22),
+                    Math.min(255, base[1] + 22),
+                    Math.min(255, base[2] + 22),
+                    Math.round(20 + fade * 200),
                   ];
                 }) as [number, number, number, number][];
               },

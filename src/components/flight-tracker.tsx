@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useSyncExternalStore } from "react";
+import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
@@ -18,11 +18,14 @@ import { CITIES, type City } from "@/lib/cities";
 import { findByIata, airportToCity } from "@/lib/airports";
 import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
+import { Github, Star } from "lucide-react";
 
 const DEFAULT_CITY_ID = "mia";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
+const GITHUB_REPO_URL = "https://github.com/kewonit/aeris";
+const GITHUB_REPO_API = "https://api.github.com/repos/kewonit/aeris";
 
 const subscribeNoop = () => () => {};
 
@@ -121,6 +124,29 @@ function FlightTrackerInner() {
   const trails = useTrailHistory(flights);
   const [hoveredFlight, setHoveredFlight] = useState<FlightState | null>(null);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [repoStars, setRepoStars] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRepoStars() {
+      try {
+        const res = await fetch(GITHUB_REPO_API, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { stargazers_count?: number };
+        if (mounted && typeof data.stargazers_count === "number") {
+          setRepoStars(data.stargazers_count);
+        }
+      } catch {
+        /* silent fallback */
+      }
+    }
+
+    loadRepoStars();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleHover = useCallback((info: PickingInfo<FlightState> | null) => {
     if (info?.object) {
@@ -143,8 +169,12 @@ function FlightTrackerInner() {
   }, []);
 
   const handleResetView = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("aeris:reset-view"));
-  }, []);
+    window.dispatchEvent(
+      new CustomEvent("aeris:reset-view", {
+        detail: { center: activeCity.coordinates },
+      }),
+    );
+  }, [activeCity.coordinates]);
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
@@ -175,6 +205,41 @@ function FlightTrackerInner() {
         </div>
 
         <div className="pointer-events-auto absolute right-4 top-4 flex items-center gap-2">
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open GitHub repository"
+            className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+            style={{
+              borderWidth: 1,
+              borderColor: "rgb(var(--ui-fg) / 0.06)",
+              backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+              color: "rgb(var(--ui-fg) / 0.5)",
+            }}
+            title={
+              repoStars != null
+                ? `GitHub · ${formatStarCount(repoStars)} stars`
+                : "Open GitHub repository"
+            }
+          >
+            <Github className="h-4 w-4" />
+            {repoStars != null && (
+              <span
+                className="pointer-events-none absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
+                style={{
+                  backgroundColor: "rgb(var(--ui-bg) / 0.95)",
+                  border: "1px solid rgb(var(--ui-fg) / 0.1)",
+                  color: "rgb(var(--ui-fg) / 0.55)",
+                }}
+              >
+                <span className="flex items-center gap-0.5">
+                  <Star className="h-2 w-2" />
+                  {formatStarCount(repoStars)}
+                </span>
+              </span>
+            )}
+          </a>
           <ControlPanel
             activeCity={activeCity}
             onSelectCity={setActiveCity}
@@ -225,4 +290,10 @@ function Brand({ isDark }: { isDark: boolean }) {
       aeris
     </span>
   );
+}
+
+function formatStarCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return `${value}`;
 }

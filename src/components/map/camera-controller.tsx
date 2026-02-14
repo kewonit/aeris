@@ -44,9 +44,11 @@ export function CameraController({ city }: { city: City }) {
       });
     };
 
-    const onResetView = () => {
+    const onResetView = (event: Event) => {
+      const customEvent = event as CustomEvent<{ center?: [number, number] }>;
+      const center = customEvent.detail?.center ?? city.coordinates;
       map.flyTo({
-        center: city.coordinates,
+        center,
         zoom: DEFAULT_ZOOM,
         pitch: DEFAULT_PITCH,
         bearing: DEFAULT_BEARING,

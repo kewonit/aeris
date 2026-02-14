@@ -13,7 +13,7 @@ export type TrailEntry = {
 
 const MAX_POINTS = 40;
 const JUMP_THRESHOLD_DEG = 0.3;
-export const SAMPLES_PER_SEGMENT = 8;
+export const SAMPLES_PER_SEGMENT = 16;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
 const BOOTSTRAP_UPDATES = 3;
