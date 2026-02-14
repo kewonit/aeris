@@ -13,7 +13,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[aeris] Uncaught error:", error, info.componentStack);
+    if (process.env.NODE_ENV === "development") {
+      console.error("[aeris] Uncaught error:", error, info.componentStack);
+    }
   }
 
   render() {

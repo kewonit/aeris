@@ -177,7 +177,7 @@ function FlightTrackerInner() {
   }, [activeCity.coordinates]);
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-black">
+    <main className="relative h-dvh w-screen overflow-hidden bg-black">
       <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
         <CameraController city={activeCity} />
         <AirportLayer
@@ -202,11 +202,11 @@ function FlightTrackerInner() {
         data-map-theme={mapStyle.dark ? "dark" : "light"}
         className="pointer-events-none absolute inset-0 z-10"
       >
-        <div className="pointer-events-auto absolute left-4 top-4 flex items-center gap-3">
+        <div className="pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4">
           <Brand isDark={mapStyle.dark} />
         </div>
 
-        <div className="pointer-events-auto absolute right-4 top-4 flex items-center gap-2">
+        <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
           <a
             href={GITHUB_REPO_URL}
             target="_blank"
@@ -250,7 +250,7 @@ function FlightTrackerInner() {
           />
         </div>
 
-        <div className="pointer-events-auto absolute bottom-4 left-4">
+        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0">
           <StatusBar
             flightCount={flights.length}
             cityName={activeCity.name}
@@ -262,7 +262,7 @@ function FlightTrackerInner() {
           />
         </div>
 
-        <div className="pointer-events-auto absolute bottom-4 right-4">
+        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 sm:bottom-4 sm:right-4 sm:mb-0">
           <AltitudeLegend />
         </div>
       </div>

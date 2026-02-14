@@ -50,7 +50,7 @@ export function StatusBar({
         )}
       </AnimatePresence>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -122,7 +122,7 @@ export function StatusBar({
             damping: 24,
             delay: 0.48,
           }}
-          className="flex items-center gap-1 rounded-xl border px-1.5 py-1.5 backdrop-blur-2xl"
+          className="flex items-center gap-1.5 rounded-xl border px-2.5 py-2 backdrop-blur-2xl"
           style={{
             borderColor: "rgb(var(--ui-fg) / 0.06)",
             backgroundColor: "rgb(var(--ui-bg) / 0.5)",
@@ -133,15 +133,19 @@ export function StatusBar({
             onClick={onNorthUp}
             aria-label="North up"
             title="North up"
-            className="rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-wide transition-colors"
+            className="text-[11px] font-medium tracking-wide transition-colors"
             style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
           >
-            <Compass className="h-3.5 w-3.5" />
+            <Compass className="h-3 w-3" />
           </button>
+          <div
+            className="h-3 w-px"
+            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+          />
           <button
             type="button"
             onClick={onResetView}
-            className="rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-wide transition-colors"
+            className="text-[11px] font-medium tracking-wide transition-colors"
             style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
           >
             Reset

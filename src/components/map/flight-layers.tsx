@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer } from "@deck.gl/layers";
+import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
@@ -13,11 +14,13 @@ const DEFAULT_ANIM_DURATION_MS = 30_000;
 const MIN_ANIM_DURATION_MS = 8_000;
 const MAX_ANIM_DURATION_MS = 45_000;
 const TELEPORT_THRESHOLD = 0.3;
-const TRAIL_BELOW_AIRCRAFT_METERS = 20;
+const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 const STARTUP_TRAIL_POLLS = 3;
 const STARTUP_TRAIL_STEP_SEC = 12;
 const TRACK_DAMPING = 0.18;
 const TRAIL_SMOOTHING_ITERATIONS = 3;
+const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
+const AIRCRAFT_PX_PER_UNIT = 0.3;
 
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
@@ -164,32 +167,60 @@ function createAircraftAtlas(): HTMLCanvasElement {
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
 
+  ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = "#ffffff";
+
   ctx.beginPath();
-  ctx.moveTo(64, 12);
-  ctx.lineTo(72, 48);
-  ctx.lineTo(108, 72);
-  ctx.lineTo(104, 78);
-  ctx.lineTo(72, 66);
-  ctx.lineTo(70, 96);
+  ctx.moveTo(64, 6);
+  ctx.lineTo(71, 19);
+  ctx.lineTo(71, 33);
+  ctx.lineTo(100, 44);
+  ctx.lineTo(106, 52);
+  ctx.lineTo(80, 53);
+  ctx.lineTo(72, 56);
+  ctx.lineTo(72, 88);
+  ctx.lineTo(90, 101);
   ctx.lineTo(88, 108);
-  ctx.lineTo(86, 114);
-  ctx.lineTo(64, 104);
-  ctx.lineTo(42, 114);
+  ctx.lineTo(69, 99);
+  ctx.lineTo(69, 121);
+  ctx.lineTo(64, 126);
+  ctx.lineTo(59, 121);
+  ctx.lineTo(59, 99);
   ctx.lineTo(40, 108);
-  ctx.lineTo(58, 96);
-  ctx.lineTo(56, 66);
-  ctx.lineTo(24, 78);
-  ctx.lineTo(20, 72);
-  ctx.lineTo(56, 48);
+  ctx.lineTo(38, 101);
+  ctx.lineTo(56, 88);
+  ctx.lineTo(56, 56);
+  ctx.lineTo(48, 53);
+  ctx.lineTo(22, 52);
+  ctx.lineTo(28, 44);
+  ctx.lineTo(57, 33);
+  ctx.lineTo(57, 19);
   ctx.closePath();
   ctx.fill();
+
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath();
+  ctx.moveTo(64, 13);
+  ctx.lineTo(67, 19);
+  ctx.lineTo(64, 24);
+  ctx.lineTo(61, 19);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
 
   return canvas;
 }
 
 const AIRCRAFT_ICON_MAPPING = {
-  aircraft: { x: 0, y: 0, width: 128, height: 128, mask: true },
+  aircraft: {
+    x: 0,
+    y: 0,
+    width: 128,
+    height: 128,
+    anchorX: 64,
+    anchorY: 64,
+    mask: true,
+  },
 };
 
 let _atlasCache: string | undefined;
@@ -438,7 +469,7 @@ export function FlightLayers({
               data: interpolated,
               getPosition: (d) => [d.longitude!, d.latitude!, 0],
               getIcon: () => "aircraft",
-              getSize: 18,
+              getSize: 20,
               getColor: [0, 0, 0, 60],
               getAngle: (d) => 360 - (d.trueTrack ?? 0),
               iconAtlas: atlasUrl,
@@ -580,7 +611,7 @@ export function FlightLayers({
         }
 
         layers.push(
-          new IconLayer<FlightState>({
+          new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
             data: interpolated,
             getPosition: (d) => [
@@ -588,16 +619,20 @@ export function FlightLayers({
               d.latitude!,
               altitudeToElevation(d.baroAltitude),
             ],
-            getIcon: () => "aircraft",
-            getSize: 22,
+            getOrientation: (d) => {
+              const vr = d.verticalRate ?? 0;
+              const v = d.velocity ?? 0;
+              const pitch = v > 0 ? (-Math.atan2(vr, v) * 180) / Math.PI : 0;
+              const yaw = -(d.trueTrack ?? 0);
+              return [pitch, yaw, 90];
+            },
             getColor: (d) =>
               altColors ? altitudeToColor(d.baroAltitude) : defaultColor,
-            getAngle: (d) => 360 - (d.trueTrack ?? 0),
-            iconAtlas: atlasUrl,
-            iconMapping: AIRCRAFT_ICON_MAPPING,
-            billboard: false,
-            sizeUnits: "pixels",
-            sizeScale: 1,
+            scenegraph: AIRCRAFT_SCENEGRAPH_URL,
+            sizeScale: 25,
+            sizeMinPixels: AIRCRAFT_PX_PER_UNIT,
+            sizeMaxPixels: AIRCRAFT_PX_PER_UNIT,
+            _lighting: "pbr",
             pickable: true,
             onHover: handleHover,
             onClick: handleClick,
@@ -608,13 +643,15 @@ export function FlightLayers({
 
         overlay.setProps({ layers });
       } catch (err) {
-        console.error("[aeris] FlightLayers render error:", err);
+        if (process.env.NODE_ENV === "development") {
+          console.error("[aeris] FlightLayers render error:", err);
+        }
       }
     }
 
     buildAndPushLayers();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [atlasUrl, handleHover, handleClick]);
+  }, [atlasUrl, handleHover, handleClick, map]);
 
   return null;
 }
