@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const OPENSKY_BASE = "https://opensky-network.org/api";
 const OPENSKY_TOKEN_URL =
   "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
-const TOKEN_TIMEOUT_MS = 3_000;
+const TOKEN_TIMEOUT_MS = 5_000;
 const FETCH_TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 25_000;
 const MAX_REQUESTS_PER_MINUTE = 20;
@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
     Math.abs(coords.lomax - coords.lomin) > MAX_BBOX_SPAN
   ) {
     return json(
-      { error: `Bounding box too large (max ${MAX_BBOX_SPAN}° per axis)` },
+      { error: `Bounding box too large (max ${MAX_BBOX_SPAN}\u00b0 per axis)` },
       400,
     );
   }
@@ -287,7 +287,13 @@ export async function GET(request: NextRequest) {
     setCache(cacheKey, data);
     return json(data, 200, { "X-Cache": "MISS" });
   } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
+    const isAbort =
+      (err instanceof Error && err.name === "AbortError") ||
+      (typeof DOMException !== "undefined" &&
+        err instanceof DOMException &&
+        err.name === "AbortError");
+
+    if (isAbort) {
       console.error(`[aeris] OpenSky timed out (${FETCH_TIMEOUT_MS}ms)`);
       return json(
         { error: "Upstream request timed out", timeout: true },
