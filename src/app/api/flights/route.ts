@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// When OPENSKY_PROXY_URL is set, forward requests to the Railway proxy
+// instead of calling OpenSky directly (avoids Vercel IP blocks).
+const PROXY_URL = process.env.OPENSKY_PROXY_URL;
+
 // Deploy in Frankfurt — closest Vercel region to OpenSky's EU servers
 export const preferredRegion = "fra1";
 
@@ -10,6 +14,7 @@ const TOKEN_TIMEOUT_MS = 8_000;
 const FETCH_TIMEOUT_MS = 15_000;
 const FETCH_RETRY_COUNT = 1;
 const FETCH_RETRY_DELAY_MS = 500;
+const PROXY_TIMEOUT_MS = 20_000;
 const CACHE_TTL_MS = 25_000;
 const MAX_REQUESTS_PER_MINUTE = 20;
 const MAX_BBOX_SPAN = 20;
@@ -190,6 +195,38 @@ function json(
 }
 
 export async function GET(request: NextRequest) {
+  // --- Proxy mode: forward to Railway if configured ---
+  if (PROXY_URL) {
+    const { searchParams } = request.nextUrl;
+    const proxyUrl = `${PROXY_URL}/flights?${searchParams.toString()}`;
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+      const proxyRes = await fetch(proxyUrl, {
+        cache: "no-store",
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
+
+      const data = await proxyRes.json();
+      return NextResponse.json(data, {
+        status: proxyRes.status,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Proxy": "railway",
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[aeris] Proxy forward failed: ${msg}`);
+      return NextResponse.json(
+        { error: "Proxy request failed", detail: msg },
+        { status: 502, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  }
+
+  // --- Direct mode: call OpenSky from Vercel ---
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     request.headers.get("x-real-ip") ??
