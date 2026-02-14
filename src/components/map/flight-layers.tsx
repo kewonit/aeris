@@ -9,12 +9,15 @@ import type { FlightState } from "@/lib/opensky";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
-const ANIM_DURATION_MS = 30_000;
-const TELEPORT_THRESHOLD = 0.3; // degrees
+const DEFAULT_ANIM_DURATION_MS = 30_000;
+const MIN_ANIM_DURATION_MS = 8_000;
+const MAX_ANIM_DURATION_MS = 45_000;
+const TELEPORT_THRESHOLD = 0.3;
 const TRAIL_BELOW_AIRCRAFT_METERS = 20;
 const STARTUP_TRAIL_POLLS = 3;
 const STARTUP_TRAIL_STEP_SEC = 12;
 const TRACK_DAMPING = 0.18;
+const TRAIL_SMOOTHING_ITERATIONS = 3;
 
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
@@ -42,8 +45,116 @@ function lerpAngle(a: number, b: number, t: number): number {
   return a + delta * t;
 }
 
+function trackFromDelta(dx: number, dy: number, fallback: number): number {
+  if (dx * dx + dy * dy < 1e-10) return fallback;
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
 function smoothStep(t: number): number {
   return t * t * (3 - 2 * t);
+}
+
+type ElevatedPoint = [number, number, number];
+
+function smoothElevatedPath(
+  points: ElevatedPoint[],
+  iterations: number = TRAIL_SMOOTHING_ITERATIONS,
+): ElevatedPoint[] {
+  if (points.length < 3 || iterations <= 0) return points;
+
+  let current = points;
+  for (let iter = 0; iter < iterations; iter++) {
+    if (current.length < 3) break;
+
+    const next: ElevatedPoint[] = [current[0]];
+    for (let i = 0; i < current.length - 1; i++) {
+      const a = current[i];
+      const b = current[i + 1];
+      next.push([
+        a[0] * 0.75 + b[0] * 0.25,
+        a[1] * 0.75 + b[1] * 0.25,
+        a[2] * 0.75 + b[2] * 0.25,
+      ]);
+      next.push([
+        a[0] * 0.25 + b[0] * 0.75,
+        a[1] * 0.25 + b[1] * 0.75,
+        a[2] * 0.25 + b[2] * 0.75,
+      ]);
+    }
+    next.push(current[current.length - 1]);
+    current = next;
+  }
+
+  return current;
+}
+
+function smoothNumericSeries(values: number[]): number[] {
+  if (values.length < 3) return values;
+  const out = [...values];
+  for (let i = 1; i < values.length - 1; i++) {
+    out[i] = values[i - 1] * 0.2 + values[i] * 0.6 + values[i + 1] * 0.2;
+  }
+  return out;
+}
+
+function smoothPlanarPath(points: [number, number][]): [number, number][] {
+  if (points.length < 3) return points;
+
+  let current = points;
+  for (let pass = 0; pass < 2; pass++) {
+    const next = [...current];
+    for (let i = 1; i < current.length - 1; i++) {
+      next[i] = [
+        current[i - 1][0] * 0.2 + current[i][0] * 0.6 + current[i + 1][0] * 0.2,
+        current[i - 1][1] * 0.2 + current[i][1] * 0.6 + current[i + 1][1] * 0.2,
+      ];
+    }
+    current = next;
+  }
+
+  return current;
+}
+
+function trimPathAheadOfAircraft(
+  points: ElevatedPoint[],
+  aircraft: ElevatedPoint,
+): ElevatedPoint[] {
+  if (points.length < 2) return [aircraft];
+
+  const px = aircraft[0];
+  const py = aircraft[1];
+
+  let bestIndex = points.length - 2;
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  const searchStart = Math.max(0, points.length - 10);
+
+  for (let i = searchStart; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const denom = dx * dx + dy * dy;
+    const t =
+      denom > 1e-12
+        ? Math.max(
+            0,
+            Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / denom),
+          )
+        : 0;
+    const qx = a[0] + dx * t;
+    const qy = a[1] + dy * t;
+    const distSq = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+
+    if (distSq < bestDistanceSq) {
+      bestDistanceSq = distSq;
+      bestIndex = i;
+    }
+  }
+
+  const trimmed = points.slice(0, bestIndex + 1);
+  trimmed.push([px, py, aircraft[2]]);
+
+  return trimmed;
 }
 
 function createAircraftAtlas(): HTMLCanvasElement {
@@ -94,6 +205,8 @@ type FlightLayerProps = {
   onHover: (info: PickingInfo<FlightState> | null) => void;
   onClick: (info: PickingInfo<FlightState> | null) => void;
   showTrails: boolean;
+  trailThickness: number;
+  trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
 };
@@ -104,6 +217,8 @@ export function FlightLayers({
   onHover,
   onClick,
   showTrails,
+  trailThickness,
+  trailDistance,
   showShadows,
   showAltitudeColors,
 }: FlightLayerProps) {
@@ -114,11 +229,14 @@ export function FlightLayers({
   const prevSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
   const currSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
   const dataTimestampRef = useRef(0);
+  const animDurationRef = useRef(DEFAULT_ANIM_DURATION_MS);
   const animFrameRef = useRef(0);
 
   const flightsRef = useRef(flights);
   const trailsRef = useRef(trails);
   const showTrailsRef = useRef(showTrails);
+  const trailThicknessRef = useRef(trailThickness);
+  const trailDistanceRef = useRef(trailDistance);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
 
@@ -126,14 +244,15 @@ export function FlightLayers({
     flightsRef.current = flights;
     trailsRef.current = trails;
     showTrailsRef.current = showTrails;
+    trailThicknessRef.current = trailThickness;
+    trailDistanceRef.current = trailDistance;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
   });
 
-  // Capture current animated position as new "prev" on each data update
   useEffect(() => {
     const elapsed = performance.now() - dataTimestampRef.current;
-    const oldLinearT = Math.min(elapsed / ANIM_DURATION_MS, 1);
+    const oldLinearT = Math.min(elapsed / animDurationRef.current, 1);
     const oldAngleT = smoothStep(oldLinearT);
 
     const newPrev = new Map<string, Snapshot>();
@@ -179,7 +298,15 @@ export function FlightLayers({
       }
     }
     currSnapshotsRef.current = next;
-    dataTimestampRef.current = performance.now();
+    const now = performance.now();
+    if (dataTimestampRef.current > 0) {
+      const observedInterval = now - dataTimestampRef.current;
+      animDurationRef.current = Math.max(
+        MIN_ANIM_DURATION_MS,
+        Math.min(MAX_ANIM_DURATION_MS, observedInterval * 0.94),
+      );
+    }
+    dataTimestampRef.current = now;
   }, [flights]);
 
   const handleHover = useCallback(
@@ -232,7 +359,7 @@ export function FlightLayers({
 
       try {
         const elapsed = performance.now() - dataTimestampRef.current;
-        const rawT = elapsed / ANIM_DURATION_MS;
+        const rawT = elapsed / animDurationRef.current;
         const tPos = Math.min(rawT, 1);
         const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
@@ -249,13 +376,12 @@ export function FlightLayers({
           const curr = currSnapshotsRef.current.get(f.icao24);
           if (!curr) return f;
 
-          // Synthesize a virtual "prev" for new flights so they slide in
           let prev = prevSnapshotsRef.current.get(f.icao24);
           if (!prev) {
             const rad = (curr.track * Math.PI) / 180;
             const spd = f.velocity ?? 200;
             const step = Math.min(
-              (spd * (ANIM_DURATION_MS / 1000)) / 111_320,
+              (spd * (animDurationRef.current / 1000)) / 111_320,
               0.015,
             );
             prev = {
@@ -269,31 +395,32 @@ export function FlightLayers({
           const dx = curr.lng - prev.lng;
           const dy = curr.lat - prev.lat;
           if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
-            return f; // teleport — skip interpolation
+            return f;
           }
 
           if (rawT <= 1) {
+            const blendedTrack = lerpAngle(prev.track, curr.track, tAngle);
             return {
               ...f,
               longitude: prev.lng + dx * tPos,
               latitude: prev.lat + dy * tPos,
               baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
-              trueTrack: lerpAngle(prev.track, curr.track, tAngle),
+              trueTrack: trackFromDelta(dx, dy, blendedTrack),
             };
           }
 
-          // Extrapolate when the next poll is delayed (velocity-continuous
-          // with the linear interpolation above)
           const heading = (curr.track * Math.PI) / 180;
           const speed = f.velocity ?? 200;
-          const extraSec = ((rawT - 1) * ANIM_DURATION_MS) / 1000;
+          const extraSec = ((rawT - 1) * animDurationRef.current) / 1000;
           const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
+          const moveDx = Math.sin(heading) * extraDeg;
+          const moveDy = Math.cos(heading) * extraDeg;
           return {
             ...f,
-            longitude: curr.lng + Math.sin(heading) * extraDeg,
-            latitude: curr.lat + Math.cos(heading) * extraDeg,
+            longitude: curr.lng + moveDx,
+            latitude: curr.lat + moveDy,
             baroAltitude: curr.alt,
-            trueTrack: curr.track,
+            trueTrack: trackFromDelta(moveDx, moveDy, curr.track),
           };
         });
 
@@ -344,6 +471,9 @@ export function FlightLayers({
             trailData.push({
               icao24: f.icao24,
               path: startupPath,
+              altitudes: startupPath.map(
+                () => existing?.baroAltitude ?? f.baroAltitude,
+              ),
               baroAltitude: existing?.baroAltitude ?? f.baroAltitude,
             });
           }
@@ -360,14 +490,35 @@ export function FlightLayers({
               data: trailData,
               updateTriggers: { getPath: elapsed },
               getPath: (d) => {
+                const historyPoints = Math.max(
+                  2,
+                  Math.round(trailDistanceRef.current),
+                );
+                const pathSlice =
+                  d.path.length > historyPoints
+                    ? d.path.slice(d.path.length - historyPoints)
+                    : d.path;
+                const altitudeSlice =
+                  d.altitudes.length > historyPoints
+                    ? d.altitudes.slice(d.altitudes.length - historyPoints)
+                    : d.altitudes;
+                const smoothPathSlice = smoothPlanarPath(pathSlice);
+                const altitudeMeters = smoothNumericSeries(
+                  altitudeSlice.map((a) =>
+                    altitudeToElevation(a ?? d.baroAltitude),
+                  ),
+                );
+
                 const animFlight = interpolatedMap.get(d.icao24);
-                const alt = altitudeToElevation(
-                  animFlight?.baroAltitude ?? d.baroAltitude,
-                );
-                const trailAlt = Math.max(0, alt - TRAIL_BELOW_AIRCRAFT_METERS);
-                const basePath = d.path.map(
-                  (p) => [p[0], p[1], trailAlt] as [number, number, number],
-                );
+                const basePath = smoothPathSlice.map((p, i) => {
+                  const pointAlt =
+                    altitudeMeters[i] ?? altitudeToElevation(d.baroAltitude);
+                  const trailAlt = Math.max(
+                    0,
+                    pointAlt - TRAIL_BELOW_AIRCRAFT_METERS,
+                  );
+                  return [p[0], p[1], trailAlt] as [number, number, number];
+                });
                 if (
                   animFlight &&
                   animFlight.longitude != null &&
@@ -376,33 +527,33 @@ export function FlightLayers({
                 ) {
                   const ax = animFlight.longitude;
                   const ay = animFlight.latitude;
+                  const currentAlt = Math.max(
+                    0,
+                    altitudeToElevation(animFlight.baroAltitude) -
+                      TRAIL_BELOW_AIRCRAFT_METERS,
+                  );
 
-                  if (
-                    animFlight.trueTrack != null &&
-                    basePath.length > STARTUP_TRAIL_POLLS + 3 &&
-                    (animFlight.velocity ?? 0) > 40
-                  ) {
-                    const heading = (animFlight.trueTrack * Math.PI) / 180;
-                    const fdx = Math.sin(heading);
-                    const fdy = Math.cos(heading);
-
-                    for (let i = basePath.length - 1; i >= 0; i--) {
-                      const vx = basePath[i][0] - ax;
-                      const vy = basePath[i][1] - ay;
-                      if (vx * fdx + vy * fdy > 0) {
-                        basePath[i] = [ax, ay, trailAlt];
-                      } else {
-                        break;
-                      }
-                    }
-                  }
-
-                  basePath[basePath.length - 1] = [ax, ay, trailAlt];
+                  const clipped = trimPathAheadOfAircraft(basePath, [
+                    ax,
+                    ay,
+                    currentAlt,
+                  ]);
+                  if (clipped.length < 4) return clipped;
+                  return smoothElevatedPath(clipped);
                 }
-                return basePath;
+                if (basePath.length < 4) return basePath;
+                return smoothElevatedPath(basePath);
               },
               getColor: (d) => {
-                const len = d.path.length;
+                const historyPoints = Math.max(
+                  2,
+                  Math.round(trailDistanceRef.current),
+                );
+                const visibleLen = Math.min(d.path.length, historyPoints);
+                const len =
+                  visibleLen < 4
+                    ? visibleLen
+                    : visibleLen * 2 ** TRAIL_SMOOTHING_ITERATIONS;
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
                   : defaultColor;
@@ -417,10 +568,10 @@ export function FlightLayers({
                   ];
                 }) as [number, number, number, number][];
               },
-              getWidth: 3,
+              getWidth: trailThicknessRef.current,
               widthUnits: "pixels",
-              widthMinPixels: 2,
-              widthMaxPixels: 6,
+              widthMinPixels: Math.max(1, trailThicknessRef.current * 0.6),
+              widthMaxPixels: Math.max(2, trailThicknessRef.current * 1.8),
               billboard: true,
               capRounded: true,
               jointRounded: true,

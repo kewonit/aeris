@@ -18,15 +18,43 @@ export type Settings = {
   orbitSpeed: number;
   orbitDirection: OrbitDirection;
   showTrails: boolean;
+  trailThickness: number;
+  trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
 };
+
+const TRAIL_THICKNESS_MIN = 1;
+const TRAIL_THICKNESS_MAX = 8;
+const TRAIL_DISTANCE_MIN = 12;
+const TRAIL_DISTANCE_MAX = 100;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeSettings(input: Settings): Settings {
+  return {
+    ...input,
+    orbitSpeed: clamp(input.orbitSpeed, 0.02, 0.5),
+    trailThickness: clamp(
+      input.trailThickness,
+      TRAIL_THICKNESS_MIN,
+      TRAIL_THICKNESS_MAX,
+    ),
+    trailDistance: Math.round(
+      clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
+    ),
+  };
+}
 
 const DEFAULT_SETTINGS: Settings = {
   autoOrbit: true,
   orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
+  trailThickness: 2,
+  trailDistance: 40,
   showShadows: true,
   showAltitudeColors: true,
 };
@@ -50,6 +78,14 @@ function isValidSettings(obj: unknown): obj is Settings {
     (s.orbitDirection === "clockwise" ||
       s.orbitDirection === "counter-clockwise") &&
     typeof s.showTrails === "boolean" &&
+    typeof s.trailThickness === "number" &&
+    Number.isFinite(s.trailThickness) &&
+    s.trailThickness >= TRAIL_THICKNESS_MIN &&
+    s.trailThickness <= TRAIL_THICKNESS_MAX &&
+    typeof s.trailDistance === "number" &&
+    Number.isFinite(s.trailDistance) &&
+    s.trailDistance >= TRAIL_DISTANCE_MIN &&
+    s.trailDistance <= TRAIL_DISTANCE_MAX &&
     typeof s.showShadows === "boolean" &&
     typeof s.showAltitudeColors === "boolean"
   );
@@ -62,7 +98,6 @@ function loadSettings(): Settings {
     if (!raw) return DEFAULT_SETTINGS;
     const envelope: StorageEnvelope = JSON.parse(raw);
     if (envelope.v !== STORAGE_VERSION || !isValidSettings(envelope.data)) {
-      // Merge salvageable keys with defaults
       const merged = { ...DEFAULT_SETTINGS };
       if (typeof envelope.data === "object" && envelope.data !== null) {
         const d = envelope.data as Record<string, unknown>;
@@ -72,9 +107,9 @@ function loadSettings(): Settings {
           }
         }
       }
-      return merged;
+      return normalizeSettings(merged);
     }
-    return { ...DEFAULT_SETTINGS, ...envelope.data };
+    return normalizeSettings({ ...DEFAULT_SETTINGS, ...envelope.data });
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -93,6 +128,7 @@ function saveSettings(settings: Settings): void {
 type SettingsContextValue = {
   settings: Settings;
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  reset: () => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -138,14 +174,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     <K extends keyof Settings>(key: K, value: Settings[K]) => {
       setOverride((prev) => {
         const base = prev ?? getSettingsSnapshot();
-        return { ...base, [key]: value };
+        return normalizeSettings({ ...base, [key]: value });
       });
     },
     [],
   );
 
+  const reset = useCallback(() => {
+    setOverride({ ...DEFAULT_SETTINGS });
+  }, []);
+
   return (
-    <SettingsContext.Provider value={{ settings, update }}>
+    <SettingsContext.Provider value={{ settings, update, reset }}>
       {children}
     </SettingsContext.Provider>
   );

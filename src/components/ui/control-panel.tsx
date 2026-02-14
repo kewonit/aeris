@@ -638,6 +638,10 @@ const ORBIT_SPEED_PRESETS = [
 const ORBIT_SPEED_MIN = 0.02;
 const ORBIT_SPEED_MAX = 0.5;
 const ORBIT_SNAP_THRESHOLD = 0.025;
+const TRAIL_THICKNESS_MIN = 1;
+const TRAIL_THICKNESS_MAX = 8;
+const TRAIL_DISTANCE_MIN = 12;
+const TRAIL_DISTANCE_MAX = 100;
 
 const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
   { label: "Clockwise", value: "clockwise" },
@@ -645,7 +649,7 @@ const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
 ];
 
 function SettingsContent() {
-  const { settings, update } = useSettings();
+  const { settings, update, reset } = useSettings();
 
   return (
     <ScrollArea className="h-full">
@@ -683,6 +687,18 @@ function SettingsContent() {
           checked={settings.showTrails}
           onChange={(v) => update("showTrails", v)}
         />
+        {settings.showTrails && (
+          <>
+            <TrailThicknessSlider
+              value={settings.trailThickness}
+              onChange={(v) => update("trailThickness", v)}
+            />
+            <TrailDistanceSlider
+              value={settings.trailDistance}
+              onChange={(v) => update("trailDistance", v)}
+            />
+          </>
+        )}
         <SettingRow
           icon={<Layers className="h-4 w-4" />}
           title="Ground shadows"
@@ -697,6 +713,16 @@ function SettingsContent() {
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
         />
+
+        <div className="px-3 pt-2">
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-[12px] font-medium text-white/65 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/85"
+          >
+            Reset to defaults
+          </button>
+        </div>
       </div>
     </ScrollArea>
   );
@@ -766,6 +792,74 @@ function OrbitSpeedSlider({
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TrailThicknessSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/35 ring-1 ring-white/6">
+        <Layers className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-white/80">
+            Trail thickness
+          </p>
+          <span className="text-[11px] font-semibold text-white/40 tabular-nums">
+            {value.toFixed(1)} px
+          </span>
+        </div>
+        <Slider
+          min={TRAIL_THICKNESS_MIN}
+          max={TRAIL_THICKNESS_MAX}
+          step={0.1}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Trail thickness"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrailDistanceSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/35 ring-1 ring-white/6">
+        <Route className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-white/80">
+            Trail distance
+          </p>
+          <span className="text-[11px] font-semibold text-white/40 tabular-nums">
+            {value} pts
+          </span>
+        </div>
+        <Slider
+          min={TRAIL_DISTANCE_MIN}
+          max={TRAIL_DISTANCE_MAX}
+          step={1}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Trail distance"
+        />
       </div>
     </div>
   );

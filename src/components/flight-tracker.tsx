@@ -191,6 +191,8 @@ function FlightTrackerInner() {
           onHover={handleHover}
           onClick={handleClick}
           showTrails={settings.showTrails}
+          trailThickness={settings.trailThickness}
+          trailDistance={settings.trailDistance}
           showShadows={settings.showShadows}
           showAltitudeColors={settings.showAltitudeColors}
         />

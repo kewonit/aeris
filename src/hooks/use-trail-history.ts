@@ -5,73 +5,44 @@ import type { FlightState } from "@/lib/opensky";
 
 type Position = [lng: number, lat: number];
 
+type TrailPoint = {
+  position: Position;
+  baroAltitude: number | null;
+};
+
 export type TrailEntry = {
   icao24: string;
   path: Position[];
+  altitudes: Array<number | null>;
   baroAltitude: number | null;
 };
 
 const MAX_POINTS = 40;
 const JUMP_THRESHOLD_DEG = 0.3;
-export const SAMPLES_PER_SEGMENT = 16;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
 const BOOTSTRAP_UPDATES = 3;
+const ALTITUDE_RECENT_WINDOW = 6;
+const ALTITUDE_SOFT_STEP_METERS = 500;
+const ALTITUDE_HARD_STEP_METERS = 12_000;
+const ALTITUDE_OUTLIER_BASE_METERS = 1_200;
+const ALTITUDE_OUTLIER_SCALE = 3;
+const ALTITUDE_SMOOTHING_ALPHA_TRUSTED = 0.9;
+const ALTITUDE_SMOOTHING_ALPHA_GUARDED = 0.5;
 
-// Centripetal Catmull-Rom spline (Barry-Goldman algorithm, α = 0.5).
-// Produces smooth C1 curves that pass through every control point.
-function catmullRomSmooth(
-  points: Position[],
-  samplesPerSegment: number = SAMPLES_PER_SEGMENT,
-): Position[] {
-  if (points.length < 3) return [...points];
+type AltitudeState = {
+  filtered: number | null;
+  recent: number[];
+  outlierStreak: number;
+};
 
-  const result: Position[] = [points[0]];
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-
-    const d01 = Math.pow(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), 0.5) || 1e-6;
-    const d12 = Math.pow(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), 0.5) || 1e-6;
-    const d23 = Math.pow(Math.hypot(p3[0] - p2[0], p3[1] - p2[1]), 0.5) || 1e-6;
-
-    const t0 = 0;
-    const t1 = d01;
-    const t2 = t1 + d12;
-    const t3 = t2 + d23;
-
-    for (let s = 1; s <= samplesPerSegment; s++) {
-      const t = t1 + (t2 - t1) * (s / samplesPerSegment);
-
-      const a1x =
-        ((t1 - t) / (t1 - t0)) * p0[0] + ((t - t0) / (t1 - t0)) * p1[0];
-      const a1y =
-        ((t1 - t) / (t1 - t0)) * p0[1] + ((t - t0) / (t1 - t0)) * p1[1];
-      const a2x =
-        ((t2 - t) / (t2 - t1)) * p1[0] + ((t - t1) / (t2 - t1)) * p2[0];
-      const a2y =
-        ((t2 - t) / (t2 - t1)) * p1[1] + ((t - t1) / (t2 - t1)) * p2[1];
-      const a3x =
-        ((t3 - t) / (t3 - t2)) * p2[0] + ((t - t2) / (t3 - t2)) * p3[0];
-      const a3y =
-        ((t3 - t) / (t3 - t2)) * p2[1] + ((t - t2) / (t3 - t2)) * p3[1];
-
-      const b1x = ((t2 - t) / (t2 - t0)) * a1x + ((t - t0) / (t2 - t0)) * a2x;
-      const b1y = ((t2 - t) / (t2 - t0)) * a1y + ((t - t0) / (t2 - t0)) * a2y;
-      const b2x = ((t3 - t) / (t3 - t1)) * a2x + ((t - t1) / (t3 - t1)) * a3x;
-      const b2y = ((t3 - t) / (t3 - t1)) * a2y + ((t - t1) / (t3 - t1)) * a3y;
-
-      const cx = ((t2 - t) / (t2 - t1)) * b1x + ((t - t1) / (t2 - t1)) * b2x;
-      const cy = ((t2 - t) / (t2 - t1)) * b1y + ((t - t1) / (t2 - t1)) * b2y;
-
-      result.push([cx, cy]);
-    }
-  }
-
-  return result;
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
 }
 
 function synthesizeHistoricalPolls(f: FlightState): Position[] {
@@ -96,9 +67,57 @@ function synthesizeHistoricalPolls(f: FlightState): Position[] {
 }
 
 class TrailStore {
-  private trails = new Map<string, Position[]>();
+  private trails = new Map<string, TrailPoint[]>();
+  private altitudeStates = new Map<string, AltitudeState>();
   private seen = new Set<string>();
   private bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+
+  private filterAltitude(id: string, rawAltitude: number | null): number | null {
+    if (rawAltitude == null) return null;
+
+    const state =
+      this.altitudeStates.get(id) ??
+      ({ filtered: null, recent: [], outlierStreak: 0 } as AltitudeState);
+
+    if (state.filtered == null) {
+      state.filtered = rawAltitude;
+      state.recent.push(rawAltitude);
+      this.altitudeStates.set(id, state);
+      return rawAltitude;
+    }
+
+    const med = median(state.recent);
+    const absoluteDeviations = state.recent.map((x) => Math.abs(x - med));
+    const mad = median(absoluteDeviations);
+    const outlierThreshold =
+      ALTITUDE_OUTLIER_BASE_METERS + ALTITUDE_OUTLIER_SCALE * Math.max(120, mad);
+
+    const isOutlier = Math.abs(rawAltitude - med) > outlierThreshold;
+    state.outlierStreak = isOutlier ? state.outlierStreak + 1 : 0;
+    const trustedTarget = !isOutlier || state.outlierStreak >= 2;
+    const maxStep = trustedTarget
+      ? ALTITUDE_HARD_STEP_METERS
+      : ALTITUDE_SOFT_STEP_METERS;
+    const alpha = trustedTarget
+      ? ALTITUDE_SMOOTHING_ALPHA_TRUSTED
+      : ALTITUDE_SMOOTHING_ALPHA_GUARDED;
+
+    const delta = rawAltitude - state.filtered;
+    const clampedDelta = Math.max(
+      -maxStep,
+      Math.min(maxStep, delta),
+    );
+
+    const filtered = state.filtered + clampedDelta * alpha;
+    state.filtered = filtered;
+    state.recent.push(filtered);
+    if (state.recent.length > ALTITUDE_RECENT_WINDOW) {
+      state.recent.splice(0, state.recent.length - ALTITUDE_RECENT_WINDOW);
+    }
+
+    this.altitudeStates.set(id, state);
+    return filtered;
+  }
 
   update(flights: FlightState[]): TrailEntry[] {
     const current = new Set<string>();
@@ -109,13 +128,22 @@ class TrailStore {
       processedFlightCount += 1;
       const id = f.icao24;
       current.add(id);
+      const filteredAltitude = this.filterAltitude(id, f.baroAltitude);
 
-      const pos: Position = [f.longitude, f.latitude];
+      const pos: TrailPoint = {
+        position: [f.longitude, f.latitude],
+        baroAltitude: filteredAltitude,
+      };
       let trail = this.trails.get(id);
 
       if (!trail) {
         trail =
-          this.bootstrapUpdatesRemaining > 0 ? synthesizeHistoricalPolls(f) : [];
+          this.bootstrapUpdatesRemaining > 0
+            ? synthesizeHistoricalPolls(f).map((position) => ({
+                position,
+                baroAltitude: filteredAltitude,
+              }))
+            : [];
         this.trails.set(id, trail);
       }
 
@@ -124,9 +152,9 @@ class TrailStore {
         continue;
       }
 
-      const last = trail[trail.length - 1];
-      const dx = pos[0] - last[0];
-      const dy = pos[1] - last[1];
+      const last = trail[trail.length - 1].position;
+      const dx = pos.position[0] - last[0];
+      const dy = pos.position[1] - last[1];
       if (dx * dx + dy * dy > JUMP_THRESHOLD_DEG * JUMP_THRESHOLD_DEG) {
         trail.length = 0;
       }
@@ -138,7 +166,10 @@ class TrailStore {
     }
 
     for (const id of this.seen) {
-      if (!current.has(id)) this.trails.delete(id);
+      if (!current.has(id)) {
+        this.trails.delete(id);
+        this.altitudeStates.delete(id);
+      }
     }
     this.seen = current;
 
@@ -150,10 +181,14 @@ class TrailStore {
     for (const f of flights) {
       const trail = this.trails.get(f.icao24);
       if (trail && trail.length >= 2) {
+        const path = trail.map((p) => p.position);
+        const altitudes = trail.map((p) => p.baroAltitude);
+
         result.push({
           icao24: f.icao24,
-          path: trail.length >= 5 ? catmullRomSmooth(trail) : [...trail],
-          baroAltitude: f.baroAltitude,
+          path: [...path],
+          altitudes,
+          baroAltitude: altitudes[altitudes.length - 1] ?? null,
         });
       }
     }
