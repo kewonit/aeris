@@ -20,7 +20,7 @@ import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star } from "lucide-react";
 
-const DEFAULT_CITY_ID = "mia";
+const DEFAULT_CITY_ID = "sfo";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
