@@ -13,17 +13,15 @@ const CONSERVATIVE_POLL_MS = 60_000;
 const CAUTIOUS_POLL_MS = 120_000;
 const EMERGENCY_POLL_MS = 300_000;
 
-// Credit thresholds (out of 4 000 daily for authenticated users)
-const CREDIT_TIER_CONSERVATIVE = 2_000; // < 50 % remaining
-const CREDIT_TIER_CAUTIOUS = 800; // < 20 %
-const CREDIT_TIER_EMERGENCY = 200; // < 5 %
+const CREDIT_TIER_CONSERVATIVE = 2_000;
+const CREDIT_TIER_CAUTIOUS = 800;
+const CREDIT_TIER_EMERGENCY = 200;
 
 const RATE_LIMIT_BACKOFF_MS = 30_000;
 const VISIBILITY_RESUME_STALE_MS = 60_000;
 
-/** Choose a poll interval based on how many API credits remain today. */
 function adaptiveInterval(creditsRemaining: number | null): number {
-  if (creditsRemaining === null) return BASE_POLL_MS; // unknown → default
+  if (creditsRemaining === null) return BASE_POLL_MS;
   if (creditsRemaining < CREDIT_TIER_EMERGENCY) return EMERGENCY_POLL_MS;
   if (creditsRemaining < CREDIT_TIER_CAUTIOUS) return CAUTIOUS_POLL_MS;
   if (creditsRemaining < CREDIT_TIER_CONSERVATIVE) return CONSERVATIVE_POLL_MS;
@@ -118,12 +116,10 @@ export function useFlights(city: City | null) {
         const nextInterval = adaptiveInterval(creditsRef.current);
         scheduleNext(target, nextInterval);
       } catch (err) {
-        const isAbort =
-          err instanceof Error && err.name === "AbortError";
+        const isAbort = err instanceof Error && err.name === "AbortError";
         if (isAbort) return;
         setError(err instanceof Error ? err.message : "Unknown error");
         setFlights([]);
-        // After an error, back off longer to avoid hammering a sick upstream
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
       } finally {
         setLoading(false);
@@ -139,22 +135,18 @@ export function useFlights(city: City | null) {
 
     function onVisibilityChange() {
       if (document.visibilityState === "visible") {
-        // Tab just became visible — decide whether to fetch now or schedule
         const elapsed = Date.now() - lastFetchRef.current;
 
         if (elapsed >= VISIBILITY_RESUME_STALE_MS) {
-          // Data is stale after being hidden for a while; fetch immediately
           clearSchedule();
           fetchData(activeCity);
         } else {
-          // Data is still fresh — schedule for the remaining time
           const interval = adaptiveInterval(creditsRef.current);
           const remaining = Math.max(1_000, interval - elapsed);
           clearSchedule();
           scheduleNext(activeCity, remaining);
         }
       } else {
-        // Tab hidden — cancel scheduled poll to save credits
         clearSchedule();
       }
     }
