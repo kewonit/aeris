@@ -15,7 +15,7 @@ import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
 import { CITIES, type City } from "@/lib/cities";
-import { findByIata, airportToCity } from "@/lib/airports";
+import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
 import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star } from "lucide-react";
@@ -26,6 +26,33 @@ const STYLE_STORAGE_KEY = "aeris:mapStyle";
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
 const GITHUB_REPO_URL = "https://github.com/kewonit/aeris";
 const GITHUB_REPO_API = "https://api.github.com/repos/kewonit/aeris";
+const HIGH_TRAFFIC_IATA = [
+  "ATL",
+  "DXB",
+  "LHR",
+  "HND",
+  "DFW",
+  "DEN",
+  "IST",
+  "LAX",
+  "CDG",
+  "AMS",
+  "FRA",
+  "MAD",
+  "JFK",
+  "SIN",
+  "ORD",
+  "SFO",
+  "MIA",
+  "LAS",
+  "MUC",
+  "CLT",
+] as const;
+const HUB_PICK_PROBABILITY = 0.75;
+const HIGH_TRAFFIC_IATA_SET = new Set<string>(HIGH_TRAFFIC_IATA);
+const HIGH_TRAFFIC_AIRPORTS = AIRPORTS.filter((airport) =>
+  HIGH_TRAFFIC_IATA_SET.has(airport.iata.toUpperCase()),
+);
 
 const subscribeNoop = () => () => {};
 
@@ -91,6 +118,31 @@ function saveMapStyle(style: MapStyle): void {
   } catch {
     /* blocked */
   }
+}
+
+function chooseRandom<T>(items: readonly T[]): T | null {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function pickRandomAirportCity(excludeIata?: string): City {
+  const exclude = excludeIata?.toUpperCase();
+  const filteredHubs = exclude
+    ? HIGH_TRAFFIC_AIRPORTS.filter(
+        (airport) => airport.iata.toUpperCase() !== exclude,
+      )
+    : HIGH_TRAFFIC_AIRPORTS;
+
+  const filteredAirports = exclude
+    ? AIRPORTS.filter((airport) => airport.iata.toUpperCase() !== exclude)
+    : AIRPORTS;
+
+  const useHubs =
+    filteredHubs.length > 0 && Math.random() < HUB_PICK_PROBABILITY;
+  const source = useHubs ? filteredHubs : filteredAirports;
+  const randomAirport = chooseRandom(source);
+  if (!randomAirport) return DEFAULT_CITY;
+  return airportToCity(randomAirport);
 }
 
 function FlightTrackerInner() {
@@ -176,6 +228,11 @@ function FlightTrackerInner() {
     );
   }, [activeCity.coordinates]);
 
+  const handleRandomAirport = useCallback(() => {
+    const randomCity = pickRandomAirportCity(activeCity.iata);
+    setActiveCity(randomCity);
+  }, [activeCity.iata, setActiveCity]);
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
       <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
@@ -259,6 +316,7 @@ function FlightTrackerInner() {
             retryIn={retryIn}
             onNorthUp={handleNorthUp}
             onResetView={handleResetView}
+            onRandomAirport={handleRandomAirport}
           />
         </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { Compass, Plane, Radio, ShieldAlert } from "lucide-react";
+import { Compass, Dices, Plane, Radio, ShieldAlert } from "lucide-react";
 
 type StatusBarProps = {
   flightCount: number;
@@ -11,6 +11,7 @@ type StatusBarProps = {
   retryIn?: number;
   onNorthUp?: () => void;
   onResetView?: () => void;
+  onRandomAirport?: () => void;
 };
 
 export function StatusBar({
@@ -21,6 +22,7 @@ export function StatusBar({
   retryIn = 0,
   onNorthUp,
   onResetView,
+  onRandomAirport,
 }: StatusBarProps) {
   return (
     <div className="flex flex-col items-start gap-2">
@@ -122,7 +124,7 @@ export function StatusBar({
             damping: 24,
             delay: 0.48,
           }}
-          className="flex items-center gap-1.5 rounded-xl border px-2.5 py-2 backdrop-blur-2xl"
+          className="flex items-center gap-3 rounded-xl border px-3.5 py-2 backdrop-blur-2xl"
           style={{
             borderColor: "rgb(var(--ui-fg) / 0.06)",
             backgroundColor: "rgb(var(--ui-bg) / 0.5)",
@@ -149,6 +151,21 @@ export function StatusBar({
             style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
           >
             Reset
+          </button>
+          <div
+            className="h-3 w-px"
+            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+          />
+          <button
+            type="button"
+            onClick={onRandomAirport}
+            aria-label="Random airport"
+            title="Random airport"
+            className="inline-flex items-center gap-1 text-[11px] font-medium tracking-wide transition-colors"
+            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+          >
+            <Dices className="h-3 w-3" />
+            Random
           </button>
         </motion.div>
       </div>
