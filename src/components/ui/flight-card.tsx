@@ -1,7 +1,17 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { Plane, ArrowUp, ArrowDown, Gauge, Compass, Globe } from "lucide-react";
+import {
+  Plane,
+  ArrowUp,
+  ArrowDown,
+  Gauge,
+  Compass,
+  Globe,
+  X,
+  Navigation,
+  Building2,
+} from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import {
   metersToFeet,
@@ -9,40 +19,44 @@ import {
   formatCallsign,
   headingToCardinal,
 } from "@/lib/flight-utils";
+import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
 
 type FlightCardProps = {
   flight: FlightState | null;
-  x: number;
-  y: number;
+  onClose: () => void;
 };
 
-export function FlightCard({ flight, x, y }: FlightCardProps) {
+export function FlightCard({ flight, onClose }: FlightCardProps) {
+  const airline = flight ? lookupAirline(flight.callsign) : null;
+  const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
+  const heading = flight?.trueTrack ?? null;
+  const cardinal = heading !== null ? headingToCardinal(heading) : null;
+
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {flight && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.92, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.92, y: 8 }}
+          key={flight.icao24}
+          initial={{ opacity: 0, x: -16, scale: 0.96 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={{ opacity: 0, x: -16, scale: 0.96 }}
           transition={{
             type: "spring",
             stiffness: 400,
             damping: 28,
             mass: 0.8,
           }}
-          className="pointer-events-none fixed z-50 w-64 sm:w-72"
-          role="status"
+          className="w-64 sm:w-72"
+          role="complementary"
+          aria-label="Selected flight details"
           aria-live="polite"
-          style={{
-            left: `clamp(8px, ${x + 16}px, calc(100vw - 272px))`,
-            top: `clamp(8px, ${y - 8}px, calc(100vh - 280px))`,
-          }}
         >
           <div className="rounded-2xl border border-white/8 bg-black/60 p-4 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/6">
-                  <Plane className="h-4 w-4 text-white/80" />
+                <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10">
+                  <Plane className="h-4 w-4 text-sky-400/80" />
+                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold tracking-wide text-white">
@@ -50,17 +64,33 @@ export function FlightCard({ flight, x, y }: FlightCardProps) {
                   </p>
                   <p className="text-[11px] font-medium tracking-wider text-white/40 uppercase">
                     {flight.icao24}
+                    {flightNum ? ` · #${flightNum}` : ""}
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-400 uppercase">
-                Live
-              </span>
+              <motion.button
+                onClick={onClose}
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/6 transition-colors hover:bg-white/12"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                aria-label="Deselect flight"
+              >
+                <X className="h-3 w-3 text-white/40" />
+              </motion.button>
             </div>
 
-            <div className="mt-4 h-px bg-linear-to-r from-transparent via-white/6 to-transparent" />
+            {airline && (
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-white/25" />
+                <p className="text-[11px] font-semibold tracking-wide text-white/55">
+                  {airline}
+                </p>
+              </div>
+            )}
 
-            <div className="mt-3.5 grid grid-cols-2 gap-3">
+            <div className="mt-3 h-px bg-linear-to-r from-transparent via-white/6 to-transparent" />
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <Metric
                 icon={<ArrowUp className="h-3 w-3" />}
                 label="Altitude"
@@ -75,9 +105,7 @@ export function FlightCard({ flight, x, y }: FlightCardProps) {
                 icon={<Compass className="h-3 w-3" />}
                 label="Heading"
                 value={
-                  flight.trueTrack !== null
-                    ? `${Math.round(flight.trueTrack)}° ${headingToCardinal(flight.trueTrack)}`
-                    : "—"
+                  heading !== null ? `${Math.round(heading)}° ${cardinal}` : "—"
                 }
               />
               <Metric
@@ -91,19 +119,91 @@ export function FlightCard({ flight, x, y }: FlightCardProps) {
               />
             </div>
 
-            <div className="mt-3.5 h-px bg-linear-to-r from-transparent via-white/6 to-transparent" />
+            <div className="mt-3 h-px bg-linear-to-r from-transparent via-white/6 to-transparent" />
 
-            <div className="mt-3 flex items-center gap-1.5">
-              <Globe className="h-3 w-3 text-white/30" />
-              <p className="text-[11px] font-medium tracking-wide text-white/40">
-                {flight.originCountry}
-              </p>
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <Globe className="h-3 w-3 text-white/25" />
+                <p className="text-[11px] font-medium tracking-wide text-white/40">
+                  {flight.originCountry}
+                </p>
+              </div>
+              {cardinal && (
+                <div className="flex items-center gap-1.5">
+                  <Navigation
+                    className="h-3 w-3 text-white/25"
+                    style={{
+                      transform:
+                        heading !== null ? `rotate(${heading}deg)` : undefined,
+                    }}
+                  />
+                  <p className="text-[11px] font-medium tracking-wide text-white/40">
+                    Heading {cardinal}
+                    {flight.latitude !== null && flight.longitude !== null && (
+                      <span className="text-white/20">
+                        {" "}
+                        · {Math.abs(flight.latitude).toFixed(2)}°
+                        {flight.latitude >= 0 ? "N" : "S"},{" "}
+                        {Math.abs(flight.longitude).toFixed(2)}°
+                        {flight.longitude >= 0 ? "E" : "W"}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+              {flight.squawk && (
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`h-3 w-3 text-center text-[8px] font-bold leading-3 ${
+                      isEmergencySquawk(flight.squawk)
+                        ? "text-red-400"
+                        : "text-white/25"
+                    }`}
+                  >
+                    SQ
+                  </span>
+                  <p
+                    className={`font-mono text-[11px] font-medium tracking-wide ${
+                      isEmergencySquawk(flight.squawk)
+                        ? "text-red-400"
+                        : "text-white/40"
+                    }`}
+                  >
+                    {flight.squawk}
+                    {isEmergencySquawk(flight.squawk) && (
+                      <span className="ml-1.5 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-red-400 uppercase">
+                        {squawkLabel(flight.squawk)}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
       )}
     </AnimatePresence>
   );
+}
+
+const EMERGENCY_SQUAWKS = new Set(["7500", "7600", "7700"]);
+
+function isEmergencySquawk(squawk: string | null): boolean {
+  if (!squawk) return false;
+  return EMERGENCY_SQUAWKS.has(squawk.trim());
+}
+
+function squawkLabel(squawk: string): string {
+  switch (squawk.trim()) {
+    case "7500":
+      return "Hijack";
+    case "7600":
+      return "Radio fail";
+    case "7700":
+      return "Emergency";
+    default:
+      return "";
+  }
 }
 
 function Metric({

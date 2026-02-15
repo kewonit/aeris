@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { motion } from "motion/react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FlightCard } from "@/components/ui/flight-card";
+import { KeyboardShortcutsHelp } from "@/components/ui/keyboard-shortcuts-help";
 import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
+import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
@@ -18,7 +29,7 @@ import { CITIES, type City } from "@/lib/cities";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
 import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
-import { Github, Star } from "lucide-react";
+import { Github, Star, Keyboard } from "lucide-react";
 
 const DEFAULT_CITY_ID = "sfo";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
@@ -159,12 +170,17 @@ function FlightTrackerInner() {
 
   const [cityOverride, setCityOverride] = useState<City | undefined>();
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
+  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [repoStars, setRepoStars] = useState<number | null>(null);
+
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
 
   const setActiveCity = useCallback((city: City) => {
     setCityOverride(city);
+    setSelectedIcao24(null);
     syncCityToUrl(city);
   }, []);
 
@@ -174,9 +190,44 @@ function FlightTrackerInner() {
   }, []);
   const { flights, loading, rateLimited, retryIn } = useFlights(activeCity);
   const trails = useTrailHistory(flights);
-  const [hoveredFlight, setHoveredFlight] = useState<FlightState | null>(null);
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
-  const [repoStars, setRepoStars] = useState<number | null>(null);
+
+  const selectedFlight = useMemo(() => {
+    if (!selectedIcao24) return null;
+    return flights.find((f) => f.icao24 === selectedIcao24) ?? null;
+  }, [selectedIcao24, flights]);
+
+  const lastKnownFlightRef = useRef<FlightState | null>(null);
+  useEffect(() => {
+    if (selectedFlight) lastKnownFlightRef.current = selectedFlight;
+    if (!selectedIcao24) lastKnownFlightRef.current = null;
+  }, [selectedFlight, selectedIcao24]);
+
+  // Safe: ref only changes in the effect above, which runs after state-driven re-renders.
+  const displayFlight =
+    // eslint-disable-next-line react-hooks/refs
+    selectedFlight ?? (selectedIcao24 ? lastKnownFlightRef.current : null);
+
+  const missingSinceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!selectedIcao24) {
+      missingSinceRef.current = null;
+      return;
+    }
+    if (selectedFlight) {
+      missingSinceRef.current = null;
+      return;
+    }
+    // Flight is selected but not in the current flights list.
+    const now = Date.now();
+    if (missingSinceRef.current == null) {
+      missingSinceRef.current = now;
+      return;
+    }
+    if (now - missingSinceRef.current >= 30_000) {
+      setSelectedIcao24(null);
+      missingSinceRef.current = null;
+    }
+  }, [selectedIcao24, selectedFlight, flights]);
 
   useEffect(() => {
     let mounted = true;
@@ -200,20 +251,18 @@ function FlightTrackerInner() {
     };
   }, []);
 
-  const handleHover = useCallback((info: PickingInfo<FlightState> | null) => {
+  const handleClick = useCallback((info: PickingInfo<FlightState> | null) => {
     if (info?.object) {
-      setHoveredFlight(info.object);
-      setCursorPos({ x: info.x ?? 0, y: info.y ?? 0 });
+      setSelectedIcao24((prev) =>
+        prev === info.object!.icao24 ? null : info.object!.icao24,
+      );
     } else {
-      setHoveredFlight(null);
+      setSelectedIcao24(null);
     }
   }, []);
 
-  const handleClick = useCallback((info: PickingInfo<FlightState> | null) => {
-    if (info?.object) {
-      setHoveredFlight(info.object);
-      setCursorPos({ x: info.x ?? 0, y: info.y ?? 0 });
-    }
+  const handleDeselectFlight = useCallback(() => {
+    setSelectedIcao24(null);
   }, []);
 
   const handleNorthUp = useCallback(() => {
@@ -233,6 +282,27 @@ function FlightTrackerInner() {
     setActiveCity(randomCity);
   }, [activeCity.iata, setActiveCity]);
 
+  const handleToggleOrbit = useCallback(() => {
+    update("autoOrbit", !settings.autoOrbit);
+  }, [settings.autoOrbit, update]);
+
+  const handleOpenSearch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("aeris:open-search"));
+  }, []);
+
+  const handleToggleHelp = useCallback(() => {
+    setShowHelp((prev) => !prev);
+  }, []);
+
+  useKeyboardShortcuts({
+    onNorthUp: handleNorthUp,
+    onResetView: handleResetView,
+    onToggleOrbit: handleToggleOrbit,
+    onOpenSearch: handleOpenSearch,
+    onToggleHelp: handleToggleHelp,
+    onDeselect: handleDeselectFlight,
+  });
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
       <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
@@ -245,8 +315,8 @@ function FlightTrackerInner() {
         <FlightLayers
           flights={flights}
           trails={trails}
-          onHover={handleHover}
           onClick={handleClick}
+          selectedIcao24={selectedIcao24}
           showTrails={settings.showTrails}
           trailThickness={settings.trailThickness}
           trailDistance={settings.trailDistance}
@@ -263,7 +333,27 @@ function FlightTrackerInner() {
           <Brand isDark={mapStyle.dark} />
         </div>
 
+        <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
+          <FlightCard flight={displayFlight} onClose={handleDeselectFlight} />
+        </div>
+
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
+          <motion.button
+            onClick={handleToggleHelp}
+            className="hidden h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors sm:flex"
+            style={{
+              borderWidth: 1,
+              borderColor: "rgb(var(--ui-fg) / 0.06)",
+              backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+              color: "rgb(var(--ui-fg) / 0.5)",
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard className="h-4 w-4" />
+          </motion.button>
           <a
             href={GITHUB_REPO_URL}
             target="_blank"
@@ -320,12 +410,16 @@ function FlightTrackerInner() {
           />
         </div>
 
-        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 sm:bottom-4 sm:right-4 sm:mb-0">
+        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
+          <CameraControls />
           <AltitudeLegend />
         </div>
       </div>
 
-      <FlightCard flight={hoveredFlight} x={cursorPos.x} y={cursorPos.y} />
+      <KeyboardShortcutsHelp
+        open={showHelp}
+        onClose={() => setShowHelp(false)}
+      />
     </main>
   );
 }

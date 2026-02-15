@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer } from "@deck.gl/layers";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
@@ -9,6 +10,15 @@ import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
+
+/** Typed overlay with deck.gl's pickObject capability */
+type DeckGLOverlay = MapboxOverlay & {
+  pickObject?(opts: {
+    x: number;
+    y: number;
+    radius: number;
+  }): PickingInfo | null;
+};
 
 const DEFAULT_ANIM_DURATION_MS = 30_000;
 const MIN_ANIM_DURATION_MS = 8_000;
@@ -21,6 +31,103 @@ const TRACK_DAMPING = 0.18;
 const TRAIL_SMOOTHING_ITERATIONS = 3;
 const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
 const AIRCRAFT_PX_PER_UNIT = 0.3;
+
+const PULSE_PERIOD_MS = 7000;
+const RING_PERIOD_MS = 5500;
+
+function createHaloAtlas(): HTMLCanvasElement {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+  const c = size / 2;
+  for (let r = 0; r < c; r++) {
+    const norm = r / c;
+    let alpha = 0;
+    if (norm < 0.18) {
+      alpha = 0;
+    } else if (norm < 0.35) {
+      const t = (norm - 0.18) / 0.17;
+      alpha = t * t * 0.7;
+    } else if (norm < 0.55) {
+      alpha = 0.7 - ((norm - 0.35) / 0.2) * 0.3;
+    } else {
+      const t = (norm - 0.55) / 0.45;
+      alpha = 0.4 * (1 - t) * (1 - t);
+    }
+    if (alpha < 0.003) continue;
+    ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  return canvas;
+}
+
+function createSoftRingAtlas(): HTMLCanvasElement {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+  const c = size / 2;
+  const ringCenter = c * 0.75;
+  const ringWidth = c * 0.18;
+  for (let r = 0; r < c; r++) {
+    const dist = Math.abs(r - ringCenter);
+    const falloff = Math.max(0, 1 - (dist / ringWidth) ** 2);
+    const alpha = falloff * 0.85;
+    if (alpha < 0.005) continue;
+    ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  return canvas;
+}
+
+const HALO_MAPPING = {
+  halo: {
+    x: 0,
+    y: 0,
+    width: 256,
+    height: 256,
+    anchorX: 128,
+    anchorY: 128,
+    mask: true,
+  },
+};
+
+const RING_MAPPING = {
+  ring: {
+    x: 0,
+    y: 0,
+    width: 256,
+    height: 256,
+    anchorX: 128,
+    anchorY: 128,
+    mask: true,
+  },
+};
+
+let _haloCache: string | undefined;
+function getHaloUrl(): string {
+  if (typeof document === "undefined") return "";
+  if (!_haloCache) _haloCache = createHaloAtlas().toDataURL();
+  return _haloCache;
+}
+
+let _ringCache: string | undefined;
+function getRingUrl(): string {
+  if (typeof document === "undefined") return "";
+  if (!_ringCache) _ringCache = createSoftRingAtlas().toDataURL();
+  return _ringCache;
+}
 
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
@@ -274,8 +381,8 @@ function getAircraftAtlasUrl(): string {
 type FlightLayerProps = {
   flights: FlightState[];
   trails: TrailEntry[];
-  onHover: (info: PickingInfo<FlightState> | null) => void;
   onClick: (info: PickingInfo<FlightState> | null) => void;
+  selectedIcao24: string | null;
   showTrails: boolean;
   trailThickness: number;
   trailDistance: number;
@@ -286,8 +393,8 @@ type FlightLayerProps = {
 export function FlightLayers({
   flights,
   trails,
-  onHover,
   onClick,
+  selectedIcao24,
   showTrails,
   trailThickness,
   trailDistance,
@@ -297,6 +404,8 @@ export function FlightLayers({
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
   const atlasUrl = getAircraftAtlasUrl();
+  const haloUrl = getHaloUrl();
+  const ringUrl = getRingUrl();
 
   const prevSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
   const currSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
@@ -311,6 +420,10 @@ export function FlightLayers({
   const trailDistanceRef = useRef(trailDistance);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
+  const selectedIcao24Ref = useRef(selectedIcao24);
+  const prevSelectedRef = useRef<string | null>(null);
+  const selectionChangeTimeRef = useRef(0);
+  const SELECTION_FADE_MS = 600;
 
   useEffect(() => {
     flightsRef.current = flights;
@@ -320,7 +433,21 @@ export function FlightLayers({
     trailDistanceRef.current = trailDistance;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
-  });
+    if (selectedIcao24 !== selectedIcao24Ref.current) {
+      prevSelectedRef.current = selectedIcao24Ref.current;
+      selectionChangeTimeRef.current = performance.now();
+    }
+    selectedIcao24Ref.current = selectedIcao24;
+  }, [
+    flights,
+    trails,
+    showTrails,
+    trailThickness,
+    trailDistance,
+    showShadows,
+    showAltitudeColors,
+    selectedIcao24,
+  ]);
 
   useEffect(() => {
     const elapsed = performance.now() - dataTimestampRef.current;
@@ -383,10 +510,19 @@ export function FlightLayers({
 
   const handleHover = useCallback(
     (info: PickingInfo<FlightState>) => {
-      onHover(info.object ? info : null);
+      const canvas = map?.getCanvas();
+      if (canvas) canvas.style.cursor = info.object ? "pointer" : "";
     },
-    [onHover],
+    [map],
   );
+
+  // Reset cursor if component unmounts while hovering.
+  useEffect(() => {
+    return () => {
+      const canvas = map?.getCanvas();
+      if (canvas) canvas.style.cursor = "";
+    };
+  }, [map]);
 
   const handleClick = useCallback(
     (info: PickingInfo<FlightState>) => {
@@ -394,6 +530,31 @@ export function FlightLayers({
     },
     [onClick],
   );
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    function onMapClick(e: maplibregl.MapMouseEvent) {
+      const overlay = overlayRef.current;
+      if (!overlay) {
+        onClick(null);
+        return;
+      }
+      const picked = (overlay as unknown as DeckGLOverlay).pickObject?.({
+        x: e.point.x,
+        y: e.point.y,
+        radius: 10,
+      });
+      if (!picked?.object) {
+        onClick(null);
+      }
+    }
+
+    map.on("click", onMapClick);
+    return () => {
+      map.off("click", onMapClick);
+    };
+  }, [map, isLoaded, onClick]);
 
   useEffect(() => {
     if (!map || !isLoaded) return;
@@ -725,6 +886,94 @@ export function FlightLayers({
           );
         }
 
+        const smoothstep = (t: number) => t * t * (3 - 2 * t);
+        const easeOutQuint = (t: number) => 1 - (1 - t) ** 5;
+
+        const fadeElapsed = performance.now() - selectionChangeTimeRef.current;
+        const fadeT = Math.min(fadeElapsed / SELECTION_FADE_MS, 1);
+        const fadeIn = smoothstep(fadeT);
+        const fadeOut = 1 - fadeIn;
+
+        const selectedId = selectedIcao24Ref.current;
+        const prevId = prevSelectedRef.current;
+
+        const pulseTargets: { id: string; opacity: number; prefix: string }[] =
+          [];
+        if (selectedId)
+          pulseTargets.push({ id: selectedId, opacity: fadeIn, prefix: "sel" });
+        if (prevId && prevId !== selectedId && fadeOut > 0.01) {
+          pulseTargets.push({ id: prevId, opacity: fadeOut, prefix: "prev" });
+        } else if (fadeT >= 1) {
+          prevSelectedRef.current = null;
+        }
+
+        for (const target of pulseTargets) {
+          const flight = interpolated.find((f) => f.icao24 === target.id);
+          if (!flight || flight.longitude == null || flight.latitude == null)
+            continue;
+
+          const pos: [number, number, number] = [
+            flight.longitude,
+            flight.latitude,
+            altitudeToElevation(flight.baroAltitude),
+          ];
+          const op = target.opacity;
+
+          const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
+          const breath = Math.sin(breathT * Math.PI * 2);
+          const softBreath = smoothstep(smoothstep((breath + 1) / 2)) * 2 - 1;
+
+          const haloSize = 75 + 8 * softBreath;
+          const haloAlpha = Math.round((18 + 8 * softBreath) * op);
+
+          if (haloAlpha > 0) {
+            layers.push(
+              new IconLayer({
+                id: `${target.prefix}-halo`,
+                data: [{ position: pos }],
+                getPosition: (d: { position: [number, number, number] }) =>
+                  d.position,
+                getIcon: () => "halo",
+                getSize: haloSize,
+                getColor: [70, 160, 240, haloAlpha],
+                iconAtlas: haloUrl,
+                iconMapping: HALO_MAPPING,
+                billboard: true,
+                sizeUnits: "pixels",
+                sizeScale: 1,
+              }),
+            );
+          }
+
+          const ringOffsets = [0, RING_PERIOD_MS / 3, (RING_PERIOD_MS * 2) / 3];
+          ringOffsets.forEach((offset, i) => {
+            const t = ((elapsed + offset) % RING_PERIOD_MS) / RING_PERIOD_MS;
+            const eased = easeOutQuint(t);
+            const ringSize = 30 + 60 * eased;
+            const fade = 1 - t;
+            const ringAlpha = Math.round(70 * fade * fade * fade * fade * op);
+
+            if (ringAlpha < 2) return;
+
+            layers.push(
+              new IconLayer({
+                id: `${target.prefix}-ring-${i}`,
+                data: [{ position: pos }],
+                getPosition: (d: { position: [number, number, number] }) =>
+                  d.position,
+                getIcon: () => "ring",
+                getSize: ringSize,
+                getColor: [70, 165, 235, ringAlpha],
+                iconAtlas: ringUrl,
+                iconMapping: RING_MAPPING,
+                billboard: true,
+                sizeUnits: "pixels",
+                sizeScale: 1,
+              }),
+            );
+          });
+        }
+
         layers.push(
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
@@ -764,7 +1013,7 @@ export function FlightLayers({
 
     buildAndPushLayers();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [atlasUrl, handleHover, handleClick, map]);
+  }, [atlasUrl, haloUrl, ringUrl, handleHover, handleClick, map]);
 
   return null;
 }
