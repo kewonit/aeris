@@ -6,6 +6,7 @@ import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 
 const IDLE_TIMEOUT_MS = 5_000;
+const ORBIT_EASE_IN_MS = 2000;
 const DEFAULT_ZOOM = 9.2;
 const DEFAULT_PITCH = 49;
 const DEFAULT_BEARING = 27.4;
@@ -84,9 +85,14 @@ export function CameraController({ city }: { city: City }) {
     function startOrbit() {
       if (!map || isInteractingRef.current) return;
 
+      const resumeStart = performance.now();
+
       function tick() {
         if (!map || isInteractingRef.current) return;
-        const bearing = map.getBearing() + speed;
+        const resumeElapsed = performance.now() - resumeStart;
+        const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
+        const easeFactor = t * t * (3 - 2 * t);
+        const bearing = map.getBearing() + speed * easeFactor;
         map.setBearing(bearing % 360);
         orbitFrameRef.current = requestAnimationFrame(tick);
       }

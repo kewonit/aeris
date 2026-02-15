@@ -48,6 +48,15 @@ export function ControlPanel({
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
 
+  useEffect(() => {
+    function handleOpenSearch() {
+      setOpenTab("search");
+    }
+    window.addEventListener("aeris:open-search", handleOpenSearch);
+    return () =>
+      window.removeEventListener("aeris:open-search", handleOpenSearch);
+  }, []);
+
   const open = (tab: TabId) => setOpenTab(tab);
   const close = () => setOpenTab(null);
 

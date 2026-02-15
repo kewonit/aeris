@@ -1,16 +1,26 @@
 "use client";
 
-import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { motion } from "motion/react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FlightCard } from "@/components/ui/flight-card";
+import { KeyboardShortcutsHelp } from "@/components/ui/keyboard-shortcuts-help";
 import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { StatusBar } from "@/components/ui/status-bar";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
@@ -18,7 +28,7 @@ import { CITIES, type City } from "@/lib/cities";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
 import type { FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
-import { Github, Star } from "lucide-react";
+import { Github, Star, Keyboard } from "lucide-react";
 
 const DEFAULT_CITY_ID = "sfo";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
@@ -161,10 +171,11 @@ function FlightTrackerInner() {
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
 
   const setActiveCity = useCallback((city: City) => {
     setCityOverride(city);
+    setSelectedIcao24(null);
     syncCityToUrl(city);
   }, []);
 
@@ -174,9 +185,38 @@ function FlightTrackerInner() {
   }, []);
   const { flights, loading, rateLimited, retryIn } = useFlights(activeCity);
   const trails = useTrailHistory(flights);
-  const [hoveredFlight, setHoveredFlight] = useState<FlightState | null>(null);
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [repoStars, setRepoStars] = useState<number | null>(null);
+
+  const selectedFlight = useMemo(() => {
+    if (!selectedIcao24) return null;
+    return flights.find((f) => f.icao24 === selectedIcao24) ?? null;
+  }, [selectedIcao24, flights]);
+
+  const lastKnownFlightRef = useRef<FlightState | null>(null);
+  useEffect(() => {
+    if (selectedFlight) lastKnownFlightRef.current = selectedFlight;
+    if (!selectedIcao24) lastKnownFlightRef.current = null;
+  }, [selectedFlight, selectedIcao24]);
+
+  const displayFlight = selectedFlight ?? (selectedIcao24 ? lastKnownFlightRef.current : null);
+
+  const missingTicksRef = useRef(0);
+  useEffect(() => {
+    if (!selectedIcao24) {
+      missingTicksRef.current = 0;
+      return;
+    }
+    if (selectedFlight) {
+      missingTicksRef.current = 0;
+    } else {
+      missingTicksRef.current += 1;
+      if (missingTicksRef.current >= 3) {
+        setSelectedIcao24(null);
+      }
+    }
+  }, [selectedIcao24, selectedFlight, flights]);
 
   useEffect(() => {
     let mounted = true;
@@ -200,20 +240,18 @@ function FlightTrackerInner() {
     };
   }, []);
 
-  const handleHover = useCallback((info: PickingInfo<FlightState> | null) => {
+  const handleClick = useCallback((info: PickingInfo<FlightState> | null) => {
     if (info?.object) {
-      setHoveredFlight(info.object);
-      setCursorPos({ x: info.x ?? 0, y: info.y ?? 0 });
+      setSelectedIcao24((prev) =>
+        prev === info.object!.icao24 ? null : info.object!.icao24,
+      );
     } else {
-      setHoveredFlight(null);
+      setSelectedIcao24(null);
     }
   }, []);
 
-  const handleClick = useCallback((info: PickingInfo<FlightState> | null) => {
-    if (info?.object) {
-      setHoveredFlight(info.object);
-      setCursorPos({ x: info.x ?? 0, y: info.y ?? 0 });
-    }
+  const handleDeselectFlight = useCallback(() => {
+    setSelectedIcao24(null);
   }, []);
 
   const handleNorthUp = useCallback(() => {
@@ -233,6 +271,27 @@ function FlightTrackerInner() {
     setActiveCity(randomCity);
   }, [activeCity.iata, setActiveCity]);
 
+  const handleToggleOrbit = useCallback(() => {
+    update("autoOrbit", !settings.autoOrbit);
+  }, [settings.autoOrbit, update]);
+
+  const handleOpenSearch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("aeris:open-search"));
+  }, []);
+
+  const handleToggleHelp = useCallback(() => {
+    setShowHelp((prev) => !prev);
+  }, []);
+
+  useKeyboardShortcuts({
+    onNorthUp: handleNorthUp,
+    onResetView: handleResetView,
+    onToggleOrbit: handleToggleOrbit,
+    onOpenSearch: handleOpenSearch,
+    onToggleHelp: handleToggleHelp,
+    onDeselect: handleDeselectFlight,
+  });
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
       <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
@@ -245,8 +304,8 @@ function FlightTrackerInner() {
         <FlightLayers
           flights={flights}
           trails={trails}
-          onHover={handleHover}
           onClick={handleClick}
+          selectedIcao24={selectedIcao24}
           showTrails={settings.showTrails}
           trailThickness={settings.trailThickness}
           trailDistance={settings.trailDistance}
@@ -263,7 +322,30 @@ function FlightTrackerInner() {
           <Brand isDark={mapStyle.dark} />
         </div>
 
+        <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
+          <FlightCard
+            flight={displayFlight}
+            onClose={handleDeselectFlight}
+          />
+        </div>
+
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
+          <motion.button
+            onClick={handleToggleHelp}
+            className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+            style={{
+              borderWidth: 1,
+              borderColor: "rgb(var(--ui-fg) / 0.06)",
+              backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+              color: "rgb(var(--ui-fg) / 0.5)",
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard className="h-4 w-4" />
+          </motion.button>
           <a
             href={GITHUB_REPO_URL}
             target="_blank"
@@ -325,7 +407,10 @@ function FlightTrackerInner() {
         </div>
       </div>
 
-      <FlightCard flight={hoveredFlight} x={cursorPos.x} y={cursorPos.y} />
+      <KeyboardShortcutsHelp
+        open={showHelp}
+        onClose={() => setShowHelp(false)}
+      />
     </main>
   );
 }
