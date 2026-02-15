@@ -49,6 +49,7 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
           className="w-64 sm:w-72"
           role="complementary"
           aria-label="Selected flight details"
+          aria-live="polite"
         >
           <div className="rounded-2xl border border-white/8 bg-black/60 p-4 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="flex items-center justify-between">
@@ -104,9 +105,7 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
                 icon={<Compass className="h-3 w-3" />}
                 label="Heading"
                 value={
-                  heading !== null
-                    ? `${Math.round(heading)}° ${cardinal}`
-                    : "—"
+                  heading !== null ? `${Math.round(heading)}° ${cardinal}` : "—"
                 }
               />
               <Metric
@@ -134,9 +133,8 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
                   <Navigation
                     className="h-3 w-3 text-white/25"
                     style={{
-                      transform: heading !== null
-                        ? `rotate(${heading}deg)`
-                        : undefined,
+                      transform:
+                        heading !== null ? `rotate(${heading}deg)` : undefined,
                     }}
                   />
                   <p className="text-[11px] font-medium tracking-wide text-white/40">

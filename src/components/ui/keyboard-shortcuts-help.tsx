@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Keyboard } from "lucide-react";
 
@@ -22,17 +22,53 @@ export function KeyboardShortcutsHelp({
   open,
   onClose,
 }: KeyboardShortcutsHelpProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        e.stopPropagation();
         onClose();
       }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length > 0) focusable[0].focus();
+
+    function trapFocus(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+      const elements = dialog!.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    dialog.addEventListener("keydown", trapFocus);
+    return () => dialog.removeEventListener("keydown", trapFocus);
+  }, [open]);
 
   return (
     <AnimatePresence>
@@ -57,6 +93,7 @@ export function KeyboardShortcutsHelp({
               mass: 0.8,
             }}
             className="fixed left-1/2 top-1/2 z-90 w-72 -translate-x-1/2 -translate-y-1/2"
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Keyboard shortcuts"

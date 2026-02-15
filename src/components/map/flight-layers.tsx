@@ -11,6 +11,15 @@ import type { FlightState } from "@/lib/opensky";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
+/** Typed overlay with deck.gl's pickObject capability */
+type DeckGLOverlay = MapboxOverlay & {
+  pickObject?(opts: {
+    x: number;
+    y: number;
+    radius: number;
+  }): PickingInfo | null;
+};
+
 const DEFAULT_ANIM_DURATION_MS = 30_000;
 const MIN_ANIM_DURATION_MS = 8_000;
 const MAX_ANIM_DURATION_MS = 45_000;
@@ -43,7 +52,7 @@ function createHaloAtlas(): HTMLCanvasElement {
       const t = (norm - 0.18) / 0.17;
       alpha = t * t * 0.7;
     } else if (norm < 0.55) {
-      alpha = 0.7 - (norm - 0.35) / 0.2 * 0.3;
+      alpha = 0.7 - ((norm - 0.35) / 0.2) * 0.3;
     } else {
       const t = (norm - 0.55) / 0.45;
       alpha = 0.4 * (1 - t) * (1 - t);
@@ -83,11 +92,27 @@ function createSoftRingAtlas(): HTMLCanvasElement {
 }
 
 const HALO_MAPPING = {
-  halo: { x: 0, y: 0, width: 256, height: 256, anchorX: 128, anchorY: 128, mask: true },
+  halo: {
+    x: 0,
+    y: 0,
+    width: 256,
+    height: 256,
+    anchorX: 128,
+    anchorY: 128,
+    mask: true,
+  },
 };
 
 const RING_MAPPING = {
-  ring: { x: 0, y: 0, width: 256, height: 256, anchorX: 128, anchorY: 128, mask: true },
+  ring: {
+    x: 0,
+    y: 0,
+    width: 256,
+    height: 256,
+    anchorX: 128,
+    anchorY: 128,
+    mask: true,
+  },
 };
 
 let _haloCache: string | undefined;
@@ -103,8 +128,6 @@ function getRingUrl(): string {
   if (!_ringCache) _ringCache = createSoftRingAtlas().toDataURL();
   return _ringCache;
 }
-
-
 
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
@@ -495,14 +518,16 @@ export function FlightLayers({
     if (!map || !isLoaded) return;
 
     function onMapClick(e: maplibregl.MapMouseEvent) {
-      const canvas = map!.getCanvas();
       const overlay = overlayRef.current;
       if (!overlay) {
         onClick(null);
         return;
       }
-      const picked = (overlay as unknown as { pickObject?: (opts: { x: number; y: number; radius: number }) => PickingInfo | null })
-        .pickObject?.({ x: e.point.x, y: e.point.y, radius: 10 });
+      const picked = (overlay as unknown as DeckGLOverlay).pickObject?.({
+        x: e.point.x,
+        y: e.point.y,
+        radius: 10,
+      });
       if (!picked?.object) {
         onClick(null);
       }
@@ -855,8 +880,10 @@ export function FlightLayers({
         const selectedId = selectedIcao24Ref.current;
         const prevId = prevSelectedRef.current;
 
-        const pulseTargets: { id: string; opacity: number; prefix: string }[] = [];
-        if (selectedId) pulseTargets.push({ id: selectedId, opacity: fadeIn, prefix: "sel" });
+        const pulseTargets: { id: string; opacity: number; prefix: string }[] =
+          [];
+        if (selectedId)
+          pulseTargets.push({ id: selectedId, opacity: fadeIn, prefix: "sel" });
         if (prevId && prevId !== selectedId && fadeOut > 0.01) {
           pulseTargets.push({ id: prevId, opacity: fadeOut, prefix: "prev" });
         } else if (fadeT >= 1) {
@@ -865,7 +892,8 @@ export function FlightLayers({
 
         for (const target of pulseTargets) {
           const flight = interpolated.find((f) => f.icao24 === target.id);
-          if (!flight || flight.longitude == null || flight.latitude == null) continue;
+          if (!flight || flight.longitude == null || flight.latitude == null)
+            continue;
 
           const pos: [number, number, number] = [
             flight.longitude,

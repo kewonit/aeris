@@ -18,6 +18,7 @@ import { FlightCard } from "@/components/ui/flight-card";
 import { KeyboardShortcutsHelp } from "@/components/ui/keyboard-shortcuts-help";
 import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
+import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -169,6 +170,10 @@ function FlightTrackerInner() {
 
   const [cityOverride, setCityOverride] = useState<City | undefined>();
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
+  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [repoStars, setRepoStars] = useState<number | null>(null);
+
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
   const { settings, update } = useSettings();
@@ -185,9 +190,6 @@ function FlightTrackerInner() {
   }, []);
   const { flights, loading, rateLimited, retryIn } = useFlights(activeCity);
   const trails = useTrailHistory(flights);
-  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
-  const [showHelp, setShowHelp] = useState(false);
-  const [repoStars, setRepoStars] = useState<number | null>(null);
 
   const selectedFlight = useMemo(() => {
     if (!selectedIcao24) return null;
@@ -200,21 +202,30 @@ function FlightTrackerInner() {
     if (!selectedIcao24) lastKnownFlightRef.current = null;
   }, [selectedFlight, selectedIcao24]);
 
-  const displayFlight = selectedFlight ?? (selectedIcao24 ? lastKnownFlightRef.current : null);
+  // Safe: ref only changes in the effect above, which runs after state-driven re-renders.
+  const displayFlight =
+    // eslint-disable-next-line react-hooks/refs
+    selectedFlight ?? (selectedIcao24 ? lastKnownFlightRef.current : null);
 
-  const missingTicksRef = useRef(0);
+  const missingSinceRef = useRef<number | null>(null);
   useEffect(() => {
     if (!selectedIcao24) {
-      missingTicksRef.current = 0;
+      missingSinceRef.current = null;
       return;
     }
     if (selectedFlight) {
-      missingTicksRef.current = 0;
-    } else {
-      missingTicksRef.current += 1;
-      if (missingTicksRef.current >= 3) {
-        setSelectedIcao24(null);
-      }
+      missingSinceRef.current = null;
+      return;
+    }
+    // Flight is selected but not in the current flights list.
+    const now = Date.now();
+    if (missingSinceRef.current == null) {
+      missingSinceRef.current = now;
+      return;
+    }
+    if (now - missingSinceRef.current >= 30_000) {
+      setSelectedIcao24(null);
+      missingSinceRef.current = null;
     }
   }, [selectedIcao24, selectedFlight, flights]);
 
@@ -323,16 +334,13 @@ function FlightTrackerInner() {
         </div>
 
         <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
-          <FlightCard
-            flight={displayFlight}
-            onClose={handleDeselectFlight}
-          />
+          <FlightCard flight={displayFlight} onClose={handleDeselectFlight} />
         </div>
 
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
           <motion.button
             onClick={handleToggleHelp}
-            className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+            className="hidden h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors sm:flex"
             style={{
               borderWidth: 1,
               borderColor: "rgb(var(--ui-fg) / 0.06)",
@@ -402,7 +410,8 @@ function FlightTrackerInner() {
           />
         </div>
 
-        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 sm:bottom-4 sm:right-4 sm:mb-0">
+        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
+          <CameraControls />
           <AltitudeLegend />
         </div>
       </div>
