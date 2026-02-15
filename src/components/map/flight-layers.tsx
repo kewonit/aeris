@@ -57,6 +57,23 @@ function smoothStep(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
+function horizontalDistanceFromLngLat(
+  aLng: number,
+  aLat: number,
+  bLng: number,
+  bLat: number,
+): number {
+  const avgLatRad = ((aLat + bLat) * 0.5 * Math.PI) / 180;
+  const metersPerDegLon = 111_320 * Math.max(0.2, Math.cos(avgLatRad));
+  const dx = (bLng - aLng) * metersPerDegLon;
+  const dy = (bLat - aLat) * 111_320;
+  return Math.hypot(dx, dy);
+}
+
+function horizontalDistanceMeters(a: Snapshot, b: Snapshot): number {
+  return horizontalDistanceFromLngLat(a.lng, a.lat, b.lng, b.lat);
+}
+
 type ElevatedPoint = [number, number, number];
 
 function smoothElevatedPath(
@@ -89,6 +106,30 @@ function smoothElevatedPath(
   }
 
   return current;
+}
+
+function densifyElevatedPath(
+  points: ElevatedPoint[],
+  subdivisions: number = 2,
+): ElevatedPoint[] {
+  if (points.length < 2 || subdivisions <= 1) return points;
+
+  const out: ElevatedPoint[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    out.push(a);
+    for (let j = 1; j < subdivisions; j++) {
+      const t = j / subdivisions;
+      out.push([
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+      ]);
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
 }
 
 function smoothNumericSeries(values: number[]): number[] {
@@ -396,6 +437,7 @@ export function FlightLayers({
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
+        const trailByIcao = new Map(currentTrails.map((t) => [t.icao24, t]));
         const altColors = showAltColorsRef.current;
         const defaultColor: [number, number, number, number] = [
           180, 220, 255, 200,
@@ -460,6 +502,65 @@ export function FlightLayers({
           interpolatedMap.set(f.icao24, f);
         }
 
+        const pitchByIcao = new Map<string, number>();
+        for (const f of interpolated) {
+          const curr = currSnapshotsRef.current.get(f.icao24);
+          const prev = prevSnapshotsRef.current.get(f.icao24);
+
+          const trendTrail = trailByIcao.get(f.icao24);
+          const trendPitch =
+            trendTrail && trendTrail.path.length >= 2
+              ? (() => {
+                  const end = trendTrail.path.length - 1;
+                  const start = Math.max(0, end - 7);
+                  const startAlt =
+                    trendTrail.altitudes[start] ??
+                    trendTrail.altitudes[end] ??
+                    f.baroAltitude ??
+                    0;
+                  const endAlt =
+                    trendTrail.altitudes[end] ?? f.baroAltitude ?? startAlt;
+                  const [sLng, sLat] = trendTrail.path[start];
+                  const [eLng, eLat] = trendTrail.path[end];
+                  const horizontalMeters = horizontalDistanceFromLngLat(
+                    sLng,
+                    sLat,
+                    eLng,
+                    eLat,
+                  );
+                  if (horizontalMeters < 1) return 0;
+                  return (
+                    (-Math.atan2(endAlt - startAlt, horizontalMeters) * 180) /
+                    Math.PI
+                  );
+                })()
+              : 0;
+
+          const risePitch =
+            curr && prev
+              ? (() => {
+                  const horizontalMeters = horizontalDistanceMeters(prev, curr);
+                  if (horizontalMeters < 1) return 0;
+                  const deltaAltitudeMeters = curr.alt - prev.alt;
+                  return (
+                    (-Math.atan2(deltaAltitudeMeters, horizontalMeters) * 180) /
+                    Math.PI
+                  );
+                })()
+              : 0;
+
+          const speed = f.velocity ?? 0;
+          const verticalRate = f.verticalRate ?? 0;
+          const kinematicPitch =
+            speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
+
+          const blendedPitch =
+            trendPitch * 0.5 + risePitch * 0.38 + kinematicPitch * 0.12;
+          const amplifiedPitch = blendedPitch * 1.55;
+          const clampedPitch = Math.max(-40, Math.min(40, amplifiedPitch));
+          pitchByIcao.set(f.icao24, clampedPitch);
+        }
+
         const layers = [];
 
         if (showShadowsRef.current) {
@@ -485,6 +586,63 @@ export function FlightLayers({
           const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
           const handledIds = new Set<string>();
           const trailData: TrailEntry[] = [];
+
+          const buildVisibleTrailPoints = (
+            trail: TrailEntry,
+            animFlight: FlightState | undefined,
+          ): ElevatedPoint[] => {
+            const historyPoints = Math.max(
+              2,
+              Math.round(trailDistanceRef.current),
+            );
+            const pathSlice =
+              trail.path.length > historyPoints
+                ? trail.path.slice(trail.path.length - historyPoints)
+                : trail.path;
+            const altitudeSlice =
+              trail.altitudes.length > historyPoints
+                ? trail.altitudes.slice(trail.altitudes.length - historyPoints)
+                : trail.altitudes;
+            const smoothPathSlice = smoothPlanarPath(pathSlice);
+
+            const altitudeMeters = smoothNumericSeries(
+              altitudeSlice.map(
+                (a) => a ?? trail.baroAltitude ?? animFlight?.baroAltitude ?? 0,
+              ),
+            );
+
+            const basePath = smoothPathSlice.map((p, i) => [
+              p[0],
+              p[1],
+              Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
+            ]) as ElevatedPoint[];
+            const denseBasePath = densifyElevatedPath(basePath, 2);
+
+            if (
+              animFlight &&
+              animFlight.longitude != null &&
+              animFlight.latitude != null &&
+              denseBasePath.length > 1
+            ) {
+              const clipped = trimPathAheadOfAircraft(denseBasePath, [
+                animFlight.longitude,
+                animFlight.latitude,
+                Math.max(0, animFlight.baroAltitude ?? 0),
+              ]);
+
+              const smoothed =
+                clipped.length < 4 ? clipped : smoothElevatedPath(clipped);
+
+              return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
+            }
+
+            const smoothed =
+              denseBasePath.length < 4
+                ? denseBasePath
+                : smoothElevatedPath(denseBasePath);
+
+            return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
+          };
 
           for (const f of interpolated) {
             if (f.longitude == null || f.latitude == null) continue;
@@ -519,83 +677,40 @@ export function FlightLayers({
             new PathLayer<TrailEntry>({
               id: "flight-trails",
               data: trailData,
-              updateTriggers: { getPath: elapsed },
+              updateTriggers: {
+                getPath: [elapsed, trailDistanceRef.current],
+                getColor: [elapsed, altColors, trailDistanceRef.current],
+              },
               getPath: (d) => {
-                const historyPoints = Math.max(
-                  2,
-                  Math.round(trailDistanceRef.current),
-                );
-                const pathSlice =
-                  d.path.length > historyPoints
-                    ? d.path.slice(d.path.length - historyPoints)
-                    : d.path;
-                const altitudeSlice =
-                  d.altitudes.length > historyPoints
-                    ? d.altitudes.slice(d.altitudes.length - historyPoints)
-                    : d.altitudes;
-                const smoothPathSlice = smoothPlanarPath(pathSlice);
-                const altitudeMeters = smoothNumericSeries(
-                  altitudeSlice.map((a) =>
-                    altitudeToElevation(a ?? d.baroAltitude),
-                  ),
-                );
-
                 const animFlight = interpolatedMap.get(d.icao24);
-                const basePath = smoothPathSlice.map((p, i) => {
-                  const pointAlt =
-                    altitudeMeters[i] ?? altitudeToElevation(d.baroAltitude);
-                  const trailAlt = Math.max(
-                    0,
-                    pointAlt - TRAIL_BELOW_AIRCRAFT_METERS,
-                  );
-                  return [p[0], p[1], trailAlt] as [number, number, number];
-                });
-                if (
-                  animFlight &&
-                  animFlight.longitude != null &&
-                  animFlight.latitude != null &&
-                  basePath.length > 1
-                ) {
-                  const ax = animFlight.longitude;
-                  const ay = animFlight.latitude;
-                  const currentAlt = Math.max(
-                    0,
-                    altitudeToElevation(animFlight.baroAltitude) -
-                      TRAIL_BELOW_AIRCRAFT_METERS,
-                  );
-
-                  const clipped = trimPathAheadOfAircraft(basePath, [
-                    ax,
-                    ay,
-                    currentAlt,
-                  ]);
-                  if (clipped.length < 4) return clipped;
-                  return smoothElevatedPath(clipped);
-                }
-                if (basePath.length < 4) return basePath;
-                return smoothElevatedPath(basePath);
+                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                return visiblePoints.map(
+                  (p) =>
+                    [
+                      p[0],
+                      p[1],
+                      Math.max(
+                        0,
+                        altitudeToElevation(p[2]) - TRAIL_BELOW_AIRCRAFT_METERS,
+                      ),
+                    ] as [number, number, number],
+                );
               },
               getColor: (d) => {
-                const historyPoints = Math.max(
-                  2,
-                  Math.round(trailDistanceRef.current),
-                );
-                const visibleLen = Math.min(d.path.length, historyPoints);
-                const len =
-                  visibleLen < 4
-                    ? visibleLen
-                    : visibleLen * 2 ** TRAIL_SMOOTHING_ITERATIONS;
-                const base = altColors
-                  ? altitudeToColor(d.baroAltitude)
-                  : defaultColor;
-                return Array.from({ length: len }, (_, i) => {
+                const animFlight = interpolatedMap.get(d.icao24);
+                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                const len = visiblePoints.length;
+                return visiblePoints.map((point, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
-                  const fade = Math.pow(tVal, 2.4);
+                  const fade = Math.pow(tVal, 1.65);
+                  const base = altColors
+                    ? altitudeToColor(point[2])
+                    : defaultColor;
                   return [
-                    Math.min(255, base[0] + 22),
-                    Math.min(255, base[1] + 22),
-                    Math.min(255, base[2] + 22),
-                    Math.round(20 + fade * 200),
+                    base[0],
+                    base[1],
+                    base[2],
+                    Math.round(70 + fade * 150),
                   ];
                 }) as [number, number, number, number][];
               },
@@ -620,9 +735,7 @@ export function FlightLayers({
               altitudeToElevation(d.baroAltitude),
             ],
             getOrientation: (d) => {
-              const vr = d.verticalRate ?? 0;
-              const v = d.velocity ?? 0;
-              const pitch = v > 0 ? (-Math.atan2(vr, v) * 180) / Math.PI : 0;
+              const pitch = pitchByIcao.get(d.icao24) ?? 0;
               const yaw = -(d.trueTrack ?? 0);
               return [pitch, yaw, 90];
             },
