@@ -44,3 +44,5 @@ next-env.d.ts
 
 # local documentation
 docs.txt
+node_modules/
+package-lock.json

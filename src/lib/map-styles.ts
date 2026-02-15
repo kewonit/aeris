@@ -165,4 +165,4 @@ export const MAP_STYLES: MapStyle[] = [
   },
 ];
 
-export const DEFAULT_STYLE = MAP_STYLES[0];
+export const DEFAULT_STYLE = MAP_STYLES[1];
