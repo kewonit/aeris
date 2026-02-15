@@ -438,7 +438,16 @@ export function FlightLayers({
       selectionChangeTimeRef.current = performance.now();
     }
     selectedIcao24Ref.current = selectedIcao24;
-  });
+  }, [
+    flights,
+    trails,
+    showTrails,
+    trailThickness,
+    trailDistance,
+    showShadows,
+    showAltitudeColors,
+    selectedIcao24,
+  ]);
 
   useEffect(() => {
     const elapsed = performance.now() - dataTimestampRef.current;
@@ -506,6 +515,14 @@ export function FlightLayers({
     },
     [map],
   );
+
+  // Reset cursor if component unmounts while hovering.
+  useEffect(() => {
+    return () => {
+      const canvas = map?.getCanvas();
+      if (canvas) canvas.style.cursor = "";
+    };
+  }, [map]);
 
   const handleClick = useCallback(
     (info: PickingInfo<FlightState>) => {

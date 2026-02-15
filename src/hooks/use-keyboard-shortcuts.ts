@@ -18,7 +18,7 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
   useEffect(() => {
     ref.current = actions;
-  });
+  }, [actions]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
