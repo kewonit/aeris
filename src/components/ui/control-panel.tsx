@@ -484,7 +484,7 @@ function SearchContent({
 
           {!query && (
             <p className="px-3 pt-3 pb-1 text-center text-[10px] font-medium text-white/10">
-              Search 400+ airports worldwide
+              Search 9,000+ airports worldwide
             </p>
           )}
         </div>

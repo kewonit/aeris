@@ -15,18 +15,34 @@ type AirportLayerProps = {
   isDark: boolean;
 };
 
+function isValidCoordinates(
+  coordinates: readonly [number, number],
+): coordinates is [number, number] {
+  const [lng, lat] = coordinates;
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
+  );
+}
+
 const airportGeoJson: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
-  features: AIRPORTS.map((a) => ({
-    type: "Feature" as const,
-    geometry: { type: "Point" as const, coordinates: [a.lng, a.lat] },
-    properties: {
-      iata: a.iata,
-      name: a.name,
-      city: a.city,
-      country: a.country,
-    },
-  })),
+  features: AIRPORTS.filter((a) => isValidCoordinates([a.lng, a.lat])).map(
+    (a) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [a.lng, a.lat] },
+      properties: {
+        iata: a.iata,
+        name: a.name,
+        city: a.city,
+        country: a.country,
+      },
+    }),
+  ),
 };
 
 const LAYER_CSS = `
@@ -75,8 +91,9 @@ export function AirportLayer({
     injectCSS();
     const m = map;
 
-    const dotColor = isDark ? "rgba(74,222,128,0.6)" : "rgba(22,163,74,0.55)";
-    const strokeColor = isDark ? "rgba(74,222,128,0.8)" : "rgba(22,163,74,0.7)";
+    const dotColor = isDark
+      ? "rgba(167,243,208,0.28)"
+      : "rgba(15,118,110,0.22)";
 
     function addSourceAndLayers() {
       if (m.getSource(SOURCE_ID)) return;
@@ -89,21 +106,29 @@ export function AirportLayer({
         source: SOURCE_ID,
         paint: {
           "circle-radius": [
+            "step",
+            ["zoom"],
+            0.55,
+            6,
+            0.8,
+            10,
+            1.05,
+            14,
+            1.35,
+          ],
+          "circle-color": dotColor,
+          "circle-opacity": [
             "interpolate",
             ["linear"],
             ["zoom"],
-            3,
             2,
-            6,
-            3,
-            10,
-            4.5,
+            0.14,
+            8,
+            0.22,
             14,
-            7,
+            0.34,
           ],
-          "circle-color": dotColor,
-          "circle-stroke-width": 1,
-          "circle-stroke-color": strokeColor,
+          "circle-stroke-width": 0,
         },
       });
     }
@@ -127,11 +152,12 @@ export function AirportLayer({
       m.getCanvas().style.cursor = "pointer";
       const f = e.features?.[0];
       if (f?.properties) {
+        const iata = String(f.properties.iata ?? "").toUpperCase();
+        const city = String(f.properties.city ?? "");
+        if (!iata) return;
         popup
           .setLngLat(e.lngLat)
-          .setHTML(
-            `<strong>${f.properties.iata}</strong> · ${f.properties.city}`,
-          )
+          .setText(city ? `${iata} · ${city}` : iata)
           .addTo(m);
       }
     }
@@ -147,8 +173,9 @@ export function AirportLayer({
       },
     ) {
       const f = e.features?.[0];
-      if (f?.properties?.iata) {
-        const city = resolveCity(f.properties.iata as string);
+      const iata = String(f?.properties?.iata ?? "");
+      if (iata) {
+        const city = resolveCity(iata);
         callbackRef.current(city);
       }
     }
@@ -183,6 +210,7 @@ export function AirportLayer({
       '<div class="airport-beacon-ring"></div>' +
       '<div class="airport-beacon-ring"></div>' +
       '<div class="airport-beacon-core"></div>';
+    if (!isValidCoordinates(activeCity.coordinates)) return;
 
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat(activeCity.coordinates)
