@@ -19,7 +19,7 @@
 
 # production
 /build
-.github
+.github/agents
 
 # misc
 .DS_Store
