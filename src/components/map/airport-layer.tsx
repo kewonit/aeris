@@ -92,8 +92,8 @@ export function AirportLayer({
     const m = map;
 
     const dotColor = isDark
-      ? "rgba(167,243,208,0.28)"
-      : "rgba(15,118,110,0.22)";
+      ? "rgba(188,248,221,0.22)"
+      : "rgba(15,118,110,0.16)";
 
     function addSourceAndLayers() {
       if (m.getSource(SOURCE_ID)) return;
@@ -122,11 +122,11 @@ export function AirportLayer({
             ["linear"],
             ["zoom"],
             2,
-            0.14,
+            0.1,
             8,
-            0.22,
+            0.17,
             14,
-            0.34,
+            0.24,
           ],
           "circle-stroke-width": 0,
         },

@@ -808,6 +808,9 @@ export function FlightLayers({
           const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
           const handledIds = new Set<string>();
           const trailData: TrailEntry[] = [];
+          const denseSubdivisions = interpolated.length > 140 ? 1 : 2;
+          const smoothingIterations =
+            interpolated.length > 220 ? 1 : TRAIL_SMOOTHING_ITERATIONS;
 
           const buildVisibleTrailPoints = (
             trail: TrailEntry,
@@ -838,7 +841,10 @@ export function FlightLayers({
               p[1],
               Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
             ]) as ElevatedPoint[];
-            const denseBasePath = densifyElevatedPath(basePath, 2);
+            const denseBasePath = densifyElevatedPath(
+              basePath,
+              denseSubdivisions,
+            );
 
             if (
               animFlight &&
@@ -853,7 +859,9 @@ export function FlightLayers({
               ]);
 
               const smoothed =
-                clipped.length < 4 ? clipped : smoothElevatedPath(clipped);
+                clipped.length < 4
+                  ? clipped
+                  : smoothElevatedPath(clipped, smoothingIterations);
 
               return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
             }
@@ -861,9 +869,21 @@ export function FlightLayers({
             const smoothed =
               denseBasePath.length < 4
                 ? denseBasePath
-                : smoothElevatedPath(denseBasePath);
+                : smoothElevatedPath(denseBasePath, smoothingIterations);
 
             return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
+          };
+
+          const visibleTrailCache = new Map<string, ElevatedPoint[]>();
+          const getVisibleTrailPoints = (
+            trail: TrailEntry,
+            animFlight: FlightState | undefined,
+          ): ElevatedPoint[] => {
+            const cached = visibleTrailCache.get(trail.icao24);
+            if (cached) return cached;
+            const computed = buildVisibleTrailPoints(trail, animFlight);
+            visibleTrailCache.set(trail.icao24, computed);
+            return computed;
           };
 
           for (const f of interpolated) {
@@ -905,7 +925,7 @@ export function FlightLayers({
               },
               getPath: (d) => {
                 const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 return visiblePoints.map(
                   (p) =>
                     [
@@ -920,7 +940,7 @@ export function FlightLayers({
               },
               getColor: (d) => {
                 const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 const len = visiblePoints.length;
                 return visiblePoints.map((point, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
