@@ -18,6 +18,7 @@ export type FlightState = {
   squawk: string | null;
   spiFlag: boolean;
   positionSource: number;
+  category: number | null;
 };
 
 type OpenSkyResponse = {
@@ -44,6 +45,7 @@ function parseStates(raw: OpenSkyResponse): FlightState[] {
       squawk: s[14] as string | null,
       spiFlag: s[15] as boolean,
       positionSource: s[16] as number,
+      category: (s[17] as number | null) ?? null,
     }))
     .filter(
       (f) =>
@@ -75,7 +77,7 @@ export async function fetchFlightsByBbox(
   const lo0 = clamp(lomin, -180, 180);
   const lo1 = clamp(lomax, -180, 180);
 
-  const url = `${OPENSKY_API}/states/all?lamin=${la0}&lamax=${la1}&lomin=${lo0}&lomax=${lo1}`;
+  const url = `${OPENSKY_API}/states/all?lamin=${la0}&lamax=${la1}&lomin=${lo0}&lomax=${lo1}&extended=1`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

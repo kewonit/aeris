@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plane,
@@ -20,17 +22,39 @@ import {
   headingToCardinal,
 } from "@/lib/flight-utils";
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
+import { aircraftTypeHint } from "@/lib/aircraft";
+import { airlineLogoCandidates } from "@/lib/airline-logos";
 
 type FlightCardProps = {
   flight: FlightState | null;
   onClose: () => void;
 };
 
+const loadedLogoUrls = new Set<string>();
+
 export function FlightCard({ flight, onClose }: FlightCardProps) {
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
+  const company =
+    airline ?? (flight ? `${flight.originCountry} operator` : null);
+  const model = flight ? aircraftTypeHint(flight.category) : null;
+  const logoCandidates = airlineLogoCandidates(airline);
   const heading = flight?.trueTrack ?? null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
+  const [logoIndexByAirline, setLogoIndexByAirline] = useState<
+    Record<string, number>
+  >({});
+  const [logoLoadedByKey, setLogoLoadedByKey] = useState<
+    Record<string, boolean>
+  >({});
+  const airlineKey = airline ?? "__none__";
+  const logoIndex = logoIndexByAirline[airlineKey] ?? 0;
+  const logoLoadKey = `${airlineKey}:${logoIndex}`;
+  const logoUrl = logoCandidates[logoIndex] ?? null;
+  const logoLoaded =
+    (logoUrl ? loadedLogoUrls.has(logoUrl) : false) ||
+    (logoLoadedByKey[logoLoadKey] ?? false);
+  const showLogo = Boolean(logoUrl);
 
   return (
     <AnimatePresence mode="wait">
@@ -46,17 +70,57 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
             damping: 28,
             mass: 0.8,
           }}
-          className="w-64 sm:w-72"
+          className="w-72 sm:w-80"
           role="complementary"
           aria-label="Selected flight details"
           aria-live="polite"
         >
           <div className="rounded-2xl border border-white/8 bg-black/60 p-4 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10">
-                  <Plane className="h-4 w-4 text-sky-400/80" />
-                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+              <div className="flex items-center gap-3.5">
+                <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-white/14 bg-white/10 shadow-lg shadow-black/25">
+                  {showLogo ? (
+                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-black/10 bg-white/95 p-3.5 shadow-sm">
+                      {!logoLoaded && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
+                        />
+                      )}
+                      <Image
+                        src={logoUrl ?? undefined}
+                        alt={company ? `${company} logo` : "Airline logo"}
+                        width={68}
+                        height={68}
+                        className={`relative h-13 w-13 object-contain transition-opacity duration-200 ${
+                          logoLoaded ? "opacity-100" : "opacity-0"
+                        }`}
+                        unoptimized
+                        onLoad={() => {
+                          if (logoUrl) loadedLogoUrls.add(logoUrl);
+                          setLogoLoadedByKey((current) => ({
+                            ...current,
+                            [logoLoadKey]: true,
+                          }));
+                        }}
+                        onError={() => {
+                          if (logoIndex + 1 < logoCandidates.length) {
+                            setLogoIndexByAirline((current) => ({
+                              ...current,
+                              [airlineKey]: logoIndex + 1,
+                            }));
+                            return;
+                          }
+                          setLogoIndexByAirline((current) => ({
+                            ...current,
+                            [airlineKey]: logoCandidates.length,
+                          }));
+                        }}
+                      />
+                    </span>
+                  ) : (
+                    <Plane className="h-10 w-10 text-sky-400/85" />
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-semibold tracking-wide text-white">
@@ -79,11 +143,14 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
               </motion.button>
             </div>
 
-            {airline && (
+            {company && (
               <div className="mt-2.5 flex items-center gap-1.5">
                 <Building2 className="h-3 w-3 text-white/25" />
                 <p className="text-[11px] font-semibold tracking-wide text-white/55">
-                  {airline}
+                  {company}
+                  {model ? (
+                    <span className="text-white/30"> · {model}</span>
+                  ) : null}
                 </p>
               </div>
             )}
