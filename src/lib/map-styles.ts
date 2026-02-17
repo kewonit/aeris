@@ -19,7 +19,8 @@ const SATELLITE_STYLE: Record<string, unknown> = {
       ],
       tileSize: 256,
       maxzoom: 18,
-      attribution: "&copy; Esri",
+      attribution:
+        "&copy; <a href='https://www.esri.com/'>Esri</a>, Maxar, Earthstar Geographics",
     },
   },
   layers: [{ id: "satellite", type: "raster", source: "esri-satellite" }],
@@ -33,7 +34,8 @@ const TERRAIN_STYLE: Record<string, unknown> = {
       tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
       maxzoom: 17,
-      attribution: "&copy; OpenTopoMap",
+      attribution:
+        "&copy; <a href='https://opentopomap.org/'>OpenTopoMap</a> (<a href='https://creativecommons.org/licenses/by-sa/3.0/'>CC-BY-SA</a>) · &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
     },
   },
   layers: [{ id: "terrain", type: "raster", source: "opentopomap" }],
@@ -49,7 +51,8 @@ const ESRI_TOPO_STYLE: Record<string, unknown> = {
       ],
       tileSize: 256,
       maxzoom: 19,
-      attribution: "&copy; Esri",
+      attribution:
+        "&copy; <a href='https://www.esri.com/'>Esri</a> · &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
     },
   },
   layers: [{ id: "esri-topo", type: "raster", source: "esri-topo" }],
@@ -65,7 +68,8 @@ const SHADED_RELIEF_STYLE: Record<string, unknown> = {
       ],
       tileSize: 256,
       maxzoom: 18,
-      attribution: "&copy; Esri",
+      attribution:
+        "&copy; <a href='https://www.esri.com/'>Esri</a>, Maxar, Earthstar Geographics",
     },
     "terrain-dem": {
       type: "raster-dem",
@@ -75,6 +79,8 @@ const SHADED_RELIEF_STYLE: Record<string, unknown> = {
       tileSize: 256,
       maxzoom: 15,
       encoding: "terrarium",
+      attribution:
+        "<a href='https://github.com/tilezen/joerd'>Mapzen/Tilezen</a> · AWS Open Data",
     },
   },
   terrain: {
@@ -166,3 +172,64 @@ export const MAP_STYLES: MapStyle[] = [
 ];
 
 export const DEFAULT_STYLE = MAP_STYLES[0];
+
+export type AttributionEntry = {
+  label: string;
+  url: string;
+};
+
+/** Returns the proper attribution entries for a given map style. */
+export function getAttributions(styleId: string): AttributionEntry[] {
+  const base: AttributionEntry[] = [];
+
+  switch (styleId) {
+    case "dark":
+    case "dark-labels":
+    case "voyager":
+    case "positron":
+      base.push(
+        {
+          label: "OpenStreetMap",
+          url: "https://www.openstreetmap.org/copyright",
+        },
+        { label: "CARTO", url: "https://carto.com/attributions" },
+      );
+      break;
+    case "satellite":
+      base.push({ label: "Esri", url: "https://www.esri.com/" });
+      break;
+    case "terrain":
+      base.push(
+        {
+          label: "OpenStreetMap",
+          url: "https://www.openstreetmap.org/copyright",
+        },
+        { label: "OpenTopoMap", url: "https://opentopomap.org/" },
+      );
+      break;
+    case "topo":
+      base.push(
+        {
+          label: "OpenStreetMap",
+          url: "https://www.openstreetmap.org/copyright",
+        },
+        { label: "Esri", url: "https://www.esri.com/" },
+      );
+      break;
+    case "relief":
+      base.push(
+        { label: "Esri", url: "https://www.esri.com/" },
+        { label: "Mapzen", url: "https://github.com/tilezen/joerd" },
+      );
+      break;
+    default:
+      base.push({
+        label: "OpenStreetMap",
+        url: "https://www.openstreetmap.org/copyright",
+      });
+  }
+
+  base.push({ label: "MapLibre", url: "https://maplibre.org/" });
+
+  return base;
+}

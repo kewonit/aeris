@@ -20,6 +20,7 @@ import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
+import { MapAttribution } from "@/components/ui/map-attribution";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
@@ -413,6 +414,7 @@ function FlightTrackerInner() {
         <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
           <CameraControls />
           <AltitudeLegend />
+          <MapAttribution styleId={mapStyle.id} />
         </div>
       </div>
 
