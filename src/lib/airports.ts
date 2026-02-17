@@ -72510,10 +72510,53 @@ export const AIRPORTS: Airport[] = [
   },
 ];
 
+type SearchAirportEntry = {
+  airport: Airport;
+  iata: string;
+  city: string;
+  name: string;
+  country: string;
+};
+
+const AIRPORT_SEARCH_INDEX: SearchAirportEntry[] = AIRPORTS.map((airport) => ({
+  airport,
+  iata: airport.iata.toLowerCase(),
+  city: airport.city.toLowerCase(),
+  name: airport.name.toLowerCase(),
+  country: airport.country.toLowerCase(),
+}));
+
+const IATA_LOOKUP = new Map(AIRPORTS.map((airport) => [airport.iata, airport]));
+
+const SEARCH_CACHE_LIMIT = 80;
+const SEARCH_CACHE = new Map<string, Airport[]>();
+
+function getCachedAirportSearch(query: string): Airport[] | undefined {
+  const cached = SEARCH_CACHE.get(query);
+  if (!cached) return undefined;
+
+  SEARCH_CACHE.delete(query);
+  SEARCH_CACHE.set(query, cached);
+  return cached;
+}
+
+function setCachedAirportSearch(query: string, airports: Airport[]) {
+  if (SEARCH_CACHE.has(query)) SEARCH_CACHE.delete(query);
+  SEARCH_CACHE.set(query, airports);
+
+  if (SEARCH_CACHE.size > SEARCH_CACHE_LIMIT) {
+    const oldest = SEARCH_CACHE.keys().next().value;
+    if (oldest) SEARCH_CACHE.delete(oldest);
+  }
+}
+
 
 export function searchAirports(query: string, limit = 20): Airport[] {
   const q = query.toLowerCase().trim();
   if (!q) return [];
+
+  const cached = getCachedAirportSearch(q);
+  if (cached) return cached.slice(0, limit);
 
   const exact: Airport[] = [];
   const iataPrefix: Airport[] = [];
@@ -72521,32 +72564,37 @@ export function searchAirports(query: string, limit = 20): Airport[] {
   const nameStart: Airport[] = [];
   const contains: Airport[] = [];
 
-  for (const a of AIRPORTS) {
-    const iata = a.iata.toLowerCase();
-    const city = a.city.toLowerCase();
-    const name = a.name.toLowerCase();
-    const country = a.country.toLowerCase();
+  for (const entry of AIRPORT_SEARCH_INDEX) {
+    const { airport, iata, city, name, country } = entry;
 
-    if (iata === q) exact.push(a);
-    else if (iata.startsWith(q)) iataPrefix.push(a);
-    else if (city.startsWith(q)) cityStart.push(a);
-    else if (name.startsWith(q)) nameStart.push(a);
+    if (iata === q) {
+      if (exact.length < limit) exact.push(airport);
+    } else if (iata.startsWith(q)) {
+      if (iataPrefix.length < limit) iataPrefix.push(airport);
+    } else if (city.startsWith(q)) {
+      if (cityStart.length < limit) cityStart.push(airport);
+    } else if (name.startsWith(q)) {
+      if (nameStart.length < limit) nameStart.push(airport);
+    }
     else if (city.includes(q) || name.includes(q) || country.startsWith(q))
-      contains.push(a);
+      if (contains.length < limit) contains.push(airport);
   }
 
-  return [
+  const results = [
     ...exact,
     ...iataPrefix,
     ...cityStart,
     ...nameStart,
     ...contains,
-  ].slice(0, limit);
+  ];
+
+  setCachedAirportSearch(q, results);
+  return results.slice(0, limit);
 }
 
 export function findByIata(iata: string): Airport | undefined {
   const code = iata.toUpperCase();
-  return AIRPORTS.find((a) => a.iata === code);
+  return IATA_LOOKUP.get(code);
 }
 
 export function airportToCity(airport: Airport): City {
