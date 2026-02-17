@@ -8,6 +8,10 @@ import { CITIES, type City } from "@/lib/cities";
 
 const SOURCE_ID = "airport-markers";
 const DOTS_LAYER = "airport-dots";
+const HIT_LAYER = "airport-hit";
+const ACTIVE_SOURCE_ID = "active-airport-marker";
+const ACTIVE_RING_LAYER = "active-airport-ring";
+const ACTIVE_CORE_LAYER = "active-airport-core";
 
 type AirportLayerProps = {
   activeCity: City;
@@ -79,7 +83,6 @@ export function AirportLayer({
   isDark,
 }: AirportLayerProps) {
   const { map, isLoaded } = useMap();
-  const markerRef = useRef<maplibregl.Marker | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const callbackRef = useRef(onSelectAirport);
   useEffect(() => {
@@ -92,8 +95,8 @@ export function AirportLayer({
     const m = map;
 
     const dotColor = isDark
-      ? "rgba(188,248,221,0.22)"
-      : "rgba(15,118,110,0.16)";
+      ? "rgba(188,248,221,0.68)"
+      : "rgba(15,118,110,0.62)";
 
     function addSourceAndLayers() {
       if (m.getSource(SOURCE_ID)) return;
@@ -101,36 +104,113 @@ export function AirportLayer({
       m.addSource(SOURCE_ID, { type: "geojson", data: airportGeoJson });
 
       m.addLayer({
+        id: HIT_LAYER,
+        type: "circle",
+        source: SOURCE_ID,
+        paint: {
+          "circle-radius": ["step", ["zoom"], 8, 6, 10, 10, 12, 14, 15],
+          "circle-color": "rgba(255,255,255,0.01)",
+          "circle-opacity": 0.01,
+          "circle-pitch-alignment": "map",
+          "circle-pitch-scale": "map",
+        },
+      });
+
+      m.addLayer({
         id: DOTS_LAYER,
         type: "circle",
         source: SOURCE_ID,
         paint: {
-          "circle-radius": [
-            "step",
-            ["zoom"],
-            0.55,
-            6,
-            0.8,
-            10,
-            1.05,
-            14,
-            1.35,
-          ],
+          "circle-radius": ["step", ["zoom"], 1.3, 6, 1.8, 10, 2.4, 14, 3],
           "circle-color": dotColor,
           "circle-opacity": [
             "interpolate",
             ["linear"],
             ["zoom"],
             2,
-            0.1,
+            0.44,
             8,
-            0.17,
+            0.56,
             14,
-            0.24,
+            0.68,
           ],
-          "circle-stroke-width": 0,
+          "circle-stroke-color": "rgba(255,255,255,0.18)",
+          "circle-stroke-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            2,
+            0.15,
+            10,
+            0.3,
+            14,
+            0.5,
+          ],
+          "circle-pitch-alignment": "map",
+          "circle-pitch-scale": "map",
         },
       });
+
+      if (!m.getSource(ACTIVE_SOURCE_ID)) {
+        m.addSource(ACTIVE_SOURCE_ID, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [],
+          },
+        });
+      }
+
+      if (!m.getLayer(ACTIVE_RING_LAYER)) {
+        m.addLayer({
+          id: ACTIVE_RING_LAYER,
+          type: "circle",
+          source: ACTIVE_SOURCE_ID,
+          paint: {
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              2,
+              4,
+              8,
+              6,
+              14,
+              9,
+            ],
+            "circle-color": "rgba(255,255,255,0)",
+            "circle-stroke-color": "rgba(255,255,255,0.26)",
+            "circle-stroke-width": 1,
+            "circle-pitch-alignment": "map",
+            "circle-pitch-scale": "map",
+          },
+        });
+      }
+
+      if (!m.getLayer(ACTIVE_CORE_LAYER)) {
+        m.addLayer({
+          id: ACTIVE_CORE_LAYER,
+          type: "circle",
+          source: ACTIVE_SOURCE_ID,
+          paint: {
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              2,
+              1.6,
+              8,
+              2.2,
+              14,
+              2.8,
+            ],
+            "circle-color": "rgba(255,255,255,0.62)",
+            "circle-opacity": 0.95,
+            "circle-pitch-alignment": "map",
+            "circle-pitch-scale": "map",
+          },
+        });
+      }
     }
 
     addSourceAndLayers();
@@ -180,18 +260,22 @@ export function AirportLayer({
       }
     }
 
-    m.on("mouseenter", DOTS_LAYER, onMouseEnter);
-    m.on("mouseleave", DOTS_LAYER, onMouseLeave);
-    m.on("click", DOTS_LAYER, onClick);
+    m.on("mouseenter", HIT_LAYER, onMouseEnter);
+    m.on("mouseleave", HIT_LAYER, onMouseLeave);
+    m.on("click", HIT_LAYER, onClick);
 
     return () => {
       m.off("style.load", addSourceAndLayers);
-      m.off("mouseenter", DOTS_LAYER, onMouseEnter);
-      m.off("mouseleave", DOTS_LAYER, onMouseLeave);
-      m.off("click", DOTS_LAYER, onClick);
+      m.off("mouseenter", HIT_LAYER, onMouseEnter);
+      m.off("mouseleave", HIT_LAYER, onMouseLeave);
+      m.off("click", HIT_LAYER, onClick);
       popup.remove();
       try {
+        if (m.getLayer(ACTIVE_CORE_LAYER)) m.removeLayer(ACTIVE_CORE_LAYER);
+        if (m.getLayer(ACTIVE_RING_LAYER)) m.removeLayer(ACTIVE_RING_LAYER);
+        if (m.getSource(ACTIVE_SOURCE_ID)) m.removeSource(ACTIVE_SOURCE_ID);
         if (m.getLayer(DOTS_LAYER)) m.removeLayer(DOTS_LAYER);
+        if (m.getLayer(HIT_LAYER)) m.removeLayer(HIT_LAYER);
         if (m.getSource(SOURCE_ID)) m.removeSource(SOURCE_ID);
       } catch {
         /* already cleaned up */
@@ -201,26 +285,26 @@ export function AirportLayer({
 
   useEffect(() => {
     if (!map || !isLoaded) return;
-    injectCSS();
-
-    const el = document.createElement("div");
-    el.className = "airport-beacon";
-    el.innerHTML =
-      '<div class="airport-beacon-ring"></div>' +
-      '<div class="airport-beacon-ring"></div>' +
-      '<div class="airport-beacon-ring"></div>' +
-      '<div class="airport-beacon-core"></div>';
     if (!isValidCoordinates(activeCity.coordinates)) return;
 
-    const marker = new maplibregl.Marker({ element: el })
-      .setLngLat(activeCity.coordinates)
-      .addTo(map);
-    markerRef.current = marker;
+    const src = map.getSource(ACTIVE_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!src) return;
 
-    return () => {
-      marker.remove();
-      markerRef.current = null;
-    };
+    src.setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: activeCity.coordinates,
+          },
+          properties: {},
+        },
+      ],
+    });
   }, [map, isLoaded, activeCity]);
 
   return null;
