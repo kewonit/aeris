@@ -31,6 +31,66 @@ const TRACK_DAMPING = 0.18;
 const TRAIL_SMOOTHING_ITERATIONS = 3;
 const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
 const AIRCRAFT_PX_PER_UNIT = 0.3;
+const BASE_AIRCRAFT_SIZE = 25;
+const AIRCRAFT_PICK_RADIUS_PX = 14;
+
+const CATEGORY_TINT: Record<number, [number, number, number]> = {
+  2: [100, 235, 180],
+  3: [120, 225, 235],
+  4: [255, 210, 120],
+  5: [255, 185, 110],
+  6: [255, 160, 120],
+  7: [255, 120, 200],
+  8: [140, 220, 160],
+  9: [170, 210, 255],
+  10: [220, 170, 255],
+  11: [255, 150, 180],
+  12: [180, 230, 160],
+  14: [195, 165, 255],
+};
+
+function categorySizeMultiplier(category: number | null): number {
+  switch (category) {
+    case 2:
+      return 0.88;
+    case 3:
+      return 0.96;
+    case 4:
+      return 1.08;
+    case 5:
+      return 1.18;
+    case 6:
+      return 1.28;
+    case 7:
+      return 1.04;
+    case 8:
+      return 0.86;
+    case 9:
+    case 12:
+      return 0.8;
+    case 10:
+      return 1.15;
+    case 14:
+      return 0.72;
+    default:
+      return 1;
+  }
+}
+
+function tintAircraftColor(
+  base: [number, number, number, number],
+  category: number | null,
+): [number, number, number, number] {
+  const tint = category !== null ? CATEGORY_TINT[category] : undefined;
+  if (!tint) return base;
+
+  return [
+    Math.round(base[0] * 0.58 + tint[0] * 0.42),
+    Math.round(base[1] * 0.58 + tint[1] * 0.42),
+    Math.round(base[2] * 0.58 + tint[2] * 0.42),
+    base[3],
+  ];
+}
 
 const PULSE_PERIOD_MS = 7000;
 const RING_PERIOD_MS = 5500;
@@ -543,7 +603,7 @@ export function FlightLayers({
       const picked = (overlay as unknown as DeckGLOverlay).pickObject?.({
         x: e.point.x,
         y: e.point.y,
-        radius: 10,
+        radius: AIRCRAFT_PICK_RADIUS_PX,
       });
       if (!picked?.object) {
         onClick(null);
@@ -562,6 +622,7 @@ export function FlightLayers({
     if (!overlayRef.current) {
       overlayRef.current = new MapboxOverlay({
         interleaved: false,
+        pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         layers: [],
       });
       map.addControl(overlayRef.current as unknown as maplibregl.IControl);
@@ -731,7 +792,7 @@ export function FlightLayers({
               data: interpolated,
               getPosition: (d) => [d.longitude!, d.latitude!, 0],
               getIcon: () => "aircraft",
-              getSize: 20,
+              getSize: (d) => 20 * categorySizeMultiplier(d.category),
               getColor: [0, 0, 0, 60],
               getAngle: (d) => 360 - (d.trueTrack ?? 0),
               iconAtlas: atlasUrl,
@@ -747,6 +808,9 @@ export function FlightLayers({
           const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
           const handledIds = new Set<string>();
           const trailData: TrailEntry[] = [];
+          const denseSubdivisions = interpolated.length > 140 ? 1 : 2;
+          const smoothingIterations =
+            interpolated.length > 220 ? 1 : TRAIL_SMOOTHING_ITERATIONS;
 
           const buildVisibleTrailPoints = (
             trail: TrailEntry,
@@ -777,7 +841,10 @@ export function FlightLayers({
               p[1],
               Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
             ]) as ElevatedPoint[];
-            const denseBasePath = densifyElevatedPath(basePath, 2);
+            const denseBasePath = densifyElevatedPath(
+              basePath,
+              denseSubdivisions,
+            );
 
             if (
               animFlight &&
@@ -792,7 +859,9 @@ export function FlightLayers({
               ]);
 
               const smoothed =
-                clipped.length < 4 ? clipped : smoothElevatedPath(clipped);
+                clipped.length < 4
+                  ? clipped
+                  : smoothElevatedPath(clipped, smoothingIterations);
 
               return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
             }
@@ -800,9 +869,21 @@ export function FlightLayers({
             const smoothed =
               denseBasePath.length < 4
                 ? denseBasePath
-                : smoothElevatedPath(denseBasePath);
+                : smoothElevatedPath(denseBasePath, smoothingIterations);
 
             return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
+          };
+
+          const visibleTrailCache = new Map<string, ElevatedPoint[]>();
+          const getVisibleTrailPoints = (
+            trail: TrailEntry,
+            animFlight: FlightState | undefined,
+          ): ElevatedPoint[] => {
+            const cached = visibleTrailCache.get(trail.icao24);
+            if (cached) return cached;
+            const computed = buildVisibleTrailPoints(trail, animFlight);
+            visibleTrailCache.set(trail.icao24, computed);
+            return computed;
           };
 
           for (const f of interpolated) {
@@ -844,7 +925,7 @@ export function FlightLayers({
               },
               getPath: (d) => {
                 const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 return visiblePoints.map(
                   (p) =>
                     [
@@ -859,7 +940,7 @@ export function FlightLayers({
               },
               getColor: (d) => {
                 const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = buildVisibleTrailPoints(d, animFlight);
+                const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 const len = visiblePoints.length;
                 return visiblePoints.map((point, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
@@ -988,10 +1069,18 @@ export function FlightLayers({
               const yaw = -(d.trueTrack ?? 0);
               return [pitch, yaw, 90];
             },
-            getColor: (d) =>
-              altColors ? altitudeToColor(d.baroAltitude) : defaultColor,
+            getColor: (d) => {
+              const base = altColors
+                ? altitudeToColor(d.baroAltitude)
+                : defaultColor;
+              return tintAircraftColor(base, d.category);
+            },
             scenegraph: AIRCRAFT_SCENEGRAPH_URL,
-            sizeScale: 25,
+            getScale: (d) => {
+              const scale = categorySizeMultiplier(d.category);
+              return [scale, scale, scale];
+            },
+            sizeScale: BASE_AIRCRAFT_SIZE,
             sizeMinPixels: AIRCRAFT_PX_PER_UNIT,
             sizeMaxPixels: AIRCRAFT_PX_PER_UNIT,
             _lighting: "pbr",
