@@ -44,6 +44,7 @@ body {
   color: hsl(var(--foreground));
 }
 
+/* Custom attribution component replaces built-in controls */
 .maplibregl-ctrl-attrib {
   display: none !important;
 }
