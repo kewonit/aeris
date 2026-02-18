@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "./map";
+import {
+  FPV_DISTANCE_ZOOM_OFFSET,
+  fpvZoomForAltitude,
+  lerp,
+  lerpLng,
+  normalizeLng,
+  setMapInteractionsEnabled,
+} from "./camera-controller-utils";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
@@ -36,17 +44,10 @@ export function CameraController({
   city,
   followFlight = null,
   fpvFlight = null,
-  fpvPositionRef,
 }: {
   city: City;
   followFlight?: FlightState | null;
   fpvFlight?: FlightState | null;
-  fpvPositionRef?: MutableRefObject<{
-    lng: number;
-    lat: number;
-    alt: number;
-    track: number;
-  } | null>;
 }) {
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
@@ -59,39 +60,10 @@ export function CameraController({
   const isFollowingRef = useRef(false);
   const isFpvActiveRef = useRef(false);
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
-  const fpvSettingsRef = useRef({
-    pitch: settings.fpvPitch,
-    freeCamera: settings.fpvFreeCamera,
-  });
 
   useEffect(() => {
     fpvFlightRef.current = fpvFlight;
   }, [fpvFlight]);
-
-  useEffect(() => {
-    fpvSettingsRef.current = {
-      pitch: settings.fpvPitch,
-      freeCamera: settings.fpvFreeCamera,
-    };
-  }, [settings.fpvPitch, settings.fpvFreeCamera]);
-
-  useEffect(() => {
-    if (!map || !isFpvActiveRef.current) return;
-    if (settings.fpvFreeCamera) {
-      map.dragPan.enable();
-      map.dragRotate.enable();
-      map.scrollZoom.enable();
-      map.touchZoomRotate.enable();
-      map.doubleClickZoom.disable();
-      map.keyboard.enable();
-    } else {
-      map.dragPan.disable();
-      map.scrollZoom.disable();
-      map.touchZoomRotate.disable();
-      map.doubleClickZoom.disable();
-      map.keyboard.disable();
-    }
-  }, [map, settings.fpvFreeCamera]);
 
   useEffect(() => {
     if (!map || !isLoaded || !city) return;
@@ -158,24 +130,10 @@ export function CameraController({
     followFlight?.trueTrack,
   ]);
 
-  const FPV_DISTANCE_ZOOM_OFFSET = 1.1;
-
-  function fpvZoomForAltitude(altMeters: number): number {
-    const alt = Math.max(altMeters, 0);
-    if (alt < 50) return 16.2;
-    const z = 18.1 - 2.0 * Math.log10(Math.max(alt, 50));
-    return Math.max(10.1, Math.min(16.2, z));
-  }
-
-  const fpvFrameRef = useRef<number | null>(null);
   useEffect(() => {
     if (!map || !isLoaded) {
       if (isFpvActiveRef.current) {
         isFpvActiveRef.current = false;
-        if (fpvFrameRef.current) {
-          cancelAnimationFrame(fpvFrameRef.current);
-          fpvFrameRef.current = null;
-        }
       }
       return;
     }
@@ -187,19 +145,10 @@ export function CameraController({
     const wasFpv = prevFpvRef.current !== null;
     prevFpvRef.current = fpvKey;
 
-    if (fpvFrameRef.current) {
-      cancelAnimationFrame(fpvFrameRef.current);
-      fpvFrameRef.current = null;
-    }
-
     if (!fpv || fpv.longitude == null || fpv.latitude == null) {
       isFpvActiveRef.current = false;
       if (wasFpv) {
-        map.dragPan.enable();
-        map.scrollZoom.enable();
-        map.touchZoomRotate.enable();
-        map.doubleClickZoom.enable();
-        map.keyboard.enable();
+        setMapInteractionsEnabled(map, true);
       }
       if (wasFpv) {
         map.flyTo({
@@ -215,27 +164,12 @@ export function CameraController({
     }
 
     isFpvActiveRef.current = true;
-    const initialSettings = fpvSettingsRef.current;
-
-    if (initialSettings.freeCamera) {
-      map.dragPan.enable();
-      map.dragRotate.enable();
-      map.scrollZoom.enable();
-      map.touchZoomRotate.enable();
-      map.doubleClickZoom.disable();
-      map.keyboard.enable();
-    } else {
-      map.dragPan.disable();
-      map.scrollZoom.disable();
-      map.touchZoomRotate.disable();
-      map.doubleClickZoom.disable();
-      map.keyboard.disable();
-    }
+    setMapInteractionsEnabled(map, true);
 
     const bearing = fpv.trueTrack ?? map.getBearing();
     const zoom =
       fpvZoomForAltitude(fpv.baroAltitude ?? 5000) - FPV_DISTANCE_ZOOM_OFFSET;
-    const fpvPitch = initialSettings.pitch;
+    const fpvPitch = map.getPitch();
 
     const centerLng = ((fpv.longitude + 540) % 360) - 180;
 
@@ -248,90 +182,92 @@ export function CameraController({
       essential: true,
     });
 
-    let currentBearing = bearing;
-    let currentZoom = zoom;
+    let frameId: number | null = null;
 
-    let lastPos = {
-      lng: fpv.longitude,
-      lat: fpv.latitude,
-      alt: fpv.baroAltitude ?? 5000,
-      track: bearing,
-    };
-
-    function lerpAngleDeg(from: number, to: number, t: number): number {
-      const diff = ((to - from + 540) % 360) - 180;
-      return from + diff * t;
-    }
-
-    function tick() {
+    function keepInFrame() {
       if (!isFpvActiveRef.current || !map) {
-        fpvFrameRef.current = null;
+        frameId = null;
         return;
       }
 
-      const pos = fpvPositionRef?.current;
-      const fallback = fpvFlightRef.current;
-      const sourceLng = pos?.lng ?? fallback?.longitude ?? lastPos.lng;
-      const sourceLat = pos?.lat ?? fallback?.latitude ?? lastPos.lat;
-      const sourceAlt = pos?.alt ?? fallback?.baroAltitude ?? lastPos.alt;
-      const sourceTrack = pos?.track ?? fallback?.trueTrack ?? lastPos.track;
+      const live = fpvFlightRef.current;
+      if (live?.longitude != null && live?.latitude != null) {
+        if (
+          !Number.isFinite(live.longitude) ||
+          !Number.isFinite(live.latitude) ||
+          Math.abs(live.latitude) > 90
+        ) {
+          frameId = requestAnimationFrame(keepInFrame);
+          return;
+        }
 
-      lastPos = {
-        lng: sourceLng,
-        lat: sourceLat,
-        alt: sourceAlt,
-        track: sourceTrack,
-      };
+        const point = map.project([
+          normalizeLng(live.longitude),
+          live.latitude,
+        ]);
+        const canvas = map.getCanvas();
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
 
-      const currentSettings = fpvSettingsRef.current;
+        if (width < 2 || height < 2) {
+          frameId = requestAnimationFrame(keepInFrame);
+          return;
+        }
 
-      if (currentSettings.freeCamera) {
-        const camLng = ((sourceLng + 540) % 360) - 180;
-        map.jumpTo({ center: [camLng, sourceLat] });
-      } else {
-        currentBearing = lerpAngleDeg(currentBearing, sourceTrack, 0.15);
-        const zoomTarget =
-          fpvZoomForAltitude(sourceAlt) - FPV_DISTANCE_ZOOM_OFFSET;
-        currentZoom += (zoomTarget - currentZoom) * 0.1;
+        if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+          frameId = requestAnimationFrame(keepInFrame);
+          return;
+        }
 
-        const camLng = ((sourceLng + 540) % 360) - 180;
+        const minX = width * 0.18;
+        const maxX = width * 0.82;
+        const minY = height * 0.18;
+        const maxY = height * 0.82;
 
-        const DEG_PER_PX_AT_Z0 = 360 / 512;
-        const degPerPx = DEG_PER_PX_AT_Z0 / Math.pow(2, currentZoom);
-        const forwardPx = 120;
-        const forwardDeg = forwardPx * degPerPx;
-        const headingRad = (currentBearing * Math.PI) / 180;
-        const offsetLng = camLng + Math.sin(headingRad) * forwardDeg;
-        const offsetLat = sourceLat + Math.cos(headingRad) * forwardDeg;
+        const outOfFrame =
+          point.x < minX || point.x > maxX || point.y < minY || point.y > maxY;
 
-        map.jumpTo({
-          center: [offsetLng, offsetLat],
-          bearing: currentBearing,
-          zoom: currentZoom,
-          pitch: currentSettings.pitch,
-        });
+        if (outOfFrame) {
+          const overflowX =
+            point.x < minX
+              ? minX - point.x
+              : point.x > maxX
+                ? point.x - maxX
+                : 0;
+          const overflowY =
+            point.y < minY
+              ? minY - point.y
+              : point.y > maxY
+                ? point.y - maxY
+                : 0;
+          const overflowRatio = Math.max(overflowX / width, overflowY / height);
+          const alpha = Math.min(0.12, 0.03 + overflowRatio * 0.2);
+
+          const center = map.getCenter();
+          const targetLng = normalizeLng(live.longitude);
+          const targetLat = live.latitude;
+          map.jumpTo({
+            center: [
+              lerpLng(center.lng, targetLng, alpha),
+              lerp(center.lat, targetLat, alpha),
+            ],
+          });
+        }
       }
 
-      fpvFrameRef.current = requestAnimationFrame(tick);
+      frameId = requestAnimationFrame(keepInFrame);
     }
 
-    fpvFrameRef.current = requestAnimationFrame(tick);
+    frameId = requestAnimationFrame(keepInFrame);
 
     return () => {
-      if (fpvFrameRef.current) {
-        cancelAnimationFrame(fpvFrameRef.current);
-        fpvFrameRef.current = null;
-      }
+      if (frameId != null) cancelAnimationFrame(frameId);
       if (map && isFpvActiveRef.current) {
-        map.dragPan.enable();
-        map.scrollZoom.enable();
-        map.touchZoomRotate.enable();
-        map.doubleClickZoom.enable();
-        map.keyboard.enable();
+        setMapInteractionsEnabled(map, true);
         isFpvActiveRef.current = false;
       }
     };
-  }, [map, isLoaded, fpvFlight?.icao24, city, fpvPositionRef]);
+  }, [map, isLoaded, fpvFlight?.icao24, city]);
 
   useEffect(() => {
     if (!map || !isLoaded || !city) return;

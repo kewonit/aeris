@@ -1,25 +1,13 @@
 "use client";
 
-import { useRef, useEffect, useMemo, useState } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
-import {
-  X,
-  Eye,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  Gauge,
-  ChevronDown,
-  Video,
-  VideoOff,
-} from "lucide-react";
+import { X, Eye, ArrowUp, ArrowDown, Minus, Gauge } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
-import { Slider } from "@/components/ui/slider";
-import { useSettings } from "@/hooks/use-settings";
 
 type FpvHudProps = {
   flight: FlightState;
@@ -36,9 +24,6 @@ const COMPASS_LABELS: Record<number, string> = {
   270: "W",
   315: "NW",
 };
-
-const FPV_PITCH_MIN = 20;
-const FPV_PITCH_MAX = 45;
 
 function CompassRibbon({ heading }: { heading: number | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -133,8 +118,6 @@ function CompassRibbon({ heading }: { heading: number | null }) {
 }
 
 export function FpvHud({ flight, onExit }: FpvHudProps) {
-  const { settings, update } = useSettings();
-  const [controlsOpen, setControlsOpen] = useState(false);
   const altFeet =
     flight.baroAltitude !== null
       ? Math.round(flight.baroAltitude * 3.28084)
@@ -170,17 +153,17 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="pointer-events-auto fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+      className="pointer-events-auto fixed right-2 bottom-3 left-2 z-50 sm:right-auto sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2"
     >
       <div
-        className="flex flex-col items-center gap-0 overflow-hidden rounded-2xl border border-white/8 bg-black/70 shadow-[0_16px_64px_rgba(0,0,0,0.6)] backdrop-blur-3xl"
+        className="mx-auto flex w-full max-w-176 flex-col items-center gap-0 overflow-hidden rounded-2xl border border-white/8 bg-black/70 shadow-[0_16px_64px_rgba(0,0,0,0.6)] backdrop-blur-3xl"
         role="status"
         aria-live="polite"
         aria-label="First person view flight instruments"
       >
-        <div className="w-full border-b border-white/6 px-3 pt-2 pb-1">
+        <div className="w-full border-b border-white/6 px-2.5 pt-2 pb-1 sm:px-3">
           <div
-            className="mx-auto w-fit overflow-hidden rounded-lg"
+            className="mx-auto w-fit scale-95 overflow-hidden rounded-lg sm:scale-100"
             style={{ width: 200 }}
           >
             <CompassRibbon heading={heading} />
@@ -190,8 +173,8 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
           </p>
         </div>
 
-        <div className="flex items-stretch">
-          <div className="flex items-center gap-2 border-r border-white/6 px-4 py-2.5">
+        <div className="flex w-full items-stretch">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 border-r border-white/6 px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5">
             {logoUrl ? (
               <span className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white/90 ring-1 ring-white/20">
                 <Image
@@ -206,17 +189,17 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             ) : (
               <Eye className="h-3.5 w-3.5 text-emerald-400/70 animate-pulse" />
             )}
-            <div>
-              <p className="text-[13px] font-bold tracking-wide text-white/90">
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-bold tracking-wide text-white/90 sm:text-[13px]">
                 {formatCallsign(flight.callsign)}
               </p>
-              <p className="text-[9px] font-medium uppercase tracking-widest text-white/25">
+              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-white/25">
                 {airline ?? flight.originCountry}
               </p>
             </div>
           </div>
 
-          <div className="flex min-w-20 flex-col items-center justify-center border-r border-white/6 px-4 py-2">
+          <div className="flex min-w-15 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-20 sm:px-4">
             <div className="flex items-center gap-1 text-white/30">
               <ArrowUp className="h-2.5 w-2.5" />
               <span className="text-[9px] font-semibold uppercase tracking-wider">
@@ -229,7 +212,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             <p className="text-[9px] font-medium text-white/25">ft</p>
           </div>
 
-          <div className="flex min-w-17.5 flex-col items-center justify-center border-r border-white/6 px-4 py-2">
+          <div className="flex min-w-14 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-17.5 sm:px-4">
             <div className="flex items-center gap-1 text-white/30">
               <Gauge className="h-2.5 w-2.5" />
               <span className="text-[9px] font-semibold uppercase tracking-wider">
@@ -242,7 +225,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             <p className="text-[9px] font-medium text-white/25">kts</p>
           </div>
 
-          <div className="flex min-w-20 flex-col items-center justify-center border-r border-white/6 px-4 py-2">
+          <div className="flex min-w-15 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-20 sm:px-4">
             <div className="flex items-center gap-1 text-white/30">
               {vsIcon ?? <Minus className="h-2.5 w-2.5" />}
               <span className="text-[9px] font-semibold uppercase tracking-wider">
@@ -265,91 +248,12 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
 
           <button
             onClick={onExit}
-            className="flex items-center gap-1.5 px-4 py-2 text-white/40 hover:bg-white/5 hover:text-white/60 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-2 text-white/40 transition-colors hover:bg-white/5 hover:text-white/60 sm:px-4"
             aria-label="Exit first person view"
             title="Exit FPV (Esc)"
           >
             <X className="h-4 w-4" />
           </button>
-        </div>
-
-        <div className="w-full border-t border-white/6">
-          <button
-            type="button"
-            onClick={() => setControlsOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between px-3 py-1.5 text-left transition-colors hover:bg-white/3"
-            aria-expanded={controlsOpen}
-            aria-label="Toggle FPV camera controls"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-              Camera
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold tabular-nums text-white/50">
-                {settings.fpvFreeCamera
-                  ? "Free"
-                  : `${Math.round(settings.fpvPitch)}°`}
-              </span>
-              <ChevronDown
-                className={`h-3 w-3 text-white/35 transition-transform duration-200 ${
-                  controlsOpen ? "rotate-180" : ""
-                }`}
-              />
-            </span>
-          </button>
-
-          {controlsOpen && (
-            <div className="px-3 pt-0.5 pb-2.5 space-y-2.5">
-              <button
-                type="button"
-                onClick={() => update("fpvFreeCamera", !settings.fpvFreeCamera)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
-                  settings.fpvFreeCamera
-                    ? "bg-sky-500/15 text-sky-400/90"
-                    : "bg-white/3 text-white/40 hover:bg-white/5"
-                }`}
-                aria-label="Toggle free camera mode"
-                title={
-                  settings.fpvFreeCamera
-                    ? "Switch to chase camera"
-                    : "Switch to free camera"
-                }
-              >
-                {settings.fpvFreeCamera ? (
-                  <VideoOff className="h-3.5 w-3.5 shrink-0" />
-                ) : (
-                  <Video className="h-3.5 w-3.5 shrink-0" />
-                )}
-                <span className="text-[10px] font-semibold uppercase tracking-wider">
-                  {settings.fpvFreeCamera ? "Free Camera" : "Chase Camera"}
-                </span>
-              </button>
-
-              {!settings.fpvFreeCamera && (
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[10px] font-medium text-white/35">
-                      View
-                    </span>
-                    <span className="text-[11px] font-semibold tabular-nums text-white/65">
-                      {Math.round(settings.fpvPitch)}
-                      <span className="text-[9px] font-normal text-white/30">
-                        °
-                      </span>
-                    </span>
-                  </div>
-                  <Slider
-                    min={FPV_PITCH_MIN}
-                    max={FPV_PITCH_MAX}
-                    step={1}
-                    value={[settings.fpvPitch]}
-                    onValueChange={(vals) => update("fpvPitch", vals[0])}
-                    aria-label="FPV view angle"
-                  />
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </motion.div>

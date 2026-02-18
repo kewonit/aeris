@@ -3,6 +3,7 @@
 const OPENSKY_API = "https://opensky-network.org/api";
 const FETCH_TIMEOUT_MS = 15_000;
 const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
+const CALLSIGN_CACHE_TTL_MS = 30_000;
 
 export type FlightState = {
   icao24: string;
@@ -25,6 +26,11 @@ export type FlightState = {
 type OpenSkyResponse = {
   time: number;
   states: (string | number | boolean | null)[][] | null;
+};
+
+type ParseStateOptions = {
+  includeGround?: boolean;
+  requireBaroAltitude?: boolean;
 };
 
 type RateLimitInfo = {
@@ -100,8 +106,11 @@ function parseStateRow(rawState: (string | number | boolean | null)[]): FlightSt
   };
 }
 
-function parseStates(raw: OpenSkyResponse): FlightState[] {
+function parseStates(raw: OpenSkyResponse, options?: ParseStateOptions): FlightState[] {
   if (!raw || !Array.isArray(raw.states)) return [];
+
+  const includeGround = options?.includeGround ?? false;
+  const requireBaroAltitude = options?.requireBaroAltitude ?? true;
 
   return raw.states
     .map(parseStateRow)
@@ -110,9 +119,14 @@ function parseStates(raw: OpenSkyResponse): FlightState[] {
       (f) =>
         f.longitude !== null &&
         f.latitude !== null &&
-        !f.onGround &&
-        f.baroAltitude !== null,
+        (includeGround || !f.onGround) &&
+        (!requireBaroAltitude || f.baroAltitude !== null),
     );
+}
+
+function normalizeCallsign(value: string | null): string {
+  if (!value) return "";
+  return value.trim().toUpperCase().replace(/\s+/g, "");
 }
 
 export type FetchResult = {
@@ -233,7 +247,10 @@ export async function fetchFlightByIcao24(
       typeof payload === "object" && payload !== null
         ? (payload as OpenSkyResponse)
         : { time: 0, states: null };
-    const flights = parseStates(data);
+    const flights = parseStates(data, {
+      includeGround: true,
+      requireBaroAltitude: false,
+    });
     return {
       flight:
         flights.find((f) => f.icao24 === normalizedIcao24) ?? null,
@@ -244,6 +261,118 @@ export async function fetchFlightByIcao24(
       if (signal?.aborted) throw err;
     }
     return { flight: null, creditsRemaining: null };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
+}
+
+type CallsignLookupResult = {
+  flight: FlightState | null;
+  creditsRemaining: number | null;
+  rateLimited: boolean;
+  retryAfterSeconds: number | null;
+};
+
+const callsignLookupCache = new Map<
+  string,
+  { timestamp: number; result: CallsignLookupResult }
+>();
+
+export async function fetchFlightByCallsign(
+  callsign: string,
+  signal?: AbortSignal,
+): Promise<CallsignLookupResult> {
+  const normalizedQuery = normalizeCallsign(callsign);
+  if (!normalizedQuery) {
+    return {
+      flight: null,
+      creditsRemaining: null,
+      rateLimited: false,
+      retryAfterSeconds: null,
+    };
+  }
+
+  const cached = callsignLookupCache.get(normalizedQuery);
+  if (cached && Date.now() - cached.timestamp <= CALLSIGN_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
+  const url = `${OPENSKY_API}/states/all?extended=1`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const onExternalAbort = () => controller.abort();
+  signal?.addEventListener("abort", onExternalAbort);
+
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const rateLimitInfo = parseRateLimitInfo(res);
+
+    if (res.status === 429) {
+      return {
+        flight: null,
+        creditsRemaining: rateLimitInfo.creditsRemaining,
+        rateLimited: true,
+        retryAfterSeconds: rateLimitInfo.retryAfterSeconds,
+      };
+    }
+
+    if (!res.ok) {
+      return {
+        flight: null,
+        creditsRemaining: rateLimitInfo.creditsRemaining,
+        rateLimited: false,
+        retryAfterSeconds: null,
+      };
+    }
+
+    const payload = (await res.json()) as unknown;
+    const data =
+      typeof payload === "object" && payload !== null
+        ? (payload as OpenSkyResponse)
+        : { time: 0, states: null };
+
+    const flights = parseStates(data, {
+      includeGround: true,
+      requireBaroAltitude: false,
+    });
+
+    const exact = flights.find(
+      (f) => normalizeCallsign(f.callsign) === normalizedQuery,
+    );
+    const startsWith =
+      exact ??
+      flights.find((f) => normalizeCallsign(f.callsign).startsWith(normalizedQuery));
+    const contains =
+      startsWith ??
+      flights.find((f) => normalizeCallsign(f.callsign).includes(normalizedQuery));
+
+    const result: CallsignLookupResult = {
+      flight: contains ?? null,
+      creditsRemaining: rateLimitInfo.creditsRemaining,
+      rateLimited: false,
+      retryAfterSeconds: null,
+    };
+
+    callsignLookupCache.set(normalizedQuery, {
+      timestamp: Date.now(),
+      result,
+    });
+
+    return result;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      if (signal?.aborted) throw err;
+    }
+    return {
+      flight: null,
+      creditsRemaining: null,
+      rateLimited: false,
+      retryAfterSeconds: null,
+    };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onExternalAbort);

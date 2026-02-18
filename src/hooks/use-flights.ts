@@ -34,7 +34,12 @@ function adaptiveInterval(creditsRemaining: number | null): number {
  * @param fpvIcao24   – When non-null the hook switches to a small moving bbox
  *                      centred on this aircraft, saving API credits.
  */
-export function useFlights(city: City | null, fpvIcao24: string | null = null) {
+export function useFlights(
+  city: City | null,
+  fpvIcao24: string | null = null,
+  fpvSeedCenter: { lng: number; lat: number } | null = null,
+) {
+  
   const [flights, setFlights] = useState<FlightState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +54,14 @@ export function useFlights(city: City | null, fpvIcao24: string | null = null) {
   const creditsRef = useRef<number | null>(null);
   const lastFetchRef = useRef(0);
   const fpvCenterRef = useRef<{ lng: number; lat: number } | null>(null);
+  const fpvSeedCenterRef = useRef<{ lng: number; lat: number } | null>(
+    fpvSeedCenter,
+  );
   const fpvIcao24Ref = useRef<string | null>(fpvIcao24);
   const fpvSeedRef = useRef<string | null>(null);
   const fetchDataRef = useRef<(target: City) => void>(() => {});
   fpvIcao24Ref.current = fpvIcao24;
+  fpvSeedCenterRef.current = fpvSeedCenter;
 
   useEffect(() => {
     if (!fpvIcao24) {
@@ -128,6 +137,13 @@ export function useFlights(city: City | null, fpvIcao24: string | null = null) {
             fpvCenterRef.current.lat,
             FPV_BBOX_RADIUS,
           );
+        } else if (inFpv && fpvSeedCenterRef.current) {
+          fpvCenterRef.current = fpvSeedCenterRef.current;
+          bbox = bboxFromCenter(
+            fpvSeedCenterRef.current.lng,
+            fpvSeedCenterRef.current.lat,
+            FPV_BBOX_RADIUS,
+          );
         } else {
           bbox = bboxFromCenter(
             target.coordinates[0],
@@ -196,20 +212,18 @@ export function useFlights(city: City | null, fpvIcao24: string | null = null) {
     const activeCity = city;
 
     function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        const elapsed = Date.now() - lastFetchRef.current;
+      if (document.visibilityState !== "visible") return;
 
-        if (elapsed >= VISIBILITY_RESUME_STALE_MS) {
-          clearSchedule();
-          fetchData(activeCity);
-        } else {
-          const interval = adaptiveInterval(creditsRef.current);
-          const remaining = Math.max(1_000, interval - elapsed);
-          clearSchedule();
-          scheduleNext(activeCity, remaining);
-        }
-      } else {
+      const elapsed = Date.now() - lastFetchRef.current;
+
+      if (elapsed >= VISIBILITY_RESUME_STALE_MS) {
         clearSchedule();
+        fetchData(activeCity);
+      } else {
+        const interval = adaptiveInterval(creditsRef.current);
+        const remaining = Math.max(1_000, interval - elapsed);
+        clearSchedule();
+        scheduleNext(activeCity, remaining);
       }
     }
 

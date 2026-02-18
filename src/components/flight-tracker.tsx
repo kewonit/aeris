@@ -29,7 +29,12 @@ import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
 import { CITIES, type City } from "@/lib/cities";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
-import { fetchFlightByIcao24, type FlightState } from "@/lib/opensky";
+import {
+  fetchFlightByIcao24,
+  fetchFlightByCallsign,
+  type FlightState,
+} from "@/lib/opensky";
+import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star, Keyboard } from "lucide-react";
 
@@ -66,6 +71,7 @@ const HIGH_TRAFFIC_IATA_SET = new Set<string>(HIGH_TRAFFIC_IATA);
 const HIGH_TRAFFIC_AIRPORTS = AIRPORTS.filter((airport) =>
   HIGH_TRAFFIC_IATA_SET.has(airport.iata.toUpperCase()),
 );
+const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
 
 const subscribeNoop = () => () => {};
 
@@ -190,6 +196,19 @@ function pickRandomAirportCity(excludeIata?: string): City {
   const randomAirport = chooseRandom(source);
   if (!randomAirport) return DEFAULT_CITY;
   return airportToCity(randomAirport);
+}
+
+function cityFromFlight(flight: FlightState): City | null {
+  if (flight.longitude == null || flight.latitude == null) return null;
+  const code = flight.icao24.toUpperCase();
+  return {
+    id: `trk-${flight.icao24}`,
+    name: `Flight ${code}`,
+    country: flight.originCountry || "Unknown",
+    iata: code.slice(0, 3),
+    coordinates: [flight.longitude, flight.latitude],
+    radius: 2,
+  };
 }
 
 function FlightTrackerInner() {
@@ -479,6 +498,52 @@ function FlightTrackerInner() {
     }
   }, [fpvIcao24, selectedIcao24, handleToggleFpv]);
 
+  const handleLookupFlight = useCallback(
+    async (rawQuery: string, enterFpv = false): Promise<boolean> => {
+      const compactQuery = rawQuery.trim().toLowerCase().replace(/\s+/g, "");
+      if (!compactQuery) return false;
+
+      const localMatch =
+        displayFlights.find((f) => f.icao24.toLowerCase() === compactQuery) ??
+        displayFlights.find((f) =>
+          formatCallsign(f.callsign)
+            .toLowerCase()
+            .replace(/\s+/g, "")
+            .includes(compactQuery),
+        ) ??
+        null;
+
+      if (localMatch) {
+        setSelectedIcao24(localMatch.icao24);
+        setFollowIcao24(null);
+        if (enterFpv) {
+          setFpvIcao24(localMatch.icao24);
+        }
+        return true;
+      }
+
+      const result = ICAO24_REGEX.test(compactQuery)
+        ? await fetchFlightByIcao24(compactQuery)
+        : await fetchFlightByCallsign(compactQuery);
+
+      if (!result.flight) return false;
+
+      const focusCity = cityFromFlight(result.flight);
+      if (focusCity) {
+        setCityOverride(focusCity);
+        syncCityToUrl(focusCity);
+      }
+
+      setSelectedIcao24(result.flight.icao24);
+      setFollowIcao24(null);
+      if (enterFpv) {
+        setFpvIcao24(result.flight.icao24);
+      }
+      return true;
+    },
+    [displayFlights],
+  );
+
   useKeyboardShortcuts({
     onNorthUp: handleNorthUp,
     onResetView: handleResetView,
@@ -497,7 +562,6 @@ function FlightTrackerInner() {
           city={activeCity}
           followFlight={followFlight}
           fpvFlight={fpvFlightOrCached}
-          fpvPositionRef={fpvPositionRef}
         />
         <AirportLayer
           activeCity={activeCity}
@@ -600,6 +664,9 @@ function FlightTrackerInner() {
               onSelectCity={setActiveCity}
               activeStyle={mapStyle}
               onSelectStyle={setMapStyle}
+              flights={displayFlights}
+              activeFlightIcao24={selectedIcao24}
+              onLookupFlight={handleLookupFlight}
             />
           </div>
         )}

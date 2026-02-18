@@ -23,8 +23,6 @@ export type Settings = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   fpvChaseDistance: number;
-  fpvPitch: number;
-  fpvFreeCamera: boolean;
 };
 
 const TRAIL_THICKNESS_MIN = 1;
@@ -33,8 +31,6 @@ const TRAIL_DISTANCE_MIN = 12;
 const TRAIL_DISTANCE_MAX = 100;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
-const FPV_PITCH_MIN = 20;
-const FPV_PITCH_MAX = 45;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -57,7 +53,6 @@ function normalizeSettings(input: Settings): Settings {
       FPV_CHASE_DISTANCE_MIN,
       FPV_CHASE_DISTANCE_MAX,
     ),
-    fpvPitch: Math.round(clamp(input.fpvPitch, FPV_PITCH_MIN, FPV_PITCH_MAX)),
   };
 }
 
@@ -71,8 +66,6 @@ const DEFAULT_SETTINGS: Settings = {
   showShadows: true,
   showAltitudeColors: true,
   fpvChaseDistance: 0.0048,
-  fpvPitch: 34,
-  fpvFreeCamera: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -106,12 +99,7 @@ function isValidSettings(obj: unknown): obj is Settings {
     typeof s.fpvChaseDistance === "number" &&
     Number.isFinite(s.fpvChaseDistance) &&
     s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
-    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
-    typeof s.fpvPitch === "number" &&
-    Number.isFinite(s.fpvPitch) &&
-    s.fpvPitch >= FPV_PITCH_MIN &&
-    s.fpvPitch <= FPV_PITCH_MAX &&
-    typeof s.fpvFreeCamera === "boolean"
+    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX
   );
 }
 
