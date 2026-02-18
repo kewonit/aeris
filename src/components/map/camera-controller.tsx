@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
+import type { FlightState } from "@/lib/opensky";
 
 const IDLE_TIMEOUT_MS = 5_000;
 const ORBIT_EASE_IN_MS = 2000;
 const DEFAULT_ZOOM = 9.2;
 const DEFAULT_PITCH = 49;
 const DEFAULT_BEARING = 27.4;
+const FOLLOW_ZOOM = 10.5;
+const FOLLOW_PITCH = 55;
+const FOLLOW_EASE_MS = 1200;
+
+const FPV_FLY_DURATION = 2500;
 
 const CAMERA_ACCEL = 2.5;
 const CAMERA_DECEL = 4.0;
@@ -26,13 +32,66 @@ type ActionState = {
   impulseEnd: number;
 };
 
-export function CameraController({ city }: { city: City }) {
+export function CameraController({
+  city,
+  followFlight = null,
+  fpvFlight = null,
+  fpvPositionRef,
+}: {
+  city: City;
+  followFlight?: FlightState | null;
+  fpvFlight?: FlightState | null;
+  fpvPositionRef?: MutableRefObject<{
+    lng: number;
+    lat: number;
+    alt: number;
+    track: number;
+  } | null>;
+}) {
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
   const prevCityRef = useRef<string | null>(null);
+  const prevFollowRef = useRef<string | null>(null);
+  const prevFpvRef = useRef<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbitFrameRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
+  const isFollowingRef = useRef(false);
+  const isFpvActiveRef = useRef(false);
+  const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
+  const fpvSettingsRef = useRef({
+    pitch: settings.fpvPitch,
+    freeCamera: settings.fpvFreeCamera,
+  });
+
+  useEffect(() => {
+    fpvFlightRef.current = fpvFlight;
+  }, [fpvFlight]);
+
+  useEffect(() => {
+    fpvSettingsRef.current = {
+      pitch: settings.fpvPitch,
+      freeCamera: settings.fpvFreeCamera,
+    };
+  }, [settings.fpvPitch, settings.fpvFreeCamera]);
+
+  useEffect(() => {
+    if (!map || !isFpvActiveRef.current) return;
+    if (settings.fpvFreeCamera) {
+      map.dragPan.enable();
+      map.dragRotate.enable();
+      map.scrollZoom.enable();
+      map.touchZoomRotate.enable();
+      map.doubleClickZoom.disable();
+      map.keyboard.enable();
+    } else {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.touchZoomRotate.disable();
+      map.doubleClickZoom.disable();
+      map.keyboard.disable();
+    }
+  }, [map, settings.fpvFreeCamera]);
 
   useEffect(() => {
     if (!map || !isLoaded || !city) return;
@@ -50,9 +109,235 @@ export function CameraController({ city }: { city: City }) {
   }, [map, isLoaded, city]);
 
   useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    const followKey = followFlight?.icao24 ?? null;
+    if (followKey === prevFollowRef.current) return;
+    prevFollowRef.current = followKey;
+
+    if (
+      !followFlight ||
+      followFlight.longitude == null ||
+      followFlight.latitude == null
+    ) {
+      isFollowingRef.current = false;
+      return;
+    }
+
+    isFollowingRef.current = true;
+    const bearing = followFlight.trueTrack ?? map.getBearing();
+
+    map.flyTo({
+      center: [followFlight.longitude, followFlight.latitude],
+      zoom: FOLLOW_ZOOM,
+      pitch: FOLLOW_PITCH,
+      bearing,
+      duration: 2200,
+      essential: true,
+    });
+  }, [map, isLoaded, followFlight]);
+
+  useEffect(() => {
+    if (!map || !isLoaded || !followFlight) return;
+    if (followFlight.longitude == null || followFlight.latitude == null) return;
+
+    if (!isFollowingRef.current) return;
+
+    map.easeTo({
+      center: [followFlight.longitude, followFlight.latitude],
+      bearing: followFlight.trueTrack ?? map.getBearing(),
+      duration: FOLLOW_EASE_MS,
+      essential: true,
+    });
+  }, [
+    map,
+    isLoaded,
+    followFlight,
+    followFlight?.longitude,
+    followFlight?.latitude,
+    followFlight?.trueTrack,
+  ]);
+
+  const FPV_DISTANCE_ZOOM_OFFSET = 1.1;
+
+  function fpvZoomForAltitude(altMeters: number): number {
+    const alt = Math.max(altMeters, 0);
+    if (alt < 50) return 16.2;
+    const z = 18.1 - 2.0 * Math.log10(Math.max(alt, 50));
+    return Math.max(10.1, Math.min(16.2, z));
+  }
+
+  const fpvFrameRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!map || !isLoaded) {
+      if (isFpvActiveRef.current) {
+        isFpvActiveRef.current = false;
+        if (fpvFrameRef.current) {
+          cancelAnimationFrame(fpvFrameRef.current);
+          fpvFrameRef.current = null;
+        }
+      }
+      return;
+    }
+
+    const fpv = fpvFlightRef.current;
+    const fpvKey = fpv?.icao24 ?? null;
+    if (fpvKey === prevFpvRef.current) return;
+
+    const wasFpv = prevFpvRef.current !== null;
+    prevFpvRef.current = fpvKey;
+
+    if (fpvFrameRef.current) {
+      cancelAnimationFrame(fpvFrameRef.current);
+      fpvFrameRef.current = null;
+    }
+
+    if (!fpv || fpv.longitude == null || fpv.latitude == null) {
+      isFpvActiveRef.current = false;
+      if (wasFpv) {
+        map.dragPan.enable();
+        map.scrollZoom.enable();
+        map.touchZoomRotate.enable();
+        map.doubleClickZoom.enable();
+        map.keyboard.enable();
+      }
+      if (wasFpv) {
+        map.flyTo({
+          center: city.coordinates,
+          zoom: DEFAULT_ZOOM,
+          pitch: DEFAULT_PITCH,
+          bearing: DEFAULT_BEARING,
+          duration: 1800,
+          essential: true,
+        });
+      }
+      return;
+    }
+
+    isFpvActiveRef.current = true;
+    const initialSettings = fpvSettingsRef.current;
+
+    if (initialSettings.freeCamera) {
+      map.dragPan.enable();
+      map.dragRotate.enable();
+      map.scrollZoom.enable();
+      map.touchZoomRotate.enable();
+      map.doubleClickZoom.disable();
+      map.keyboard.enable();
+    } else {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.touchZoomRotate.disable();
+      map.doubleClickZoom.disable();
+      map.keyboard.disable();
+    }
+
+    const bearing = fpv.trueTrack ?? map.getBearing();
+    const zoom =
+      fpvZoomForAltitude(fpv.baroAltitude ?? 5000) - FPV_DISTANCE_ZOOM_OFFSET;
+    const fpvPitch = initialSettings.pitch;
+
+    const centerLng = ((fpv.longitude + 540) % 360) - 180;
+
+    map.flyTo({
+      center: [centerLng, fpv.latitude],
+      zoom,
+      pitch: fpvPitch,
+      bearing,
+      duration: FPV_FLY_DURATION,
+      essential: true,
+    });
+
+    let currentBearing = bearing;
+    let currentZoom = zoom;
+
+    let lastPos = {
+      lng: fpv.longitude,
+      lat: fpv.latitude,
+      alt: fpv.baroAltitude ?? 5000,
+      track: bearing,
+    };
+
+    function lerpAngleDeg(from: number, to: number, t: number): number {
+      const diff = ((to - from + 540) % 360) - 180;
+      return from + diff * t;
+    }
+
+    function tick() {
+      if (!isFpvActiveRef.current || !map) {
+        fpvFrameRef.current = null;
+        return;
+      }
+
+      const pos = fpvPositionRef?.current;
+      const fallback = fpvFlightRef.current;
+      const sourceLng = pos?.lng ?? fallback?.longitude ?? lastPos.lng;
+      const sourceLat = pos?.lat ?? fallback?.latitude ?? lastPos.lat;
+      const sourceAlt = pos?.alt ?? fallback?.baroAltitude ?? lastPos.alt;
+      const sourceTrack = pos?.track ?? fallback?.trueTrack ?? lastPos.track;
+
+      lastPos = {
+        lng: sourceLng,
+        lat: sourceLat,
+        alt: sourceAlt,
+        track: sourceTrack,
+      };
+
+      const currentSettings = fpvSettingsRef.current;
+
+      if (currentSettings.freeCamera) {
+        const camLng = ((sourceLng + 540) % 360) - 180;
+        map.jumpTo({ center: [camLng, sourceLat] });
+      } else {
+        currentBearing = lerpAngleDeg(currentBearing, sourceTrack, 0.15);
+        const zoomTarget =
+          fpvZoomForAltitude(sourceAlt) - FPV_DISTANCE_ZOOM_OFFSET;
+        currentZoom += (zoomTarget - currentZoom) * 0.1;
+
+        const camLng = ((sourceLng + 540) % 360) - 180;
+
+        const DEG_PER_PX_AT_Z0 = 360 / 512;
+        const degPerPx = DEG_PER_PX_AT_Z0 / Math.pow(2, currentZoom);
+        const forwardPx = 120;
+        const forwardDeg = forwardPx * degPerPx;
+        const headingRad = (currentBearing * Math.PI) / 180;
+        const offsetLng = camLng + Math.sin(headingRad) * forwardDeg;
+        const offsetLat = sourceLat + Math.cos(headingRad) * forwardDeg;
+
+        map.jumpTo({
+          center: [offsetLng, offsetLat],
+          bearing: currentBearing,
+          zoom: currentZoom,
+          pitch: currentSettings.pitch,
+        });
+      }
+
+      fpvFrameRef.current = requestAnimationFrame(tick);
+    }
+
+    fpvFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (fpvFrameRef.current) {
+        cancelAnimationFrame(fpvFrameRef.current);
+        fpvFrameRef.current = null;
+      }
+      if (map && isFpvActiveRef.current) {
+        map.dragPan.enable();
+        map.scrollZoom.enable();
+        map.touchZoomRotate.enable();
+        map.doubleClickZoom.enable();
+        map.keyboard.enable();
+        isFpvActiveRef.current = false;
+      }
+    };
+  }, [map, isLoaded, fpvFlight?.icao24, city, fpvPositionRef]);
+
+  useEffect(() => {
     if (!map || !isLoaded || !city) return;
 
     const onNorthUp = () => {
+      if (isFpvActiveRef.current) return;
       map.easeTo({
         bearing: 0,
         duration: 650,
@@ -61,6 +346,7 @@ export function CameraController({ city }: { city: City }) {
     };
 
     const onResetView = (event: Event) => {
+      if (isFpvActiveRef.current) return;
       const customEvent = event as CustomEvent<{ center?: [number, number] }>;
       const center = customEvent.detail?.center ?? city.coordinates;
       map.flyTo({
@@ -167,6 +453,7 @@ export function CameraController({ city }: { city: City }) {
     }
 
     const onStart = (e: Event) => {
+      if (isFpvActiveRef.current) return;
       const { type, direction } = (e as CustomEvent).detail as {
         type: CameraActionType;
         direction: number;
@@ -201,7 +488,14 @@ export function CameraController({ city }: { city: City }) {
   }, [map, isLoaded]);
 
   useEffect(() => {
-    if (!map || !isLoaded || !city || !settings.autoOrbit) {
+    if (
+      !map ||
+      !isLoaded ||
+      !city ||
+      !settings.autoOrbit ||
+      followFlight ||
+      fpvFlight
+    ) {
       if (orbitFrameRef.current) cancelAnimationFrame(orbitFrameRef.current);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       return;
@@ -290,6 +584,8 @@ export function CameraController({ city }: { city: City }) {
     map,
     isLoaded,
     city,
+    followFlight,
+    fpvFlight,
     settings.autoOrbit,
     settings.orbitSpeed,
     settings.orbitDirection,

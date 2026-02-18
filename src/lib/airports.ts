@@ -72607,3 +72607,24 @@ export function airportToCity(airport: Airport): City {
     radius: DEFAULT_RADIUS,
   };
 }
+
+/**
+ * Returns a subset of major airports (those with 3-letter IATA codes that are
+ * in the CITIES list or have well-known IATA codes). Useful for route inference
+ * where searching all 72K airports would be too slow.
+ *
+ * Cached after first call.
+ */
+let _majorAirportsCache: Airport[] | null = null;
+
+export function getMajorAirports(): Airport[] {
+  if (_majorAirportsCache) return _majorAirportsCache;
+
+  // All airports with a 3-letter IATA code (major airports tend to have them)
+  // Filter to those whose IATA is alpha-only (excludes numeric/special codes)
+  const alphaIata = /^[A-Z]{3}$/;
+  _majorAirportsCache = AIRPORTS.filter(
+    (a) => a.iata && alphaIata.test(a.iata.toUpperCase()),
+  );
+  return _majorAirportsCache;
+}

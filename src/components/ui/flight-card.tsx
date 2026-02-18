@@ -13,6 +13,7 @@ import {
   X,
   Navigation,
   Building2,
+  Eye,
 } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import {
@@ -28,11 +29,18 @@ import { airlineLogoCandidates } from "@/lib/airline-logos";
 type FlightCardProps = {
   flight: FlightState | null;
   onClose: () => void;
+  onToggleFpv?: (icao24: string) => void;
+  isFpvActive?: boolean;
 };
 
 const loadedLogoUrls = new Set<string>();
 
-export function FlightCard({ flight, onClose }: FlightCardProps) {
+export function FlightCard({
+  flight,
+  onClose,
+  onToggleFpv,
+  isFpvActive = false,
+}: FlightCardProps) {
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
@@ -132,15 +140,39 @@ export function FlightCard({ flight, onClose }: FlightCardProps) {
                   </p>
                 </div>
               </div>
-              <motion.button
-                onClick={onClose}
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/6 transition-colors hover:bg-white/12"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                aria-label="Deselect flight"
-              >
-                <X className="h-3 w-3 text-white/40" />
-              </motion.button>
+              <div className="flex items-center gap-1.5">
+                {onToggleFpv && (
+                  <motion.button
+                    onClick={() => flight && onToggleFpv(flight.icao24)}
+                    className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                      isFpvActive
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "bg-white/6 text-white/40 hover:bg-white/12"
+                    }`}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    aria-label={
+                      isFpvActive
+                        ? "Exit first person view"
+                        : "First person view"
+                    }
+                    title={
+                      isFpvActive ? "Exit FPV (F)" : "First Person View (F)"
+                    }
+                  >
+                    <Eye className="h-3 w-3" />
+                  </motion.button>
+                )}
+                <motion.button
+                  onClick={onClose}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-white/6 transition-colors hover:bg-white/12"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  aria-label="Deselect flight"
+                >
+                  <X className="h-3 w-3 text-white/40" />
+                </motion.button>
+              </div>
             </div>
 
             {company && (

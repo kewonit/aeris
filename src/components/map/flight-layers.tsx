@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer } from "@deck.gl/layers";
@@ -11,7 +11,6 @@ import type { FlightState } from "@/lib/opensky";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
-/** Typed overlay with deck.gl's pickObject capability */
 type DeckGLOverlay = MapboxOverlay & {
   pickObject?(opts: {
     x: number;
@@ -448,6 +447,13 @@ type FlightLayerProps = {
   trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
+  fpvIcao24?: string | null;
+  fpvPositionRef?: MutableRefObject<{
+    lng: number;
+    lat: number;
+    alt: number;
+    track: number;
+  } | null>;
 };
 
 export function FlightLayers({
@@ -460,6 +466,8 @@ export function FlightLayers({
   trailDistance,
   showShadows,
   showAltitudeColors,
+  fpvIcao24 = null,
+  fpvPositionRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -481,6 +489,8 @@ export function FlightLayers({
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const selectedIcao24Ref = useRef(selectedIcao24);
+  const fpvIcao24Ref = useRef(fpvIcao24);
+  const fpvPosRef = useRef(fpvPositionRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
   const SELECTION_FADE_MS = 600;
@@ -493,6 +503,8 @@ export function FlightLayers({
     trailDistanceRef.current = trailDistance;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
+    fpvIcao24Ref.current = fpvIcao24;
+    fpvPosRef.current = fpvPositionRef;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
       prevSelectedRef.current = selectedIcao24Ref.current;
       selectionChangeTimeRef.current = performance.now();
@@ -507,6 +519,8 @@ export function FlightLayers({
     showShadows,
     showAltitudeColors,
     selectedIcao24,
+    fpvIcao24,
+    fpvPositionRef,
   ]);
 
   useEffect(() => {
@@ -576,7 +590,6 @@ export function FlightLayers({
     [map],
   );
 
-  // Reset cursor if component unmounts while hovering.
   useEffect(() => {
     return () => {
       const canvas = map?.getCanvas();
@@ -724,6 +737,27 @@ export function FlightLayers({
           interpolatedMap.set(f.icao24, f);
         }
 
+        const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
+        const visibleFlights = interpolated;
+
+        const fpvPosOut = fpvPosRef.current;
+        if (fpvPosOut && fpvId) {
+          const fpvF =
+            interpolated.find((f) => f.icao24.toLowerCase() === fpvId) ?? null;
+          if (fpvF && fpvF.longitude != null && fpvF.latitude != null) {
+            fpvPosOut.current = {
+              lng: fpvF.longitude,
+              lat: fpvF.latitude,
+              alt: fpvF.baroAltitude ?? 5000,
+              track: fpvF.trueTrack ?? 0,
+            };
+          } else {
+            fpvPosOut.current = null;
+          }
+        } else if (fpvPosOut && !fpvId) {
+          fpvPosOut.current = null;
+        }
+
         const pitchByIcao = new Map<string, number>();
         for (const f of interpolated) {
           const curr = currSnapshotsRef.current.get(f.icao24);
@@ -789,11 +823,11 @@ export function FlightLayers({
           layers.push(
             new IconLayer<FlightState>({
               id: "flight-shadows",
-              data: interpolated,
+              data: visibleFlights,
               getPosition: (d) => [d.longitude!, d.latitude!, 0],
               getIcon: () => "aircraft",
               getSize: (d) => 20 * categorySizeMultiplier(d.category),
-              getColor: [0, 0, 0, 60],
+              getColor: () => [0, 0, 0, 60],
               getAngle: (d) => 360 - (d.trueTrack ?? 0),
               iconAtlas: atlasUrl,
               iconMapping: AIRCRAFT_ICON_MAPPING,
@@ -942,6 +976,7 @@ export function FlightLayers({
                 const animFlight = interpolatedMap.get(d.icao24);
                 const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 const len = visiblePoints.length;
+
                 return visiblePoints.map((point, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
                   const fade = Math.pow(tVal, 1.65);
@@ -1058,7 +1093,7 @@ export function FlightLayers({
         layers.push(
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
-            data: interpolated,
+            data: visibleFlights,
             getPosition: (d) => [
               d.longitude!,
               d.latitude!,

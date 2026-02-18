@@ -8,13 +8,14 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { Map } from "@/components/map/map";
+import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FlightCard } from "@/components/ui/flight-card";
+import { FpvHud } from "@/components/ui/fpv-hud";
 import { KeyboardShortcutsHelp } from "@/components/ui/keyboard-shortcuts-help";
 import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
@@ -28,7 +29,7 @@ import { useTrailHistory } from "@/hooks/use-trail-history";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
 import { CITIES, type City } from "@/lib/cities";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
-import type { FlightState } from "@/lib/opensky";
+import { fetchFlightByIcao24, type FlightState } from "@/lib/opensky";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star, Keyboard } from "lucide-react";
 
@@ -107,9 +108,43 @@ function syncCityToUrl(city: City): void {
   try {
     const url = new URL(window.location.href);
     url.searchParams.set("city", city.iata);
+    url.searchParams.delete("from");
+    url.searchParams.delete("to");
+    url.searchParams.delete("fpv");
     window.history.replaceState(null, "", url.toString());
   } catch {
     /* ignore */
+  }
+}
+
+function syncFpvToUrl(icao24: string | null, activeCity?: City): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (icao24) {
+      url.searchParams.set("fpv", icao24);
+      url.searchParams.delete("city");
+      url.searchParams.delete("from");
+      url.searchParams.delete("to");
+    } else {
+      url.searchParams.delete("fpv");
+      if (activeCity) {
+        url.searchParams.set("city", activeCity.iata);
+      }
+    }
+    window.history.replaceState(null, "", url.toString());
+  } catch {
+    /* ignore */
+  }
+}
+
+function resolveInitialFpv(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("fpv")?.trim().toLowerCase();
+    return raw && /^[0-9a-f]{6}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
   }
 }
 
@@ -174,6 +209,17 @@ function FlightTrackerInner() {
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [repoStars, setRepoStars] = useState<number | null>(null);
+  const [followIcao24, setFollowIcao24] = useState<string | null>(null);
+  const [fpvIcao24, setFpvIcao24] = useState<string | null>(null);
+
+  const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
+
+  const fpvPositionRef = useRef<{
+    lng: number;
+    lat: number;
+    alt: number;
+    track: number;
+  } | null>(null);
 
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
@@ -182,6 +228,8 @@ function FlightTrackerInner() {
   const setActiveCity = useCallback((city: City) => {
     setCityOverride(city);
     setSelectedIcao24(null);
+    setFpvIcao24(null);
+    setFollowIcao24(null);
     syncCityToUrl(city);
   }, []);
 
@@ -189,24 +237,127 @@ function FlightTrackerInner() {
     setStyleOverride(style);
     saveMapStyle(style);
   }, []);
-  const { flights, loading, rateLimited, retryIn } = useFlights(activeCity);
-  const trails = useTrailHistory(flights);
+  const { flights, loading, rateLimited, retryIn } = useFlights(
+    activeCity,
+    fpvIcao24,
+  );
+
+  const displayFlights = flights;
+  const displayTrails = useTrailHistory(displayFlights);
 
   const selectedFlight = useMemo(() => {
     if (!selectedIcao24) return null;
-    return flights.find((f) => f.icao24 === selectedIcao24) ?? null;
-  }, [selectedIcao24, flights]);
+    return (
+      displayFlights.find((f) => f.icao24.toLowerCase() === selectedIcao24) ??
+      null
+    );
+  }, [selectedIcao24, displayFlights]);
 
-  const lastKnownFlightRef = useRef<FlightState | null>(null);
+  const followFlight = useMemo(() => {
+    if (!followIcao24) return null;
+    return (
+      displayFlights.find((f) => f.icao24.toLowerCase() === followIcao24) ??
+      null
+    );
+  }, [followIcao24, displayFlights]);
+
+  const fpvFlight = useMemo(() => {
+    if (!fpvIcao24) return null;
+    return (
+      displayFlights.find((f) => f.icao24.toLowerCase() === fpvIcao24) ?? null
+    );
+  }, [fpvIcao24, displayFlights]);
+
   useEffect(() => {
-    if (selectedFlight) lastKnownFlightRef.current = selectedFlight;
-    if (!selectedIcao24) lastKnownFlightRef.current = null;
-  }, [selectedFlight, selectedIcao24]);
+    syncFpvToUrl(fpvIcao24, activeCity);
+  }, [fpvIcao24, activeCity]);
 
-  // Safe: ref only changes in the effect above, which runs after state-driven re-renders.
-  const displayFlight =
-    // eslint-disable-next-line react-hooks/refs
-    selectedFlight ?? (selectedIcao24 ? lastKnownFlightRef.current : null);
+  const fpvLookupDoneRef = useRef(false);
+  useEffect(() => {
+    const pending = pendingFpvRef.current;
+    if (!pending || fpvIcao24) return;
+
+    const match = displayFlights.find(
+      (f) => f.icao24.toLowerCase() === pending,
+    );
+    if (match && match.longitude != null && match.latitude != null) {
+      pendingFpvRef.current = null;
+      fpvLookupDoneRef.current = false;
+      setFpvIcao24(pending);
+      setFollowIcao24(null);
+      return;
+    }
+
+    if (!fpvLookupDoneRef.current && displayFlights.length > 0) {
+      fpvLookupDoneRef.current = true;
+      const controller = new AbortController();
+      fetchFlightByIcao24(pending, controller.signal)
+        .then((result) => {
+          if (
+            result.flight &&
+            result.flight.longitude != null &&
+            result.flight.latitude != null &&
+            pendingFpvRef.current === pending
+          ) {
+            pendingFpvRef.current = null;
+            setFpvIcao24(pending);
+            setFollowIcao24(null);
+          } else if (pendingFpvRef.current === pending) {
+            pendingFpvRef.current = null;
+            syncFpvToUrl(null, activeCity);
+          }
+        })
+        .catch(() => {
+          if (pendingFpvRef.current === pending) {
+            pendingFpvRef.current = null;
+          }
+        });
+      return () => controller.abort();
+    }
+  }, [displayFlights, fpvIcao24, activeCity]);
+
+  const fpvFlightOrCached = fpvFlight;
+
+  const fpvMissCountRef = useRef(0);
+  useEffect(() => {
+    if (!fpvIcao24) {
+      fpvMissCountRef.current = 0;
+      return;
+    }
+
+    if (fpvFlight) {
+      fpvMissCountRef.current = 0;
+      if (fpvFlight.onGround) {
+        const timer = setTimeout(() => setFpvIcao24(null), 0);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      fpvMissCountRef.current += 1;
+      if (fpvMissCountRef.current >= 2) {
+        const timer = setTimeout(() => setFpvIcao24(null), 0);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [fpvIcao24, fpvFlight]);
+
+  const followMissCountRef = useRef(0);
+  useEffect(() => {
+    if (!followIcao24) {
+      followMissCountRef.current = 0;
+      return;
+    }
+    if (followFlight) {
+      followMissCountRef.current = 0;
+    } else {
+      followMissCountRef.current += 1;
+      if (followMissCountRef.current >= 3) {
+        const timer = setTimeout(() => setFollowIcao24(null), 0);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [followIcao24, followFlight]);
+
+  const displayFlight = selectedFlight;
 
   const missingSinceRef = useRef<number | null>(null);
   useEffect(() => {
@@ -218,17 +369,17 @@ function FlightTrackerInner() {
       missingSinceRef.current = null;
       return;
     }
-    // Flight is selected but not in the current flights list.
     const now = Date.now();
     if (missingSinceRef.current == null) {
       missingSinceRef.current = now;
       return;
     }
     if (now - missingSinceRef.current >= 30_000) {
-      setSelectedIcao24(null);
+      const timer = setTimeout(() => setSelectedIcao24(null), 0);
       missingSinceRef.current = null;
+      return () => clearTimeout(timer);
     }
-  }, [selectedIcao24, selectedFlight, flights]);
+  }, [selectedIcao24, selectedFlight, displayFlights]);
 
   useEffect(() => {
     let mounted = true;
@@ -252,18 +403,43 @@ function FlightTrackerInner() {
     };
   }, []);
 
-  const handleClick = useCallback((info: PickingInfo<FlightState> | null) => {
-    if (info?.object) {
-      setSelectedIcao24((prev) =>
-        prev === info.object!.icao24 ? null : info.object!.icao24,
-      );
+  const handleClick = useCallback(
+    (info: PickingInfo<FlightState> | null) => {
+      if (fpvIcao24) return;
+      if (info?.object) {
+        const icao24 = info.object.icao24.toLowerCase();
+        setSelectedIcao24((prev) => (prev === icao24 ? null : icao24));
+      } else {
+        setSelectedIcao24(null);
+      }
+    },
+    [fpvIcao24],
+  );
+
+  const handleDeselectFlight = useCallback(() => {
+    if (fpvIcao24) {
+      setFpvIcao24(null);
     } else {
       setSelectedIcao24(null);
     }
-  }, []);
+  }, [fpvIcao24]);
 
-  const handleDeselectFlight = useCallback(() => {
-    setSelectedIcao24(null);
+  const handleToggleFpv = useCallback(
+    (icao24: string) => {
+      const targetIcao24 = icao24.toLowerCase();
+      const flight =
+        displayFlights.find((f) => f.icao24.toLowerCase() === targetIcao24) ??
+        flights.find((f) => f.icao24.toLowerCase() === targetIcao24);
+      if (flight && (flight.longitude == null || flight.latitude == null))
+        return;
+      setFpvIcao24((prev) => (prev === targetIcao24 ? null : targetIcao24));
+      setFollowIcao24(null);
+    },
+    [displayFlights, flights],
+  );
+
+  const handleExitFpv = useCallback(() => {
+    setFpvIcao24(null);
   }, []);
 
   const handleNorthUp = useCallback(() => {
@@ -295,6 +471,14 @@ function FlightTrackerInner() {
     setShowHelp((prev) => !prev);
   }, []);
 
+  const handleToggleFpvKey = useCallback(() => {
+    if (fpvIcao24) {
+      setFpvIcao24(null);
+    } else if (selectedIcao24) {
+      handleToggleFpv(selectedIcao24);
+    }
+  }, [fpvIcao24, selectedIcao24, handleToggleFpv]);
+
   useKeyboardShortcuts({
     onNorthUp: handleNorthUp,
     onResetView: handleResetView,
@@ -302,126 +486,160 @@ function FlightTrackerInner() {
     onOpenSearch: handleOpenSearch,
     onToggleHelp: handleToggleHelp,
     onDeselect: handleDeselectFlight,
+    onToggleFpv: handleToggleFpvKey,
+    isFpv: fpvIcao24 !== null,
   });
 
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
-      <Map mapStyle={mapStyle.style} isDark={mapStyle.dark}>
-        <CameraController city={activeCity} />
+      <MapView mapStyle={mapStyle.style} isDark={mapStyle.dark}>
+        <CameraController
+          city={activeCity}
+          followFlight={followFlight}
+          fpvFlight={fpvFlightOrCached}
+          fpvPositionRef={fpvPositionRef}
+        />
         <AirportLayer
           activeCity={activeCity}
           onSelectAirport={setActiveCity}
           isDark={mapStyle.dark}
         />
         <FlightLayers
-          flights={flights}
-          trails={trails}
+          flights={displayFlights}
+          trails={displayTrails}
           onClick={handleClick}
-          selectedIcao24={selectedIcao24}
+          selectedIcao24={fpvIcao24 ?? selectedIcao24}
           showTrails={settings.showTrails}
           trailThickness={settings.trailThickness}
           trailDistance={settings.trailDistance}
           showShadows={settings.showShadows}
           showAltitudeColors={settings.showAltitudeColors}
+          fpvIcao24={fpvIcao24}
+          fpvPositionRef={fpvPositionRef}
         />
-      </Map>
+      </MapView>
 
       <div
         data-map-theme={mapStyle.dark ? "dark" : "light"}
         className="pointer-events-none absolute inset-0 z-10"
       >
-        <div className="pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4">
-          <Brand isDark={mapStyle.dark} />
-        </div>
+        {!fpvIcao24 && (
+          <div className="pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4">
+            <Brand isDark={mapStyle.dark} />
+          </div>
+        )}
 
-        <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
-          <FlightCard flight={displayFlight} onClose={handleDeselectFlight} />
-        </div>
+        {!fpvIcao24 && (
+          <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
+            <FlightCard
+              flight={displayFlight}
+              onClose={handleDeselectFlight}
+              onToggleFpv={handleToggleFpv}
+              isFpvActive={
+                fpvIcao24 !== null && fpvIcao24 === displayFlight?.icao24
+              }
+            />
+          </div>
+        )}
 
-        <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
-          <motion.button
-            onClick={handleToggleHelp}
-            className="hidden h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors sm:flex"
-            style={{
-              borderWidth: 1,
-              borderColor: "rgb(var(--ui-fg) / 0.06)",
-              backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-              color: "rgb(var(--ui-fg) / 0.5)",
-            }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts (?)"
-          >
-            <Keyboard className="h-4 w-4" />
-          </motion.button>
-          <a
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Open GitHub repository"
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-            style={{
-              borderWidth: 1,
-              borderColor: "rgb(var(--ui-fg) / 0.06)",
-              backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-              color: "rgb(var(--ui-fg) / 0.5)",
-            }}
-            title={
-              repoStars != null
-                ? `GitHub · ${formatStarCount(repoStars)} stars`
-                : "Open GitHub repository"
-            }
-          >
-            <Github className="h-4 w-4" />
-            {repoStars != null && (
-              <span
-                className="pointer-events-none absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
-                style={{
-                  backgroundColor: "rgb(var(--ui-bg) / 0.95)",
-                  border: "1px solid rgb(var(--ui-fg) / 0.1)",
-                  color: "rgb(var(--ui-fg) / 0.55)",
-                }}
-              >
-                <span className="flex items-center gap-0.5">
-                  <Star className="h-2 w-2" />
-                  {formatStarCount(repoStars)}
+        {!fpvIcao24 && (
+          <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
+            <motion.button
+              onClick={handleToggleHelp}
+              className="hidden h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors sm:flex"
+              style={{
+                borderWidth: 1,
+                borderColor: "rgb(var(--ui-fg) / 0.06)",
+                backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+                color: "rgb(var(--ui-fg) / 0.5)",
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-4 w-4" />
+            </motion.button>
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open GitHub repository"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+              style={{
+                borderWidth: 1,
+                borderColor: "rgb(var(--ui-fg) / 0.06)",
+                backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+                color: "rgb(var(--ui-fg) / 0.5)",
+              }}
+              title={
+                repoStars != null
+                  ? `GitHub · ${formatStarCount(repoStars)} stars`
+                  : "Open GitHub repository"
+              }
+            >
+              <Github className="h-4 w-4" />
+              {repoStars != null && (
+                <span
+                  className="pointer-events-none absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
+                  style={{
+                    backgroundColor: "rgb(var(--ui-bg) / 0.95)",
+                    border: "1px solid rgb(var(--ui-fg) / 0.1)",
+                    color: "rgb(var(--ui-fg) / 0.55)",
+                  }}
+                >
+                  <span className="flex items-center gap-0.5">
+                    <Star className="h-2 w-2" />
+                    {formatStarCount(repoStars)}
+                  </span>
                 </span>
-              </span>
-            )}
-          </a>
-          <ControlPanel
-            activeCity={activeCity}
-            onSelectCity={setActiveCity}
-            activeStyle={mapStyle}
-            onSelectStyle={setMapStyle}
-          />
-        </div>
+              )}
+            </a>
+            <ControlPanel
+              activeCity={activeCity}
+              onSelectCity={setActiveCity}
+              activeStyle={mapStyle}
+              onSelectStyle={setMapStyle}
+            />
+          </div>
+        )}
 
-        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0">
-          <StatusBar
-            flightCount={flights.length}
-            cityName={activeCity.name}
-            loading={loading}
-            rateLimited={rateLimited}
-            retryIn={retryIn}
-            onNorthUp={handleNorthUp}
-            onResetView={handleResetView}
-            onRandomAirport={handleRandomAirport}
-          />
-        </div>
+        {!fpvIcao24 && (
+          <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0">
+            <StatusBar
+              flightCount={flights.length}
+              cityName={activeCity.name}
+              loading={loading}
+              rateLimited={rateLimited}
+              retryIn={retryIn}
+              onNorthUp={handleNorthUp}
+              onResetView={handleResetView}
+              onRandomAirport={handleRandomAirport}
+            />
+          </div>
+        )}
 
-        <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
-          <CameraControls />
-          <AltitudeLegend />
-          <MapAttribution styleId={mapStyle.id} />
-        </div>
+        {!fpvIcao24 && (
+          <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
+            <CameraControls />
+            <AltitudeLegend />
+            <MapAttribution styleId={mapStyle.id} />
+          </div>
+        )}
       </div>
 
-      <KeyboardShortcutsHelp
-        open={showHelp}
-        onClose={() => setShowHelp(false)}
-      />
+      {!fpvIcao24 && (
+        <KeyboardShortcutsHelp
+          open={showHelp}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
+
+      <AnimatePresence>
+        {fpvIcao24 && fpvFlightOrCached && (
+          <FpvHud flight={fpvFlightOrCached} onExit={handleExitFpv} />
+        )}
+      </AnimatePresence>
     </main>
   );
 }

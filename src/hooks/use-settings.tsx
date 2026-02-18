@@ -22,12 +22,19 @@ export type Settings = {
   trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
+  fpvChaseDistance: number;
+  fpvPitch: number;
+  fpvFreeCamera: boolean;
 };
 
 const TRAIL_THICKNESS_MIN = 1;
 const TRAIL_THICKNESS_MAX = 8;
 const TRAIL_DISTANCE_MIN = 12;
 const TRAIL_DISTANCE_MAX = 100;
+const FPV_CHASE_DISTANCE_MIN = 0.003;
+const FPV_CHASE_DISTANCE_MAX = 0.01;
+const FPV_PITCH_MIN = 20;
+const FPV_PITCH_MAX = 45;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -45,6 +52,12 @@ function normalizeSettings(input: Settings): Settings {
     trailDistance: Math.round(
       clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
     ),
+    fpvChaseDistance: clamp(
+      input.fpvChaseDistance,
+      FPV_CHASE_DISTANCE_MIN,
+      FPV_CHASE_DISTANCE_MAX,
+    ),
+    fpvPitch: Math.round(clamp(input.fpvPitch, FPV_PITCH_MIN, FPV_PITCH_MAX)),
   };
 }
 
@@ -57,6 +70,9 @@ const DEFAULT_SETTINGS: Settings = {
   trailDistance: 40,
   showShadows: true,
   showAltitudeColors: true,
+  fpvChaseDistance: 0.0048,
+  fpvPitch: 34,
+  fpvFreeCamera: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -68,7 +84,6 @@ type StorageEnvelope = {
   data: Settings;
 };
 
-/** Validate that a parsed value matches the Settings shape. */
 function isValidSettings(obj: unknown): obj is Settings {
   if (typeof obj !== "object" || obj === null) return false;
   const s = obj as Record<string, unknown>;
@@ -87,7 +102,16 @@ function isValidSettings(obj: unknown): obj is Settings {
     s.trailDistance >= TRAIL_DISTANCE_MIN &&
     s.trailDistance <= TRAIL_DISTANCE_MAX &&
     typeof s.showShadows === "boolean" &&
-    typeof s.showAltitudeColors === "boolean"
+    typeof s.showAltitudeColors === "boolean" &&
+    typeof s.fpvChaseDistance === "number" &&
+    Number.isFinite(s.fpvChaseDistance) &&
+    s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
+    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
+    typeof s.fpvPitch === "number" &&
+    Number.isFinite(s.fpvPitch) &&
+    s.fpvPitch >= FPV_PITCH_MIN &&
+    s.fpvPitch <= FPV_PITCH_MAX &&
+    typeof s.fpvFreeCamera === "boolean"
   );
 }
 
@@ -121,7 +145,7 @@ function saveSettings(settings: Settings): void {
     const envelope: StorageEnvelope = { v: STORAGE_VERSION, data: settings };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   } catch {
-    /* quota exceeded or blocked */
+    /* noop */
   }
 }
 
