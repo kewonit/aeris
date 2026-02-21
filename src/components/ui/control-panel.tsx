@@ -32,11 +32,17 @@ import { formatCallsign } from "@/lib/flight-utils";
 
 type TabId = "search" | "style" | "settings";
 
-const TABS: { id: TabId; icon: typeof Search; label: string }[] = [
+const MAIN_TABS: {
+  id: TabId;
+  icon: typeof Search;
+  label: string;
+}[] = [
   { id: "search", icon: Search, label: "Search" },
   { id: "style", icon: MapIcon, label: "Map Style" },
   { id: "settings", icon: Settings, label: "Settings" },
 ];
+
+const PANEL_TABS = MAIN_TABS;
 
 type ControlPanelProps = {
   activeCity: City;
@@ -73,7 +79,7 @@ export function ControlPanel({
 
   return (
     <>
-      {TABS.map(({ id, icon: Icon, label }) => (
+      {MAIN_TABS.map(({ id, icon: Icon, label }) => (
         <motion.button
           key={id}
           onClick={() => open(id)}
@@ -218,7 +224,7 @@ function PanelDialog({
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
-              {TABS.map(({ id, icon: Icon, label }) => {
+              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button
@@ -279,7 +285,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[14px] font-semibold tracking-tight text-white/90"
               >
-                {TABS.find((t) => t.id === activeTab)?.label}
+                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
             </div>
             {/* Desktop header */}
@@ -288,7 +294,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[15px] font-semibold tracking-tight text-white/90"
               >
-                {TABS.find((t) => t.id === activeTab)?.label}
+                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
               <motion.button
                 onClick={onClose}
@@ -338,7 +344,7 @@ function PanelDialog({
           {/* Mobile tab bar */}
           <div className="flex sm:hidden items-center gap-1 border-t border-white/6 px-3 pt-2 pb-3">
             <nav className="flex flex-1 gap-1">
-              {TABS.map(({ id, icon: Icon, label }) => {
+              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button

@@ -26,6 +26,7 @@ import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
+import { useFlightTrack } from "@/hooks/use-flight-track";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
 import { CITIES, type City } from "@/lib/cities";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
@@ -270,6 +271,267 @@ function FlightTrackerInner() {
   const displayFlights = flights;
   const displayTrails = useTrailHistory(displayFlights);
 
+  // Fetch /tracks only for explicit click-selection (never FPV).
+  const selectedFlightForTrack = useMemo(() => {
+    if (!selectedIcao24) return null;
+    return displayFlights.find((f) => f.icao24 === selectedIcao24) ?? null;
+  }, [selectedIcao24, displayFlights]);
+
+  const shouldFetchSelectedTrack =
+    !!selectedIcao24 &&
+    !fpvIcao24 &&
+    !(selectedFlightForTrack?.onGround ?? false);
+
+  const { track: selectedTrack, fetchedAtMs: selectedTrackFetchedAtMs } =
+    useFlightTrack(selectedIcao24, {
+      enabled: shouldFetchSelectedTrack,
+    });
+
+  const mergedTrails = useMemo(() => {
+    if (!selectedIcao24 || !selectedTrack) return displayTrails;
+
+    const flight =
+      displayFlights.find((f) => f.icao24 === selectedIcao24) ?? null;
+
+    const livePos: [number, number] | null =
+      flight && flight.longitude != null && flight.latitude != null
+        ? [flight.longitude, flight.latitude]
+        : null;
+
+    const trackPositions: [number, number][] = [];
+    const trackAltitudes: Array<number | null> = [];
+
+    const snapLngToRef = (lng: number, refLng: number): number => {
+      let x = lng;
+      while (x - refLng > 180) x -= 360;
+      while (x - refLng < -180) x += 360;
+      return x;
+    };
+
+    const unwrapPath = (path: [number, number][]): [number, number][] => {
+      if (path.length < 2) return path;
+      const out: [number, number][] = [path[0]];
+      let prevLng = path[0][0];
+      for (let i = 1; i < path.length; i++) {
+        const [lng, lat] = path[i];
+        const nextLng = snapLngToRef(lng, prevLng);
+        out.push([nextLng, lat]);
+        prevLng = nextLng;
+      }
+      return out;
+    };
+
+    for (const p of selectedTrack.path) {
+      if (p.longitude == null || p.latitude == null) continue;
+      trackPositions.push([p.longitude, p.latitude]);
+      trackAltitudes.push(p.baroAltitude ?? null);
+    }
+
+    // Unwrap longitudes to avoid dateline/world-wrap glitches.
+    if (trackPositions.length >= 2) {
+      const unwrapped = unwrapPath(trackPositions);
+      trackPositions.splice(0, trackPositions.length, ...unwrapped);
+    }
+
+    const livePosAdjusted: [number, number] | null =
+      livePos && trackPositions.length > 0
+        ? [
+            snapLngToRef(
+              livePos[0],
+              trackPositions[trackPositions.length - 1][0],
+            ),
+            livePos[1],
+          ]
+        : livePos;
+
+    // Guard against wrong tracks (tolerate sparse/laggy waypoints).
+    if (livePosAdjusted && trackPositions.length >= 2) {
+      const window = 70;
+      const start = Math.max(0, trackPositions.length - window);
+      let bestDistSq = Number.POSITIVE_INFINITY;
+      for (let i = start; i < trackPositions.length; i++) {
+        const p = trackPositions[i];
+        const dx = p[0] - livePosAdjusted[0];
+        const dy = p[1] - livePosAdjusted[1];
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDistSq) bestDistSq = d2;
+      }
+
+      // Tracks can be sparse; scale tolerance by speed and waypoint age.
+      const lastWaypointTime =
+        selectedTrack.path[selectedTrack.path.length - 1]?.time;
+      const nowSec =
+        selectedTrackFetchedAtMs > 0
+          ? Math.floor(selectedTrackFetchedAtMs / 1000)
+          : 0;
+      const dtSec =
+        typeof lastWaypointTime === "number" &&
+        Number.isFinite(lastWaypointTime)
+          ? Math.max(0, nowSec - lastWaypointTime)
+          : 0;
+      const speedMps =
+        flight && Number.isFinite(flight.velocity)
+          ? Math.max(0, flight.velocity!)
+          : 230;
+      const expectedDeg = (speedMps * dtSec) / 111_320;
+      const maxAllowedDeg = Math.min(
+        6,
+        Math.max(0.9, expectedDeg * 1.6 + 0.25),
+      );
+
+      if (bestDistSq > maxAllowedDeg * maxAllowedDeg) {
+        return displayTrails;
+      }
+    }
+
+    // Merge the high-frequency live tail for recent turns.
+    const existingTrail =
+      displayTrails.find((t) => t.icao24 === selectedIcao24) ?? null;
+    if (existingTrail && existingTrail.path.length >= 2) {
+      const tailCount = 18;
+      const start = Math.max(0, existingTrail.path.length - tailCount);
+      const rawTailPath = existingTrail.path.slice(start);
+      const tailAlt = existingTrail.altitudes.slice(start);
+
+      // Unwrap tail points to be continuous with the historical track.
+      const tailPath: [number, number][] = [];
+      let refLng =
+        trackPositions.length > 0
+          ? trackPositions[trackPositions.length - 1][0]
+          : rawTailPath[0][0];
+      for (const [lng, lat] of rawTailPath) {
+        const nextLng = snapLngToRef(lng, refLng);
+        tailPath.push([nextLng, lat]);
+        refLng = nextLng;
+      }
+
+      // Merge where the two data sources overlap near the end.
+      const MERGE_SNAP_DEG = 0.06;
+      const CONNECT_BRIDGE_DEG = 0.07;
+      const MAX_CONNECT_GAP_DEG = 3.5;
+
+      const firstTail = tailPath[0];
+      const searchWindow = 70;
+      const searchStart = Math.max(0, trackPositions.length - searchWindow);
+      let bestIndex = -1;
+      let bestDistSq = Number.POSITIVE_INFINITY;
+
+      for (let i = searchStart; i < trackPositions.length; i++) {
+        const p = trackPositions[i];
+        const dx = p[0] - firstTail[0];
+        const dy = p[1] - firstTail[1];
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDistSq) {
+          bestDistSq = d2;
+          bestIndex = i;
+        }
+      }
+
+      if (bestIndex >= 0 && bestDistSq <= MERGE_SNAP_DEG * MERGE_SNAP_DEG) {
+        // Snap to overlap, then append the live tail.
+        trackPositions.splice(bestIndex + 1);
+        trackAltitudes.splice(bestIndex + 1);
+
+        const join = trackPositions[trackPositions.length - 1];
+        if (join) {
+          tailPath[0] = join;
+          const joinAlt = trackAltitudes[trackAltitudes.length - 1] ?? null;
+          tailAlt[0] = joinAlt ?? tailAlt[0] ?? null;
+        }
+      } else {
+        // No overlap: optionally insert a short bridge to avoid a sharp kink.
+        const last = trackPositions[trackPositions.length - 1];
+        const lastAlt = trackAltitudes[trackAltitudes.length - 1] ?? null;
+        if (last) {
+          const dx = last[0] - firstTail[0];
+          const dy = last[1] - firstTail[1];
+          const gap = Math.sqrt(dx * dx + dy * dy);
+
+          if (gap > MAX_CONNECT_GAP_DEG) {
+            tailPath.length = 0;
+          } else if (gap > CONNECT_BRIDGE_DEG) {
+            const steps = Math.max(6, Math.min(24, Math.ceil(gap / 0.15)));
+            const firstTailAlt = tailAlt[0] ?? null;
+            for (let s = 1; s < steps; s++) {
+              const t = s / steps;
+              trackPositions.push([
+                last[0] + (firstTail[0] - last[0]) * t,
+                last[1] + (firstTail[1] - last[1]) * t,
+              ]);
+              if (lastAlt == null && firstTailAlt == null) {
+                trackAltitudes.push(null);
+              } else {
+                const a0 = lastAlt ?? firstTailAlt ?? 0;
+                const a1 = firstTailAlt ?? lastAlt ?? a0;
+                trackAltitudes.push(a0 + (a1 - a0) * t);
+              }
+            }
+          } else {
+            tailPath[0] = last;
+            tailAlt[0] = lastAlt ?? tailAlt[0] ?? null;
+          }
+        }
+      }
+
+      // Append tail points, skipping consecutive duplicates.
+      for (let i = 0; i < tailPath.length; i++) {
+        const pos = tailPath[i];
+        const alt = tailAlt[i] ?? null;
+        const last = trackPositions[trackPositions.length - 1];
+        if (last && last[0] === pos[0] && last[1] === pos[1]) continue;
+        trackPositions.push(pos);
+        trackAltitudes.push(alt);
+      }
+    }
+
+    // Ensure the trail reaches the aircraft.
+    if (livePosAdjusted) {
+      const last = trackPositions[trackPositions.length - 1];
+      if (
+        !last ||
+        last[0] !== livePosAdjusted[0] ||
+        last[1] !== livePosAdjusted[1]
+      ) {
+        trackPositions.push(livePosAdjusted);
+        trackAltitudes.push(flight?.baroAltitude ?? null);
+      }
+    }
+
+    if (trackPositions.length < 2) return displayTrails;
+
+    const out = displayTrails.map((t) => {
+      if (t.icao24 !== selectedIcao24) return t;
+      const baroAltitude =
+        trackAltitudes[trackAltitudes.length - 1] ?? t.baroAltitude ?? null;
+      return {
+        ...t,
+        path: trackPositions,
+        altitudes: trackAltitudes,
+        baroAltitude,
+        fullHistory: true,
+      };
+    });
+
+    // If the selected aircraft didn't have an in-memory trail yet, add one.
+    if (!out.some((t) => t.icao24 === selectedIcao24)) {
+      out.push({
+        icao24: selectedIcao24,
+        path: trackPositions,
+        altitudes: trackAltitudes,
+        baroAltitude: trackAltitudes[trackAltitudes.length - 1] ?? null,
+        fullHistory: true,
+      });
+    }
+
+    return out;
+  }, [
+    selectedIcao24,
+    selectedTrack,
+    selectedTrackFetchedAtMs,
+    displayTrails,
+    displayFlights,
+  ]);
+
   const selectedFlight = useMemo(() => {
     if (!selectedIcao24) return null;
     return (
@@ -428,7 +690,7 @@ function FlightTrackerInner() {
       missingSinceRef.current = now;
       return;
     }
-    if (now - missingSinceRef.current >= 30_000) {
+    if (now - missingSinceRef.current >= 60_000) {
       const timer = setTimeout(() => setSelectedIcao24(null), 0);
       missingSinceRef.current = null;
       return () => clearTimeout(timer);
@@ -636,7 +898,7 @@ function FlightTrackerInner() {
         />
         <FlightLayers
           flights={displayFlights}
-          trails={displayTrails}
+          trails={mergedTrails}
           onClick={handleClick}
           selectedIcao24={fpvIcao24 ?? selectedIcao24}
           showTrails={settings.showTrails}
