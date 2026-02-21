@@ -9,6 +9,8 @@ type ShortcutActions = {
   onOpenSearch: () => void;
   onToggleHelp: () => void;
   onDeselect: () => void;
+  onToggleFpv: () => void;
+  isFpv?: boolean;
 };
 
 const INPUT_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
@@ -40,6 +42,14 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       if (dialogOpen) return;
 
+      if (a.isFpv) {
+        if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          a.onToggleFpv();
+        }
+        return;
+      }
+
       switch (e.key) {
         case "n":
         case "N":
@@ -59,6 +69,11 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         case "/":
           e.preventDefault();
           a.onOpenSearch();
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          a.onToggleFpv();
           break;
         case "?":
           e.preventDefault();

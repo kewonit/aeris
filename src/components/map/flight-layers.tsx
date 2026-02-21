@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer } from "@deck.gl/layers";
@@ -11,7 +11,6 @@ import type { FlightState } from "@/lib/opensky";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
-/** Typed overlay with deck.gl's pickObject capability */
 type DeckGLOverlay = MapboxOverlay & {
   pickObject?(opts: {
     x: number;
@@ -192,8 +191,9 @@ function getRingUrl(): string {
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
 
-  const heading = ((f.trueTrack ?? 0) * Math.PI) / 180;
-  const speed = f.velocity ?? 200;
+  const heading =
+    ((Number.isFinite(f.trueTrack) ? f.trueTrack! : 0) * Math.PI) / 180;
+  const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
   const degPerSecond = speed / 111_320;
 
   const path: [number, number][] = [];
@@ -448,6 +448,13 @@ type FlightLayerProps = {
   trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
+  fpvIcao24?: string | null;
+  fpvPositionRef?: MutableRefObject<{
+    lng: number;
+    lat: number;
+    alt: number;
+    track: number;
+  } | null>;
 };
 
 export function FlightLayers({
@@ -460,6 +467,8 @@ export function FlightLayers({
   trailDistance,
   showShadows,
   showAltitudeColors,
+  fpvIcao24 = null,
+  fpvPositionRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -481,6 +490,8 @@ export function FlightLayers({
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const selectedIcao24Ref = useRef(selectedIcao24);
+  const fpvIcao24Ref = useRef(fpvIcao24);
+  const fpvPosRef = useRef(fpvPositionRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
   const SELECTION_FADE_MS = 600;
@@ -493,6 +504,8 @@ export function FlightLayers({
     trailDistanceRef.current = trailDistance;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
+    fpvIcao24Ref.current = fpvIcao24;
+    fpvPosRef.current = fpvPositionRef;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
       prevSelectedRef.current = selectedIcao24Ref.current;
       selectionChangeTimeRef.current = performance.now();
@@ -507,6 +520,8 @@ export function FlightLayers({
     showShadows,
     showAltitudeColors,
     selectedIcao24,
+    fpvIcao24,
+    fpvPositionRef,
   ]);
 
   useEffect(() => {
@@ -544,11 +559,12 @@ export function FlightLayers({
     for (const f of flights) {
       if (f.longitude != null && f.latitude != null) {
         const prev = newPrev.get(f.icao24);
-        const rawTrack = f.trueTrack ?? 0;
+        const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
+        const rawAlt = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
         next.set(f.icao24, {
           lng: f.longitude,
           lat: f.latitude,
-          alt: f.baroAltitude ?? 0,
+          alt: rawAlt,
           track:
             prev != null
               ? lerpAngle(prev.track, rawTrack, TRACK_DAMPING)
@@ -576,7 +592,6 @@ export function FlightLayers({
     [map],
   );
 
-  // Reset cursor if component unmounts while hovering.
   useEffect(() => {
     return () => {
       const canvas = map?.getCanvas();
@@ -674,7 +689,7 @@ export function FlightLayers({
           let prev = prevSnapshotsRef.current.get(f.icao24);
           if (!prev) {
             const rad = (curr.track * Math.PI) / 180;
-            const spd = f.velocity ?? 200;
+            const spd = Number.isFinite(f.velocity) ? f.velocity! : 200;
             const step = Math.min(
               (spd * (animDurationRef.current / 1000)) / 111_320,
               0.015,
@@ -705,7 +720,7 @@ export function FlightLayers({
           }
 
           const heading = (curr.track * Math.PI) / 180;
-          const speed = f.velocity ?? 200;
+          const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
           const extraSec = ((rawT - 1) * animDurationRef.current) / 1000;
           const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
           const moveDx = Math.sin(heading) * extraDeg;
@@ -722,6 +737,33 @@ export function FlightLayers({
         const interpolatedMap = new Map<string, FlightState>();
         for (const f of interpolated) {
           interpolatedMap.set(f.icao24, f);
+        }
+
+        const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
+        const visibleFlights = interpolated;
+
+        const fpvPosOut = fpvPosRef.current;
+        if (fpvPosOut && fpvId) {
+          const fpvF =
+            interpolated.find((f) => f.icao24.toLowerCase() === fpvId) ?? null;
+          if (
+            fpvF &&
+            Number.isFinite(fpvF.longitude) &&
+            Number.isFinite(fpvF.latitude)
+          ) {
+            fpvPosOut.current = {
+              lng: fpvF.longitude!,
+              lat: fpvF.latitude!,
+              alt: Number.isFinite(fpvF.baroAltitude)
+                ? fpvF.baroAltitude!
+                : 5000,
+              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack! : 0,
+            };
+          } else {
+            fpvPosOut.current = null;
+          }
+        } else if (fpvPosOut && !fpvId) {
+          fpvPosOut.current = null;
         }
 
         const pitchByIcao = new Map<string, number>();
@@ -771,8 +813,10 @@ export function FlightLayers({
                 })()
               : 0;
 
-          const speed = f.velocity ?? 0;
-          const verticalRate = f.verticalRate ?? 0;
+          const speed = Number.isFinite(f.velocity) ? f.velocity! : 0;
+          const verticalRate = Number.isFinite(f.verticalRate)
+            ? f.verticalRate!
+            : 0;
           const kinematicPitch =
             speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
 
@@ -789,12 +833,13 @@ export function FlightLayers({
           layers.push(
             new IconLayer<FlightState>({
               id: "flight-shadows",
-              data: interpolated,
+              data: visibleFlights,
               getPosition: (d) => [d.longitude!, d.latitude!, 0],
               getIcon: () => "aircraft",
               getSize: (d) => 20 * categorySizeMultiplier(d.category),
-              getColor: [0, 0, 0, 60],
-              getAngle: (d) => 360 - (d.trueTrack ?? 0),
+              getColor: () => [0, 0, 0, 60],
+              getAngle: (d) =>
+                360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
               iconAtlas: atlasUrl,
               iconMapping: AIRCRAFT_ICON_MAPPING,
               billboard: false,
@@ -942,6 +987,7 @@ export function FlightLayers({
                 const animFlight = interpolatedMap.get(d.icao24);
                 const visiblePoints = getVisibleTrailPoints(d, animFlight);
                 const len = visiblePoints.length;
+
                 return visiblePoints.map((point, i) => {
                   const tVal = len > 1 ? i / (len - 1) : 1;
                   const fade = Math.pow(tVal, 1.65);
@@ -1058,7 +1104,7 @@ export function FlightLayers({
         layers.push(
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
-            data: interpolated,
+            data: visibleFlights,
             getPosition: (d) => [
               d.longitude!,
               d.latitude!,
@@ -1066,7 +1112,7 @@ export function FlightLayers({
             ],
             getOrientation: (d) => {
               const pitch = pitchByIcao.get(d.icao24) ?? 0;
-              const yaw = -(d.trueTrack ?? 0);
+              const yaw = -(Number.isFinite(d.trueTrack) ? d.trueTrack! : 0);
               return [pitch, yaw, 90];
             },
             getColor: (d) => {
