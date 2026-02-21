@@ -26,7 +26,7 @@ function lerpColor(a: RGB, b: RGB, t: number): RGB {
 export function altitudeToColor(
   altitude: number | null,
 ): [number, number, number, number] {
-  if (altitude === null) return [100, 100, 100, 200];
+  if (altitude === null || !Number.isFinite(altitude)) return [100, 100, 100, 200];
 
   const normalized = Math.min(Math.max(altitude / MAX_ALTITUDE_METERS, 0), 1);
   const t = Math.pow(normalized, 0.4);
@@ -46,17 +46,17 @@ export function altitudeToColor(
 }
 
 export function altitudeToElevation(altitude: number | null): number {
-  if (altitude === null) return 0;
+  if (altitude === null || !Number.isFinite(altitude)) return 0;
   return Math.max(altitude * 5, 200);
 }
 
 export function metersToFeet(meters: number | null): string {
-  if (meters === null) return "—";
+  if (meters === null || !Number.isFinite(meters)) return "—";
   return `${Math.round(meters * 3.28084).toLocaleString()} ft`;
 }
 
 export function msToKnots(ms: number | null): string {
-  if (ms === null) return "—";
+  if (ms === null || !Number.isFinite(ms)) return "—";
   return `${Math.round(ms * 1.94384)} kts`;
 }
 
@@ -66,8 +66,8 @@ export function formatCallsign(callsign: string | null): string {
 }
 
 export function headingToCardinal(degrees: number | null): string {
-  if (degrees === null) return "—";
+  if (degrees === null || !Number.isFinite(degrees)) return "—";
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const index = Math.round(degrees / 45) % 8;
+  const index = ((Math.round(degrees / 45) % 8) + 8) % 8;
   return directions[index];
 }

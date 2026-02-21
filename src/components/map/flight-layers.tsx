@@ -191,8 +191,9 @@ function getRingUrl(): string {
 function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
 
-  const heading = ((f.trueTrack ?? 0) * Math.PI) / 180;
-  const speed = f.velocity ?? 200;
+  const heading =
+    ((Number.isFinite(f.trueTrack) ? f.trueTrack! : 0) * Math.PI) / 180;
+  const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
   const degPerSecond = speed / 111_320;
 
   const path: [number, number][] = [];
@@ -558,11 +559,12 @@ export function FlightLayers({
     for (const f of flights) {
       if (f.longitude != null && f.latitude != null) {
         const prev = newPrev.get(f.icao24);
-        const rawTrack = f.trueTrack ?? 0;
+        const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
+        const rawAlt = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
         next.set(f.icao24, {
           lng: f.longitude,
           lat: f.latitude,
-          alt: f.baroAltitude ?? 0,
+          alt: rawAlt,
           track:
             prev != null
               ? lerpAngle(prev.track, rawTrack, TRACK_DAMPING)
@@ -687,7 +689,7 @@ export function FlightLayers({
           let prev = prevSnapshotsRef.current.get(f.icao24);
           if (!prev) {
             const rad = (curr.track * Math.PI) / 180;
-            const spd = f.velocity ?? 200;
+            const spd = Number.isFinite(f.velocity) ? f.velocity! : 200;
             const step = Math.min(
               (spd * (animDurationRef.current / 1000)) / 111_320,
               0.015,
@@ -718,7 +720,7 @@ export function FlightLayers({
           }
 
           const heading = (curr.track * Math.PI) / 180;
-          const speed = f.velocity ?? 200;
+          const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
           const extraSec = ((rawT - 1) * animDurationRef.current) / 1000;
           const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
           const moveDx = Math.sin(heading) * extraDeg;
@@ -744,12 +746,18 @@ export function FlightLayers({
         if (fpvPosOut && fpvId) {
           const fpvF =
             interpolated.find((f) => f.icao24.toLowerCase() === fpvId) ?? null;
-          if (fpvF && fpvF.longitude != null && fpvF.latitude != null) {
+          if (
+            fpvF &&
+            Number.isFinite(fpvF.longitude) &&
+            Number.isFinite(fpvF.latitude)
+          ) {
             fpvPosOut.current = {
-              lng: fpvF.longitude,
-              lat: fpvF.latitude,
-              alt: fpvF.baroAltitude ?? 5000,
-              track: fpvF.trueTrack ?? 0,
+              lng: fpvF.longitude!,
+              lat: fpvF.latitude!,
+              alt: Number.isFinite(fpvF.baroAltitude)
+                ? fpvF.baroAltitude!
+                : 5000,
+              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack! : 0,
             };
           } else {
             fpvPosOut.current = null;
@@ -805,8 +813,10 @@ export function FlightLayers({
                 })()
               : 0;
 
-          const speed = f.velocity ?? 0;
-          const verticalRate = f.verticalRate ?? 0;
+          const speed = Number.isFinite(f.velocity) ? f.velocity! : 0;
+          const verticalRate = Number.isFinite(f.verticalRate)
+            ? f.verticalRate!
+            : 0;
           const kinematicPitch =
             speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
 
@@ -828,7 +838,8 @@ export function FlightLayers({
               getIcon: () => "aircraft",
               getSize: (d) => 20 * categorySizeMultiplier(d.category),
               getColor: () => [0, 0, 0, 60],
-              getAngle: (d) => 360 - (d.trueTrack ?? 0),
+              getAngle: (d) =>
+                360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
               iconAtlas: atlasUrl,
               iconMapping: AIRCRAFT_ICON_MAPPING,
               billboard: false,
@@ -1101,7 +1112,7 @@ export function FlightLayers({
             ],
             getOrientation: (d) => {
               const pitch = pitchByIcao.get(d.icao24) ?? 0;
-              const yaw = -(d.trueTrack ?? 0);
+              const yaw = -(Number.isFinite(d.trueTrack) ? d.trueTrack! : 0);
               return [pitch, yaw, 90];
             },
             getColor: (d) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
 import { X, Eye, ArrowUp, ArrowDown, Minus, Gauge } from "lucide-react";
@@ -35,7 +35,7 @@ function CompassRibbon({ heading }: { heading: number | null }) {
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio ?? 1;
-    const w = 200;
+    const w = 260;
     const h = 32;
     canvas.width = w * dpr;
     canvas.height = h * dpr;
@@ -109,7 +109,7 @@ function CompassRibbon({ heading }: { heading: number | null }) {
     <canvas
       ref={canvasRef}
       className="block"
-      style={{ width: 200, height: 32 }}
+      style={{ width: 260, height: 32 }}
       aria-label={
         heading !== null ? `Heading ${Math.round(heading)}°` : "No heading data"
       }
@@ -119,15 +119,21 @@ function CompassRibbon({ heading }: { heading: number | null }) {
 
 export function FpvHud({ flight, onExit }: FpvHudProps) {
   const altFeet =
-    flight.baroAltitude !== null
+    flight.baroAltitude !== null && Number.isFinite(flight.baroAltitude)
       ? Math.round(flight.baroAltitude * 3.28084)
       : null;
   const speedKts =
-    flight.velocity !== null ? Math.round(flight.velocity * 1.944) : null;
-  const heading = flight.trueTrack ?? null;
+    flight.velocity !== null && Number.isFinite(flight.velocity)
+      ? Math.round(flight.velocity * 1.944)
+      : null;
+  const heading =
+    flight.trueTrack !== null && Number.isFinite(flight.trueTrack)
+      ? flight.trueTrack
+      : null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const vs = flight.verticalRate;
-  const vsFpm = vs !== null ? Math.round(vs * 196.85) : null;
+  const vsFpm =
+    vs !== null && Number.isFinite(vs) ? Math.round(vs * 196.85) : null;
   const vsDisplay = vsFpm !== null ? `${vsFpm > 0 ? "+" : ""}${vsFpm}` : null;
   const airline = useMemo(
     () => lookupAirline(flight.callsign),
@@ -136,8 +142,10 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
   const logoUrl = useMemo(() => {
     return airlineLogoCandidates(airline)[0] ?? null;
   }, [airline]);
+  const [logoErrorUrl, setLogoErrorUrl] = useState<string | null>(null);
+  const logoError = logoUrl !== null && logoUrl === logoErrorUrl;
   const vsIcon =
-    vs !== null ? (
+    vs !== null && Number.isFinite(vs) ? (
       vs > 0.5 ? (
         <ArrowUp className="h-3 w-3" />
       ) : vs < -0.5 ? (
@@ -149,91 +157,94 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
+      exit={{ opacity: 0, y: 12 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="pointer-events-auto fixed right-2 bottom-3 left-2 z-50 sm:right-auto sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2"
+      className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
     >
       <div
-        className="mx-auto flex w-full max-w-176 flex-col items-center gap-0 overflow-hidden rounded-2xl border border-white/8 bg-black/70 shadow-[0_16px_64px_rgba(0,0,0,0.6)] backdrop-blur-3xl"
+        className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-xl border border-white/8 bg-black/70 pb-1 shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-3xl md:w-max"
         role="status"
         aria-live="polite"
         aria-label="First person view flight instruments"
       >
-        <div className="w-full border-b border-white/6 px-2.5 pt-2 pb-1 sm:px-3">
+        <div className="w-full border-b border-white/6 px-2 pt-1.5 pb-0.5 sm:px-2.5">
           <div
-            className="mx-auto w-fit scale-95 overflow-hidden rounded-lg sm:scale-100"
-            style={{ width: 200 }}
+            className="mx-auto w-fit overflow-hidden rounded-md"
+            style={{ width: 260 }}
           >
             <CompassRibbon heading={heading} />
           </div>
-          <p className="mt-0.5 text-center text-[11px] font-bold tabular-nums text-sky-400/70">
+          <p className="mt-0 text-center text-[10px] font-bold tabular-nums text-sky-400/70">
             {heading !== null ? `${Math.round(heading)}° ${cardinal}` : "—"}
           </p>
         </div>
 
         <div className="flex w-full items-stretch">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 border-r border-white/6 px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5">
-            {logoUrl ? (
-              <span className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white/90 ring-1 ring-white/20">
+          <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-white/6 px-2 py-1.5 sm:px-3 sm:py-2">
+            {logoUrl && !logoError ? (
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 shadow-sm ring-1 ring-white/20">
                 <Image
                   src={logoUrl}
                   alt={airline ? `${airline} logo` : "Airline logo"}
                   fill
-                  sizes="24px"
+                  sizes="32px"
                   className="object-contain p-1"
                   unoptimized
+                  onError={() => setLogoErrorUrl(logoUrl)}
                 />
               </span>
             ) : (
-              <Eye className="h-3.5 w-3.5 text-emerald-400/70 animate-pulse" />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 ring-1 ring-white/10">
+                <Eye className="h-3.5 w-3.5 text-emerald-400/70 animate-pulse" />
+              </span>
             )}
             <div className="min-w-0">
               <p className="truncate text-[12px] font-bold tracking-wide text-white/90 sm:text-[13px]">
                 {formatCallsign(flight.callsign)}
               </p>
-              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-white/25">
+              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-white/30">
                 {airline ?? flight.originCountry}
               </p>
             </div>
           </div>
 
-          <div className="flex min-w-15 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-20 sm:px-4">
-            <div className="flex items-center gap-1 text-white/30">
-              <ArrowUp className="h-2.5 w-2.5" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-white/30">
+              <ArrowUp className="h-2 w-2" />
+              <span className="text-[8px] font-semibold uppercase tracking-wider">
                 ALT
               </span>
             </div>
-            <p className="text-[15px] font-bold tabular-nums text-white/90">
+            <p className="text-[13px] font-bold tabular-nums text-white/90">
               {altFeet !== null ? altFeet.toLocaleString() : "—"}
             </p>
-            <p className="text-[9px] font-medium text-white/25">ft</p>
+            <p className="text-[8px] font-medium text-white/25">ft</p>
           </div>
 
-          <div className="flex min-w-14 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-17.5 sm:px-4">
-            <div className="flex items-center gap-1 text-white/30">
-              <Gauge className="h-2.5 w-2.5" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider">
+          <div className="flex min-w-11 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-white/30">
+              <Gauge className="h-2 w-2" />
+              <span className="text-[8px] font-semibold uppercase tracking-wider">
                 SPD
               </span>
             </div>
-            <p className="text-[15px] font-bold tabular-nums text-white/90">
+            <p className="text-[13px] font-bold tabular-nums text-white/90">
               {speedKts ?? "—"}
             </p>
-            <p className="text-[9px] font-medium text-white/25">kts</p>
+            <p className="text-[8px] font-medium text-white/25">kts</p>
           </div>
 
-          <div className="flex min-w-15 flex-col items-center justify-center border-r border-white/6 px-2 py-2 sm:min-w-20 sm:px-4">
-            <div className="flex items-center gap-1 text-white/30">
-              {vsIcon ?? <Minus className="h-2.5 w-2.5" />}
-              <span className="text-[9px] font-semibold uppercase tracking-wider">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-white/30">
+              {vsIcon ?? <Minus className="h-2 w-2" />}
+              <span className="text-[8px] font-semibold uppercase tracking-wider">
                 V/S
               </span>
             </div>
             <p
-              className={`text-[15px] font-bold tabular-nums ${
+              className={`text-[13px] font-bold tabular-nums ${
                 vs !== null && vs > 0.5
                   ? "text-emerald-400/80"
                   : vs !== null && vs < -0.5
@@ -243,16 +254,16 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             >
               {vsDisplay ?? "—"}
             </p>
-            <p className="text-[9px] font-medium text-white/25">fpm</p>
+            <p className="text-[8px] font-medium text-white/25">fpm</p>
           </div>
 
           <button
             onClick={onExit}
-            className="flex items-center gap-1.5 px-2.5 py-2 text-white/40 transition-colors hover:bg-white/5 hover:text-white/60 sm:px-4"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-white/40 transition-colors hover:bg-white/5 hover:text-white/60 sm:px-2.5"
             aria-label="Exit first person view"
             title="Exit FPV (Esc)"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

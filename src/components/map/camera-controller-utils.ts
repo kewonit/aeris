@@ -1,6 +1,6 @@
 import type maplibregl from "maplibre-gl";
+import { MercatorCoordinate } from "maplibre-gl";
 
-export const FPV_MODE_SWITCH_DURATION_MS = 700;
 export const FPV_DISTANCE_ZOOM_OFFSET = 1.1;
 
 export function clamp01(value: number): number {
@@ -25,10 +25,49 @@ export function lerpLng(from: number, to: number, t: number): number {
 }
 
 export function fpvZoomForAltitude(altMeters: number): number {
+  if (!Number.isFinite(altMeters)) return 12;
   const alt = Math.max(altMeters, 0);
   if (alt < 50) return 16.2;
   const zoom = 18.1 - 2.0 * Math.log10(Math.max(alt, 50));
   return Math.max(10.1, Math.min(16.2, zoom));
+}
+
+export function projectLngLatElevationPixelDelta(
+  map: maplibregl.Map,
+  lng: number,
+  lat: number,
+  elevationMeters: number,
+): { dx: number; dy: number } | null {
+  type Transform3DLike = {
+    _pixelMatrix3D?: unknown;
+    centerPoint?: { x: number; y: number };
+    coordinatePoint: (
+      coord: MercatorCoordinate,
+      elevation: number,
+      pixelMatrix3D: unknown,
+    ) => { x: number; y: number } | null;
+  };
+
+  const tr = (map as unknown as { transform?: Transform3DLike }).transform;
+  if (!tr || typeof tr.coordinatePoint !== "function") return null;
+
+  const pixelMatrix3D = tr._pixelMatrix3D;
+  const centerPoint = tr.centerPoint;
+  if (!pixelMatrix3D || !centerPoint) return null;
+
+  let p: { x: number; y: number } | null = null;
+  try {
+    p = tr.coordinatePoint(
+      MercatorCoordinate.fromLngLat({ lng, lat }),
+      elevationMeters,
+      pixelMatrix3D,
+    );
+  } catch {
+    return null;
+  }
+
+  if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+  return { dx: p.x - centerPoint.x, dy: p.y - centerPoint.y };
 }
 
 export function setMapInteractionsEnabled(

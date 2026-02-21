@@ -240,6 +240,11 @@ function FlightTrackerInner() {
     track: number;
   } | null>(null);
 
+  const [fpvSeedCenter, setFpvSeedCenter] = useState<{
+    lng: number;
+    lat: number;
+  } | null>(null);
+
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
   const { settings, update } = useSettings();
@@ -259,6 +264,7 @@ function FlightTrackerInner() {
   const { flights, loading, rateLimited, retryIn } = useFlights(
     activeCity,
     fpvIcao24,
+    fpvSeedCenter,
   );
 
   const displayFlights = flights;
@@ -300,8 +306,15 @@ function FlightTrackerInner() {
       (f) => f.icao24.toLowerCase() === pending,
     );
     if (match && match.longitude != null && match.latitude != null) {
+      if (match.onGround) {
+        pendingFpvRef.current = null;
+        syncFpvToUrl(null, activeCity);
+        setSelectedIcao24(match.icao24);
+        return;
+      }
       pendingFpvRef.current = null;
       fpvLookupDoneRef.current = false;
+      setFpvSeedCenter({ lng: match.longitude, lat: match.latitude });
       setFpvIcao24(pending);
       setFollowIcao24(null);
       return;
@@ -316,14 +329,26 @@ function FlightTrackerInner() {
             result.flight &&
             result.flight.longitude != null &&
             result.flight.latitude != null &&
+            !result.flight.onGround &&
             pendingFpvRef.current === pending
           ) {
+            const focusCity = cityFromFlight(result.flight);
+            if (focusCity) {
+              setCityOverride(focusCity);
+            }
+            setFpvSeedCenter({
+              lng: result.flight.longitude,
+              lat: result.flight.latitude,
+            });
             pendingFpvRef.current = null;
             setFpvIcao24(pending);
             setFollowIcao24(null);
           } else if (pendingFpvRef.current === pending) {
             pendingFpvRef.current = null;
             syncFpvToUrl(null, activeCity);
+            if (result.flight) {
+              setSelectedIcao24(result.flight.icao24);
+            }
           }
         })
         .catch(() => {
@@ -347,17 +372,27 @@ function FlightTrackerInner() {
     if (fpvFlight) {
       fpvMissCountRef.current = 0;
       if (fpvFlight.onGround) {
-        const timer = setTimeout(() => setFpvIcao24(null), 0);
+        const exitIcao = fpvIcao24;
+        const timer = setTimeout(() => {
+          setSelectedIcao24(exitIcao);
+          setFpvIcao24(null);
+        }, 0);
         return () => clearTimeout(timer);
       }
     } else {
-      fpvMissCountRef.current += 1;
-      if (fpvMissCountRef.current >= 2) {
-        const timer = setTimeout(() => setFpvIcao24(null), 0);
+      if (!rateLimited) {
+        fpvMissCountRef.current += 1;
+      }
+      if (fpvMissCountRef.current >= 3) {
+        const exitIcao = fpvIcao24;
+        const timer = setTimeout(() => {
+          setSelectedIcao24(exitIcao);
+          setFpvIcao24(null);
+        }, 0);
         return () => clearTimeout(timer);
       }
     }
-  }, [fpvIcao24, fpvFlight]);
+  }, [fpvIcao24, fpvFlight, rateLimited]);
 
   const followMissCountRef = useRef(0);
   useEffect(() => {
@@ -437,6 +472,7 @@ function FlightTrackerInner() {
 
   const handleDeselectFlight = useCallback(() => {
     if (fpvIcao24) {
+      setSelectedIcao24(fpvIcao24);
       setFpvIcao24(null);
     } else {
       setSelectedIcao24(null);
@@ -449,17 +485,27 @@ function FlightTrackerInner() {
       const flight =
         displayFlights.find((f) => f.icao24.toLowerCase() === targetIcao24) ??
         flights.find((f) => f.icao24.toLowerCase() === targetIcao24);
-      if (flight && (flight.longitude == null || flight.latitude == null))
-        return;
-      setFpvIcao24((prev) => (prev === targetIcao24 ? null : targetIcao24));
+      if (!flight) return;
+      if (flight.longitude == null || flight.latitude == null) return;
+      if (flight.onGround) return;
+      setFpvSeedCenter({ lng: flight.longitude, lat: flight.latitude });
+      setFpvIcao24((prev) => {
+        if (prev === targetIcao24) {
+          setFpvSeedCenter(null);
+          setSelectedIcao24(targetIcao24);
+          return null;
+        }
+        return targetIcao24;
+      });
       setFollowIcao24(null);
     },
     [displayFlights, flights],
   );
 
   const handleExitFpv = useCallback(() => {
+    setSelectedIcao24(fpvIcao24);
     setFpvIcao24(null);
-  }, []);
+  }, [fpvIcao24]);
 
   const handleNorthUp = useCallback(() => {
     window.dispatchEvent(new CustomEvent("aeris:north-up"));
@@ -492,6 +538,7 @@ function FlightTrackerInner() {
 
   const handleToggleFpvKey = useCallback(() => {
     if (fpvIcao24) {
+      setSelectedIcao24(fpvIcao24);
       setFpvIcao24(null);
     } else if (selectedIcao24) {
       handleToggleFpv(selectedIcao24);
@@ -516,7 +563,16 @@ function FlightTrackerInner() {
       if (localMatch) {
         setSelectedIcao24(localMatch.icao24);
         setFollowIcao24(null);
-        if (enterFpv) {
+        if (
+          enterFpv &&
+          !localMatch.onGround &&
+          localMatch.longitude != null &&
+          localMatch.latitude != null
+        ) {
+          setFpvSeedCenter({
+            lng: localMatch.longitude,
+            lat: localMatch.latitude,
+          });
           setFpvIcao24(localMatch.icao24);
         }
         return true;
@@ -536,7 +592,16 @@ function FlightTrackerInner() {
 
       setSelectedIcao24(result.flight.icao24);
       setFollowIcao24(null);
-      if (enterFpv) {
+      if (
+        enterFpv &&
+        !result.flight.onGround &&
+        result.flight.longitude != null &&
+        result.flight.latitude != null
+      ) {
+        setFpvSeedCenter({
+          lng: result.flight.longitude,
+          lat: result.flight.latitude,
+        });
         setFpvIcao24(result.flight.icao24);
       }
       return true;
@@ -562,6 +627,7 @@ function FlightTrackerInner() {
           city={activeCity}
           followFlight={followFlight}
           fpvFlight={fpvFlightOrCached}
+          fpvPositionRef={fpvPositionRef}
         />
         <AirportLayer
           activeCity={activeCity}

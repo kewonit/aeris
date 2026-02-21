@@ -11,17 +11,16 @@ type MapAttributionProps = {
 
 const SM_BREAKPOINT = 640;
 
-function getInitialExpanded(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.innerWidth >= SM_BREAKPOINT;
-}
-
 export function MapAttribution({ styleId }: MapAttributionProps) {
-  const [expanded, setExpanded] = useState(getInitialExpanded);
+  const [expanded, setExpanded] = useState(false);
   const attributions = getAttributions(styleId);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
+
+  useEffect(() => {
+    setExpanded(window.innerWidth >= SM_BREAKPOINT);
+  }, []);
 
   // Close on outside click for small screens
   useEffect(() => {

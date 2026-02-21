@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import {
   FPV_DISTANCE_ZOOM_OFFSET,
@@ -8,7 +8,9 @@ import {
   lerp,
   lerpLng,
   normalizeLng,
+  projectLngLatElevationPixelDelta,
   setMapInteractionsEnabled,
+  smoothstep,
 } from "./camera-controller-utils";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
@@ -23,7 +25,13 @@ const FOLLOW_ZOOM = 10.5;
 const FOLLOW_PITCH = 55;
 const FOLLOW_EASE_MS = 1200;
 
-const FPV_FLY_DURATION = 2500;
+const FPV_FLY_DURATION = 1600;
+const FPV_PITCH = 65;
+const FPV_CENTER_ALPHA = 0.16;
+const FPV_BEARING_ALPHA = 0.1;
+const FPV_ZOOM_ALPHA = 0.06;
+const FPV_IDLE_RECENTER_MS = 1200;
+const FPV_EASE_IN_MS = 600;
 
 const CAMERA_ACCEL = 2.5;
 const CAMERA_DECEL = 4.0;
@@ -40,14 +48,18 @@ type ActionState = {
   impulseEnd: number;
 };
 
+type FpvPosition = { lng: number; lat: number; alt: number; track: number };
+
 export function CameraController({
   city,
   followFlight = null,
   fpvFlight = null,
+  fpvPositionRef,
 }: {
   city: City;
   followFlight?: FlightState | null;
   fpvFlight?: FlightState | null;
+  fpvPositionRef?: MutableRefObject<FpvPosition | null>;
 }) {
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
@@ -60,6 +72,11 @@ export function CameraController({
   const isFollowingRef = useRef(false);
   const isFpvActiveRef = useRef(false);
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
+  const fpvPosRef = useRef(fpvPositionRef);
+
+  useEffect(() => {
+    fpvPosRef.current = fpvPositionRef;
+  }, [fpvPositionRef]);
 
   useEffect(() => {
     fpvFlightRef.current = fpvFlight;
@@ -97,7 +114,9 @@ export function CameraController({
     }
 
     isFollowingRef.current = true;
-    const bearing = followFlight.trueTrack ?? map.getBearing();
+    const bearing = Number.isFinite(followFlight.trueTrack)
+      ? followFlight.trueTrack!
+      : map.getBearing();
 
     map.flyTo({
       center: [followFlight.longitude, followFlight.latitude],
@@ -117,7 +136,9 @@ export function CameraController({
 
     map.easeTo({
       center: [followFlight.longitude, followFlight.latitude],
-      bearing: followFlight.trueTrack ?? map.getBearing(),
+      bearing: Number.isFinite(followFlight.trueTrack)
+        ? followFlight.trueTrack!
+        : map.getBearing(),
       duration: FOLLOW_EASE_MS,
       essential: true,
     });
@@ -166,23 +187,61 @@ export function CameraController({
     isFpvActiveRef.current = true;
     setMapInteractionsEnabled(map, true);
 
-    const bearing = fpv.trueTrack ?? map.getBearing();
-    const zoom =
-      fpvZoomForAltitude(fpv.baroAltitude ?? 5000) - FPV_DISTANCE_ZOOM_OFFSET;
-    const fpvPitch = map.getPitch();
+    const bearing = Number.isFinite(fpv.trueTrack)
+      ? fpv.trueTrack!
+      : map.getBearing();
+    const safeAltitude = Number.isFinite(fpv.baroAltitude)
+      ? fpv.baroAltitude!
+      : 5000;
+    const zoom = fpvZoomForAltitude(safeAltitude) - FPV_DISTANCE_ZOOM_OFFSET;
 
-    const centerLng = ((fpv.longitude + 540) % 360) - 180;
+    let fpvOffsetX = 0;
+    let fpvOffsetY = 0;
 
     map.flyTo({
-      center: [centerLng, fpv.latitude],
+      center: [normalizeLng(fpv.longitude), fpv.latitude],
       zoom,
-      pitch: fpvPitch,
+      pitch: FPV_PITCH,
       bearing,
       duration: FPV_FLY_DURATION,
       essential: true,
     });
 
     let frameId: number | null = null;
+    let startupTimer: ReturnType<typeof setTimeout> | null = null;
+    let prevBearing = bearing;
+
+    let lastInteractionTime = 0; // 0 = no interaction yet → track immediately
+    let recenterStartTime = 0;
+    let programmaticMove = false;
+
+    function onUserInteraction() {
+      if (programmaticMove) return;
+      lastInteractionTime = performance.now();
+      recenterStartTime = 0;
+    }
+
+    const onMapInteraction = (e: unknown) => {
+      if (programmaticMove) return;
+      const evt = e as { originalEvent?: Event };
+      if (!evt?.originalEvent) return;
+      onUserInteraction();
+    };
+
+    const interactionEventTypes = [
+      "movestart",
+      "move",
+      "zoomstart",
+      "zoom",
+      "rotatestart",
+      "rotate",
+      "pitchstart",
+      "pitch",
+    ] as const;
+
+    for (const t of interactionEventTypes) {
+      map.on(t, onMapInteraction);
+    }
 
     function keepInFrame() {
       if (!isFpvActiveRef.current || !map) {
@@ -190,78 +249,136 @@ export function CameraController({
         return;
       }
 
+      const interpPos = fpvPosRef.current?.current ?? null;
       const live = fpvFlightRef.current;
-      if (live?.longitude != null && live?.latitude != null) {
-        if (
-          !Number.isFinite(live.longitude) ||
-          !Number.isFinite(live.latitude) ||
-          Math.abs(live.latitude) > 90
-        ) {
-          frameId = requestAnimationFrame(keepInFrame);
-          return;
-        }
 
-        const point = map.project([
-          normalizeLng(live.longitude),
-          live.latitude,
-        ]);
+      const posLng = interpPos?.lng ?? live?.longitude ?? null;
+      const posLat = interpPos?.lat ?? live?.latitude ?? null;
+      const posAlt = interpPos?.alt ?? live?.baroAltitude ?? 5000;
+      const posTrack = interpPos?.track ?? live?.trueTrack ?? null;
+
+      if (posLng == null || posLat == null) {
+        frameId = requestAnimationFrame(keepInFrame);
+        return;
+      }
+
+      if (
+        !Number.isFinite(posLng) ||
+        !Number.isFinite(posLat) ||
+        Math.abs(posLat) > 90
+      ) {
+        frameId = requestAnimationFrame(keepInFrame);
+        return;
+      }
+
+      const now = performance.now();
+      const idleMs =
+        lastInteractionTime === 0
+          ? FPV_IDLE_RECENTER_MS + 1
+          : now - lastInteractionTime;
+      const isIdle = idleMs > FPV_IDLE_RECENTER_MS;
+
+      let trackingStrength = 0;
+      if (isIdle) {
+        if (recenterStartTime === 0) {
+          recenterStartTime = now;
+        }
+        const easeElapsed = now - recenterStartTime;
+        const t = Math.min(easeElapsed / FPV_EASE_IN_MS, 1);
+        trackingStrength = smoothstep(t);
+      }
+
+      const liveBearing =
+        posTrack !== null && Number.isFinite(posTrack) ? posTrack : prevBearing;
+      const bearingDelta = ((liveBearing - prevBearing + 540) % 360) - 180;
+      prevBearing = prevBearing + bearingDelta * FPV_BEARING_ALPHA;
+
+      if (trackingStrength > 0.001) {
+        const safeAlt = Number.isFinite(posAlt) ? posAlt : 5000;
+        const targetZoom =
+          fpvZoomForAltitude(safeAlt) - FPV_DISTANCE_ZOOM_OFFSET;
+        const currentZoom = map.getZoom();
+        const zoomAlpha = FPV_ZOOM_ALPHA * trackingStrength;
+        const smoothZoom = lerp(currentZoom, targetZoom, zoomAlpha);
+
+        const currentPitch = map.getPitch();
+        const targetLng = normalizeLng(posLng);
+        const targetLat = posLat;
+        const center = map.getCenter();
+        const centerAlpha = FPV_CENTER_ALPHA * trackingStrength;
+
         const canvas = map.getCanvas();
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
+        const canvasW = Math.max(1, canvas.clientWidth);
+        const canvasH = Math.max(1, canvas.clientHeight);
 
-        if (width < 2 || height < 2) {
-          frameId = requestAnimationFrame(keepInFrame);
-          return;
+        const elevationMeters = Math.max(safeAlt * 5, 200);
+        const deltaPx = projectLngLatElevationPixelDelta(
+          map,
+          targetLng,
+          targetLat,
+          elevationMeters,
+        );
+        if (deltaPx) {
+          const desiredX = fpvOffsetX - deltaPx.dx;
+          const desiredY = fpvOffsetY - deltaPx.dy;
+          const offsetAlpha = 0.08 * trackingStrength;
+          fpvOffsetX = lerp(fpvOffsetX, desiredX, offsetAlpha);
+          fpvOffsetY = lerp(fpvOffsetY, desiredY, offsetAlpha);
+        } else {
+          const decayAlpha = 0.1 * trackingStrength;
+          fpvOffsetX = lerp(fpvOffsetX, 0, decayAlpha);
+          fpvOffsetY = lerp(fpvOffsetY, 0, decayAlpha);
         }
 
-        if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-          frameId = requestAnimationFrame(keepInFrame);
-          return;
-        }
+        const maxScale = Math.min(1.5, Math.max(1, elevationMeters / 15_000));
+        const maxOffset = 0.45 * maxScale * Math.min(canvasW, canvasH);
+        fpvOffsetX = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetX));
+        fpvOffsetY = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetY));
 
-        const minX = width * 0.18;
-        const maxX = width * 0.82;
-        const minY = height * 0.18;
-        const maxY = height * 0.82;
+        const currentBearing = map.getBearing();
+        const bearingToCurrent =
+          ((prevBearing - currentBearing + 540) % 360) - 180;
+        const newMapBearing =
+          currentBearing +
+          bearingToCurrent * FPV_BEARING_ALPHA * trackingStrength;
 
-        const outOfFrame =
-          point.x < minX || point.x > maxX || point.y < minY || point.y > maxY;
+        const pitchAlpha = 0.05 * trackingStrength;
+        const newPitch = lerp(currentPitch, FPV_PITCH, pitchAlpha);
 
-        if (outOfFrame) {
-          const overflowX =
-            point.x < minX
-              ? minX - point.x
-              : point.x > maxX
-                ? point.x - maxX
-                : 0;
-          const overflowY =
-            point.y < minY
-              ? minY - point.y
-              : point.y > maxY
-                ? point.y - maxY
-                : 0;
-          const overflowRatio = Math.max(overflowX / width, overflowY / height);
-          const alpha = Math.min(0.12, 0.03 + overflowRatio * 0.2);
-
-          const center = map.getCenter();
-          const targetLng = normalizeLng(live.longitude);
-          const targetLat = live.latitude;
-          map.jumpTo({
+        programmaticMove = true;
+        try {
+          map.easeTo({
             center: [
-              lerpLng(center.lng, targetLng, alpha),
-              lerp(center.lat, targetLat, alpha),
+              lerpLng(center.lng, targetLng, centerAlpha),
+              lerp(center.lat, targetLat, centerAlpha),
             ],
+            bearing: newMapBearing,
+            zoom: smoothZoom,
+            pitch: newPitch,
+            offset: [fpvOffsetX, fpvOffsetY],
+            duration: 0,
+            animate: false,
+            essential: true,
           });
+        } finally {
+          programmaticMove = false;
         }
       }
 
       frameId = requestAnimationFrame(keepInFrame);
     }
 
-    frameId = requestAnimationFrame(keepInFrame);
+    startupTimer = setTimeout(() => {
+      startupTimer = null;
+      frameId = requestAnimationFrame(keepInFrame);
+    }, FPV_FLY_DURATION + 300);
 
     return () => {
+      if (startupTimer) clearTimeout(startupTimer);
       if (frameId != null) cancelAnimationFrame(frameId);
+      for (const t of interactionEventTypes) {
+        map.off(t, onMapInteraction);
+      }
       if (map && isFpvActiveRef.current) {
         setMapInteractionsEnabled(map, true);
         isFpvActiveRef.current = false;
@@ -454,7 +571,7 @@ export function CameraController({
         if (!map || isInteractingRef.current) return;
         const resumeElapsed = performance.now() - resumeStart;
         const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
-        const easeFactor = t * t * (3 - 2 * t);
+        const easeFactor = smoothstep(t);
         const bearing = map.getBearing() + speed * easeFactor;
         map.setBearing(bearing % 360);
         orbitFrameRef.current = requestAnimationFrame(tick);

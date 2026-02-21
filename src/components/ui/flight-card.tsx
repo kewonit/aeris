@@ -49,6 +49,11 @@ export function FlightCard({
   const logoCandidates = airlineLogoCandidates(airline);
   const heading = flight?.trueTrack ?? null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
+  const canEnterFpv =
+    flight != null &&
+    flight.longitude != null &&
+    flight.latitude != null &&
+    !flight.onGround;
   const [logoIndexByAirline, setLogoIndexByAirline] = useState<
     Record<string, number>
   >({});
@@ -143,21 +148,38 @@ export function FlightCard({
               <div className="flex items-center gap-1.5">
                 {onToggleFpv && (
                   <motion.button
-                    onClick={() => flight && onToggleFpv(flight.icao24)}
+                    onClick={() =>
+                      (isFpvActive || canEnterFpv) &&
+                      flight &&
+                      onToggleFpv(flight.icao24)
+                    }
+                    disabled={!isFpvActive && !canEnterFpv}
                     className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
                       isFpvActive
                         ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-white/6 text-white/40 hover:bg-white/12"
+                        : !canEnterFpv
+                          ? "bg-white/4 text-white/15 cursor-not-allowed"
+                          : "bg-white/6 text-white/40 hover:bg-white/12"
                     }`}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                    whileHover={
+                      isFpvActive || canEnterFpv ? { scale: 1.1 } : {}
+                    }
+                    whileTap={isFpvActive || canEnterFpv ? { scale: 0.9 } : {}}
                     aria-label={
                       isFpvActive
                         ? "Exit first person view"
-                        : "First person view"
+                        : canEnterFpv
+                          ? "First person view"
+                          : "First person view unavailable"
                     }
                     title={
-                      isFpvActive ? "Exit FPV (F)" : "First Person View (F)"
+                      isFpvActive
+                        ? "Exit FPV (F)"
+                        : canEnterFpv
+                          ? "First Person View (F)"
+                          : flight?.onGround
+                            ? "FPV unavailable (aircraft on ground)"
+                            : "FPV unavailable (no position data)"
                     }
                   >
                     <Eye className="h-3 w-3" />
@@ -204,14 +226,17 @@ export function FlightCard({
                 icon={<Compass className="h-3 w-3" />}
                 label="Heading"
                 value={
-                  heading !== null ? `${Math.round(heading)}° ${cardinal}` : "—"
+                  heading !== null && Number.isFinite(heading)
+                    ? `${Math.round(heading)}° ${cardinal}`
+                    : "—"
                 }
               />
               <Metric
                 icon={<ArrowDown className="h-3 w-3" />}
                 label="V/S"
                 value={
-                  flight.verticalRate !== null
+                  flight.verticalRate !== null &&
+                  Number.isFinite(flight.verticalRate)
                     ? `${flight.verticalRate > 0 ? "+" : ""}${Math.round(flight.verticalRate)} m/s`
                     : "—"
                 }
@@ -233,20 +258,25 @@ export function FlightCard({
                     className="h-3 w-3 text-white/25"
                     style={{
                       transform:
-                        heading !== null ? `rotate(${heading}deg)` : undefined,
+                        heading !== null && Number.isFinite(heading)
+                          ? `rotate(${heading}deg)`
+                          : undefined,
                     }}
                   />
                   <p className="text-[11px] font-medium tracking-wide text-white/40">
                     Heading {cardinal}
-                    {flight.latitude !== null && flight.longitude !== null && (
-                      <span className="text-white/20">
-                        {" "}
-                        · {Math.abs(flight.latitude).toFixed(2)}°
-                        {flight.latitude >= 0 ? "N" : "S"},{" "}
-                        {Math.abs(flight.longitude).toFixed(2)}°
-                        {flight.longitude >= 0 ? "E" : "W"}
-                      </span>
-                    )}
+                    {flight.latitude !== null &&
+                      flight.longitude !== null &&
+                      Number.isFinite(flight.latitude) &&
+                      Number.isFinite(flight.longitude) && (
+                        <span className="text-white/20">
+                          {" "}
+                          · {Math.abs(flight.latitude).toFixed(2)}°
+                          {flight.latitude >= 0 ? "N" : "S"},{" "}
+                          {Math.abs(flight.longitude).toFixed(2)}°
+                          {flight.longitude >= 0 ? "E" : "W"}
+                        </span>
+                      )}
                   </p>
                 </div>
               )}

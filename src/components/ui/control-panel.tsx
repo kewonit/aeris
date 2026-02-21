@@ -789,6 +789,7 @@ function StyleTile({
           fill
           unoptimized
           onLoad={() => setImgLoaded(true)}
+          onError={() => setImgLoaded(true)}
           className={`object-cover transition-all duration-500 group-hover:scale-105 ${
             imgLoaded ? "opacity-100" : "opacity-0"
           }`}

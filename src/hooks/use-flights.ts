@@ -30,16 +30,14 @@ function adaptiveInterval(creditsRemaining: number | null): number {
 }
 
 /**
- * @param city        – The active city (always needed for fallback bbox).
- * @param fpvIcao24   – When non-null the hook switches to a small moving bbox
- *                      centred on this aircraft, saving API credits.
+ * Fetches flights via OpenSky. In FPV mode the bbox moves with the tracked
+ * aircraft (4×4° = 1 API credit). City changes are ignored while in FPV.
  */
 export function useFlights(
   city: City | null,
   fpvIcao24: string | null = null,
   fpvSeedCenter: { lng: number; lat: number } | null = null,
 ) {
-  
   const [flights, setFlights] = useState<FlightState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +142,16 @@ export function useFlights(
             fpvSeedCenterRef.current.lat,
             FPV_BBOX_RADIUS,
           );
+        } else if (inFpv) {
+          fpvCenterRef.current = {
+            lng: target.coordinates[0],
+            lat: target.coordinates[1],
+          };
+          bbox = bboxFromCenter(
+            target.coordinates[0],
+            target.coordinates[1],
+            FPV_BBOX_RADIUS,
+          );
         } else {
           bbox = bboxFromCenter(
             target.coordinates[0],
@@ -234,6 +242,8 @@ export function useFlights(
   }, [city, fetchData, scheduleNext, clearSchedule]);
 
   useEffect(() => {
+    if (fpvIcao24Ref.current !== null) return;
+
     clearSchedule();
 
     if (!city) {
@@ -262,12 +272,23 @@ export function useFlights(
     const isInFpv = fpvIcao24 !== null;
     prevFpvRef.current = fpvIcao24;
 
-    if (wasInFpv && !isInFpv && city) {
+    if (!wasInFpv && isInFpv) {
+      clearSchedule();
+      if (city) fetchData(city);
+    } else if (wasInFpv && !isInFpv && city) {
       fpvCenterRef.current = null;
       clearSchedule();
       fetchData(city);
     }
   }, [fpvIcao24, city, clearSchedule, fetchData]);
+
+  useEffect(() => {
+    return () => {
+      clearSchedule();
+      abortRef.current?.abort();
+      clearCountdown();
+    };
+  }, [clearSchedule, clearCountdown]);
 
   return { flights, loading, error, rateLimited, retryIn, creditsRemaining };
 }
