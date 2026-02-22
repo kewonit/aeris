@@ -8,6 +8,7 @@ import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
+import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
@@ -239,26 +240,6 @@ function horizontalDistanceFromLngLat(
 
 function horizontalDistanceMeters(a: Snapshot, b: Snapshot): number {
   return horizontalDistanceFromLngLat(a.lng, a.lat, b.lng, b.lat);
-}
-
-function snapLngToReference(lng: number, refLng: number): number {
-  let x = lng;
-  while (x - refLng > 180) x -= 360;
-  while (x - refLng < -180) x += 360;
-  return x;
-}
-
-function unwrapLngPath(path: [number, number][]): [number, number][] {
-  if (path.length < 2) return path;
-  const out: [number, number][] = [path[0]];
-  let refLng = path[0][0];
-  for (let i = 1; i < path.length; i++) {
-    const [lng, lat] = path[i];
-    const nextLng = snapLngToReference(lng, refLng);
-    out.push([nextLng, lat]);
-    refLng = nextLng;
-  }
-  return out;
 }
 
 function trimAfterLargeJump(

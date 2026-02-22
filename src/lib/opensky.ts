@@ -505,6 +505,7 @@ type OpenSkyTrackResponse = {
   startTime?: unknown;
   endTime?: unknown;
   callsign?: unknown;
+  // Defensive: accept a misspelled field name if present.
   calllsign?: unknown;
   path?: unknown;
 };

@@ -35,6 +35,7 @@ import {
   fetchFlightByCallsign,
   type FlightState,
 } from "@/lib/opensky";
+import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star, Keyboard } from "lucide-react";
@@ -301,26 +302,6 @@ function FlightTrackerInner() {
     const trackPositions: [number, number][] = [];
     const trackAltitudes: Array<number | null> = [];
 
-    const snapLngToRef = (lng: number, refLng: number): number => {
-      let x = lng;
-      while (x - refLng > 180) x -= 360;
-      while (x - refLng < -180) x += 360;
-      return x;
-    };
-
-    const unwrapPath = (path: [number, number][]): [number, number][] => {
-      if (path.length < 2) return path;
-      const out: [number, number][] = [path[0]];
-      let prevLng = path[0][0];
-      for (let i = 1; i < path.length; i++) {
-        const [lng, lat] = path[i];
-        const nextLng = snapLngToRef(lng, prevLng);
-        out.push([nextLng, lat]);
-        prevLng = nextLng;
-      }
-      return out;
-    };
-
     for (const p of selectedTrack.path) {
       if (p.longitude == null || p.latitude == null) continue;
       trackPositions.push([p.longitude, p.latitude]);
@@ -329,14 +310,14 @@ function FlightTrackerInner() {
 
     // Unwrap longitudes to avoid dateline/world-wrap glitches.
     if (trackPositions.length >= 2) {
-      const unwrapped = unwrapPath(trackPositions);
+      const unwrapped = unwrapLngPath(trackPositions);
       trackPositions.splice(0, trackPositions.length, ...unwrapped);
     }
 
     const livePosAdjusted: [number, number] | null =
       livePos && trackPositions.length > 0
         ? [
-            snapLngToRef(
+            snapLngToReference(
               livePos[0],
               trackPositions[trackPositions.length - 1][0],
             ),
@@ -362,8 +343,8 @@ function FlightTrackerInner() {
 
     // Guard against wrong tracks (tolerate sparse/laggy waypoints).
     if (livePosAdjusted && trackPositions.length >= 2) {
-      const window = 70;
-      const start = Math.max(0, trackPositions.length - window);
+      const searchWindow = 70;
+      const start = Math.max(0, trackPositions.length - searchWindow);
       let bestDistSq = Number.POSITIVE_INFINITY;
       for (let i = start; i < trackPositions.length; i++) {
         const p = trackPositions[i];
@@ -404,7 +385,7 @@ function FlightTrackerInner() {
           ? trackPositions[trackPositions.length - 1][0]
           : rawTailPath[0][0];
       for (const [lng, lat] of rawTailPath) {
-        const nextLng = snapLngToRef(lng, refLng);
+        const nextLng = snapLngToReference(lng, refLng);
         tailPath.push([nextLng, lat]);
         refLng = nextLng;
       }
@@ -448,7 +429,7 @@ function FlightTrackerInner() {
           tailAlt[0] = joinAlt ?? tailAlt[0] ?? null;
         }
       } else {
-        // No overlap: optionally insert a short bridge to avoid a sharp kink.
+        // No overlap: disconnect stale history or insert a short bridge when close.
         const last = trackPositions[trackPositions.length - 1];
         const lastAlt = trackAltitudes[trackAltitudes.length - 1] ?? null;
         if (last) {

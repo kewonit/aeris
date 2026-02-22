@@ -201,6 +201,7 @@ export function useFlightTrack(
       controller.abort();
       window.clearTimeout(loadTimer);
       if (interval !== null) window.clearInterval(interval);
+      setLoading(false);
     };
   }, [icao24, refreshMs, enabled]);
 
