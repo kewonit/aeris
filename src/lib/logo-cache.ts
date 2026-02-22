@@ -5,7 +5,6 @@ const MAX_FAILED_ENTRIES = 500;
 const failedAirlineLogoTimestamps = new Map<string, number>();
 
 export function wasAirlineLogoRecentlyFailed(url: string): boolean {
-
   if (!url) return false;
   const ts = failedAirlineLogoTimestamps.get(url);
   if (ts === undefined) return false;
@@ -17,9 +16,16 @@ export function wasAirlineLogoRecentlyFailed(url: string): boolean {
 }
 
 export function markAirlineLogoFailed(url: string): void {
-
   if (!url) return;
-  failedAirlineLogoTimestamps.set(url, Date.now());
+  const now = Date.now();
+  failedAirlineLogoTimestamps.set(url, now);
+
+  // Opportunistically prune expired entries so the cache doesn't skew toward old URLs.
+  for (const [key, ts] of failedAirlineLogoTimestamps) {
+    if (now - ts > FAILED_TTL_MS) {
+      failedAirlineLogoTimestamps.delete(key);
+    }
+  }
 
   if (failedAirlineLogoTimestamps.size <= MAX_FAILED_ENTRIES) return;
 
