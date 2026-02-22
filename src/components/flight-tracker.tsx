@@ -344,6 +344,22 @@ function FlightTrackerInner() {
           ]
         : livePos;
 
+    const lastWaypointTime =
+      selectedTrack.path[selectedTrack.path.length - 1]?.time;
+    const nowSec =
+      selectedTrackFetchedAtMs > 0
+        ? Math.floor(selectedTrackFetchedAtMs / 1000)
+        : 0;
+    const lastWaypointAgeSec =
+      typeof lastWaypointTime === "number" && Number.isFinite(lastWaypointTime)
+        ? Math.max(0, nowSec - lastWaypointTime)
+        : 0;
+    const speedMps =
+      flight && Number.isFinite(flight.velocity) && flight.velocity! > 30
+        ? Math.max(0, flight.velocity!)
+        : 140;
+    const expectedDeg = (speedMps * lastWaypointAgeSec) / 111_320;
+
     // Guard against wrong tracks (tolerate sparse/laggy waypoints).
     if (livePosAdjusted && trackPositions.length >= 2) {
       const window = 70;
@@ -358,22 +374,6 @@ function FlightTrackerInner() {
       }
 
       // Tracks can be sparse; scale tolerance by speed and waypoint age.
-      const lastWaypointTime =
-        selectedTrack.path[selectedTrack.path.length - 1]?.time;
-      const nowSec =
-        selectedTrackFetchedAtMs > 0
-          ? Math.floor(selectedTrackFetchedAtMs / 1000)
-          : 0;
-      const dtSec =
-        typeof lastWaypointTime === "number" &&
-        Number.isFinite(lastWaypointTime)
-          ? Math.max(0, nowSec - lastWaypointTime)
-          : 0;
-      const speedMps =
-        flight && Number.isFinite(flight.velocity) && flight.velocity! > 30
-          ? Math.max(0, flight.velocity!)
-          : 140;
-      const expectedDeg = (speedMps * dtSec) / 111_320;
       const lowAltitude =
         flight && Number.isFinite(flight.baroAltitude)
           ? flight.baroAltitude! < 6_000
@@ -455,29 +455,40 @@ function FlightTrackerInner() {
           const dx = last[0] - firstTail[0];
           const dy = last[1] - firstTail[1];
           const gap = Math.sqrt(dx * dx + dy * dy);
+          const shouldDisconnect =
+            gap > 0.25 ||
+            (lastWaypointAgeSec > 900 && gap > 0.06) ||
+            (lastWaypointAgeSec > 300 && gap > 0.1);
 
-          if (gap > MAX_CONNECT_GAP_DEG) {
+          if (shouldDisconnect) {
+            trackPositions.splice(0, trackPositions.length, ...tailPath);
+            trackAltitudes.splice(0, trackAltitudes.length, ...tailAlt);
             tailPath.length = 0;
-          } else if (gap > CONNECT_BRIDGE_DEG) {
-            const steps = Math.max(6, Math.min(24, Math.ceil(gap / 0.15)));
-            const firstTailAlt = tailAlt[0] ?? null;
-            for (let s = 1; s < steps; s++) {
-              const t = s / steps;
-              trackPositions.push([
-                last[0] + (firstTail[0] - last[0]) * t,
-                last[1] + (firstTail[1] - last[1]) * t,
-              ]);
-              if (lastAlt == null && firstTailAlt == null) {
-                trackAltitudes.push(null);
-              } else {
-                const a0 = lastAlt ?? firstTailAlt ?? 0;
-                const a1 = firstTailAlt ?? lastAlt ?? a0;
-                trackAltitudes.push(a0 + (a1 - a0) * t);
-              }
-            }
+            tailAlt.length = 0;
           } else {
-            tailPath[0] = last;
-            tailAlt[0] = lastAlt ?? tailAlt[0] ?? null;
+            if (gap > MAX_CONNECT_GAP_DEG) {
+              tailPath.length = 0;
+            } else if (gap > CONNECT_BRIDGE_DEG) {
+              const steps = Math.max(6, Math.min(24, Math.ceil(gap / 0.15)));
+              const firstTailAlt = tailAlt[0] ?? null;
+              for (let s = 1; s < steps; s++) {
+                const t = s / steps;
+                trackPositions.push([
+                  last[0] + (firstTail[0] - last[0]) * t,
+                  last[1] + (firstTail[1] - last[1]) * t,
+                ]);
+                if (lastAlt == null && firstTailAlt == null) {
+                  trackAltitudes.push(null);
+                } else {
+                  const a0 = lastAlt ?? firstTailAlt ?? 0;
+                  const a1 = firstTailAlt ?? lastAlt ?? a0;
+                  trackAltitudes.push(a0 + (a1 - a0) * t);
+                }
+              }
+            } else {
+              tailPath[0] = last;
+              tailAlt[0] = lastAlt ?? tailAlt[0] ?? null;
+            }
           }
         }
       }
