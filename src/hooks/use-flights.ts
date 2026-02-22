@@ -110,6 +110,10 @@ export function useFlights(
   const scheduleNext = useCallback(
     (target: City, delayMs: number) => {
       clearSchedule();
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+
       timerRef.current = setTimeout(() => {
         fetchDataRef.current(target);
       }, delayMs);
@@ -220,7 +224,12 @@ export function useFlights(
     const activeCity = city;
 
     function onVisibilityChange() {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible") {
+        // Fully pause polling while hidden.
+        clearSchedule();
+        abortRef.current?.abort();
+        return;
+      }
 
       const elapsed = Date.now() - lastFetchRef.current;
 

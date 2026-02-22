@@ -248,6 +248,50 @@ function snapLngToReference(lng: number, refLng: number): number {
   return x;
 }
 
+function unwrapLngPath(path: [number, number][]): [number, number][] {
+  if (path.length < 2) return path;
+  const out: [number, number][] = [path[0]];
+  let refLng = path[0][0];
+  for (let i = 1; i < path.length; i++) {
+    const [lng, lat] = path[i];
+    const nextLng = snapLngToReference(lng, refLng);
+    out.push([nextLng, lat]);
+    refLng = nextLng;
+  }
+  return out;
+}
+
+function trimAfterLargeJump(
+  path: [number, number][],
+  altitudes: Array<number | null>,
+  maxJumpDeg: number,
+): { path: [number, number][]; altitudes: Array<number | null> } {
+  if (path.length < 2) return { path, altitudes };
+
+  const maxJumpSq = maxJumpDeg * maxJumpDeg;
+  let start = 0;
+  for (let i = path.length - 2; i >= 0; i--) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    if (dx * dx + dy * dy > maxJumpSq) {
+      start = i + 1;
+      break;
+    }
+  }
+
+  if (start > 0) {
+    start = Math.min(start, path.length - 2);
+    return {
+      path: path.slice(start),
+      altitudes: altitudes.slice(start),
+    };
+  }
+
+  return { path, altitudes };
+}
+
 type ElevatedPoint = [number, number, number];
 
 function smoothElevatedPath(
@@ -900,6 +944,30 @@ export function FlightLayers({
                 altitudeSlice = nextAlt;
               }
             }
+
+            if (altitudeSlice.length !== pathSlice.length) {
+              const last = altitudeSlice[altitudeSlice.length - 1] ?? null;
+              if (altitudeSlice.length < pathSlice.length) {
+                altitudeSlice = [...altitudeSlice];
+                while (altitudeSlice.length < pathSlice.length) {
+                  altitudeSlice.push(last);
+                }
+              } else {
+                altitudeSlice = altitudeSlice.slice(
+                  altitudeSlice.length - pathSlice.length,
+                );
+              }
+            }
+
+            const unwrappedPath = unwrapLngPath(pathSlice);
+            const maxJumpDeg = isFullHistory ? 3.0 : TELEPORT_THRESHOLD;
+            const trimmed = trimAfterLargeJump(
+              unwrappedPath,
+              altitudeSlice,
+              maxJumpDeg,
+            );
+            pathSlice = trimmed.path;
+            altitudeSlice = trimmed.altitudes;
 
             // The OpenSky track endpoint can be extremely sparse (waypoints ~ every 15min).
             // Applying planar smoothing to sparse points can create visible kinks/loops.

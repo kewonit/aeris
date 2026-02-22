@@ -3,7 +3,12 @@
 const OPENSKY_API = "https://opensky-network.org/api";
 const FETCH_TIMEOUT_MS = 15_000;
 const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
-const CALLSIGN_CACHE_TTL_MS = 30_000;
+// Callsign lookup scans global /states/all (4 credits); cache longer to reduce spikes.
+const CALLSIGN_CACHE_TTL_MS = 2 * 60_000;
+const CALLSIGN_CACHE_MAX_ENTRIES = 200;
+
+// Keep bbox queries inside OpenSky's 0–25 sq-deg (1 credit) tier.
+const MAX_1_CREDIT_RADIUS_DEG = 2.49;
 
 export type FlightState = {
   icao24: string;
@@ -207,7 +212,16 @@ export function bboxFromCenter(
   lat: number,
   radiusDeg: number,
 ): [lamin: number, lamax: number, lomin: number, lomax: number] {
-  return [lat - radiusDeg, lat + radiusDeg, lng - radiusDeg, lng + radiusDeg];
+  // If callers pass a bogus radius, fall back to a safe 1-credit value.
+  const safeRadiusRaw =
+    Number.isFinite(radiusDeg) && radiusDeg > 0 ? radiusDeg : MAX_1_CREDIT_RADIUS_DEG;
+  const safeRadius = Math.min(safeRadiusRaw, MAX_1_CREDIT_RADIUS_DEG);
+  return [
+    lat - safeRadius,
+    lat + safeRadius,
+    lng - safeRadius,
+    lng + safeRadius,
+  ];
 }
 
 /**
@@ -361,6 +375,10 @@ export async function fetchFlightByCallsign(
       timestamp: Date.now(),
       result,
     });
+    if (callsignLookupCache.size > CALLSIGN_CACHE_MAX_ENTRIES) {
+      const oldestKey = callsignLookupCache.keys().next().value as string | undefined;
+      if (oldestKey) callsignLookupCache.delete(oldestKey);
+    }
 
     return result;
   } catch (err) {
@@ -597,7 +615,9 @@ export async function fetchTrackByIcao24(
   }
 
   try {
-    async function fetchWithTime(t: number): Promise<TrackFetchResult> {
+    async function fetchWithTime(
+      t: number,
+    ): Promise<{ result: TrackFetchResult; notFound: boolean }> {
       const urlAll = `${OPENSKY_API}/tracks/all?icao24=${encodeURIComponent(normalizedIcao24)}&time=${t}`;
       const urlFallback = `${OPENSKY_API}/tracks?icao24=${encodeURIComponent(normalizedIcao24)}&time=${t}`;
 
@@ -659,34 +679,40 @@ export async function fetchTrackByIcao24(
 
       const primary = await attempt(urlAll);
       if (primary.result.track || primary.result.rateLimited) {
-        return primary.result;
+        return { result: primary.result, notFound: false };
       }
 
       // Some OpenSky deployments/documentation use `/tracks` instead of `/tracks/all`.
       // Fall back only when the primary endpoint is missing (404), not on auth failures.
       if (primary.status === 404) {
         const fallback = await attempt(urlFallback);
-        return fallback.result;
+        // Only treat as “not found” if both endpoints return 404.
+        const notFound = fallback.status === 404;
+        return { result: fallback.result, notFound };
       }
 
-      return primary.result;
+      return { result: primary.result, notFound: false };
     }
 
     const primary = await fetchWithTime(safeTime);
-    if (primary.track || primary.rateLimited || safeTime !== 0) {
-      return primary;
+    if (primary.result.track || primary.result.rateLimited || safeTime !== 0) {
+      return primary.result;
     }
 
     // Per OpenSky docs: `time` can be any time between the start and end of a known flight.
     // `time=0` only returns a live track if OpenSky considers a flight ongoing. If that lookup
-    // fails, retry once with the current timestamp.
+    // fails with a not-found response, retry once with the current timestamp.
+    if (!primary.notFound) {
+      return primary.result;
+    }
+
     const nowSec = Math.floor(Date.now() / 1000);
     if (nowSec > 0) {
       const retry = await fetchWithTime(nowSec);
-      return retry;
+      return retry.result;
     }
 
-    return primary;
+    return primary.result;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       // Abort is expected on effect cleanup or request timeouts. Treat it as a

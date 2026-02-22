@@ -370,13 +370,17 @@ function FlightTrackerInner() {
           ? Math.max(0, nowSec - lastWaypointTime)
           : 0;
       const speedMps =
-        flight && Number.isFinite(flight.velocity)
+        flight && Number.isFinite(flight.velocity) && flight.velocity! > 30
           ? Math.max(0, flight.velocity!)
-          : 230;
+          : 140;
       const expectedDeg = (speedMps * dtSec) / 111_320;
+      const lowAltitude =
+        flight && Number.isFinite(flight.baroAltitude)
+          ? flight.baroAltitude! < 6_000
+          : false;
       const maxAllowedDeg = Math.min(
-        6,
-        Math.max(0.9, expectedDeg * 1.6 + 0.25),
+        lowAltitude ? 2.8 : 6,
+        Math.max(lowAltitude ? 0.75 : 0.9, expectedDeg * 1.35 + 0.22),
       );
 
       if (bestDistSq > maxAllowedDeg * maxAllowedDeg) {
@@ -408,7 +412,12 @@ function FlightTrackerInner() {
       // Merge where the two data sources overlap near the end.
       const MERGE_SNAP_DEG = 0.06;
       const CONNECT_BRIDGE_DEG = 0.07;
-      const MAX_CONNECT_GAP_DEG = 3.5;
+      const MAX_CONNECT_GAP_DEG =
+        flight &&
+        Number.isFinite(flight.baroAltitude) &&
+        flight.baroAltitude! < 6_000
+          ? 1.25
+          : 3.5;
 
       const firstTail = tailPath[0];
       const searchWindow = 70;
