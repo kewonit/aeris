@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Plane,
   ArrowUp,
   ArrowDown,
   Gauge,
@@ -25,6 +24,11 @@ import {
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
 import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
+import {
+  loadedAirlineLogoUrls,
+  markAirlineLogoFailed,
+  wasAirlineLogoRecentlyFailed,
+} from "@/lib/logo-cache";
 
 type FlightCardProps = {
   flight: FlightState | null;
@@ -32,8 +36,6 @@ type FlightCardProps = {
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
 };
-
-const loadedLogoUrls = new Set<string>();
 
 export function FlightCard({
   flight,
@@ -60,14 +62,27 @@ export function FlightCard({
   const [logoLoadedByKey, setLogoLoadedByKey] = useState<
     Record<string, boolean>
   >({});
+  const [genericLogoFailed, setGenericLogoFailed] = useState(false);
   const airlineKey = airline ?? "__none__";
-  const logoIndex = logoIndexByAirline[airlineKey] ?? 0;
-  const logoLoadKey = `${airlineKey}:${logoIndex}`;
-  const logoUrl = logoCandidates[logoIndex] ?? null;
+  const baseLogoIndex = logoIndexByAirline[airlineKey] ?? 0;
+  const resolvedLogoIndex = useMemo(() => {
+    let idx = baseLogoIndex;
+    while (
+      idx < logoCandidates.length &&
+      wasAirlineLogoRecentlyFailed(logoCandidates[idx] ?? "")
+    ) {
+      idx += 1;
+    }
+    return idx;
+  }, [baseLogoIndex, logoCandidates]);
+
+  const logoLoadKey = `${airlineKey}:${resolvedLogoIndex}`;
+  const logoUrl = logoCandidates[resolvedLogoIndex] ?? null;
   const logoLoaded =
-    (logoUrl ? loadedLogoUrls.has(logoUrl) : false) ||
+    (logoUrl ? loadedAirlineLogoUrls.has(logoUrl) : false) ||
     (logoLoadedByKey[logoLoadKey] ?? false);
   const showLogo = Boolean(logoUrl);
+  const genericLogoUrl = "/airline-logos/envoy-air.png";
 
   return (
     <AnimatePresence mode="wait">
@@ -110,17 +125,19 @@ export function FlightCard({
                         }`}
                         unoptimized
                         onLoad={() => {
-                          if (logoUrl) loadedLogoUrls.add(logoUrl);
+                          if (logoUrl) loadedAirlineLogoUrls.add(logoUrl);
                           setLogoLoadedByKey((current) => ({
                             ...current,
                             [logoLoadKey]: true,
                           }));
                         }}
                         onError={() => {
-                          if (logoIndex + 1 < logoCandidates.length) {
+                          if (logoUrl) markAirlineLogoFailed(logoUrl);
+
+                          if (resolvedLogoIndex + 1 < logoCandidates.length) {
                             setLogoIndexByAirline((current) => ({
                               ...current,
-                              [airlineKey]: logoIndex + 1,
+                              [airlineKey]: resolvedLogoIndex + 1,
                             }));
                             return;
                           }
@@ -132,7 +149,23 @@ export function FlightCard({
                       />
                     </span>
                   ) : (
-                    <Plane className="h-10 w-10 text-sky-400/85" />
+                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/95 p-3.5 shadow-sm">
+                      {genericLogoFailed ? (
+                        <span className="text-[22px] font-semibold text-black/25">
+                          —
+                        </span>
+                      ) : (
+                        <Image
+                          src={genericLogoUrl}
+                          alt="Generic airline logo"
+                          width={68}
+                          height={68}
+                          className="h-13 w-13 object-contain grayscale opacity-80"
+                          unoptimized
+                          onError={() => setGenericLogoFailed(true)}
+                        />
+                      )}
+                    </span>
                   )}
                 </div>
                 <div>
