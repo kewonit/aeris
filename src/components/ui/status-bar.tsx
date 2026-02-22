@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { Compass, Dices, Plane, Radio, ShieldAlert } from "lucide-react";
+import { Dices, Plane, Radio, ShieldAlert } from "lucide-react";
 
 type StatusBarProps = {
   flightCount: number;
@@ -138,7 +138,14 @@ export function StatusBar({
             className="text-[11px] font-medium tracking-wide transition-colors"
             style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
           >
-            <Compass className="h-3 w-3" />
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5"
+              fill="currentColor"
+            >
+              <path d="M12 3L4 21l8-4 8 4L12 3z" />
+            </svg>
           </button>
           <div
             className="h-3 w-px"

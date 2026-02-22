@@ -3,11 +3,16 @@
 import { useRef, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
-import { X, Eye, ArrowUp, ArrowDown, Minus, Gauge } from "lucide-react";
+import { X, ArrowUp, ArrowDown, Minus, Gauge } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
+import {
+  loadedAirlineLogoUrls,
+  markAirlineLogoFailed,
+  wasAirlineLogoRecentlyFailed,
+} from "@/lib/logo-cache";
 
 type FpvHudProps = {
   flight: FlightState;
@@ -139,11 +144,39 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
     () => lookupAirline(flight.callsign),
     [flight.callsign],
   );
-  const logoUrl = useMemo(() => {
-    return airlineLogoCandidates(airline)[0] ?? null;
-  }, [airline]);
-  const [logoErrorUrl, setLogoErrorUrl] = useState<string | null>(null);
-  const logoError = logoUrl !== null && logoUrl === logoErrorUrl;
+  const logoCandidates = useMemo(
+    () => airlineLogoCandidates(airline),
+    [airline],
+  );
+  const airlineKey = airline ?? "__none__";
+  const [logoIndexByAirline, setLogoIndexByAirline] = useState<
+    Record<string, number>
+  >({});
+  const [logoLoadedByKey, setLogoLoadedByKey] = useState<
+    Record<string, boolean>
+  >({});
+  const [genericFailedByAirline, setGenericFailedByAirline] = useState<
+    Record<string, boolean>
+  >({});
+  const baseLogoIndex = logoIndexByAirline[airlineKey] ?? 0;
+  const resolvedLogoIndex = useMemo(() => {
+    let idx = baseLogoIndex;
+    while (
+      idx < logoCandidates.length &&
+      wasAirlineLogoRecentlyFailed(logoCandidates[idx] ?? "")
+    ) {
+      idx += 1;
+    }
+    return idx;
+  }, [baseLogoIndex, logoCandidates]);
+  const logoUrl = logoCandidates[resolvedLogoIndex] ?? null;
+  const logoLoadKey = `${airlineKey}:${resolvedLogoIndex}`;
+  const logoLoaded =
+    logoUrl !== null &&
+    (loadedAirlineLogoUrls.has(logoUrl) ||
+      (logoLoadedByKey[logoLoadKey] ?? false));
+  const genericLogoFailed = genericFailedByAirline[airlineKey] ?? false;
+  const genericLogoUrl = "/airline-logos/envoy-air.png";
   const vsIcon =
     vs !== null && Number.isFinite(vs) ? (
       vs > 0.5 ? (
@@ -183,21 +216,68 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
 
         <div className="flex w-full items-stretch">
           <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-white/6 px-2 py-1.5 sm:px-3 sm:py-2">
-            {logoUrl && !logoError ? (
+            {logoUrl ? (
               <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 shadow-sm ring-1 ring-white/20">
+                {!logoLoaded && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
+                  />
+                )}
                 <Image
                   src={logoUrl}
                   alt={airline ? `${airline} logo` : "Airline logo"}
                   fill
                   sizes="32px"
-                  className="object-contain p-1"
+                  className="relative object-contain p-1"
                   unoptimized
-                  onError={() => setLogoErrorUrl(logoUrl)}
+                  onLoad={() => {
+                    if (logoUrl) loadedAirlineLogoUrls.add(logoUrl);
+                    setLogoLoadedByKey((current) => ({
+                      ...current,
+                      [logoLoadKey]: true,
+                    }));
+                  }}
+                  onError={() => {
+                    if (logoUrl) markAirlineLogoFailed(logoUrl);
+                    if (resolvedLogoIndex + 1 < logoCandidates.length) {
+                      setLogoIndexByAirline((current) => ({
+                        ...current,
+                        [airlineKey]: resolvedLogoIndex + 1,
+                      }));
+                      return;
+                    }
+                    setLogoIndexByAirline((current) => ({
+                      ...current,
+                      [airlineKey]: logoCandidates.length,
+                    }));
+                  }}
                 />
               </span>
             ) : (
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 ring-1 ring-white/10">
-                <Eye className="h-3.5 w-3.5 text-emerald-400/70 animate-pulse" />
+                <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white/95 ring-1 ring-white/15">
+                  {genericLogoFailed ? (
+                    <span className="text-[12px] font-semibold text-black/25">
+                      —
+                    </span>
+                  ) : (
+                    <Image
+                      src={genericLogoUrl}
+                      alt="Generic airline logo"
+                      fill
+                      sizes="28px"
+                      className="object-contain p-1 grayscale opacity-80"
+                      unoptimized
+                      onError={() =>
+                        setGenericFailedByAirline((current) => ({
+                          ...current,
+                          [airlineKey]: true,
+                        }))
+                      }
+                    />
+                  )}
+                </span>
               </span>
             )}
             <div className="min-w-0">

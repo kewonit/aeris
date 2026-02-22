@@ -18,8 +18,17 @@ export function MapAttribution({ styleId }: MapAttributionProps) {
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
 
+  // Expand by default on larger screens (after mount to avoid hydration mismatch)
   useEffect(() => {
-    setExpanded(window.innerWidth >= SM_BREAKPOINT);
+    const mq = window.matchMedia(`(min-width: ${SM_BREAKPOINT}px)`);
+    const sync = () => setExpanded(mq.matches);
+    const raf = window.requestAnimationFrame(sync);
+
+    mq.addEventListener("change", sync);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      mq.removeEventListener("change", sync);
+    };
   }, []);
 
   // Close on outside click for small screens

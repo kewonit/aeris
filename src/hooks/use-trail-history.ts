@@ -15,6 +15,7 @@ export type TrailEntry = {
   path: Position[];
   altitudes: Array<number | null>;
   baroAltitude: number | null;
+  fullHistory?: boolean;
 };
 
 const MAX_POINTS = 40;

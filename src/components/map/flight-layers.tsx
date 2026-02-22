@@ -8,6 +8,7 @@ import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
+import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import type { PickingInfo } from "@deck.gl/core";
 
@@ -239,6 +240,37 @@ function horizontalDistanceFromLngLat(
 
 function horizontalDistanceMeters(a: Snapshot, b: Snapshot): number {
   return horizontalDistanceFromLngLat(a.lng, a.lat, b.lng, b.lat);
+}
+
+function trimAfterLargeJump(
+  path: [number, number][],
+  altitudes: Array<number | null>,
+  maxJumpDeg: number,
+): { path: [number, number][]; altitudes: Array<number | null> } {
+  if (path.length < 2) return { path, altitudes };
+
+  const maxJumpSq = maxJumpDeg * maxJumpDeg;
+  let start = 0;
+  for (let i = path.length - 2; i >= 0; i--) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    if (dx * dx + dy * dy > maxJumpSq) {
+      start = i + 1;
+      break;
+    }
+  }
+
+  if (start > 0) {
+    start = Math.min(start, path.length - 2);
+    return {
+      path: path.slice(start),
+      altitudes: altitudes.slice(start),
+    };
+  }
+
+  return { path, altitudes };
 }
 
 type ElevatedPoint = [number, number, number];
@@ -686,19 +718,19 @@ export function FlightLayers({
           const curr = currSnapshotsRef.current.get(f.icao24);
           if (!curr) return f;
 
-          let prev = prevSnapshotsRef.current.get(f.icao24);
+          const prev = prevSnapshotsRef.current.get(f.icao24);
+          // For newly-loaded aircraft we may not have a real previous snapshot yet.
+          // Avoid synthesizing a fake motion vector from heading/velocity because it
+          // can briefly animate aircraft in the wrong direction until the next poll.
           if (!prev) {
-            const rad = (curr.track * Math.PI) / 180;
-            const spd = Number.isFinite(f.velocity) ? f.velocity! : 200;
-            const step = Math.min(
-              (spd * (animDurationRef.current / 1000)) / 111_320,
-              0.015,
-            );
-            prev = {
-              lng: curr.lng - Math.sin(rad) * step,
-              lat: curr.lat - Math.cos(rad) * step,
-              alt: curr.alt,
-              track: curr.track,
+            return {
+              ...f,
+              longitude: curr.lng,
+              latitude: curr.lat,
+              baroAltitude: curr.alt,
+              trueTrack: Number.isFinite(f.trueTrack)
+                ? f.trueTrack!
+                : curr.track,
             };
           }
 
@@ -861,19 +893,69 @@ export function FlightLayers({
             trail: TrailEntry,
             animFlight: FlightState | undefined,
           ): ElevatedPoint[] => {
-            const historyPoints = Math.max(
-              2,
-              Math.round(trailDistanceRef.current),
+            const isFullHistory = trail.fullHistory === true;
+            const historyPoints = isFullHistory
+              ? trail.path.length
+              : Math.max(2, Math.round(trailDistanceRef.current));
+
+            let pathSlice =
+              isFullHistory || trail.path.length <= historyPoints
+                ? trail.path
+                : trail.path.slice(trail.path.length - historyPoints);
+            let altitudeSlice =
+              isFullHistory || trail.altitudes.length <= historyPoints
+                ? trail.altitudes
+                : trail.altitudes.slice(trail.altitudes.length - historyPoints);
+
+            // Keep full-history rendering performant by limiting point count.
+            if (isFullHistory) {
+              const MAX_FULL_HISTORY_POINTS = 1200;
+              if (pathSlice.length > MAX_FULL_HISTORY_POINTS) {
+                const stride = pathSlice.length / MAX_FULL_HISTORY_POINTS;
+                const nextPath: [number, number][] = [];
+                const nextAlt: Array<number | null> = [];
+                for (let i = 0; i < MAX_FULL_HISTORY_POINTS - 1; i++) {
+                  const idx = Math.floor(i * stride);
+                  nextPath.push(pathSlice[idx]);
+                  nextAlt.push(altitudeSlice[idx] ?? null);
+                }
+                nextPath.push(pathSlice[pathSlice.length - 1]);
+                nextAlt.push(altitudeSlice[altitudeSlice.length - 1] ?? null);
+                pathSlice = nextPath;
+                altitudeSlice = nextAlt;
+              }
+            }
+
+            if (altitudeSlice.length !== pathSlice.length) {
+              const last = altitudeSlice[altitudeSlice.length - 1] ?? null;
+              if (altitudeSlice.length < pathSlice.length) {
+                altitudeSlice = [...altitudeSlice];
+                while (altitudeSlice.length < pathSlice.length) {
+                  altitudeSlice.push(last);
+                }
+              } else {
+                altitudeSlice = altitudeSlice.slice(
+                  altitudeSlice.length - pathSlice.length,
+                );
+              }
+            }
+
+            const unwrappedPath = unwrapLngPath(pathSlice);
+            const maxJumpDeg = isFullHistory ? 3.0 : TELEPORT_THRESHOLD;
+            const trimmed = trimAfterLargeJump(
+              unwrappedPath,
+              altitudeSlice,
+              maxJumpDeg,
             );
-            const pathSlice =
-              trail.path.length > historyPoints
-                ? trail.path.slice(trail.path.length - historyPoints)
-                : trail.path;
-            const altitudeSlice =
-              trail.altitudes.length > historyPoints
-                ? trail.altitudes.slice(trail.altitudes.length - historyPoints)
-                : trail.altitudes;
-            const smoothPathSlice = smoothPlanarPath(pathSlice);
+            pathSlice = trimmed.path;
+            altitudeSlice = trimmed.altitudes;
+
+            // The OpenSky track endpoint can be extremely sparse (waypoints ~ every 15min).
+            // Applying planar smoothing to sparse points can create visible kinks/loops.
+            // For full-history tracks, keep the raw geometry.
+            const smoothPathSlice = isFullHistory
+              ? pathSlice
+              : smoothPlanarPath(pathSlice);
 
             const altitudeMeters = smoothNumericSeries(
               altitudeSlice.map(
@@ -888,7 +970,7 @@ export function FlightLayers({
             ]) as ElevatedPoint[];
             const denseBasePath = densifyElevatedPath(
               basePath,
-              denseSubdivisions,
+              isFullHistory ? 1 : denseSubdivisions,
             );
 
             if (
@@ -897,8 +979,13 @@ export function FlightLayers({
               animFlight.latitude != null &&
               denseBasePath.length > 1
             ) {
-              const clipped = trimPathAheadOfAircraft(denseBasePath, [
+              const refLng = denseBasePath[denseBasePath.length - 1][0];
+              const snappedLng = snapLngToReference(
                 animFlight.longitude,
+                refLng,
+              );
+              const clipped = trimPathAheadOfAircraft(denseBasePath, [
+                snappedLng,
                 animFlight.latitude,
                 Math.max(0, animFlight.baroAltitude ?? 0),
               ]);
@@ -906,7 +993,10 @@ export function FlightLayers({
               const smoothed =
                 clipped.length < 4
                   ? clipped
-                  : smoothElevatedPath(clipped, smoothingIterations);
+                  : smoothElevatedPath(
+                      clipped,
+                      isFullHistory ? 0 : smoothingIterations,
+                    );
 
               return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
             }
@@ -914,7 +1004,10 @@ export function FlightLayers({
             const smoothed =
               denseBasePath.length < 4
                 ? denseBasePath
-                : smoothElevatedPath(denseBasePath, smoothingIterations);
+                : smoothElevatedPath(
+                    denseBasePath,
+                    isFullHistory ? 0 : smoothingIterations,
+                  );
 
             return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
           };

@@ -14,7 +14,7 @@ export const CITIES: City[] = [
     country: "US",
     iata: "JFK",
     coordinates: [-73.7781, 40.6413],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "lax",
@@ -22,7 +22,7 @@ export const CITIES: City[] = [
     country: "US",
     iata: "LAX",
     coordinates: [-118.4085, 33.9416],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "lhr",
@@ -30,7 +30,7 @@ export const CITIES: City[] = [
     country: "GB",
     iata: "LHR",
     coordinates: [-0.4614, 51.47],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "dxb",
@@ -38,7 +38,7 @@ export const CITIES: City[] = [
     country: "AE",
     iata: "DXB",
     coordinates: [55.3644, 25.2532],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "nrt",
@@ -46,7 +46,7 @@ export const CITIES: City[] = [
     country: "JP",
     iata: "NRT",
     coordinates: [140.3929, 35.772],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "sin",
@@ -54,7 +54,7 @@ export const CITIES: City[] = [
     country: "SG",
     iata: "SIN",
     coordinates: [103.9915, 1.3644],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "cdg",
@@ -62,7 +62,7 @@ export const CITIES: City[] = [
     country: "FR",
     iata: "CDG",
     coordinates: [2.5479, 49.0097],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "sfo",
@@ -70,7 +70,7 @@ export const CITIES: City[] = [
     country: "US",
     iata: "SFO",
     coordinates: [-122.379, 37.6213],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "ord",
@@ -78,7 +78,7 @@ export const CITIES: City[] = [
     country: "US",
     iata: "ORD",
     coordinates: [-87.9073, 41.9742],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "fra",
@@ -86,7 +86,7 @@ export const CITIES: City[] = [
     country: "DE",
     iata: "FRA",
     coordinates: [8.5622, 50.0379],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "bom",
@@ -94,7 +94,7 @@ export const CITIES: City[] = [
     country: "IN",
     iata: "BOM",
     coordinates: [72.8679, 19.0896],
-    radius: 2.5,
+    radius: 2.49,
   },
   {
     id: "mia",
@@ -102,6 +102,6 @@ export const CITIES: City[] = [
     country: "US",
     iata: "MIA",
     coordinates: [-80.2906, 25.7959],
-    radius: 2.5,
+    radius: 2.49,
   },
 ];
