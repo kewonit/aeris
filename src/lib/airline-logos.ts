@@ -17,23 +17,11 @@ function toAirlineAliasKey(airlineName: string): string {
 }
 
 const LOGO_SLUG_ALIASES: Record<string, string> = {
-  allnipponairways: "all-nippon-airways",
-  ana: "all-nippon-airways",
-  jal: "japan-airlines",
-  elal: "el-al",
   itaairways: "ita-airways",
   latam: "latam-airlines",
   latamairlines: "latam-airlines",
-  norwegian: "norwegian-air-shuttle",
   swiss: "swiss",
   tapairportugal: "tap-air-portugal",
-  vietjetair: "vietjet-air",
-  xiamenair: "xiamenair",
-  pakistaninternationalairlines: "pakistan-international-airlines",
-  pakistanintlairlines: "pakistan-int-l-airlines",
-  indigo: "indigo",
-  indigoairlines: "indigo",
-  goindigo: "indigo",
 };
 
 function buildSlugVariants(baseSlug: string): string[] {
