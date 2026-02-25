@@ -18,7 +18,7 @@ export type TrailEntry = {
   fullHistory?: boolean;
 };
 
-const MAX_POINTS = 40;
+const MAX_POINTS = 100;
 const JUMP_THRESHOLD_DEG = 0.3;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
@@ -141,9 +141,9 @@ class TrailStore {
         trail =
           this.bootstrapUpdatesRemaining > 0
             ? synthesizeHistoricalPolls(f).map((position) => ({
-                position,
-                baroAltitude: filteredAltitude,
-              }))
+              position,
+              baroAltitude: filteredAltitude,
+            }))
             : [];
         this.trails.set(id, trail);
       }
