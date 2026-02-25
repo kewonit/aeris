@@ -10,7 +10,7 @@ const jsonLd = {
   applicationCategory: "TravelApplication",
   operatingSystem: "Any",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  author: { "@type": "Person", name: "kewonit" },
+  author: { "@type": "Person", name: "ssaymontorres" },
 };
 
 export default function Home() {

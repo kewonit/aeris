@@ -1,6 +1,6 @@
 # Aeris Mercosul
 
-Real-time 3D flight tracking focused on Latin America — altitude-aware, visually stunning.
+Real-time 3D flight tracking focused on the Mercosul region — altitude-aware, visually stunning.
 
 Aeris Mercosul renders live air traffic over Latin American airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold. Select a city, and the camera glides to that airspace with spring-eased animation. Defaults to São Paulo (GRU) with 20 curated regional hubs across Brazil, Argentina, Uruguay, Paraguay, Chile, Peru and Bolivia.
 
@@ -24,7 +24,7 @@ Aeris Mercosul renders live air traffic over Latin American airspaces on a premi
 | Map       | MapLibre GL JS                                  |
 | WebGL     | Deck.gl 9 (IconLayer, PathLayer, MapboxOverlay) |
 | Animation | Motion (Framer Motion)                          |
-| Data      | OpenSky Network API                             |
+| Data      | ADS-B.fi (opendata.adsb.fi)                     |
 | Hosting   | Vercel                                          |
 
 ## Getting Started
@@ -32,7 +32,6 @@ Aeris Mercosul renders live air traffic over Latin American airspaces on a premi
 ```bash
 pnpm install
 cp .env.example .env.local
-# Optionally add OpenSky credentials — see .env.example
 pnpm dev
 ```
 
@@ -46,7 +45,7 @@ src/
 │   ├── globals.css            Tailwind config, theme vars
 │   ├── layout.tsx             Root layout (Inter font)
 │   ├── page.tsx               Entry — renders <FlightTracker />
-│   └── api/flights/route.ts   OpenSky proxy with rate limiting + auth
+│   └── api/flights/route.ts   ADS-B.fi server-side proxy (CORS bypass)
 ├── components/
 │   ├── flight-tracker.tsx     Orchestrator — state, camera, layers, UI
 │   ├── map/
@@ -60,15 +59,15 @@ src/
 │       ├── slider.tsx         Orbit speed slider (Radix)
 │       └── status-bar.tsx     Live status indicator
 ├── hooks/
-│   ├── use-flights.ts         Adaptive polling hook with credit-aware throttling
+│   ├── use-flights.ts         10s polling hook via ADS-B.fi adapter
 │   ├── use-settings.tsx       Settings context with localStorage persistence
 │   └── use-trail-history.ts   Trail accumulation + Catmull-Rom smoothing
 └── lib/
     ├── cities.ts              City type definition
-    ├── regions.ts             Curated LATAM aviation hub presets
+    ├── regions.ts             Curated Mercosul aviation hub presets
+    ├── adsbfi.ts              ADS-B.fi API adapter (drop-in for opensky.ts)
     ├── flight-utils.ts        Altitude→color, unit conversions
     ├── map-styles.ts          Map style definitions
-    ├── opensky.ts             OpenSky API client + types
     └── utils.ts               cn() utility
 ```
 
@@ -80,20 +79,14 @@ src/
 - **Glassmorphism**: `backdrop-blur-2xl`, `bg-black/60`, `border-white/[0.08]`
 - **Spring physics**: All UI transitions use spring easing
 - **Responsive**: Desktop sidebar dialog, mobile bottom-sheet with thumb-zone tab bar
-- **API efficiency**: Adaptive polling (30 s → 5 min) based on remaining credits, Page Visibility pause, grid-snapped cache
+- **API efficiency**: 10s fixed poll via ADS-B.fi, Page Visibility pause, no credit system
 - **Persistence**: Settings + map style in localStorage, `?city=IATA` URL deep links
 
 ## Environment Variables
 
-| Variable                | Required | Description                     |
-| ----------------------- | -------- | ------------------------------- |
-| `OPENSKY_CLIENT_ID`     | No       | OAuth2 client ID (recommended)  |
-| `OPENSKY_CLIENT_SECRET` | No       | OAuth2 client secret            |
-| `OPENSKY_USERNAME`      | No       | Basic auth username (legacy)    |
-| `OPENSKY_PASSWORD`      | No       | Basic auth password (legacy)    |
-| `NEXT_PUBLIC_GA_ID`     | No       | Google Analytics measurement ID |
-
-Without credentials, anonymous access is used (~10 requests/minute).
+| Variable            | Required | Description                     |
+| ------------------- | -------- | ------------------------------- |
+| `NEXT_PUBLIC_GA_ID` | No       | Google Analytics measurement ID |
 
 ## License
 
