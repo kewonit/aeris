@@ -33,7 +33,7 @@ const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
 const HELICOPTER_SCENEGRAPH_URL = "/models/helicopter.glb";
 const AIRCRAFT_PX_PER_UNIT = 0.3;
 const BASE_AIRCRAFT_SIZE = 25;
-const BASE_HELICOPTER_SIZE = 22;
+const BASE_HELICOPTER_SIZE = 35;
 const AIRCRAFT_PICK_RADIUS_PX = 14;
 
 const CATEGORY_TINT: Record<number, [number, number, number]> = {
@@ -1254,19 +1254,9 @@ export function FlightLayers({
                 const yaw = -(Number.isFinite(d.trueTrack) ? d.trueTrack! : 0);
                 return [0, yaw, 90];
               },
-              getColor: (d) => {
-                // Helicopters always render in a distinct warm-amber tint
-                // regardless of altitude-color mode to make them stand out.
-                const base = altColors
-                  ? altitudeToColor(d.baroAltitude)
-                  : defaultColor;
-                // Blend towards amber to visually distinguish from fixed-wing
-                return [
-                  Math.min(255, Math.round(base[0] * 0.7 + 255 * 0.3)),
-                  Math.min(255, Math.round(base[1] * 0.7 + 180 * 0.3)),
-                  Math.min(255, Math.round(base[2] * 0.5)),
-                  base[3] ?? 200,
-                ];
+              getColor: () => {
+                // Vivid red-orange so helicopters stand out from fixed-wing aircraft.
+                return [255, 120, 40, 230];
               },
               scenegraph: HELICOPTER_SCENEGRAPH_URL,
               getScale: () => [1, 1, 1],
