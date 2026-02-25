@@ -20,8 +20,8 @@ const trackCache = new Map<string, TrackCacheEntry>();
 let globalNextAllowedAt = 0;
 let globalBackoffMs = 5 * 60_000;
 const GLOBAL_BACKOFF_MAX_MS = 24 * 60 * 60_000;
-const GLOBAL_BACKOFF_KEY = "aeris-mercosul:opensky:tracksGlobalNextAllowedAt";
-const GLOBAL_BACKOFF_MS_KEY = "aeris-mercosul:opensky:tracksGlobalBackoffMs";
+const GLOBAL_BACKOFF_KEY = "aeris-mercosul:tracks:globalNextAllowedAt";
+const GLOBAL_BACKOFF_MS_KEY = "aeris-mercosul:tracks:globalBackoffMs";
 const SELECTION_DEBOUNCE_MS = 350;
 
 function loadGlobalBackoff(): void {
