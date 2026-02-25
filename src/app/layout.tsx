@@ -30,8 +30,8 @@ export const metadata: Metadata = {
     "aeris-mercosul",
     "opensky",
   ],
-  authors: [{ name: "kewonit", url: "https://github.com/kewonit" }],
-  creator: "kewonit",
+  authors: [{ name: "ssaymontorres", url: "https://github.com/ssaymontorres" }],
+  creator: "ssaymontorres",
   openGraph: {
     type: "website",
     locale: "en_US",

@@ -257,7 +257,7 @@ function PanelDialog({
 
             <div className="mt-auto pt-4 px-1 flex flex-col gap-3">
               <a
-                href="https://github.com/kewonit/aeris"
+                href="https://github.com/ssaymontorres/aeris-latam"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub (opens in new tab)"
@@ -271,7 +271,7 @@ function PanelDialog({
               </a>
               <div className="border-t border-white/3 pt-2 px-2.5">
                 <p className="text-[10px] font-medium text-white/10 tracking-wide">
-                  v0.1 · OpenSky Network
+                  v0.1 · ADS-B.fi
                 </p>
               </div>
             </div>

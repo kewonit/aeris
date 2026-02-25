@@ -44,8 +44,8 @@ const DEFAULT_CITY_ID = "gru";
 const STYLE_STORAGE_KEY = "aeris-mercosul:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
-const GITHUB_REPO_URL = "https://github.com/kewonit/aeris";
-const GITHUB_REPO_API = "https://api.github.com/repos/kewonit/aeris";
+const GITHUB_REPO_URL = "https://github.com/ssaymontorres/aeris-latam";
+const GITHUB_REPO_API = "https://api.github.com/repos/ssaymontorres/aeris-latam";
 const HIGH_TRAFFIC_IATA = [
   "ATL",
   "DXB",

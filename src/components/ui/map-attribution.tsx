@@ -148,13 +148,13 @@ function ExpandedAttribution({
           ·
         </span>
         <a
-          href="https://opensky-network.org/"
+          href="https://opendata.adsb.fi"
           target="_blank"
           rel="noopener noreferrer"
           className="transition-colors hover:underline"
           style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
         >
-          OpenSky Network
+          ADS-B.fi
         </a>
       </span>
     </motion.div>
