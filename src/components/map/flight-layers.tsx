@@ -960,7 +960,8 @@ export function FlightLayers({
             // The OpenSky track endpoint can be extremely sparse (waypoints ~ every 15min).
             // Applying planar smoothing to sparse points can create visible kinks/loops.
             // For full-history tracks, keep the raw geometry.
-            const smoothPathSlice = isFullHistory
+            const heli = animFlight ? isRotorcraft(animFlight.category) : false;
+            const smoothPathSlice = isFullHistory || heli
               ? pathSlice
               : smoothPlanarPath(pathSlice);
 
@@ -998,7 +999,7 @@ export function FlightLayers({
               ]);
 
               const smoothed =
-                clipped.length < 4
+                clipped.length < 4 || heli
                   ? clipped
                   : smoothElevatedPath(
                     clipped,
@@ -1009,7 +1010,7 @@ export function FlightLayers({
             }
 
             const smoothed =
-              denseBasePath.length < 4
+              denseBasePath.length < 4 || heli
                 ? denseBasePath
                 : smoothElevatedPath(
                   denseBasePath,
