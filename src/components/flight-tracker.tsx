@@ -41,7 +41,7 @@ import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star, Keyboard } from "lucide-react";
 
 const DEFAULT_CITY_ID = "gru";
-const STYLE_STORAGE_KEY = "aeris:mapStyle";
+const STYLE_STORAGE_KEY = "aeris-mercosul:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
 const GITHUB_REPO_URL = "https://github.com/kewonit/aeris";
@@ -771,12 +771,12 @@ function FlightTrackerInner() {
   }, [fpvIcao24]);
 
   const handleNorthUp = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("aeris:north-up"));
+    window.dispatchEvent(new CustomEvent("aeris-mercosul:north-up"));
   }, []);
 
   const handleResetView = useCallback(() => {
     window.dispatchEvent(
-      new CustomEvent("aeris:reset-view", {
+      new CustomEvent("aeris-mercosul:reset-view", {
         detail: { center: activeCity.coordinates },
       }),
     );
@@ -792,7 +792,7 @@ function FlightTrackerInner() {
   }, [settings.autoOrbit, update]);
 
   const handleOpenSearch = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("aeris:open-search"));
+    window.dispatchEvent(new CustomEvent("aeris-mercosul:open-search"));
   }, []);
 
   const handleToggleHelp = useCallback(() => {
@@ -1056,7 +1056,7 @@ function Brand({ isDark }: { isDark: boolean }) {
       className={`text-sm font-semibold tracking-wide ${isDark ? "text-white/70" : "text-black/70"
         }`}
     >
-      aeris
+      aeris-mercosul
     </span>
   );
 }

@@ -69,9 +69,9 @@ export function ControlPanel({
     function handleOpenSearch() {
       setOpenTab("search");
     }
-    window.addEventListener("aeris:open-search", handleOpenSearch);
+    window.addEventListener("aeris-mercosul:open-search", handleOpenSearch);
     return () =>
-      window.removeEventListener("aeris:open-search", handleOpenSearch);
+      window.removeEventListener("aeris-mercosul:open-search", handleOpenSearch);
   }, []);
 
   const open = (tab: TabId) => setOpenTab(tab);
@@ -231,8 +231,8 @@ function PanelDialog({
                     key={id}
                     onClick={() => onTabChange(id)}
                     className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${active
-                        ? "text-white/90"
-                        : "text-white/35 hover:text-white/55 hover:bg-white/4"
+                      ? "text-white/90"
+                      : "text-white/35 hover:text-white/55 hover:bg-white/4"
                       }`}
                   >
                     {active && (
@@ -350,8 +350,8 @@ function PanelDialog({
                     key={id}
                     onClick={() => onTabChange(id)}
                     className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center transition-colors ${active
-                        ? "text-white/90"
-                        : "text-white/35 active:bg-white/6"
+                      ? "text-white/90"
+                      : "text-white/35 active:bg-white/6"
                       }`}
                   >
                     {active && (
@@ -775,8 +775,8 @@ function StyleTile({
     >
       <div
         className={`relative aspect-16/10 w-full overflow-hidden rounded-xl transition-all duration-200 ${isActive
-            ? "ring-2 ring-white/50 ring-offset-2 ring-offset-black/80 shadow-[0_0_20px_rgba(255,255,255,0.06)]"
-            : "ring-1 ring-white/8 group-hover:ring-white/18"
+          ? "ring-2 ring-white/50 ring-offset-2 ring-offset-black/80 shadow-[0_0_20px_rgba(255,255,255,0.06)]"
+          : "ring-1 ring-white/8 group-hover:ring-white/18"
           }`}
       >
         <div
@@ -818,8 +818,8 @@ function StyleTile({
       <div className="flex items-center gap-1.5 px-0.5">
         <span
           className={`text-[12px] font-semibold tracking-tight transition-colors ${isActive
-              ? "text-white/90"
-              : "text-white/40 group-hover:text-white/60"
+            ? "text-white/90"
+            : "text-white/40 group-hover:text-white/60"
             }`}
         >
           {style.name}

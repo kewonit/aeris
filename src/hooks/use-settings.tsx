@@ -68,7 +68,7 @@ const DEFAULT_SETTINGS: Settings = {
   fpvChaseDistance: 0.0048,
 };
 
-const STORAGE_KEY = "aeris:settings";
+const STORAGE_KEY = "aeris-mercosul:settings";
 const STORAGE_VERSION = 1;
 const WRITE_DEBOUNCE_MS = 300;
 
@@ -145,7 +145,7 @@ type SettingsContextValue = {
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
-const subscribeNoop = () => () => {};
+const subscribeNoop = () => () => { };
 let settingsCache: Settings | undefined;
 
 function getSettingsSnapshot(): Settings {

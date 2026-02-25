@@ -3,7 +3,7 @@ import { FlightTracker } from "@/components/flight-tracker";
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  name: "Aeris",
+  name: "Aeris Mercosul",
   url: "https://aeris-flight.vercel.app",
   description:
     "Track live flights in 3D over the world's busiest airspaces. Altitude-aware, beautifully rendered, and completely free.",

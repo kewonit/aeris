@@ -11,7 +11,7 @@ const inter = Inter({
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
-const title = "Aeris — Real-Time 3D Flight Tracking";
+const title = "Aeris Mercosul — Real-Time 3D Flight Tracking";
 const description =
   "Track live flights in 3D over the world's busiest airspaces. Altitude-aware, beautifully rendered, and completely free.";
 const siteUrl = "https://aeris-flight.vercel.app";
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     "real-time aviation",
     "flight radar",
     "aircraft tracking",
-    "aeris",
+    "aeris-mercosul",
     "opensky",
   ],
   authors: [{ name: "kewonit", url: "https://github.com/kewonit" }],
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: siteUrl,
-    siteName: "Aeris",
+    siteName: "Aeris Mercosul",
     title,
     description,
   },

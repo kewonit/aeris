@@ -412,12 +412,12 @@ export function CameraController({
       });
     };
 
-    window.addEventListener("aeris:north-up", onNorthUp);
-    window.addEventListener("aeris:reset-view", onResetView);
+    window.addEventListener("aeris-mercosul:north-up", onNorthUp);
+    window.addEventListener("aeris-mercosul:reset-view", onResetView);
 
     return () => {
-      window.removeEventListener("aeris:north-up", onNorthUp);
-      window.removeEventListener("aeris:reset-view", onResetView);
+      window.removeEventListener("aeris-mercosul:north-up", onNorthUp);
+      window.removeEventListener("aeris-mercosul:reset-view", onResetView);
     };
   }, [map, isLoaded, city]);
 
@@ -530,12 +530,12 @@ export function CameraController({
       if (state) state.held = false;
     };
 
-    window.addEventListener("aeris:camera-start", onStart);
-    window.addEventListener("aeris:camera-stop", onStop);
+    window.addEventListener("aeris-mercosul:camera-start", onStart);
+    window.addEventListener("aeris-mercosul:camera-stop", onStop);
 
     return () => {
-      window.removeEventListener("aeris:camera-start", onStart);
-      window.removeEventListener("aeris:camera-stop", onStop);
+      window.removeEventListener("aeris-mercosul:camera-start", onStart);
+      window.removeEventListener("aeris-mercosul:camera-stop", onStop);
       if (frameId != null) cancelAnimationFrame(frameId);
     };
   }, [map, isLoaded]);
@@ -619,7 +619,7 @@ export function CameraController({
         }, IDLE_TIMEOUT_MS);
       }
     };
-    window.addEventListener("aeris:camera-stop", onCameraStop);
+    window.addEventListener("aeris-mercosul:camera-stop", onCameraStop);
 
     idleTimerRef.current = setTimeout(() => {
       isInteractingRef.current = false;
@@ -631,7 +631,7 @@ export function CameraController({
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       events.forEach((e) => container.removeEventListener(e, resetIdleTimer));
       map.off("movestart", onMoveStart);
-      window.removeEventListener("aeris:camera-stop", onCameraStop);
+      window.removeEventListener("aeris-mercosul:camera-stop", onCameraStop);
     };
   }, [
     map,
