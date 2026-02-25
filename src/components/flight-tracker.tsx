@@ -28,7 +28,7 @@ import { useFlights } from "@/hooks/use-flights";
 import { useTrailHistory } from "@/hooks/use-trail-history";
 import { useFlightTrack } from "@/hooks/use-flight-track";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
-import { CITIES, type City } from "@/lib/cities";
+import { REGIONS as CITIES, type City } from "@/lib/regions";
 import { AIRPORTS, findByIata, airportToCity } from "@/lib/airports";
 import {
   fetchFlightByIcao24,
@@ -40,7 +40,7 @@ import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star, Keyboard } from "lucide-react";
 
-const DEFAULT_CITY_ID = "sfo";
+const DEFAULT_CITY_ID = "gru";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
 
 const DEFAULT_CITY = CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
@@ -75,7 +75,7 @@ const HIGH_TRAFFIC_AIRPORTS = AIRPORTS.filter((airport) =>
 );
 const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
 
-const subscribeNoop = () => () => {};
+const subscribeNoop = () => () => { };
 
 let _cachedInitialCity: City | null = null;
 
@@ -184,8 +184,8 @@ function pickRandomAirportCity(excludeIata?: string): City {
   const exclude = excludeIata?.toUpperCase();
   const filteredHubs = exclude
     ? HIGH_TRAFFIC_AIRPORTS.filter(
-        (airport) => airport.iata.toUpperCase() !== exclude,
-      )
+      (airport) => airport.iata.toUpperCase() !== exclude,
+    )
     : HIGH_TRAFFIC_AIRPORTS;
 
   const filteredAirports = exclude
@@ -317,12 +317,12 @@ function FlightTrackerInner() {
     const livePosAdjusted: [number, number] | null =
       livePos && trackPositions.length > 0
         ? [
-            snapLngToReference(
-              livePos[0],
-              trackPositions[trackPositions.length - 1][0],
-            ),
-            livePos[1],
-          ]
+          snapLngToReference(
+            livePos[0],
+            trackPositions[trackPositions.length - 1][0],
+          ),
+          livePos[1],
+        ]
         : livePos;
 
     const lastWaypointTime =
@@ -395,8 +395,8 @@ function FlightTrackerInner() {
       const CONNECT_BRIDGE_DEG = 0.07;
       const MAX_CONNECT_GAP_DEG =
         flight &&
-        Number.isFinite(flight.baroAltitude) &&
-        flight.baroAltitude! < 6_000
+          Number.isFinite(flight.baroAltitude) &&
+          flight.baroAltitude! < 6_000
           ? 1.25
           : 3.5;
 
@@ -1053,9 +1053,8 @@ export function FlightTracker() {
 function Brand({ isDark }: { isDark: boolean }) {
   return (
     <span
-      className={`text-sm font-semibold tracking-wide ${
-        isDark ? "text-white/70" : "text-black/70"
-      }`}
+      className={`text-sm font-semibold tracking-wide ${isDark ? "text-white/70" : "text-black/70"
+        }`}
     >
       aeris
     </span>

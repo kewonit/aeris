@@ -21,7 +21,7 @@ import {
   Eye,
   Loader2,
 } from "lucide-react";
-import { CITIES, type City } from "@/lib/cities";
+import { REGIONS as CITIES, type City } from "@/lib/regions";
 import { searchAirports, airportToCity } from "@/lib/airports";
 import { MAP_STYLES, type MapStyle } from "@/lib/map-styles";
 import { useSettings, type OrbitDirection } from "@/hooks/use-settings";
@@ -37,10 +37,10 @@ const MAIN_TABS: {
   icon: typeof Search;
   label: string;
 }[] = [
-  { id: "search", icon: Search, label: "Search" },
-  { id: "style", icon: MapIcon, label: "Map Style" },
-  { id: "settings", icon: Settings, label: "Settings" },
-];
+    { id: "search", icon: Search, label: "Search" },
+    { id: "style", icon: MapIcon, label: "Map Style" },
+    { id: "settings", icon: Settings, label: "Settings" },
+  ];
 
 const PANEL_TABS = MAIN_TABS;
 
@@ -230,11 +230,10 @@ function PanelDialog({
                   <button
                     key={id}
                     onClick={() => onTabChange(id)}
-                    className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                      active
+                    className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${active
                         ? "text-white/90"
                         : "text-white/35 hover:text-white/55 hover:bg-white/4"
-                    }`}
+                      }`}
                   >
                     {active && (
                       <motion.div
@@ -350,11 +349,10 @@ function PanelDialog({
                   <button
                     key={id}
                     onClick={() => onTabChange(id)}
-                    className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center transition-colors ${
-                      active
+                    className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center transition-colors ${active
                         ? "text-white/90"
                         : "text-white/35 active:bg-white/6"
-                    }`}
+                      }`}
                   >
                     {active && (
                       <motion.div
@@ -620,9 +618,8 @@ function SearchContent({
           {airports.length > 0 && (
             <>
               <p
-                className={`px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/15 ${
-                  featured.length > 0 ? "pt-3" : "pt-2"
-                }`}
+                className={`px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/15 ${featured.length > 0 ? "pt-3" : "pt-2"
+                  }`}
               >
                 Airports
               </p>
@@ -664,9 +661,8 @@ function LocationRow({
     <button
       onClick={onClick}
       aria-current={isActive ? "true" : undefined}
-      className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/4 ${
-        isActive ? "bg-white/6" : ""
-      }`}
+      className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/4 ${isActive ? "bg-white/6" : ""
+        }`}
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/4">
         <MapPin className="h-3.5 w-3.5 text-white/40" />
@@ -695,9 +691,8 @@ function FlightRow({
 }) {
   return (
     <div
-      className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/4 ${
-        isActive ? "bg-white/6" : ""
-      }`}
+      className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/4 ${isActive ? "bg-white/6" : ""
+        }`}
     >
       <button
         onClick={onOpen}
@@ -779,11 +774,10 @@ function StyleTile({
       className="group relative flex flex-col gap-2 text-left"
     >
       <div
-        className={`relative aspect-16/10 w-full overflow-hidden rounded-xl transition-all duration-200 ${
-          isActive
+        className={`relative aspect-16/10 w-full overflow-hidden rounded-xl transition-all duration-200 ${isActive
             ? "ring-2 ring-white/50 ring-offset-2 ring-offset-black/80 shadow-[0_0_20px_rgba(255,255,255,0.06)]"
             : "ring-1 ring-white/8 group-hover:ring-white/18"
-        }`}
+          }`}
       >
         <div
           className="absolute inset-0"
@@ -796,9 +790,8 @@ function StyleTile({
           unoptimized
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgLoaded(true)}
-          className={`object-cover transition-all duration-500 group-hover:scale-105 ${
-            imgLoaded ? "opacity-100" : "opacity-0"
-          }`}
+          className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? "opacity-100" : "opacity-0"
+            }`}
           draggable={false}
         />
         <div className="absolute inset-0 rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-16px_28px_-10px_rgba(0,0,0,0.4)]" />
@@ -824,11 +817,10 @@ function StyleTile({
 
       <div className="flex items-center gap-1.5 px-0.5">
         <span
-          className={`text-[12px] font-semibold tracking-tight transition-colors ${
-            isActive
+          className={`text-[12px] font-semibold tracking-tight transition-colors ${isActive
               ? "text-white/90"
               : "text-white/40 group-hover:text-white/60"
-          }`}
+            }`}
         >
           {style.name}
         </span>
@@ -994,9 +986,8 @@ function OrbitSpeedSlider({
               return (
                 <span
                   key={preset.label}
-                  className={`absolute h-1.5 w-1.5 rounded-full -translate-x-1/2 -translate-y-1/2 transition-colors ${
-                    isActive ? "bg-white/50" : "bg-white/15"
-                  }`}
+                  className={`absolute h-1.5 w-1.5 rounded-full -translate-x-1/2 -translate-y-1/2 transition-colors ${isActive ? "bg-white/50" : "bg-white/15"
+                    }`}
                   style={{ left: `${pct}%` }}
                 />
               );
@@ -1144,9 +1135,8 @@ function SegmentRow<T extends string | number>({
               role="radio"
               aria-checked={isActive}
               onClick={() => onChange(opt.value)}
-              className={`relative rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
-                isActive ? "text-white/90" : "text-white/30 hover:text-white/50"
-              }`}
+              className={`relative rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${isActive ? "text-white/90" : "text-white/30 hover:text-white/50"
+                }`}
             >
               {isActive && (
                 <motion.div
@@ -1171,16 +1161,14 @@ function SegmentRow<T extends string | number>({
 function Toggle({ checked }: { checked: boolean }) {
   return (
     <div
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
-        checked ? "bg-white/20" : "bg-white/6"
-      }`}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${checked ? "bg-white/20" : "bg-white/6"
+        }`}
     >
       <motion.div
         animate={{ x: checked ? 17 : 2 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className={`absolute top-0.75 h-3.5 w-3.5 rounded-full shadow-sm transition-colors duration-200 ${
-          checked ? "bg-white" : "bg-white/25"
-        }`}
+        className={`absolute top-0.75 h-3.5 w-3.5 rounded-full shadow-sm transition-colors duration-200 ${checked ? "bg-white" : "bg-white/25"
+          }`}
       />
     </div>
   );

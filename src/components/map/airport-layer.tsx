@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { useMap } from "./map";
 import { AIRPORTS, airportToCity } from "@/lib/airports";
-import { CITIES, type City } from "@/lib/cities";
+import { REGIONS as CITIES, type City } from "@/lib/regions";
 
 const SOURCE_ID = "airport-markers";
 const DOTS_LAYER = "airport-dots";
