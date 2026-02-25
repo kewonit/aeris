@@ -5,29 +5,13 @@ import {
   fetchFlightsByBbox,
   bboxFromCenter,
   type FlightState,
-} from "@/lib/opensky";
+} from "@/lib/adsbfi";
 import type { City } from "@/lib/cities";
 
-const BASE_POLL_MS = 30_000;
-const CONSERVATIVE_POLL_MS = 60_000;
-const CAUTIOUS_POLL_MS = 120_000;
-const EMERGENCY_POLL_MS = 300_000;
-
-const CREDIT_TIER_CONSERVATIVE = 2_000;
-const CREDIT_TIER_CAUTIOUS = 800;
-const CREDIT_TIER_EMERGENCY = 200;
-
-const RATE_LIMIT_BACKOFF_MS = 30_000;
-const VISIBILITY_RESUME_STALE_MS = 60_000;
+const BASE_POLL_MS = 10_000;
+const RATE_LIMIT_BACKOFF_MS = 15_000;
+const VISIBILITY_RESUME_STALE_MS = 30_000;
 const FPV_BBOX_RADIUS = 2;
-
-function adaptiveInterval(creditsRemaining: number | null): number {
-  if (creditsRemaining === null) return BASE_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_EMERGENCY) return EMERGENCY_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_CAUTIOUS) return CAUTIOUS_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_CONSERVATIVE) return CONSERVATIVE_POLL_MS;
-  return BASE_POLL_MS;
-}
 
 /**
  * Fetches flights via OpenSky. In FPV mode the bbox moves with the tracked
@@ -43,7 +27,7 @@ export function useFlights(
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
-  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
+  const [creditsRemaining] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -57,7 +41,7 @@ export function useFlights(
   );
   const fpvIcao24Ref = useRef<string | null>(fpvIcao24);
   const fpvSeedRef = useRef<string | null>(null);
-  const fetchDataRef = useRef<(target: City) => void>(() => {});
+  const fetchDataRef = useRef<(target: City) => void>(() => { });
   fpvIcao24Ref.current = fpvIcao24;
   fpvSeedCenterRef.current = fpvSeedCenter;
 
@@ -193,12 +177,7 @@ export function useFlights(
           }
         }
 
-        if (result.creditsRemaining !== null) {
-          creditsRef.current = result.creditsRemaining;
-          setCreditsRemaining(result.creditsRemaining);
-        }
-
-        const nextInterval = adaptiveInterval(creditsRef.current);
+        const nextInterval = BASE_POLL_MS;
         scheduleNext(target, nextInterval);
       } catch (err) {
         const isAbort = err instanceof Error && err.name === "AbortError";
@@ -237,8 +216,7 @@ export function useFlights(
         clearSchedule();
         fetchData(activeCity);
       } else {
-        const interval = adaptiveInterval(creditsRef.current);
-        const remaining = Math.max(1_000, interval - elapsed);
+        const remaining = Math.max(1_000, BASE_POLL_MS - elapsed);
         clearSchedule();
         scheduleNext(activeCity, remaining);
       }
