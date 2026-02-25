@@ -71,3 +71,8 @@ export function headingToCardinal(degrees: number | null): string {
   const index = ((Math.round(degrees / 45) % 8) + 8) % 8;
   return directions[index];
 }
+
+/** Returns true for ADS-B emitter category A7 (rotorcraft / helicopters). */
+export function isRotorcraft(category: number | null): boolean {
+  return category === 7;
+}

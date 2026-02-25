@@ -6,7 +6,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer, PathLayer } from "@deck.gl/layers";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import { altitudeToColor, altitudeToElevation, isRotorcraft } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { type TrailEntry } from "@/hooks/use-trail-history";
@@ -30,8 +30,10 @@ const STARTUP_TRAIL_STEP_SEC = 12;
 const TRACK_DAMPING = 0.18;
 const TRAIL_SMOOTHING_ITERATIONS = 3;
 const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
+const HELICOPTER_SCENEGRAPH_URL = "/models/helicopter.glb";
 const AIRCRAFT_PX_PER_UNIT = 0.3;
 const BASE_AIRCRAFT_SIZE = 25;
+const BASE_HELICOPTER_SIZE = 22;
 const AIRCRAFT_PICK_RADIUS_PX = 14;
 
 const CATEGORY_TINT: Record<number, [number, number, number]> = {
@@ -50,6 +52,7 @@ const CATEGORY_TINT: Record<number, [number, number, number]> = {
 };
 
 function categorySizeMultiplier(category: number | null): number {
+  // Helicopters use their own layer — skip size override for category 7 here.
   switch (category) {
     case 2:
       return 0.88;
@@ -61,8 +64,6 @@ function categorySizeMultiplier(category: number | null): number {
       return 1.18;
     case 6:
       return 1.28;
-    case 7:
-      return 1.04;
     case 8:
       return 0.86;
     case 9:
@@ -772,7 +773,13 @@ export function FlightLayers({
         }
 
         const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
-        const visibleFlights = interpolated;
+        const fixedWingFlights = interpolated.filter(
+          (f) => !isRotorcraft(f.category),
+        );
+        const rotorcraftFlights = interpolated.filter((f) =>
+          isRotorcraft(f.category),
+        );
+        const visibleFlights = fixedWingFlights;
 
         const fpvPosOut = fpvPosRef.current;
         if (fpvPosOut && fpvId) {
@@ -1230,6 +1237,51 @@ export function FlightLayers({
             highlightColor: [255, 255, 255, 80],
           }),
         );
+
+        // ── Helicopter layer (category A7 / rotorcraft) ───────────────────
+        if (rotorcraftFlights.length > 0) {
+          layers.push(
+            new ScenegraphLayer<FlightState>({
+              id: "helicopter-aircraft",
+              data: rotorcraftFlights,
+              getPosition: (d) => [
+                d.longitude!,
+                d.latitude!,
+                altitudeToElevation(d.baroAltitude),
+              ],
+              getOrientation: (d) => {
+                // Helicopters don't pitch along their trajectory — only yaw.
+                const yaw = -(Number.isFinite(d.trueTrack) ? d.trueTrack! : 0);
+                return [0, yaw, 90];
+              },
+              getColor: (d) => {
+                // Helicopters always render in a distinct warm-amber tint
+                // regardless of altitude-color mode to make them stand out.
+                const base = altColors
+                  ? altitudeToColor(d.baroAltitude)
+                  : defaultColor;
+                // Blend towards amber to visually distinguish from fixed-wing
+                return [
+                  Math.min(255, Math.round(base[0] * 0.7 + 255 * 0.3)),
+                  Math.min(255, Math.round(base[1] * 0.7 + 180 * 0.3)),
+                  Math.min(255, Math.round(base[2] * 0.5)),
+                  base[3] ?? 200,
+                ];
+              },
+              scenegraph: HELICOPTER_SCENEGRAPH_URL,
+              getScale: () => [1, 1, 1],
+              sizeScale: BASE_HELICOPTER_SIZE,
+              sizeMinPixels: AIRCRAFT_PX_PER_UNIT,
+              sizeMaxPixels: AIRCRAFT_PX_PER_UNIT,
+              _lighting: "pbr",
+              pickable: true,
+              onHover: handleHover,
+              onClick: handleClick,
+              autoHighlight: true,
+              highlightColor: [255, 220, 100, 100],
+            }),
+          );
+        }
 
         overlay.setProps({ layers });
       } catch (err) {
