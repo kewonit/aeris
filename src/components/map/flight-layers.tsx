@@ -965,21 +965,24 @@ export function FlightLayers({
               ? pathSlice
               : smoothPlanarPath(pathSlice);
 
-            const altitudeMeters = smoothNumericSeries(
-              altitudeSlice.map(
-                (a) => a ?? trail.baroAltitude ?? animFlight?.baroAltitude ?? 0,
-              ),
+            const rawAltitudes = altitudeSlice.map(
+              (a) => a ?? trail.baroAltitude ?? animFlight?.baroAltitude ?? 0,
             );
+            const altitudeMeters = heli
+              ? rawAltitudes
+              : smoothNumericSeries(rawAltitudes);
 
             const basePath = smoothPathSlice.map((p, i) => [
               p[0],
               p[1],
               Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
             ]) as ElevatedPoint[];
-            const denseBasePath = densifyElevatedPath(
-              basePath,
-              isFullHistory ? 1 : denseSubdivisions,
-            );
+            const denseBasePath = heli
+              ? basePath
+              : densifyElevatedPath(
+                basePath,
+                isFullHistory ? 1 : denseSubdivisions,
+              );
 
             if (
               animFlight &&
