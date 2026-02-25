@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, X, MapPin, ChevronRight } from "lucide-react";
-import { CITIES, type City } from "@/lib/cities";
+import { REGIONS as CITIES, type City } from "@/lib/regions";
 import { searchAirports, type Airport } from "@/lib/airports";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -200,9 +200,8 @@ export function AirportSearchInput({
                 {airports.length > 0 && (
                   <>
                     <p
-                      className={`px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-white/15 ${
-                        featured.length > 0 ? "pt-2" : "pt-1.5"
-                      }`}
+                      className={`px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-white/15 ${featured.length > 0 ? "pt-2" : "pt-1.5"
+                        }`}
                     >
                       Airports
                     </p>
@@ -240,9 +239,8 @@ function DropdownRow({
   return (
     <button
       onClick={onClick}
-      className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/5 ${
-        isActive ? "bg-white/6" : ""
-      }`}
+      className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/5 ${isActive ? "bg-white/6" : ""
+        }`}
     >
       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/4">
         <MapPin className="h-3 w-3 text-white/35" />
