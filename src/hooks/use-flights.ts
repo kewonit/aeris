@@ -14,8 +14,9 @@ const VISIBILITY_RESUME_STALE_MS = 30_000;
 const FPV_BBOX_RADIUS = 2;
 
 /**
- * Fetches flights via OpenSky. In FPV mode the bbox moves with the tracked
- * aircraft (4×4° = 1 API credit). City changes are ignored while in FPV.
+ * Fetches live flights via ADS-B.fi (server-side proxy at /api/flights).
+ * In FPV mode the bbox moves with the tracked aircraft.
+ * City changes are ignored while in FPV.
  */
 export function useFlights(
   city: City | null,
@@ -27,13 +28,11 @@ export function useFlights(
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
-  const [creditsRemaining] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const creditsRef = useRef<number | null>(null);
   const lastFetchRef = useRef(0);
   const fpvCenterRef = useRef<{ lng: number; lat: number } | null>(null);
   const fpvSeedCenterRef = useRef<{ lng: number; lat: number } | null>(
@@ -277,5 +276,5 @@ export function useFlights(
     };
   }, [clearSchedule, clearCountdown]);
 
-  return { flights, loading, error, rateLimited, retryIn, creditsRemaining };
+  return { flights, loading, error, rateLimited, retryIn };
 }
