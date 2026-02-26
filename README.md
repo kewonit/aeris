@@ -2,40 +2,26 @@
 
 Real-time 3D flight tracking focused on the Mercosul region — altitude-aware, visually stunning.
 
-Aeris Mercosul renders live air traffic over Latin American airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold.
+Aeris Mercosul renders live air traffic over Latin American airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold. Select a city, and the camera glides to that airspace with spring-eased animation. Defaults to São Paulo (GRU) with 20 curated regional hubs across Brazil, Argentina, Uruguay, Paraguay, Chile, Peru and Bolivia.
 
-[Live Demo (Vercel)](https://aeris-latam.vercel.app)
+[Live Demo](https://aeris-latam.vercel.app)
 
----
-
-## 🚁 THE SHOWPIECE: Full 3D Rotorcraft Implementation
-
-**Aeris Mercosul** breaks away from the original project by implementing a state-of-the-art 3D Helicopter layer that the original creator couldn't pull off. This is a complete architectural breakthrough:
-
-- **True 3D Modeling**: Scenegraph-based rendering of high-fidelity MD500 Helicopter models.
-- **Rotorcraft Intelligence**: Automatic detection of Category A7 aircraft with dedicated rendering pipelines.
-- **Ultra-Sharp Trails**: Specialized raw geometry trails designed specifically for helicopter maneuvers. By skipping fixed-wing planar smoothing, we achieved perfectly straight, artifact-free paths—showing the exact flight geometry without the "kinks" or loops common in other implementations.
-
----
-
-## 🗺️ Roadmap
-
-- [x] **ADS-B.fi Integration**: High-fidelity live data with no credit limits.
-- [x] **3D Helicopter Layer**: Real-time rotorcraft tracking with custom GLB models.
-- [ ] **Weather Overlays**: Real-time METAR/TAF visualization on the 3D map.
-- [ ] **Multi-Model Support**: Dedicated 3D models for different aircraft types (Jumbo, Piper, etc.).
-- [ ] **Flight History**: Playback of historical flight data for regional routes.
-- [ ] **Mobile Optimization**: Progressive Web App (PWA) support for mobile flight tracking.
-- [ ] **Alert System**: Custom desktop notifications for specific regional flight arrivals.
-
----
-
-## Key Features
+## Features
 
 - **3D Altitude Separation**: Real-time z-displacement based on barometric altitude.
-- **Mercosul Hubs**: Quick-jump presets for 20+ major airports in Brazil, Argentina, Chile, and more.
+- **Rotorcraft Layer**: Dedicated 3D models for helicopters (category A7) with performance-optimized raw geometry trails.
+- **Mercosul Hubs**: Quick-jump presets for major airports in Brazil, Argentina, Chile, and more.
+- **ADS-B.fi Integration**: High-fidelity live data via the `opendata.adsb.fi` API.
 - **Cinematic Camera**: Smooth spring-eased transitions and automatic orbit modes.
-- **Glassmorphism UI**: Premium frosted-glass interface designed for the dark-mode aesthetic.
+
+## Roadmap
+
+- [x] **ADS-B.fi Integration**: High-fidelity live data via server-side proxy.
+- [x] **3D Helicopter Layer**: Dedicated ScenegraphLayer rendering for rotorcraft.
+- [ ] **Weather Overlays**: Real-time METAR/TAF visualization.
+- [ ] **Multi-Model Support**: Specialized 3D models for various aircraft classes.
+- [ ] **Flight History**: Historical playback for regional routes.
+- [ ] **Mobile Optimization**: Progressive Web App (PWA) support.
 
 ## Stack
 
@@ -57,6 +43,15 @@ pnpm install
 cp .env.example .env.local
 pnpm dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Design
+
+- **Dark-first**: CARTO Dark Matter base map, theme-aware UI.
+- **Rotorcraft Precision**: Straight-line trail segments for helicopters to reflect actual flight paths without smoothing artifacts.
+- **Glassmorphism**: Premium frosted-glass UI elements with `backdrop-blur-2xl`.
+- **Spring Physics**: All UI transitions and camera movements use spring easing for a premium feel.
 
 ## License
 
