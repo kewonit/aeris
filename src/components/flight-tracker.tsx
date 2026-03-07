@@ -8,7 +8,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
@@ -16,7 +16,6 @@ import { AirportLayer } from "@/components/map/airport-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FlightCard } from "@/components/ui/flight-card";
 import { FpvHud } from "@/components/ui/fpv-hud";
-import { KeyboardShortcutsHelp } from "@/components/ui/keyboard-shortcuts-help";
 import { ControlPanel } from "@/components/ui/control-panel";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
@@ -38,7 +37,7 @@ import {
 import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
-import { Github, Star, Keyboard } from "lucide-react";
+import { Github, Star } from "lucide-react";
 
 const DEFAULT_CITY_ID = "sfo";
 const STYLE_STORAGE_KEY = "aeris:mapStyle";
@@ -228,7 +227,6 @@ function FlightTrackerInner() {
   const [cityOverride, setCityOverride] = useState<City | undefined>();
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
-  const [showHelp, setShowHelp] = useState(false);
   const [repoStars, setRepoStars] = useState<number | null>(null);
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
   const [fpvIcao24, setFpvIcao24] = useState<string | null>(null);
@@ -796,7 +794,7 @@ function FlightTrackerInner() {
   }, []);
 
   const handleToggleHelp = useCallback(() => {
-    setShowHelp((prev) => !prev);
+    window.dispatchEvent(new CustomEvent("aeris:open-shortcuts"));
   }, []);
 
   const handleToggleFpvKey = useCallback(() => {
@@ -885,7 +883,11 @@ function FlightTrackerInner() {
 
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
-      <MapView mapStyle={mapStyle.style} isDark={mapStyle.dark}>
+      <MapView
+        mapStyle={mapStyle.style}
+        terrainProfile={mapStyle.terrainProfile}
+        isDark={mapStyle.dark}
+      >
         <CameraController
           city={activeCity}
           followFlight={followFlight}
@@ -937,22 +939,6 @@ function FlightTrackerInner() {
 
         {!fpvIcao24 && (
           <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
-            <motion.button
-              onClick={handleToggleHelp}
-              className="hidden h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors sm:flex"
-              style={{
-                borderWidth: 1,
-                borderColor: "rgb(var(--ui-fg) / 0.06)",
-                backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-                color: "rgb(var(--ui-fg) / 0.5)",
-              }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="Keyboard shortcuts"
-              title="Keyboard shortcuts (?)"
-            >
-              <Keyboard className="h-4 w-4" />
-            </motion.button>
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -1023,13 +1009,6 @@ function FlightTrackerInner() {
           </div>
         )}
       </div>
-
-      {!fpvIcao24 && (
-        <KeyboardShortcutsHelp
-          open={showHelp}
-          onClose={() => setShowHelp(false)}
-        />
-      )}
 
       <AnimatePresence>
         {fpvIcao24 && fpvFlightOrCached && (

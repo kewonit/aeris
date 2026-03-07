@@ -7,6 +7,7 @@ import {
   Search,
   Map as MapIcon,
   Settings,
+  Keyboard,
   X,
   Check,
   MapPin,
@@ -27,10 +28,11 @@ import { MAP_STYLES, type MapStyle } from "@/lib/map-styles";
 import { useSettings, type OrbitDirection } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
 import type { FlightState } from "@/lib/opensky";
 import { formatCallsign } from "@/lib/flight-utils";
 
-type TabId = "search" | "style" | "settings";
+type TabId = "search" | "style" | "settings" | "shortcuts";
 
 const MAIN_TABS: {
   id: TabId;
@@ -40,6 +42,7 @@ const MAIN_TABS: {
   { id: "search", icon: Search, label: "Search" },
   { id: "style", icon: MapIcon, label: "Map Style" },
   { id: "settings", icon: Settings, label: "Settings" },
+  { id: "shortcuts", icon: Keyboard, label: "Shortcuts" },
 ];
 
 const PANEL_TABS = MAIN_TABS;
@@ -69,9 +72,15 @@ export function ControlPanel({
     function handleOpenSearch() {
       setOpenTab("search");
     }
+    function handleOpenShortcuts() {
+      setOpenTab("shortcuts");
+    }
     window.addEventListener("aeris:open-search", handleOpenSearch);
-    return () =>
+    window.addEventListener("aeris:open-shortcuts", handleOpenShortcuts);
+    return () => {
       window.removeEventListener("aeris:open-search", handleOpenSearch);
+      window.removeEventListener("aeris:open-shortcuts", handleOpenShortcuts);
+    };
   }, []);
 
   const open = (tab: TabId) => setOpenTab(tab);
@@ -335,6 +344,11 @@ function PanelDialog({
                 {activeTab === "settings" && (
                   <TabContent key="settings">
                     <SettingsContent />
+                  </TabContent>
+                )}
+                {activeTab === "shortcuts" && (
+                  <TabContent key="shortcuts">
+                    <ShortcutsContent />
                   </TabContent>
                 )}
               </AnimatePresence>
@@ -748,7 +762,8 @@ function StyleContent({
       </div>
       <div className="border-t border-white/4 px-5 py-3">
         <p className="text-[11px] font-medium text-white/12">
-          Satellite © Esri · Terrain © OpenTopoMap · Base maps © CARTO
+          Satellite © Esri · Terrain © OpenTopoMap / Terrain Tiles · Base maps ©
+          CARTO
         </p>
       </div>
     </ScrollArea>
@@ -935,6 +950,32 @@ function SettingsContent() {
           >
             Reset to defaults
           </button>
+        </div>
+
+        <div className="mx-3 my-2 h-px bg-white/4" />
+      </div>
+    </ScrollArea>
+  );
+}
+
+function ShortcutsContent() {
+  return (
+    <ScrollArea className="h-full">
+      <div className="p-3 pt-1">
+        <div className="space-y-1">
+          {SHORTCUTS.map(({ key, description }) => (
+            <div
+              key={key}
+              className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/4"
+            >
+              <span className="text-[13px] font-medium text-white/68">
+                {description}
+              </span>
+              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-md bg-white/6 px-2 font-mono text-[11px] font-semibold text-white/74 ring-1 ring-white/8">
+                {key}
+              </kbd>
+            </div>
+          ))}
         </div>
       </div>
     </ScrollArea>

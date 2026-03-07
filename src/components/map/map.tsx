@@ -14,7 +14,19 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
-import { DEFAULT_STYLE, type MapStyleSpec } from "@/lib/map-styles";
+import {
+  createTerrainDemSource,
+  createHillshadeDemSource,
+  DEFAULT_STYLE,
+  DARK_TERRAIN_HILLSHADE_LAYER,
+  DARK_TERRAIN_SKY,
+  DARK_TERRAIN_SPEC,
+  TERRAIN_DEM_SOURCE_ID,
+  HILLSHADE_DEM_SOURCE_ID,
+  TERRAIN_HILLSHADE_LAYER_ID,
+  type MapStyleSpec,
+  type TerrainProfile,
+} from "@/lib/map-styles";
 
 const GLOBE_MAX_PITCH = 80;
 
@@ -36,6 +48,7 @@ type MapProps = {
   children?: ReactNode;
   className?: string;
   mapStyle?: MapStyleSpec;
+  terrainProfile?: TerrainProfile;
   isDark?: boolean;
   center?: [number, number];
   zoom?: number;
@@ -52,6 +65,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     children,
     className,
     mapStyle = DEFAULT_STYLE.style,
+    terrainProfile = "none",
     isDark = true,
     center = [0, 20],
     zoom = 2.5,
@@ -89,6 +103,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       maxZoom,
       maxPitch: GLOBE_MAX_PITCH,
       attributionControl: false,
+      cancelPendingTileRequestsWhileZooming: true,
       // Globe renders the full sphere so world copies are not meaningful.
       renderWorldCopies: false,
     });
@@ -116,9 +131,10 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       mapStyle as maplibregl.StyleSpecification | string,
       {
         transformStyle: (_prev, next) => {
-          (next as Record<string, unknown>).projection = { type: "globe" };
-          if (!(next as Record<string, unknown>).sky) {
-            (next as Record<string, unknown>).sky = {
+          const style = next as MutableStyleSpecification;
+          style.projection = { type: "globe" };
+          if (!style.sky) {
+            style.sky = {
               "atmosphere-blend": [
                 "interpolate",
                 ["linear"],
@@ -130,29 +146,18 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
               ],
             };
           }
-          return next;
+
+          if (terrainProfile === "dark") {
+            applyDarkTerrainStyle(style);
+            style.sky = DARK_TERRAIN_SKY as Record<string, unknown>;
+          }
+
+          return style;
         },
       } as maplibregl.StyleSwapOptions & { transformStyle: unknown },
     );
 
     const onStyleLoad = () => {
-      if (typeof mapStyle === "object" && "terrain" in mapStyle) {
-        const spec = mapStyle as Record<string, unknown>;
-        try {
-          mapInstance.setTerrain(
-            spec.terrain as maplibregl.TerrainSpecification,
-          );
-        } catch {
-          /* terrain source not yet loaded */
-        }
-      } else {
-        try {
-          mapInstance.setTerrain(null);
-        } catch {
-          /* no terrain to remove */
-        }
-      }
-
       addAerowayLayers(mapInstance, isDarkRef.current);
     };
     mapInstance.once("style.load", onStyleLoad);
@@ -160,7 +165,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     return () => {
       mapInstance.off("style.load", onStyleLoad);
     };
-  }, [mapInstance, isLoaded, mapStyle]);
+  }, [mapInstance, isLoaded, mapStyle, terrainProfile]);
 
   const ctx = useMemo(
     () => ({ map: mapInstance, isLoaded }),
@@ -180,6 +185,43 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
 });
 
 Map.displayName = "Map";
+
+type MutableStyleSpecification = maplibregl.StyleSpecification & {
+  projection?: maplibregl.ProjectionSpecification;
+  sky?: Record<string, unknown>;
+  sources?: Record<string, unknown>;
+  layers?: maplibregl.LayerSpecification[];
+  terrain?: maplibregl.TerrainSpecification;
+};
+
+function applyDarkTerrainStyle(style: MutableStyleSpecification): void {
+  const sources = (style.sources ??=
+    {}) as maplibregl.StyleSpecification["sources"];
+  if (!sources[TERRAIN_DEM_SOURCE_ID]) {
+    sources[TERRAIN_DEM_SOURCE_ID] =
+      createTerrainDemSource() as maplibregl.SourceSpecification;
+  }
+  if (!sources[HILLSHADE_DEM_SOURCE_ID]) {
+    sources[HILLSHADE_DEM_SOURCE_ID] =
+      createHillshadeDemSource() as maplibregl.SourceSpecification;
+  }
+
+  style.terrain = DARK_TERRAIN_SPEC as maplibregl.TerrainSpecification;
+
+  const layers = (style.layers ??= []);
+  if (!layers.some((layer) => layer.id === TERRAIN_HILLSHADE_LAYER_ID)) {
+    const firstSymbolIndex = layers.findIndex(
+      (layer) => layer.type === "symbol",
+    );
+    const insertIndex =
+      firstSymbolIndex === -1 ? layers.length : firstSymbolIndex;
+    layers.splice(
+      insertIndex,
+      0,
+      DARK_TERRAIN_HILLSHADE_LAYER as maplibregl.LayerSpecification,
+    );
+  }
+}
 
 function findVectorSource(map: maplibregl.Map): string | null {
   const style = map.getStyle();

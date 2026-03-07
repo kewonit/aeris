@@ -1,5 +1,66 @@
 export type MapStyleSpec = string | Record<string, unknown>;
 
+export type TerrainProfile = "none" | "dark";
+
+export const TERRAIN_DEM_SOURCE_ID = "aeris-terrain-dem";
+export const HILLSHADE_DEM_SOURCE_ID = "aeris-hillshade-dem";
+export const TERRAIN_HILLSHADE_LAYER_ID = "aeris-terrain-hillshade";
+
+export function createTerrainDemSource(): Record<string, unknown> {
+  return {
+    type: "raster-dem",
+    tiles: [
+      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+    ],
+    tileSize: 256,
+    maxzoom: 12,
+    encoding: "terrarium",
+    volatile: true,
+    attribution:
+      "<a href='https://registry.opendata.aws/terrain-tiles/'>Terrain Tiles</a> \u00b7 AWS Open Data",
+  };
+}
+
+export function createHillshadeDemSource(): Record<string, unknown> {
+  return {
+    type: "raster-dem",
+    tiles: [
+      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+    ],
+    tileSize: 256,
+    maxzoom: 12,
+    encoding: "terrarium",
+    volatile: true,
+  };
+}
+
+export const DARK_TERRAIN_SPEC: Record<string, unknown> = {
+  source: TERRAIN_DEM_SOURCE_ID,
+  exaggeration: 1.0,
+};
+
+export const DARK_TERRAIN_HILLSHADE_LAYER: Record<string, unknown> = {
+  id: TERRAIN_HILLSHADE_LAYER_ID,
+  type: "hillshade",
+  source: HILLSHADE_DEM_SOURCE_ID,
+  layout: { visibility: "visible" },
+  paint: {
+    "hillshade-shadow-color": "#040608",
+    "hillshade-highlight-color": "rgba(180,195,210,0.12)",
+    "hillshade-accent-color": "#0d1117",
+    "hillshade-exaggeration": 0.5,
+  },
+};
+
+export const DARK_TERRAIN_SKY: Record<string, unknown> = {
+  "sky-color": "#070a0d",
+  "sky-horizon-blend": 0.5,
+  "horizon-color": "#0a0e12",
+  "fog-color": "#070a0d",
+  "fog-ground-blend": 0.5,
+  "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.8, 5, 0],
+};
+
 export type MapStyle = {
   id: string;
   name: string;
@@ -7,6 +68,7 @@ export type MapStyle = {
   preview: string;
   previewUrl: string;
   dark: boolean;
+  terrainProfile?: TerrainProfile;
 };
 
 const SATELLITE_STYLE: Record<string, unknown> = {
@@ -71,22 +133,10 @@ const SHADED_RELIEF_STYLE: Record<string, unknown> = {
       attribution:
         "&copy; <a href='https://www.esri.com/'>Esri</a>, Maxar, Earthstar Geographics",
     },
-    "terrain-dem": {
-      type: "raster-dem",
-      tiles: [
-        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      maxzoom: 15,
-      encoding: "terrarium",
-      attribution:
-        "<a href='https://github.com/tilezen/joerd'>Mapzen/Tilezen</a> · AWS Open Data",
-    },
+    [TERRAIN_DEM_SOURCE_ID]: createTerrainDemSource(),
+    [HILLSHADE_DEM_SOURCE_ID]: createHillshadeDemSource(),
   },
-  terrain: {
-    source: "terrain-dem",
-    exaggeration: 1.5,
-  },
+  terrain: DARK_TERRAIN_SPEC,
   sky: {
     "sky-color": "#76a8d6",
     "horizon-color": "#d4e4f0",
@@ -94,7 +144,10 @@ const SHADED_RELIEF_STYLE: Record<string, unknown> = {
     "sky-horizon-blend": 0.5,
     "horizon-fog-blend": 0.1,
   },
-  layers: [{ id: "satellite-base", type: "raster", source: "esri-satellite" }],
+  layers: [
+    { id: "satellite-base", type: "raster", source: "esri-satellite" },
+    DARK_TERRAIN_HILLSHADE_LAYER,
+  ],
 };
 
 export const MAP_STYLES: MapStyle[] = [
@@ -106,6 +159,16 @@ export const MAP_STYLES: MapStyle[] = [
     preview: "linear-gradient(135deg, #191a1a 0%, #2d2d2d 50%, #191a1a 100%)",
     previewUrl: "https://a.basemaps.cartocdn.com/dark_nolabels/3/4/2@2x.png",
     dark: true,
+  },
+  {
+    id: "dark-terrain",
+    name: "Dark Terrain",
+    style:
+      "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json",
+    preview: "linear-gradient(135deg, #111416 0%, #1d2427 50%, #101315 100%)",
+    previewUrl: "https://a.basemaps.cartocdn.com/dark_nolabels/3/4/2@2x.png",
+    dark: true,
+    terrainProfile: "dark",
   },
   {
     id: "dark-labels",
@@ -185,6 +248,7 @@ export function getAttributions(styleId: string): AttributionEntry[] {
   switch (styleId) {
     case "dark":
     case "dark-labels":
+    case "dark-terrain":
     case "voyager":
     case "positron":
       base.push(
@@ -194,6 +258,12 @@ export function getAttributions(styleId: string): AttributionEntry[] {
         },
         { label: "CARTO", url: "https://carto.com/attributions" },
       );
+      if (styleId === "dark-terrain") {
+        base.push({
+          label: "Terrain Tiles",
+          url: "https://registry.opendata.aws/terrain-tiles/",
+        });
+      }
       break;
     case "satellite":
       base.push({ label: "Esri", url: "https://www.esri.com/" });
@@ -219,7 +289,10 @@ export function getAttributions(styleId: string): AttributionEntry[] {
     case "relief":
       base.push(
         { label: "Esri", url: "https://www.esri.com/" },
-        { label: "Mapzen", url: "https://github.com/tilezen/joerd" },
+        {
+          label: "Terrain Tiles",
+          url: "https://registry.opendata.aws/terrain-tiles/",
+        },
       );
       break;
     default:

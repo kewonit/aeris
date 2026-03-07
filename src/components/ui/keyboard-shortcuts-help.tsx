@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Keyboard } from "lucide-react";
 
-const SHORTCUTS = [
+export const SHORTCUTS = [
   { key: "N", description: "North up" },
   { key: "R", description: "Reset view" },
   { key: "O", description: "Toggle orbit" },
