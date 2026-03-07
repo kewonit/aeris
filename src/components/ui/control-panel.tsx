@@ -925,6 +925,8 @@ function SettingsContent() {
           onChange={(v) => update("showAltitudeColors", v)}
         />
 
+        <div className="mx-3 my-2 h-px bg-white/4" />
+
         <div className="px-3 pt-2">
           <button
             type="button"

@@ -32,12 +32,48 @@ export function fpvZoomForAltitude(altMeters: number): number {
   return Math.max(10.1, Math.min(16.2, zoom));
 }
 
+/**
+ * Project a geographic position at a given elevation to a screen‐space
+ * pixel offset from the map's visual centre.
+ *
+ * In **Mercator** mode this uses the internal `_pixelMatrix3D` path for
+ * elevation‐aware projection.  In **globe** mode (or whenever the internal
+ * path is unavailable) it falls back to `map.project()`, which is
+ * projection‐agnostic but ignores elevation — callers already handle the
+ * `null` return by decaying offsets smoothly.
+ */
 export function projectLngLatElevationPixelDelta(
   map: maplibregl.Map,
   lng: number,
   lat: number,
   elevationMeters: number,
 ): { dx: number; dy: number } | null {
+  // Detect globe projection — `map.project()` works on globe too, but
+  // the internal Mercator‐specific 3D pixel matrix is unavailable.
+  const projection = map.getProjection?.();
+  const isGlobe =
+    projection?.type === "globe" || projection?.type === "vertical-perspective";
+
+  if (isGlobe) {
+    // Globe‐safe fallback: use the public project() API.
+    // This doesn't account for the elevation offset, so FPV chase
+    // positioning will be slightly less accurate — acceptable because
+    // the caller (keepInFrame) smooths with decay alphas.
+    try {
+      const screenPt = map.project([lng, lat]);
+      const canvas = map.getCanvas();
+      const cx = canvas.clientWidth / 2;
+      const cy = canvas.clientHeight / 2;
+      if (Number.isFinite(screenPt.x) && Number.isFinite(screenPt.y)) {
+        return { dx: screenPt.x - cx, dy: screenPt.y - cy };
+      }
+    } catch {
+      // point is behind the globe horizon — return null
+    }
+    return null;
+  }
+
+  // Mercator path: use internal 3D pixel matrix for elevation awareness
   type Transform3DLike = {
     _pixelMatrix3D?: unknown;
     centerPoint?: { x: number; y: number };

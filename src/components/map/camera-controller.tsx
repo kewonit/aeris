@@ -391,11 +391,27 @@ export function CameraController({
 
     const onNorthUp = () => {
       if (isFpvActiveRef.current) return;
-      map.easeTo({
-        bearing: 0,
-        duration: 650,
-        essential: true,
-      });
+      // Animate via setBearing to avoid globe "easing around a point" warning.
+      const startBearing = map.getBearing();
+      const delta = ((0 - startBearing + 540) % 360) - 180;
+      if (Math.abs(delta) < 0.5) {
+        map.setBearing(0);
+        return;
+      }
+      const duration = 650;
+      const start = performance.now();
+      let rafId: number;
+      function animateBearing() {
+        const t = Math.min((performance.now() - start) / duration, 1);
+        const eased = smoothstep(t);
+        map!.setBearing(startBearing + delta * eased);
+        if (t < 1) {
+          rafId = requestAnimationFrame(animateBearing);
+        }
+      }
+      rafId = requestAnimationFrame(animateBearing);
+      const cleanup = () => cancelAnimationFrame(rafId);
+      window.addEventListener("aeris:north-up", cleanup, { once: true });
     };
 
     const onResetView = (event: Event) => {

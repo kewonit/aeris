@@ -12,11 +12,11 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@deck.gl/core": "^9.2.7",
+    "@deck.gl/core": "^9.2.11",
     "@deck.gl/geo-layers": "^9.2.7",
-    "@deck.gl/layers": "^9.2.7",
-    "@deck.gl/mapbox": "^9.2.7",
-    "@deck.gl/mesh-layers": "^9.2.7",
+    "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/mapbox": "^9.2.11",
+    "@deck.gl/mesh-layers": "^9.2.11",
     "@deck.gl/react": "^9.2.7",
     "@loaders.gl/core": "^4.3.4",
     "@loaders.gl/gltf": "^4.3.4",

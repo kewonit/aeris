@@ -16,6 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { DEFAULT_STYLE, type MapStyleSpec } from "@/lib/map-styles";
 
+const GLOBE_MAX_PITCH = 80;
+
 type MapContextValue = {
   map: maplibregl.Map | null;
   isLoaded: boolean;
@@ -66,21 +68,33 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
 
   useImperativeHandle(ref, () => mapInstance as maplibregl.Map, [mapInstance]);
 
+  // Ref that allows style-load callbacks to see the latest value without re-running effects
+  const isDarkRef = useRef(isDark);
+  isDarkRef.current = isDark;
+
+  // ── Map creation ──────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const safePitch = Math.min(pitch, GLOBE_MAX_PITCH);
 
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: DEFAULT_STYLE.style as maplibregl.StyleSpecification | string,
       center,
       zoom,
-      pitch,
+      pitch: safePitch,
       bearing,
       minZoom,
       maxZoom,
-      maxPitch: 85,
+      maxPitch: GLOBE_MAX_PITCH,
       attributionControl: false,
+      // Globe renders the full sphere so world copies are not meaningful.
       renderWorldCopies: false,
+    });
+
+    map.once("style.load", () => {
+      map.setProjection({ type: "globe" });
     });
 
     map.on("load", () => setIsLoaded(true));
@@ -94,12 +108,32 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isDarkRef = useRef(isDark);
-  isDarkRef.current = isDark;
-
+  // Inject globe projection into every style change so it survives style switches.
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
-    mapInstance.setStyle(mapStyle as maplibregl.StyleSpecification | string);
+
+    mapInstance.setStyle(
+      mapStyle as maplibregl.StyleSpecification | string,
+      {
+        transformStyle: (_prev, next) => {
+          (next as Record<string, unknown>).projection = { type: "globe" };
+          if (!(next as Record<string, unknown>).sky) {
+            (next as Record<string, unknown>).sky = {
+              "atmosphere-blend": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                0,
+                1,
+                5,
+                0,
+              ],
+            };
+          }
+          return next;
+        },
+      } as maplibregl.StyleSwapOptions & { transformStyle: unknown },
+    );
 
     const onStyleLoad = () => {
       if (typeof mapStyle === "object" && "terrain" in mapStyle) {

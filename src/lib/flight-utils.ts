@@ -26,7 +26,8 @@ function lerpColor(a: RGB, b: RGB, t: number): RGB {
 export function altitudeToColor(
   altitude: number | null,
 ): [number, number, number, number] {
-  if (altitude === null || !Number.isFinite(altitude)) return [100, 100, 100, 200];
+  if (altitude === null || !Number.isFinite(altitude))
+    return [100, 100, 100, 200];
 
   const normalized = Math.min(Math.max(altitude / MAX_ALTITUDE_METERS, 0), 1);
   const t = Math.pow(normalized, 0.4);

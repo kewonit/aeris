@@ -10,7 +10,7 @@ import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { type TrailEntry } from "@/hooks/use-trail-history";
-import type { PickingInfo } from "@deck.gl/core";
+import { type PickingInfo, MapView } from "@deck.gl/core";
 
 type DeckGLOverlay = MapboxOverlay & {
   pickObject?(opts: {
@@ -33,6 +33,12 @@ const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
 const AIRCRAFT_PX_PER_UNIT = 0.3;
 const BASE_AIRCRAFT_SIZE = 25;
 const AIRCRAFT_PICK_RADIUS_PX = 14;
+
+// At low zoom (globe scale), deck.gl's WebMercatorViewport doesn't match
+// MapLibre's globe projection, causing position errors. Fade layers out
+// below this zoom range and hide completely below the floor.
+const GLOBE_FADE_ZOOM_CEIL = 6.5;
+const GLOBE_FADE_ZOOM_FLOOR = 4.5;
 
 const CATEGORY_TINT: Record<number, [number, number, number]> = {
   2: [100, 235, 180],
@@ -528,6 +534,11 @@ export function FlightLayers({
   const selectionChangeTimeRef = useRef(0);
   const SELECTION_FADE_MS = 600;
 
+  const lastGeoJsonUpdateRef = useRef(0);
+  const lastGeoJsonTimestampRef = useRef(0);
+  const geoJsonClearedRef = useRef(false);
+  const GEOJSON_THROTTLE_MS = 2000;
+
   useEffect(() => {
     flightsRef.current = flights;
     trailsRef.current = trails;
@@ -669,6 +680,9 @@ export function FlightLayers({
     if (!overlayRef.current) {
       overlayRef.current = new MapboxOverlay({
         interleaved: false,
+        // Force WebMercatorViewport — deck.gl's GlobeViewport doesn't match
+        // MapLibre's globe projection. Mercator is sub-pixel accurate at city zoom.
+        views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         layers: [],
       });
@@ -689,6 +703,78 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
+  // Native MapLibre GeoJSON dots for globe zoom where deck.gl layers fade out.
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    const sourceId = "globe-aircraft-source";
+    const layerId = "globe-aircraft-dots";
+
+    if (!map.getSource(sourceId)) {
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getLayer(layerId)) {
+      map.addLayer({
+        id: layerId,
+        type: "circle",
+        source: sourceId,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["exponential", 1.5],
+            ["zoom"],
+            0,
+            1.5,
+            3,
+            2.5,
+            5,
+            3.5,
+            GLOBE_FADE_ZOOM_CEIL,
+            4.5,
+          ],
+          "circle-color": ["get", "color"],
+          "circle-opacity": [
+            "interpolate",
+            ["exponential", 2],
+            ["zoom"],
+            GLOBE_FADE_ZOOM_FLOOR,
+            0.85,
+            GLOBE_FADE_ZOOM_FLOOR + 0.5,
+            0.7,
+            GLOBE_FADE_ZOOM_CEIL - 0.5,
+            0.2,
+            GLOBE_FADE_ZOOM_CEIL,
+            0,
+          ],
+          "circle-stroke-color": "rgba(255, 255, 255, 0.45)",
+          "circle-stroke-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0,
+            0.3,
+            GLOBE_FADE_ZOOM_CEIL,
+            0.8,
+          ],
+          "circle-blur": 0.15,
+        },
+      });
+    }
+
+    return () => {
+      try {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      } catch {
+        /* map already removed */
+      }
+    };
+  }, [map, isLoaded]);
+
   useEffect(() => {
     if (!atlasUrl) return;
 
@@ -697,6 +783,62 @@ export function FlightLayers({
 
       const overlay = overlayRef.current;
       if (!overlay) return;
+
+      const currentZoom = map?.getZoom() ?? 10;
+      const now = performance.now();
+
+      if (currentZoom < GLOBE_FADE_ZOOM_CEIL && map) {
+        const dataChanged =
+          dataTimestampRef.current !== lastGeoJsonTimestampRef.current;
+        const throttleExpired =
+          now - lastGeoJsonUpdateRef.current > GEOJSON_THROTTLE_MS;
+
+        if (dataChanged || throttleExpired) {
+          const src = map.getSource("globe-aircraft-source") as
+            | maplibregl.GeoJSONSource
+            | undefined;
+          if (src) {
+            const features = flightsRef.current
+              .filter((f) => f.longitude != null && f.latitude != null)
+              .map((f) => ({
+                type: "Feature" as const,
+                geometry: {
+                  type: "Point" as const,
+                  coordinates: [f.longitude!, f.latitude!],
+                },
+                properties: {
+                  color: (() => {
+                    const c = altitudeToColor(f.baroAltitude);
+                    return `rgb(${c[0]},${c[1]},${c[2]})`;
+                  })(),
+                },
+              }));
+            src.setData({ type: "FeatureCollection", features });
+            lastGeoJsonUpdateRef.current = now;
+            lastGeoJsonTimestampRef.current = dataTimestampRef.current;
+            geoJsonClearedRef.current = false;
+          }
+        }
+      } else if (map && !geoJsonClearedRef.current) {
+        const src = map.getSource("globe-aircraft-source") as
+          | maplibregl.GeoJSONSource
+          | undefined;
+        if (src) {
+          src.setData({ type: "FeatureCollection", features: [] });
+          geoJsonClearedRef.current = true;
+        }
+      }
+
+      if (currentZoom < GLOBE_FADE_ZOOM_FLOOR) {
+        overlay.setProps({ layers: [] });
+        return;
+      }
+      const linearFade = Math.min(
+        1,
+        (currentZoom - GLOBE_FADE_ZOOM_FLOOR) /
+          (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR),
+      );
+      const globeFade = smoothStep(linearFade);
 
       try {
         const elapsed = performance.now() - dataTimestampRef.current;
@@ -866,6 +1008,7 @@ export function FlightLayers({
             new IconLayer<FlightState>({
               id: "flight-shadows",
               data: visibleFlights,
+              opacity: globeFade,
               getPosition: (d) => [d.longitude!, d.latitude!, 0],
               getIcon: () => "aircraft",
               getSize: (d) => 20 * categorySizeMultiplier(d.category),
@@ -1057,6 +1200,7 @@ export function FlightLayers({
             new PathLayer<TrailEntry>({
               id: "flight-trails",
               data: trailData,
+              opacity: globeFade,
               updateTriggers: {
                 getPath: [elapsed, trailDistanceRef.current],
                 getColor: [elapsed, altColors, trailDistanceRef.current],
@@ -1099,6 +1243,7 @@ export function FlightLayers({
               widthUnits: "pixels",
               widthMinPixels: Math.max(1, trailThicknessRef.current * 0.6),
               widthMaxPixels: Math.max(2, trailThicknessRef.current * 1.8),
+              wrapLongitude: true,
               billboard: true,
               capRounded: true,
               jointRounded: true,
@@ -1151,6 +1296,7 @@ export function FlightLayers({
               new IconLayer({
                 id: `${target.prefix}-halo`,
                 data: [{ position: pos }],
+                opacity: globeFade,
                 getPosition: (d: { position: [number, number, number] }) =>
                   d.position,
                 getIcon: () => "halo",
@@ -1179,6 +1325,7 @@ export function FlightLayers({
               new IconLayer({
                 id: `${target.prefix}-ring-${i}`,
                 data: [{ position: pos }],
+                opacity: globeFade,
                 getPosition: (d: { position: [number, number, number] }) =>
                   d.position,
                 getIcon: () => "ring",
@@ -1198,6 +1345,7 @@ export function FlightLayers({
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
             data: visibleFlights,
+            opacity: globeFade,
             getPosition: (d) => [
               d.longitude!,
               d.latitude!,
