@@ -1,5 +1,4 @@
-import type maplibregl from "maplibre-gl";
-import { MercatorCoordinate } from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 
 export const FPV_DISTANCE_ZOOM_OFFSET = 1.1;
 
@@ -36,11 +35,9 @@ export function fpvZoomForAltitude(altMeters: number): number {
  * Project a geographic position at a given elevation to a screen‐space
  * pixel offset from the map's visual centre.
  *
- * In **Mercator** mode this uses the internal `_pixelMatrix3D` path for
- * elevation‐aware projection.  In **globe** mode (or whenever the internal
- * path is unavailable) it falls back to `map.project()`, which is
- * projection‐agnostic but ignores elevation — callers already handle the
- * `null` return by decaying offsets smoothly.
+ * Uses MapLibre's internal transform.locationToScreenPoint with a synthetic
+ * terrain provider so the correct projection (Globe, Mercator, or the
+ * automatic transition between them) handles elevation natively.
  */
 export function projectLngLatElevationPixelDelta(
   map: maplibregl.Map,
@@ -48,62 +45,44 @@ export function projectLngLatElevationPixelDelta(
   lat: number,
   elevationMeters: number,
 ): { dx: number; dy: number } | null {
-  // Detect globe projection — `map.project()` works on globe too, but
-  // the internal Mercator‐specific 3D pixel matrix is unavailable.
-  const projection = map.getProjection?.();
-  const isGlobe =
-    projection?.type === "globe" || projection?.type === "vertical-perspective";
-
-  if (isGlobe) {
-    // Globe‐safe fallback: use the public project() API.
-    // This doesn't account for the elevation offset, so FPV chase
-    // positioning will be slightly less accurate — acceptable because
-    // the caller (keepInFrame) smooths with decay alphas.
-    try {
-      const screenPt = map.project([lng, lat]);
-      const canvas = map.getCanvas();
-      const cx = canvas.clientWidth / 2;
-      const cy = canvas.clientHeight / 2;
-      if (Number.isFinite(screenPt.x) && Number.isFinite(screenPt.y)) {
-        return { dx: screenPt.x - cx, dy: screenPt.y - cy };
-      }
-    } catch {
-      // point is behind the globe horizon — return null
-    }
-    return null;
-  }
-
-  // Mercator path: use internal 3D pixel matrix for elevation awareness
-  type Transform3DLike = {
-    _pixelMatrix3D?: unknown;
-    centerPoint?: { x: number; y: number };
-    coordinatePoint: (
-      coord: MercatorCoordinate,
-      elevation: number,
-      pixelMatrix3D: unknown,
-    ) => { x: number; y: number } | null;
+  // MapLibre's transform has separate Globe and Mercator implementations of
+  // locationToScreenPoint(lnglat, terrain). Both support elevation when a
+  // terrain-like provider is supplied:
+  //   Mercator: coordinatePoint(coord, elevation, _pixelMatrix3D)
+  //   Globe:    scales surface point by (1 + elevation/earthRadius), then projects
+  // By providing a duck-typed provider that returns our altitude, we get
+  // elevation-aware projection in every mode without touching internals.
+  type TransformLike = {
+    locationToScreenPoint: (
+      lnglat: maplibregl.LngLat,
+      terrain: unknown,
+    ) => { x: number; y: number };
   };
 
-  const tr = (map as unknown as { transform?: Transform3DLike }).transform;
-  if (!tr || typeof tr.coordinatePoint !== "function") return null;
+  const tr = (map as unknown as { transform?: TransformLike }).transform;
+  if (!tr || typeof tr.locationToScreenPoint !== "function") return null;
 
-  const pixelMatrix3D = tr._pixelMatrix3D;
-  const centerPoint = tr.centerPoint;
-  if (!pixelMatrix3D || !centerPoint) return null;
+  const fakeTerrain = {
+    getElevationForLngLat: () => elevationMeters,
+    getElevationForLngLatZoom: () => elevationMeters,
+  };
 
-  let p: { x: number; y: number } | null = null;
   try {
-    p = tr.coordinatePoint(
-      MercatorCoordinate.fromLngLat({ lng, lat }),
-      elevationMeters,
-      pixelMatrix3D,
-    );
+    const lnglat = new maplibregl.LngLat(lng, lat);
+    const screenPt = tr.locationToScreenPoint(lnglat, fakeTerrain);
+
+    if (!Number.isFinite(screenPt.x) || !Number.isFinite(screenPt.y)) {
+      return null;
+    }
+
+    const canvas = map.getCanvas();
+    const cx = canvas.clientWidth / 2;
+    const cy = canvas.clientHeight / 2;
+    return { dx: screenPt.x - cx, dy: screenPt.y - cy };
   } catch {
+    // Point may be behind the globe horizon
     return null;
   }
-
-  if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
-  return { dx: p.x - centerPoint.x, dy: p.y - centerPoint.y };
 }
 
 export function setMapInteractionsEnabled(
