@@ -8,6 +8,7 @@ import {
   Map as MapIcon,
   Settings,
   Keyboard,
+  Globe,
   X,
   Check,
   MapPin,
@@ -42,10 +43,12 @@ const MAIN_TABS: {
   { id: "search", icon: Search, label: "Search" },
   { id: "style", icon: MapIcon, label: "Map Style" },
   { id: "settings", icon: Settings, label: "Settings" },
-  { id: "shortcuts", icon: Keyboard, label: "Shortcuts" },
 ];
 
-const PANEL_TABS = MAIN_TABS;
+const PANEL_TABS = [
+  ...MAIN_TABS,
+  { id: "shortcuts" as TabId, icon: Keyboard, label: "Shortcuts" },
+];
 
 type ControlPanelProps = {
   activeCity: City;
@@ -55,6 +58,8 @@ type ControlPanelProps = {
   flights: FlightState[];
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
+  globeMode: boolean;
+  onToggleGlobe: () => void;
 };
 
 export function ControlPanel({
@@ -65,6 +70,8 @@ export function ControlPanel({
   flights,
   activeFlightIcao24,
   onLookupFlight,
+  globeMode,
+  onToggleGlobe,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
 
@@ -106,6 +113,29 @@ export function ControlPanel({
           <Icon className="h-4 w-4" />
         </motion.button>
       ))}
+
+      <motion.button
+        onClick={onToggleGlobe}
+        className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+        style={{
+          borderWidth: 1,
+          borderColor: globeMode
+            ? "rgb(var(--ui-fg) / 0.18)"
+            : "rgb(var(--ui-fg) / 0.06)",
+          backgroundColor: globeMode
+            ? "rgb(var(--ui-fg) / 0.1)"
+            : "rgb(var(--ui-fg) / 0.03)",
+          color: globeMode
+            ? "rgb(var(--ui-fg) / 0.85)"
+            : "rgb(var(--ui-fg) / 0.5)",
+        }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label={globeMode ? "Switch to Mercator" : "Switch to Globe"}
+        title={globeMode ? "Globe mode (on)" : "Globe mode (off)"}
+      >
+        <Globe className="h-4 w-4" />
+      </motion.button>
 
       <AnimatePresence>
         {openTab && (
@@ -938,6 +968,16 @@ function SettingsContent() {
           description="Color aircraft and trails by altitude"
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
+        />
+
+        <div className="mx-3 my-2 h-px bg-white/4" />
+
+        <SettingRow
+          icon={<Globe className="h-4 w-4" />}
+          title="Globe mode"
+          description="Display earth as a 3D sphere when zoomed out"
+          checked={settings.globeMode}
+          onChange={(v) => update("globeMode", v)}
         />
 
         <div className="mx-3 my-2 h-px bg-white/4" />

@@ -23,6 +23,7 @@ export type Settings = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   fpvChaseDistance: number;
+  globeMode: boolean;
 };
 
 const TRAIL_THICKNESS_MIN = 1;
@@ -66,6 +67,7 @@ const DEFAULT_SETTINGS: Settings = {
   showShadows: true,
   showAltitudeColors: true,
   fpvChaseDistance: 0.0048,
+  globeMode: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -99,7 +101,8 @@ function isValidSettings(obj: unknown): obj is Settings {
     typeof s.fpvChaseDistance === "number" &&
     Number.isFinite(s.fpvChaseDistance) &&
     s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
-    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX
+    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
+    typeof s.globeMode === "boolean"
   );
 }
 

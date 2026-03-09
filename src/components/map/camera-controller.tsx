@@ -389,8 +389,13 @@ export function CameraController({
   useEffect(() => {
     if (!map || !isLoaded || !city) return;
 
+    // Track active north-up animation RAF so we can cancel on cleanup.
+    let northUpRafId: number | undefined;
+
     const onNorthUp = () => {
       if (isFpvActiveRef.current) return;
+      // Cancel any in-flight animation before starting a new one.
+      if (northUpRafId != null) cancelAnimationFrame(northUpRafId);
       // Animate via setBearing to avoid globe "easing around a point" warning.
       const startBearing = map.getBearing();
       const delta = ((0 - startBearing + 540) % 360) - 180;
@@ -400,18 +405,17 @@ export function CameraController({
       }
       const duration = 650;
       const start = performance.now();
-      let rafId: number;
       function animateBearing() {
         const t = Math.min((performance.now() - start) / duration, 1);
         const eased = smoothstep(t);
         map!.setBearing(startBearing + delta * eased);
         if (t < 1) {
-          rafId = requestAnimationFrame(animateBearing);
+          northUpRafId = requestAnimationFrame(animateBearing);
+        } else {
+          northUpRafId = undefined;
         }
       }
-      rafId = requestAnimationFrame(animateBearing);
-      const cleanup = () => cancelAnimationFrame(rafId);
-      window.addEventListener("aeris:north-up", cleanup, { once: true });
+      northUpRafId = requestAnimationFrame(animateBearing);
     };
 
     const onResetView = (event: Event) => {
@@ -432,6 +436,7 @@ export function CameraController({
     window.addEventListener("aeris:reset-view", onResetView);
 
     return () => {
+      if (northUpRafId != null) cancelAnimationFrame(northUpRafId);
       window.removeEventListener("aeris:north-up", onNorthUp);
       window.removeEventListener("aeris:reset-view", onResetView);
     };

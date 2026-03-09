@@ -14,6 +14,8 @@ import {
   Building2,
   Eye,
 } from "lucide-react";
+import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
+import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import type { FlightState } from "@/lib/opensky";
 import {
   metersToFeet,
@@ -341,6 +343,8 @@ export function FlightCard({
                 </div>
               )}
             </div>
+
+            <PhotoSection icao24={flight.icao24} />
           </div>
         </motion.div>
       )}
@@ -366,6 +370,18 @@ function squawkLabel(squawk: string): string {
     default:
       return "";
   }
+}
+
+function PhotoSection({ icao24 }: { icao24: string }) {
+  const { photos, aircraft, loading, error } = useAircraftPhotos(icao24);
+  return (
+    <AircraftPhotos
+      photos={photos}
+      loading={loading}
+      aircraft={aircraft}
+      error={error}
+    />
+  );
 }
 
 function Metric({

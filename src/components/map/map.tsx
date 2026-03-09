@@ -50,6 +50,7 @@ type MapProps = {
   mapStyle?: MapStyleSpec;
   terrainProfile?: TerrainProfile;
   isDark?: boolean;
+  globeMode?: boolean;
   center?: [number, number];
   zoom?: number;
   pitch?: number;
@@ -67,6 +68,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     mapStyle = DEFAULT_STYLE.style,
     terrainProfile = "none",
     isDark = true,
+    globeMode = false,
     center = [0, 20],
     zoom = 2.5,
     pitch = 49,
@@ -86,6 +88,9 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   const isDarkRef = useRef(isDark);
   isDarkRef.current = isDark;
 
+  const globeModeRef = useRef(globeMode);
+  globeModeRef.current = globeMode;
+
   // ── Map creation ──────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -104,12 +109,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       maxPitch: GLOBE_MAX_PITCH,
       attributionControl: false,
       cancelPendingTileRequestsWhileZooming: true,
-      // Globe renders the full sphere so world copies are not meaningful.
       renderWorldCopies: false,
-    });
-
-    map.once("style.load", () => {
-      map.setProjection({ type: "globe" });
     });
 
     map.on("load", () => setIsLoaded(true));
@@ -123,7 +123,8 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Inject globe projection into every style change so it survives style switches.
+  // Inject globe projection into every style change when globe mode is on.
+  // In Mercator mode, skip projection injection entirely.
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
 
@@ -132,19 +133,22 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       {
         transformStyle: (_prev, next) => {
           const style = next as MutableStyleSpecification;
-          style.projection = { type: "globe" };
-          if (!style.sky) {
-            style.sky = {
-              "atmosphere-blend": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                0,
-                1,
-                5,
-                0,
-              ],
-            };
+
+          if (globeMode) {
+            style.projection = { type: "globe" };
+            if (!style.sky) {
+              style.sky = {
+                "atmosphere-blend": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  0,
+                  1,
+                  5,
+                  0,
+                ],
+              };
+            }
           }
 
           if (terrainProfile === "dark") {
@@ -157,15 +161,16 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       } as maplibregl.StyleSwapOptions & { transformStyle: unknown },
     );
 
-    const onStyleLoad = () => {
+    // Set projection imperatively so it takes effect immediately.
+    mapInstance.once("style.load", () => {
+      mapInstance.setProjection({ type: globeMode ? "globe" : "mercator" });
       addAerowayLayers(mapInstance, isDarkRef.current);
-    };
-    mapInstance.once("style.load", onStyleLoad);
+    });
 
     return () => {
-      mapInstance.off("style.load", onStyleLoad);
+      mapInstance.off("style.load", () => {});
     };
-  }, [mapInstance, isLoaded, mapStyle, terrainProfile]);
+  }, [mapInstance, isLoaded, mapStyle, terrainProfile, globeMode]);
 
   const ctx = useMemo(
     () => ({ map: mapInstance, isLoaded }),
