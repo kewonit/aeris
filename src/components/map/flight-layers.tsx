@@ -1,549 +1,51 @@
 "use client";
 
-import { useEffect, useRef, useCallback, type MutableRefObject } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { IconLayer, PathLayer } from "@deck.gl/layers";
+import { IconLayer } from "@deck.gl/layers";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
-import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import { type TrailEntry } from "@/hooks/use-trail-history";
 import { type PickingInfo, MapView } from "@deck.gl/core";
-import { roundSharpCorners2D } from "@/lib/trail-smoothing";
 
-type DeckGLOverlay = MapboxOverlay & {
-  pickObject?(opts: {
-    x: number;
-    y: number;
-    radius: number;
-  }): PickingInfo | null;
-};
+import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
+import {
+  DEFAULT_ANIM_DURATION_MS,
+  MIN_ANIM_DURATION_MS,
+  MAX_ANIM_DURATION_MS,
+  TELEPORT_THRESHOLD,
+  TRACK_DAMPING,
+  AIRCRAFT_SCENEGRAPH_URL,
+  AIRCRAFT_PX_PER_UNIT,
+  BASE_AIRCRAFT_SIZE,
+  AIRCRAFT_PICK_RADIUS_PX,
+  GLOBE_FADE_ZOOM_FLOOR,
+  GLOBE_FADE_ZOOM_CEIL,
+  type FlightLayerProps,
+} from "./flight-layer-constants";
 
-const DEFAULT_ANIM_DURATION_MS = 30_000;
-const MIN_ANIM_DURATION_MS = 8_000;
-const MAX_ANIM_DURATION_MS = 45_000;
-const TELEPORT_THRESHOLD = 0.3;
-const TRAIL_BELOW_AIRCRAFT_METERS = 40;
-const STARTUP_TRAIL_POLLS = 3;
-const STARTUP_TRAIL_STEP_SEC = 12;
-const TRACK_DAMPING = 0.18;
-const TRAIL_SMOOTHING_ITERATIONS = 3;
-const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
-const AIRCRAFT_PX_PER_UNIT = 0.3;
-const BASE_AIRCRAFT_SIZE = 25;
-const AIRCRAFT_PICK_RADIUS_PX = 14;
+import {
+  categorySizeMultiplier,
+  tintAircraftColor,
+  AIRCRAFT_ICON_MAPPING,
+  getHaloUrl,
+  getRingUrl,
+  getAircraftAtlasUrl,
+} from "./aircraft-appearance";
 
-// MapLibre's globe projection transitions to Mercator internally around
-// zoom 12. At low zoom the forced WebMercatorViewport diverges from globe.
-// Fade deck.gl layers out in a tight 0.5-zoom band and use native GeoJSON
-// dots below. At zoom 5.5+ the centre-of-viewport error is < 2px.
-const GLOBE_FADE_ZOOM_CEIL = 5.5;
-const GLOBE_FADE_ZOOM_FLOOR = 5.0;
+import {
+  lerpAngle,
+  smoothStep,
+  computePitchByIcao,
+  computeInterpolatedFlights,
+} from "./flight-animation-helpers";
 
-const CATEGORY_TINT: Record<number, [number, number, number]> = {
-  2: [100, 235, 180],
-  3: [120, 225, 235],
-  4: [255, 210, 120],
-  5: [255, 185, 110],
-  6: [255, 160, 120],
-  7: [255, 120, 200],
-  8: [140, 220, 160],
-  9: [170, 210, 255],
-  10: [220, 170, 255],
-  11: [255, 150, 180],
-  12: [180, 230, 160],
-  14: [195, 165, 255],
-};
-
-function categorySizeMultiplier(category: number | null): number {
-  switch (category) {
-    case 2:
-      return 0.88;
-    case 3:
-      return 0.96;
-    case 4:
-      return 1.08;
-    case 5:
-      return 1.18;
-    case 6:
-      return 1.28;
-    case 7:
-      return 1.04;
-    case 8:
-      return 0.86;
-    case 9:
-    case 12:
-      return 0.8;
-    case 10:
-      return 1.15;
-    case 14:
-      return 0.72;
-    default:
-      return 1;
-  }
-}
-
-function tintAircraftColor(
-  base: [number, number, number, number],
-  category: number | null,
-): [number, number, number, number] {
-  const tint = category !== null ? CATEGORY_TINT[category] : undefined;
-  if (!tint) return base;
-
-  return [
-    Math.round(base[0] * 0.58 + tint[0] * 0.42),
-    Math.round(base[1] * 0.58 + tint[1] * 0.42),
-    Math.round(base[2] * 0.58 + tint[2] * 0.42),
-    base[3],
-  ];
-}
-
-const PULSE_PERIOD_MS = 7000;
-const RING_PERIOD_MS = 5500;
-
-function createHaloAtlas(): HTMLCanvasElement {
-  const size = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, size, size);
-  const c = size / 2;
-  for (let r = 0; r < c; r++) {
-    const norm = r / c;
-    let alpha = 0;
-    if (norm < 0.18) {
-      alpha = 0;
-    } else if (norm < 0.35) {
-      const t = (norm - 0.18) / 0.17;
-      alpha = t * t * 0.7;
-    } else if (norm < 0.55) {
-      alpha = 0.7 - ((norm - 0.35) / 0.2) * 0.3;
-    } else {
-      const t = (norm - 0.55) / 0.45;
-      alpha = 0.4 * (1 - t) * (1 - t);
-    }
-    if (alpha < 0.003) continue;
-    ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(c, c, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  return canvas;
-}
-
-function createSoftRingAtlas(): HTMLCanvasElement {
-  const size = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, size, size);
-  const c = size / 2;
-  const ringCenter = c * 0.75;
-  const ringWidth = c * 0.18;
-  for (let r = 0; r < c; r++) {
-    const dist = Math.abs(r - ringCenter);
-    const falloff = Math.max(0, 1 - (dist / ringWidth) ** 2);
-    const alpha = falloff * 0.85;
-    if (alpha < 0.005) continue;
-    ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(c, c, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  return canvas;
-}
-
-const HALO_MAPPING = {
-  halo: {
-    x: 0,
-    y: 0,
-    width: 256,
-    height: 256,
-    anchorX: 128,
-    anchorY: 128,
-    mask: true,
-  },
-};
-
-const RING_MAPPING = {
-  ring: {
-    x: 0,
-    y: 0,
-    width: 256,
-    height: 256,
-    anchorX: 128,
-    anchorY: 128,
-    mask: true,
-  },
-};
-
-let _haloCache: string | undefined;
-function getHaloUrl(): string {
-  if (typeof document === "undefined") return "";
-  if (!_haloCache) _haloCache = createHaloAtlas().toDataURL();
-  return _haloCache;
-}
-
-let _ringCache: string | undefined;
-function getRingUrl(): string {
-  if (typeof document === "undefined") return "";
-  if (!_ringCache) _ringCache = createSoftRingAtlas().toDataURL();
-  return _ringCache;
-}
-
-function buildStartupFallbackTrail(f: FlightState): [number, number][] {
-  if (f.longitude == null || f.latitude == null) return [];
-
-  const heading =
-    ((Number.isFinite(f.trueTrack) ? f.trueTrack! : 0) * Math.PI) / 180;
-  const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
-  const degPerSecond = speed / 111_320;
-
-  const path: [number, number][] = [];
-  for (let i = STARTUP_TRAIL_POLLS; i >= 1; i--) {
-    const distDeg = Math.min(degPerSecond * STARTUP_TRAIL_STEP_SEC * i, 0.08);
-    path.push([
-      f.longitude - Math.sin(heading) * distDeg,
-      f.latitude - Math.cos(heading) * distDeg,
-    ]);
-  }
-  path.push([f.longitude, f.latitude]);
-  return path;
-}
-
-type Snapshot = { lng: number; lat: number; alt: number; track: number };
-
-function lerpAngle(a: number, b: number, t: number): number {
-  const delta = ((b - a + 540) % 360) - 180;
-  return a + delta * t;
-}
-
-function trackFromDelta(dx: number, dy: number, fallback: number): number {
-  if (dx * dx + dy * dy < 1e-10) return fallback;
-  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-}
-
-function smoothStep(t: number): number {
-  return t * t * (3 - 2 * t);
-}
-
-function horizontalDistanceFromLngLat(
-  aLng: number,
-  aLat: number,
-  bLng: number,
-  bLat: number,
-): number {
-  const avgLatRad = ((aLat + bLat) * 0.5 * Math.PI) / 180;
-  const metersPerDegLon = 111_320 * Math.max(0.2, Math.cos(avgLatRad));
-  const dx = (bLng - aLng) * metersPerDegLon;
-  const dy = (bLat - aLat) * 111_320;
-  return Math.hypot(dx, dy);
-}
-
-function horizontalDistanceMeters(a: Snapshot, b: Snapshot): number {
-  return horizontalDistanceFromLngLat(a.lng, a.lat, b.lng, b.lat);
-}
-
-function trimAfterLargeJump(
-  path: [number, number][],
-  altitudes: Array<number | null>,
-  maxJumpDeg: number,
-): { path: [number, number][]; altitudes: Array<number | null> } {
-  if (path.length < 2) return { path, altitudes };
-
-  const maxJumpSq = maxJumpDeg * maxJumpDeg;
-  let start = 0;
-  for (let i = path.length - 2; i >= 0; i--) {
-    const a = path[i];
-    const b = path[i + 1];
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    if (dx * dx + dy * dy > maxJumpSq) {
-      start = i + 1;
-      break;
-    }
-  }
-
-  if (start > 0) {
-    start = Math.min(start, path.length - 2);
-    return {
-      path: path.slice(start),
-      altitudes: altitudes.slice(start),
-    };
-  }
-
-  return { path, altitudes };
-}
-
-type ElevatedPoint = [number, number, number];
-
-function smoothElevatedPath(
-  points: ElevatedPoint[],
-  iterations: number = TRAIL_SMOOTHING_ITERATIONS,
-): ElevatedPoint[] {
-  if (points.length < 3 || iterations <= 0) return points;
-
-  let current = points;
-  for (let iter = 0; iter < iterations; iter++) {
-    if (current.length < 3) break;
-
-    const next: ElevatedPoint[] = [current[0]];
-    for (let i = 0; i < current.length - 1; i++) {
-      const a = current[i];
-      const b = current[i + 1];
-      next.push([
-        a[0] * 0.75 + b[0] * 0.25,
-        a[1] * 0.75 + b[1] * 0.25,
-        a[2] * 0.75 + b[2] * 0.25,
-      ]);
-      next.push([
-        a[0] * 0.25 + b[0] * 0.75,
-        a[1] * 0.25 + b[1] * 0.75,
-        a[2] * 0.25 + b[2] * 0.75,
-      ]);
-    }
-    next.push(current[current.length - 1]);
-    current = next;
-  }
-
-  return current;
-}
-
-function densifyElevatedPath(
-  points: ElevatedPoint[],
-  subdivisions: number = 2,
-): ElevatedPoint[] {
-  if (points.length < 2 || subdivisions <= 1) return points;
-
-  const out: ElevatedPoint[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    out.push(a);
-    for (let j = 1; j < subdivisions; j++) {
-      const t = j / subdivisions;
-      out.push([
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t,
-      ]);
-    }
-  }
-  out.push(points[points.length - 1]);
-  return out;
-}
-
-function smoothNumericSeries(values: number[]): number[] {
-  if (values.length < 3) return values;
-  const out = [...values];
-  for (let i = 1; i < values.length - 1; i++) {
-    out[i] = values[i - 1] * 0.2 + values[i] * 0.6 + values[i + 1] * 0.2;
-  }
-  return out;
-}
-
-function smoothPlanarPath(points: [number, number][]): [number, number][] {
-  if (points.length < 3) return points;
-
-  // First, remove spike points that would create V-shaped artifacts.
-  let current: [number, number][] = removePlanarSpikes(points);
-
-  // Round sharp corners (>15°) with Bézier arcs so the subsequent
-  // averaging has intermediate points to work with instead of a V.
-  current = roundSharpCorners2D(current, 15);
-
-  for (let pass = 0; pass < 6; pass++) {
-    const next = [...current];
-    for (let i = 1; i < current.length - 1; i++) {
-      next[i] = [
-        current[i - 1][0] * 0.2 + current[i][0] * 0.6 + current[i + 1][0] * 0.2,
-        current[i - 1][1] * 0.2 + current[i][1] * 0.6 + current[i + 1][1] * 0.2,
-      ];
-    }
-    current = next;
-  }
-
-  return current;
-}
-
-/** Remove points that create sharp reversals (V-spikes) in a 2D path. */
-function removePlanarSpikes(points: [number, number][]): [number, number][] {
-  if (points.length < 3) return points;
-
-  const keep: boolean[] = new Array(points.length).fill(true);
-  const COS_THRESHOLD = -0.5; // reject turns sharper than 120°
-
-  for (let pass = 0; pass < 2; pass++) {
-    let changed = false;
-    for (let i = 1; i < points.length - 1; i++) {
-      if (!keep[i]) continue;
-      let prevIdx = i - 1;
-      while (prevIdx >= 0 && !keep[prevIdx]) prevIdx--;
-      if (prevIdx < 0) continue;
-      let nextIdx = i + 1;
-      while (nextIdx < points.length && !keep[nextIdx]) nextIdx++;
-      if (nextIdx >= points.length) continue;
-
-      const dx1 = points[i][0] - points[prevIdx][0];
-      const dy1 = points[i][1] - points[prevIdx][1];
-      const dx2 = points[nextIdx][0] - points[i][0];
-      const dy2 = points[nextIdx][1] - points[i][1];
-      const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-      const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-      if (len1 < 1e-10 || len2 < 1e-10) continue;
-
-      const cos = (dx1 * dx2 + dy1 * dy2) / (len1 * len2);
-      if (cos < COS_THRESHOLD) {
-        keep[i] = false;
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  if (keep.every(Boolean)) return points;
-  return points.filter((_, i) => keep[i]);
-}
-
-function trimPathAheadOfAircraft(
-  points: ElevatedPoint[],
-  aircraft: ElevatedPoint,
-): ElevatedPoint[] {
-  if (points.length < 2) return [aircraft];
-
-  const px = aircraft[0];
-  const py = aircraft[1];
-
-  let bestIndex = points.length - 2;
-  let bestDistanceSq = Number.POSITIVE_INFINITY;
-  // Dense splined paths may need a wider search window to find the
-  // closest segment to the aircraft position.
-  const searchStart = Math.max(0, points.length - 40);
-
-  for (let i = searchStart; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    const denom = dx * dx + dy * dy;
-    const t =
-      denom > 1e-12
-        ? Math.max(
-            0,
-            Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / denom),
-          )
-        : 0;
-    const qx = a[0] + dx * t;
-    const qy = a[1] + dy * t;
-    const distSq = (px - qx) * (px - qx) + (py - qy) * (py - qy);
-
-    if (distSq < bestDistanceSq) {
-      bestDistanceSq = distSq;
-      bestIndex = i;
-    }
-  }
-
-  const trimmed = points.slice(0, bestIndex + 1);
-  trimmed.push([px, py, aircraft[2]]);
-
-  return trimmed;
-}
-
-function createAircraftAtlas(): HTMLCanvasElement {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-
-  ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = "#ffffff";
-
-  ctx.beginPath();
-  ctx.moveTo(64, 6);
-  ctx.lineTo(71, 19);
-  ctx.lineTo(71, 33);
-  ctx.lineTo(100, 44);
-  ctx.lineTo(106, 52);
-  ctx.lineTo(80, 53);
-  ctx.lineTo(72, 56);
-  ctx.lineTo(72, 88);
-  ctx.lineTo(90, 101);
-  ctx.lineTo(88, 108);
-  ctx.lineTo(69, 99);
-  ctx.lineTo(69, 121);
-  ctx.lineTo(64, 126);
-  ctx.lineTo(59, 121);
-  ctx.lineTo(59, 99);
-  ctx.lineTo(40, 108);
-  ctx.lineTo(38, 101);
-  ctx.lineTo(56, 88);
-  ctx.lineTo(56, 56);
-  ctx.lineTo(48, 53);
-  ctx.lineTo(22, 52);
-  ctx.lineTo(28, 44);
-  ctx.lineTo(57, 33);
-  ctx.lineTo(57, 19);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.beginPath();
-  ctx.moveTo(64, 13);
-  ctx.lineTo(67, 19);
-  ctx.lineTo(64, 24);
-  ctx.lineTo(61, 19);
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
-
-  return canvas;
-}
-
-const AIRCRAFT_ICON_MAPPING = {
-  aircraft: {
-    x: 0,
-    y: 0,
-    width: 128,
-    height: 128,
-    anchorX: 64,
-    anchorY: 64,
-    mask: true,
-  },
-};
-
-let _atlasCache: string | undefined;
-function getAircraftAtlasUrl(): string {
-  if (typeof document === "undefined") return "";
-  if (!_atlasCache) _atlasCache = createAircraftAtlas().toDataURL();
-  return _atlasCache;
-}
-
-type FlightLayerProps = {
-  flights: FlightState[];
-  trails: TrailEntry[];
-  onClick: (info: PickingInfo<FlightState> | null) => void;
-  selectedIcao24: string | null;
-  showTrails: boolean;
-  trailThickness: number;
-  trailDistance: number;
-  showShadows: boolean;
-  showAltitudeColors: boolean;
-  globeMode?: boolean;
-  fpvIcao24?: string | null;
-  fpvPositionRef?: MutableRefObject<{
-    lng: number;
-    lat: number;
-    alt: number;
-    track: number;
-  } | null>;
-};
+import { buildTrailLayers } from "./flight-layer-builders";
+import { buildSelectionPulseLayers } from "./flight-layer-builders";
+import { useGlobeDots } from "./use-globe-dots";
 
 export function FlightLayers({
   flights,
@@ -585,14 +87,16 @@ export function FlightLayers({
   const fpvPosRef = useRef(fpvPositionRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
-  const SELECTION_FADE_MS = 600;
 
-  const lastGeoJsonUpdateRef = useRef(0);
-  const lastGeoJsonTimestampRef = useRef(0);
-  const geoJsonClearedRef = useRef(false);
-  const globeZoomEnteredAtRef = useRef(0); // timestamp when zoom first dipped below CEIL
-  const GEOJSON_THROTTLE_MS = 2000;
-  const GEOJSON_DEBOUNCE_MS = 600; // don't show dots until zoom stays low for this long
+  const { updateGlobeDots } = useGlobeDots(
+    map,
+    isLoaded,
+    flightsRef,
+    dataTimestampRef,
+    onClickRef,
+  );
+
+  // ── Sync props into refs ───────────────────────────────────────────
 
   useEffect(() => {
     flightsRef.current = flights;
@@ -625,6 +129,8 @@ export function FlightLayers({
     fpvIcao24,
     fpvPositionRef,
   ]);
+
+  // ── Snapshot interpolation on new data ─────────────────────────────
 
   useEffect(() => {
     const elapsed = performance.now() - dataTimestampRef.current;
@@ -686,6 +192,8 @@ export function FlightLayers({
     dataTimestampRef.current = now;
   }, [flights]);
 
+  // ── Cursor management ──────────────────────────────────────────────
+
   const handleHover = useCallback(
     (info: PickingInfo<FlightState>) => {
       const canvas = map?.getCanvas();
@@ -707,6 +215,8 @@ export function FlightLayers({
     },
     [onClick],
   );
+
+  // ── Map click pass-through ─────────────────────────────────────────
 
   useEffect(() => {
     if (!map || !isLoaded) return;
@@ -733,15 +243,14 @@ export function FlightLayers({
     };
   }, [map, isLoaded, onClick]);
 
+  // ── Overlay lifecycle ──────────────────────────────────────────────
+
   useEffect(() => {
     if (!map || !isLoaded) return;
 
     if (!overlayRef.current) {
       overlayRef.current = new MapboxOverlay({
         interleaved: false,
-        // Force WebMercatorViewport — deck.gl's auto-detected GlobeViewport
-        // doesn't match MapLibre's camera at non-zero pitch, causing aircraft
-        // to render in the sky. Mercator is sub-pixel accurate at city zoom.
         views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         layers: [],
@@ -763,108 +272,7 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
-  // Native MapLibre GeoJSON dots for globe zoom where deck.gl layers fade out.
-  useEffect(() => {
-    if (!map || !isLoaded) return;
-
-    const sourceId = "globe-aircraft-source";
-    const layerId = "globe-aircraft-dots";
-
-    // Extracted so we can call on initial mount AND after every style change
-    // (MapLibre clears custom sources/layers when setStyle is called).
-    const ensureGlobeLayers = () => {
-      if (!map.getSource(sourceId)) {
-        map.addSource(sourceId, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-      }
-
-      if (!map.getLayer(layerId)) {
-        map.addLayer({
-          id: layerId,
-          type: "circle",
-          source: sourceId,
-          paint: {
-            "circle-radius": [
-              "interpolate",
-              ["exponential", 1.5],
-              ["zoom"],
-              0,
-              1.5,
-              3,
-              2.5,
-              5,
-              3.5,
-              GLOBE_FADE_ZOOM_CEIL,
-              4.5,
-            ],
-            "circle-color": ["get", "color"],
-            "circle-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              GLOBE_FADE_ZOOM_FLOOR,
-              0.85,
-              GLOBE_FADE_ZOOM_CEIL,
-              0,
-            ],
-            "circle-stroke-color": "rgba(255, 255, 255, 0.45)",
-            "circle-stroke-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              0,
-              0.3,
-              GLOBE_FADE_ZOOM_CEIL,
-              0.8,
-            ],
-            "circle-blur": 0.15,
-          },
-        });
-      }
-    };
-
-    ensureGlobeLayers();
-    map.on("style.load", ensureGlobeLayers);
-
-    // Click handler for GeoJSON globe dots — find the matching flight and
-    // forward it through the same onClick callback deck.gl layers use.
-    const onDotClick = (
-      e: maplibregl.MapMouseEvent & { features?: maplibregl.GeoJSONFeature[] },
-    ) => {
-      const icao24 = e.features?.[0]?.properties?.icao24;
-      if (!icao24) return;
-      const flight = flightsRef.current.find((f) => f.icao24 === icao24);
-      if (flight) {
-        onClickRef.current({ object: flight } as PickingInfo<FlightState>);
-      }
-    };
-    map.on("click", layerId, onDotClick);
-
-    // Pointer cursor on hover over dots.
-    const onDotEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onDotLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-    map.on("mouseenter", layerId, onDotEnter);
-    map.on("mouseleave", layerId, onDotLeave);
-
-    return () => {
-      map.off("style.load", ensureGlobeLayers);
-      map.off("click", layerId, onDotClick);
-      map.off("mouseenter", layerId, onDotEnter);
-      map.off("mouseleave", layerId, onDotLeave);
-      try {
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-      } catch {
-        /* map already removed */
-      }
-    };
-  }, [map, isLoaded]);
+  // ── Main animation loop ────────────────────────────────────────────
 
   useEffect(() => {
     if (!atlasUrl) return;
@@ -879,76 +287,8 @@ export function FlightLayers({
       const now = performance.now();
       const isGlobe = globeModeRef.current;
 
-      // In globe mode, manage GeoJSON dot layer for low-zoom fallback.
-      // In Mercator mode, skip entirely — deck.gl is always accurate.
-      if (isGlobe) {
-        if (currentZoom < GLOBE_FADE_ZOOM_CEIL && map) {
-          // Debounce: don't populate dots until zoom has stayed below CEIL
-          // for at least GEOJSON_DEBOUNCE_MS. Prevents flash during flyTo.
-          if (globeZoomEnteredAtRef.current === 0) {
-            globeZoomEnteredAtRef.current = now;
-          }
-          const stableMs = now - globeZoomEnteredAtRef.current;
+      updateGlobeDots(isGlobe, currentZoom, now);
 
-          if (stableMs >= GEOJSON_DEBOUNCE_MS) {
-            const dataChanged =
-              dataTimestampRef.current !== lastGeoJsonTimestampRef.current;
-            const throttleExpired =
-              now - lastGeoJsonUpdateRef.current > GEOJSON_THROTTLE_MS;
-
-            if (dataChanged || throttleExpired) {
-              const src = map.getSource("globe-aircraft-source") as
-                | maplibregl.GeoJSONSource
-                | undefined;
-              if (src) {
-                const features = flightsRef.current
-                  .filter((f) => f.longitude != null && f.latitude != null)
-                  .map((f) => ({
-                    type: "Feature" as const,
-                    geometry: {
-                      type: "Point" as const,
-                      coordinates: [f.longitude!, f.latitude!],
-                    },
-                    properties: {
-                      icao24: f.icao24,
-                      color: (() => {
-                        const c = altitudeToColor(f.baroAltitude);
-                        return `rgb(${c[0]},${c[1]},${c[2]})`;
-                      })(),
-                    },
-                  }));
-                src.setData({ type: "FeatureCollection", features });
-                lastGeoJsonUpdateRef.current = now;
-                lastGeoJsonTimestampRef.current = dataTimestampRef.current;
-                geoJsonClearedRef.current = false;
-              }
-            }
-          }
-        } else {
-          // Zoom is above CEIL — reset debounce timer and clear dots.
-          globeZoomEnteredAtRef.current = 0;
-          if (map && !geoJsonClearedRef.current) {
-            const src = map.getSource("globe-aircraft-source") as
-              | maplibregl.GeoJSONSource
-              | undefined;
-            if (src) {
-              src.setData({ type: "FeatureCollection", features: [] });
-              geoJsonClearedRef.current = true;
-            }
-          }
-        }
-      } else if (map && !geoJsonClearedRef.current) {
-        // Mercator mode — ensure GeoJSON source is cleared.
-        const src = map.getSource("globe-aircraft-source") as
-          | maplibregl.GeoJSONSource
-          | undefined;
-        if (src) {
-          src.setData({ type: "FeatureCollection", features: [] });
-          geoJsonClearedRef.current = true;
-        }
-      }
-
-      // In Mercator mode, deck.gl is always fully visible (no fade).
       let globeFade = 1;
       if (isGlobe) {
         if (currentZoom < GLOBE_FADE_ZOOM_FLOOR) {
@@ -971,74 +311,29 @@ export function FlightLayers({
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
-        const trailByIcao = new Map(currentTrails.map((t) => [t.icao24, t]));
         const altColors = showAltColorsRef.current;
         const defaultColor: [number, number, number, number] = [
           180, 220, 255, 200,
         ];
 
-        const interpolated: FlightState[] = currentFlights.map((f) => {
-          if (f.longitude == null || f.latitude == null) return f;
-
-          const curr = currSnapshotsRef.current.get(f.icao24);
-          if (!curr) return f;
-
-          const prev = prevSnapshotsRef.current.get(f.icao24);
-          // For newly-loaded aircraft we may not have a real previous snapshot yet.
-          // Avoid synthesizing a fake motion vector from heading/velocity because it
-          // can briefly animate aircraft in the wrong direction until the next poll.
-          if (!prev) {
-            return {
-              ...f,
-              longitude: curr.lng,
-              latitude: curr.lat,
-              baroAltitude: curr.alt,
-              trueTrack: Number.isFinite(f.trueTrack)
-                ? f.trueTrack!
-                : curr.track,
-            };
-          }
-
-          const dx = curr.lng - prev.lng;
-          const dy = curr.lat - prev.lat;
-          if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
-            return f;
-          }
-
-          if (rawT <= 1) {
-            const blendedTrack = lerpAngle(prev.track, curr.track, tAngle);
-            return {
-              ...f,
-              longitude: prev.lng + dx * tPos,
-              latitude: prev.lat + dy * tPos,
-              baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
-              trueTrack: trackFromDelta(dx, dy, blendedTrack),
-            };
-          }
-
-          const heading = (curr.track * Math.PI) / 180;
-          const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
-          const extraSec = ((rawT - 1) * animDurationRef.current) / 1000;
-          const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
-          const moveDx = Math.sin(heading) * extraDeg;
-          const moveDy = Math.cos(heading) * extraDeg;
-          return {
-            ...f,
-            longitude: curr.lng + moveDx,
-            latitude: curr.lat + moveDy,
-            baroAltitude: curr.alt,
-            trueTrack: trackFromDelta(moveDx, moveDy, curr.track),
-          };
-        });
+        const interpolated = computeInterpolatedFlights(
+          currentFlights,
+          prevSnapshotsRef.current,
+          currSnapshotsRef.current,
+          tPos,
+          tAngle,
+          rawT,
+          animDurationRef.current,
+        );
 
         const interpolatedMap = new Map<string, FlightState>();
         for (const f of interpolated) {
           interpolatedMap.set(f.icao24, f);
         }
 
+        // FPV position output
         const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
         const visibleFlights = interpolated;
-
         const fpvPosOut = fpvPosRef.current;
         if (fpvPosOut && fpvId) {
           const fpvF =
@@ -1063,69 +358,16 @@ export function FlightLayers({
           fpvPosOut.current = null;
         }
 
-        const pitchByIcao = new Map<string, number>();
-        for (const f of interpolated) {
-          const curr = currSnapshotsRef.current.get(f.icao24);
-          const prev = prevSnapshotsRef.current.get(f.icao24);
-
-          const trendTrail = trailByIcao.get(f.icao24);
-          const trendPitch =
-            trendTrail && trendTrail.path.length >= 2
-              ? (() => {
-                  const end = trendTrail.path.length - 1;
-                  const start = Math.max(0, end - 7);
-                  const startAlt =
-                    trendTrail.altitudes[start] ??
-                    trendTrail.altitudes[end] ??
-                    f.baroAltitude ??
-                    0;
-                  const endAlt =
-                    trendTrail.altitudes[end] ?? f.baroAltitude ?? startAlt;
-                  const [sLng, sLat] = trendTrail.path[start];
-                  const [eLng, eLat] = trendTrail.path[end];
-                  const horizontalMeters = horizontalDistanceFromLngLat(
-                    sLng,
-                    sLat,
-                    eLng,
-                    eLat,
-                  );
-                  if (horizontalMeters < 1) return 0;
-                  return (
-                    (-Math.atan2(endAlt - startAlt, horizontalMeters) * 180) /
-                    Math.PI
-                  );
-                })()
-              : 0;
-
-          const risePitch =
-            curr && prev
-              ? (() => {
-                  const horizontalMeters = horizontalDistanceMeters(prev, curr);
-                  if (horizontalMeters < 1) return 0;
-                  const deltaAltitudeMeters = curr.alt - prev.alt;
-                  return (
-                    (-Math.atan2(deltaAltitudeMeters, horizontalMeters) * 180) /
-                    Math.PI
-                  );
-                })()
-              : 0;
-
-          const speed = Number.isFinite(f.velocity) ? f.velocity! : 0;
-          const verticalRate = Number.isFinite(f.verticalRate)
-            ? f.verticalRate!
-            : 0;
-          const kinematicPitch =
-            speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
-
-          const blendedPitch =
-            trendPitch * 0.5 + risePitch * 0.38 + kinematicPitch * 0.12;
-          const amplifiedPitch = blendedPitch * 1.55;
-          const clampedPitch = Math.max(-40, Math.min(40, amplifiedPitch));
-          pitchByIcao.set(f.icao24, clampedPitch);
-        }
+        const pitchByIcao = computePitchByIcao(
+          interpolated,
+          new Map(currentTrails.map((t) => [t.icao24, t])),
+          currSnapshotsRef.current,
+          prevSnapshotsRef.current,
+        );
 
         const layers = [];
 
+        // Shadow layer
         if (showShadowsRef.current) {
           layers.push(
             new IconLayer<FlightState>({
@@ -1147,337 +389,40 @@ export function FlightLayers({
           );
         }
 
+        // Trail layer
         if (showTrailsRef.current) {
-          const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
-          const handledIds = new Set<string>();
-          const trailData: TrailEntry[] = [];
-          const denseSubdivisions = 2;
-          const smoothingIterations =
-            interpolated.length > 220 ? 2 : TRAIL_SMOOTHING_ITERATIONS;
-
-          const buildVisibleTrailPoints = (
-            trail: TrailEntry,
-            animFlight: FlightState | undefined,
-          ): ElevatedPoint[] => {
-            const isFullHistory = trail.fullHistory === true;
-            const historyPoints = isFullHistory
-              ? trail.path.length
-              : Math.max(2, Math.round(trailDistanceRef.current));
-
-            let pathSlice =
-              isFullHistory || trail.path.length <= historyPoints
-                ? trail.path
-                : trail.path.slice(trail.path.length - historyPoints);
-            let altitudeSlice =
-              isFullHistory || trail.altitudes.length <= historyPoints
-                ? trail.altitudes
-                : trail.altitudes.slice(trail.altitudes.length - historyPoints);
-
-            // Keep full-history rendering performant by limiting point count.
-            // Pre-smoothed trails from trail-stitching already use RDP adaptive
-            // downsampling, so this acts as a safety cap only.
-            if (isFullHistory) {
-              const MAX_FULL_HISTORY_POINTS = 2000;
-              if (pathSlice.length > MAX_FULL_HISTORY_POINTS) {
-                const stride = pathSlice.length / MAX_FULL_HISTORY_POINTS;
-                const nextPath: [number, number][] = [];
-                const nextAlt: Array<number | null> = [];
-                for (let i = 0; i < MAX_FULL_HISTORY_POINTS - 1; i++) {
-                  const idx = Math.floor(i * stride);
-                  nextPath.push(pathSlice[idx]);
-                  nextAlt.push(altitudeSlice[idx] ?? null);
-                }
-                nextPath.push(pathSlice[pathSlice.length - 1]);
-                nextAlt.push(altitudeSlice[altitudeSlice.length - 1] ?? null);
-                pathSlice = nextPath;
-                altitudeSlice = nextAlt;
-              }
-            }
-
-            if (altitudeSlice.length !== pathSlice.length) {
-              const last = altitudeSlice[altitudeSlice.length - 1] ?? null;
-              if (altitudeSlice.length < pathSlice.length) {
-                altitudeSlice = [...altitudeSlice];
-                while (altitudeSlice.length < pathSlice.length) {
-                  altitudeSlice.push(last);
-                }
-              } else {
-                altitudeSlice = altitudeSlice.slice(
-                  altitudeSlice.length - pathSlice.length,
-                );
-              }
-            }
-
-            const unwrappedPath = unwrapLngPath(pathSlice);
-            const maxJumpDeg = isFullHistory ? 3.0 : TELEPORT_THRESHOLD;
-            const trimmed = trimAfterLargeJump(
-              unwrappedPath,
-              altitudeSlice,
-              maxJumpDeg,
-            );
-            pathSlice = trimmed.path;
-            altitudeSlice = trimmed.altitudes;
-
-            // The OpenSky track endpoint can be extremely sparse (waypoints ~ every 15min).
-            // Applying planar smoothing to sparse points can create visible kinks/loops.
-            // For full-history tracks, keep the raw geometry.
-            const smoothPathSlice = isFullHistory
-              ? pathSlice
-              : smoothPlanarPath(pathSlice);
-
-            // For full-history trails, altitude is already smoothed by the
-            // spline pipeline; skip redundant smoothing to preserve the profile.
-            const rawAltitudes = altitudeSlice.map(
-              (a) => a ?? trail.baroAltitude ?? animFlight?.baroAltitude ?? 0,
-            );
-            const altitudeMeters = isFullHistory
-              ? rawAltitudes
-              : smoothNumericSeries(rawAltitudes);
-
-            const basePath = smoothPathSlice.map((p, i) => [
-              p[0],
-              p[1],
-              Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
-            ]) as ElevatedPoint[];
-            const denseBasePath = densifyElevatedPath(
-              basePath,
-              // Full-history trails are already dense from Catmull-Rom spline;
-              // skip densification to avoid exploding point count before Chaikin.
-              isFullHistory ? 1 : denseSubdivisions,
-            );
-
-            if (
-              animFlight &&
-              animFlight.longitude != null &&
-              animFlight.latitude != null &&
-              denseBasePath.length > 1
-            ) {
-              const refLng = denseBasePath[denseBasePath.length - 1][0];
-              const snappedLng = snapLngToReference(
-                animFlight.longitude,
-                refLng,
-              );
-              const clipped = trimPathAheadOfAircraft(denseBasePath, [
-                snappedLng,
-                animFlight.latitude,
-                Math.max(0, animFlight.baroAltitude ?? 0),
-              ]);
-
-              const smoothed =
-                clipped.length < 4
-                  ? clipped
-                  : smoothElevatedPath(
-                      clipped,
-                      // Full-history trails already have dense path from
-                      // Catmull-Rom spline; 1 Chaikin pass softens the
-                      // remaining corners without exploding point count.
-                      isFullHistory ? 1 : smoothingIterations,
-                    );
-
-              return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
-            }
-
-            const smoothed =
-              denseBasePath.length < 4
-                ? denseBasePath
-                : smoothElevatedPath(
-                    denseBasePath,
-                    isFullHistory ? 1 : smoothingIterations,
-                  );
-
-            return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
-          };
-
-          const visibleTrailCache = new Map<string, ElevatedPoint[]>();
-          const getVisibleTrailPoints = (
-            trail: TrailEntry,
-            animFlight: FlightState | undefined,
-          ): ElevatedPoint[] => {
-            const cached = visibleTrailCache.get(trail.icao24);
-            if (cached) return cached;
-            const computed = buildVisibleTrailPoints(trail, animFlight);
-            visibleTrailCache.set(trail.icao24, computed);
-            return computed;
-          };
-
-          for (const f of interpolated) {
-            if (f.longitude == null || f.latitude == null) continue;
-
-            const existing = trailMap.get(f.icao24);
-            handledIds.add(f.icao24);
-
-            if (existing && existing.path.length >= 2) {
-              trailData.push(existing);
-              continue;
-            }
-
-            const startupPath = buildStartupFallbackTrail(f);
-
-            trailData.push({
-              icao24: f.icao24,
-              path: startupPath,
-              altitudes: startupPath.map(
-                () => existing?.baroAltitude ?? f.baroAltitude,
-              ),
-              baroAltitude: existing?.baroAltitude ?? f.baroAltitude,
-            });
-          }
-
-          for (const d of currentTrails) {
-            if (!handledIds.has(d.icao24)) {
-              trailData.push(d);
-            }
-          }
-
           layers.push(
-            new PathLayer<TrailEntry>({
-              id: "flight-trails",
-              data: trailData,
-              opacity: globeFade,
-              updateTriggers: {
-                getPath: [elapsed, trailDistanceRef.current],
-                getColor: [elapsed, altColors, trailDistanceRef.current],
-              },
-              getPath: (d) => {
-                const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = getVisibleTrailPoints(d, animFlight);
-                return visiblePoints.map(
-                  (p) =>
-                    [
-                      p[0],
-                      p[1],
-                      Math.max(
-                        0,
-                        altitudeToElevation(p[2]) - TRAIL_BELOW_AIRCRAFT_METERS,
-                      ),
-                    ] as [number, number, number],
-                );
-              },
-              getColor: (d) => {
-                const animFlight = interpolatedMap.get(d.icao24);
-                const visiblePoints = getVisibleTrailPoints(d, animFlight);
-                const len = visiblePoints.length;
-                const isFullHist = d.fullHistory === true;
-
-                return visiblePoints.map((point, i) => {
-                  const tVal = len > 1 ? i / (len - 1) : 1;
-                  // Historical trails use a gentler fade so the older
-                  // portion stays visible instead of disappearing.
-                  // Active trails: smooth cubic fade with visible base.
-                  const fade = isFullHist
-                    ? 0.35 + 0.65 * Math.pow(tVal, 1.1)
-                    : 0.15 + 0.85 * Math.pow(tVal, 1.4);
-                  const base = altColors
-                    ? altitudeToColor(point[2])
-                    : defaultColor;
-                  const alpha = isFullHist
-                    ? Math.round(55 + fade * 165)
-                    : Math.round(60 + fade * 160);
-                  return [base[0], base[1], base[2], alpha];
-                }) as [number, number, number, number][];
-              },
-              getWidth: trailThicknessRef.current,
-              widthUnits: "pixels",
-              widthMinPixels: Math.max(1, trailThicknessRef.current * 0.6),
-              widthMaxPixels: Math.max(2, trailThicknessRef.current * 1.8),
-              wrapLongitude: true,
-              billboard: true,
-              capRounded: true,
-              jointRounded: true,
+            buildTrailLayers({
+              interpolated,
+              interpolatedMap,
+              currentTrails,
+              trailDistance: trailDistanceRef.current,
+              trailThickness: trailThicknessRef.current,
+              altColors,
+              defaultColor,
+              elapsed,
+              globeFade,
             }),
           );
         }
 
-        const smoothstep = (t: number) => t * t * (3 - 2 * t);
-        const easeOutQuint = (t: number) => 1 - (1 - t) ** 5;
-
-        const fadeElapsed = performance.now() - selectionChangeTimeRef.current;
-        const fadeT = Math.min(fadeElapsed / SELECTION_FADE_MS, 1);
-        const fadeIn = smoothstep(fadeT);
-        const fadeOut = 1 - fadeIn;
-
-        const selectedId = selectedIcao24Ref.current;
-        const prevId = prevSelectedRef.current;
-
-        const pulseTargets: { id: string; opacity: number; prefix: string }[] =
-          [];
-        if (selectedId)
-          pulseTargets.push({ id: selectedId, opacity: fadeIn, prefix: "sel" });
-        if (prevId && prevId !== selectedId && fadeOut > 0.01) {
-          pulseTargets.push({ id: prevId, opacity: fadeOut, prefix: "prev" });
-        } else if (fadeT >= 1) {
+        // Selection pulse layers (halo + rings)
+        const pulseResult = buildSelectionPulseLayers({
+          selectionChangeTime: selectionChangeTimeRef.current,
+          selectedId: selectedIcao24Ref.current,
+          prevId: prevSelectedRef.current,
+          interpolated,
+          elapsed,
+          globeFade,
+          haloUrl,
+          ringUrl,
+        });
+        layers.push(...pulseResult.layers);
+        if (pulseResult.shouldClearPrev) {
           prevSelectedRef.current = null;
         }
 
-        for (const target of pulseTargets) {
-          const flight = interpolated.find((f) => f.icao24 === target.id);
-          if (!flight || flight.longitude == null || flight.latitude == null)
-            continue;
-
-          const pos: [number, number, number] = [
-            flight.longitude,
-            flight.latitude,
-            altitudeToElevation(flight.baroAltitude),
-          ];
-          const op = target.opacity;
-
-          const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
-          const breath = Math.sin(breathT * Math.PI * 2);
-          const softBreath = smoothstep(smoothstep((breath + 1) / 2)) * 2 - 1;
-
-          const haloSize = 75 + 8 * softBreath;
-          const haloAlpha = Math.round((18 + 8 * softBreath) * op);
-
-          if (haloAlpha > 0) {
-            layers.push(
-              new IconLayer({
-                id: `${target.prefix}-halo`,
-                data: [{ position: pos }],
-                opacity: globeFade,
-                getPosition: (d: { position: [number, number, number] }) =>
-                  d.position,
-                getIcon: () => "halo",
-                getSize: haloSize,
-                getColor: [70, 160, 240, haloAlpha],
-                iconAtlas: haloUrl,
-                iconMapping: HALO_MAPPING,
-                billboard: true,
-                sizeUnits: "pixels",
-                sizeScale: 1,
-              }),
-            );
-          }
-
-          const ringOffsets = [0, RING_PERIOD_MS / 3, (RING_PERIOD_MS * 2) / 3];
-          ringOffsets.forEach((offset, i) => {
-            const t = ((elapsed + offset) % RING_PERIOD_MS) / RING_PERIOD_MS;
-            const eased = easeOutQuint(t);
-            const ringSize = 30 + 60 * eased;
-            const fade = 1 - t;
-            const ringAlpha = Math.round(70 * fade * fade * fade * fade * op);
-
-            if (ringAlpha < 2) return;
-
-            layers.push(
-              new IconLayer({
-                id: `${target.prefix}-ring-${i}`,
-                data: [{ position: pos }],
-                opacity: globeFade,
-                getPosition: (d: { position: [number, number, number] }) =>
-                  d.position,
-                getIcon: () => "ring",
-                getSize: ringSize,
-                getColor: [70, 165, 235, ringAlpha],
-                iconAtlas: ringUrl,
-                iconMapping: RING_MAPPING,
-                billboard: true,
-                sizeUnits: "pixels",
-                sizeScale: 1,
-              }),
-            );
-          });
-        }
-
+        // Aircraft 3D model layer
         layers.push(
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
@@ -1526,7 +471,15 @@ export function FlightLayers({
 
     buildAndPushLayers();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [atlasUrl, haloUrl, ringUrl, handleHover, handleClick, map]);
+  }, [
+    atlasUrl,
+    haloUrl,
+    ringUrl,
+    handleHover,
+    handleClick,
+    map,
+    updateGlobeDots,
+  ]);
 
   return null;
 }
