@@ -85,6 +85,7 @@ export interface TrailLayerParams {
   defaultColor: [number, number, number, number];
   elapsed: number;
   globeFade: number;
+  visible?: boolean;
 }
 
 export function buildTrailLayers(params: TrailLayerParams) {
@@ -98,6 +99,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
     defaultColor,
     elapsed,
     globeFade,
+    visible = true,
   } = params;
 
   const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
@@ -150,6 +152,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
 
   return new PathLayer<TrailEntry>({
     id: "flight-trails",
+    visible,
     data: trailData,
     opacity: globeFade,
     updateTriggers: {
@@ -211,12 +214,16 @@ export interface SelectionPulseParams {
   globeFade: number;
   haloUrl: string;
   ringUrl: string;
+  layersVisible?: boolean;
 }
 
 export interface SelectionPulseResult {
   layers: IconLayer[];
   shouldClearPrev: boolean;
 }
+
+// Dummy position used for invisible layers to keep deck.gl layer state alive
+const EMPTY_PULSE_DATA: { position: [number, number, number] }[] = [];
 
 export function buildSelectionPulseLayers(
   params: SelectionPulseParams,
@@ -230,6 +237,7 @@ export function buildSelectionPulseLayers(
     globeFade,
     haloUrl,
     ringUrl,
+    layersVisible = true,
   } = params;
 
   const layers: IconLayer[] = [];
@@ -239,27 +247,33 @@ export function buildSelectionPulseLayers(
   const fadeOut = 1 - fadeIn;
 
   let shouldClearPrev = false;
-
-  const pulseTargets: { id: string; opacity: number; prefix: string }[] = [];
-  if (selectedId)
-    pulseTargets.push({ id: selectedId, opacity: fadeIn, prefix: "sel" });
-  if (prevId && prevId !== selectedId && fadeOut > 0.01) {
-    pulseTargets.push({ id: prevId, opacity: fadeOut, prefix: "prev" });
-  } else if (fadeT >= 1) {
-    shouldClearPrev = true;
+  if (!prevId || prevId === selectedId || fadeOut <= 0.01) {
+    if (fadeT >= 1) shouldClearPrev = true;
   }
 
-  for (const target of pulseTargets) {
-    const flight = interpolated.find((f) => f.icao24 === target.id);
-    if (!flight || flight.longitude == null || flight.latitude == null)
-      continue;
+  // Build stable layers for both "sel" and "prev" prefixes.
+  // Always emit all 8 IDs; use `visible` to toggle rather than omitting layers.
+  const prefixes = ["sel", "prev"] as const;
+  for (const prefix of prefixes) {
+    const isSelected = prefix === "sel";
+    const targetId = isSelected ? selectedId : prevId;
+    const op = isSelected ? fadeIn : fadeOut;
 
-    const pos: [number, number, number] = [
-      flight.longitude,
-      flight.latitude,
-      altitudeToElevation(flight.baroAltitude),
-    ];
-    const op = target.opacity;
+    const flight = targetId
+      ? interpolated.find((f) => f.icao24 === targetId)
+      : undefined;
+    const hasPosition =
+      flight && flight.longitude != null && flight.latitude != null;
+
+    const active = layersVisible && !!targetId && hasPosition && op > 0.01;
+    const pos: [number, number, number] = hasPosition
+      ? [
+          flight!.longitude!,
+          flight!.latitude!,
+          altitudeToElevation(flight!.baroAltitude),
+        ]
+      : [0, 0, 0];
+    const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;
 
     const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
     const breath = Math.sin(breathT * Math.PI * 2);
@@ -268,25 +282,23 @@ export function buildSelectionPulseLayers(
     const haloSize = 75 + 8 * softBreath;
     const haloAlpha = Math.round((18 + 8 * softBreath) * op);
 
-    if (haloAlpha > 0) {
-      layers.push(
-        new IconLayer({
-          id: `${target.prefix}-halo`,
-          data: [{ position: pos }],
-          opacity: globeFade,
-          getPosition: (d: { position: [number, number, number] }) =>
-            d.position,
-          getIcon: () => "halo",
-          getSize: haloSize,
-          getColor: [70, 160, 240, haloAlpha],
-          iconAtlas: haloUrl,
-          iconMapping: HALO_MAPPING,
-          billboard: true,
-          sizeUnits: "pixels",
-          sizeScale: 1,
-        }),
-      );
-    }
+    layers.push(
+      new IconLayer({
+        id: `${prefix}-halo`,
+        visible: active && haloAlpha > 0,
+        data,
+        opacity: globeFade,
+        getPosition: (d: { position: [number, number, number] }) => d.position,
+        getIcon: () => "halo",
+        getSize: haloSize,
+        getColor: [70, 160, 240, haloAlpha],
+        iconAtlas: haloUrl,
+        iconMapping: HALO_MAPPING,
+        billboard: true,
+        sizeUnits: "pixels",
+        sizeScale: 1,
+      }),
+    );
 
     const ringOffsets = [0, RING_PERIOD_MS / 3, (RING_PERIOD_MS * 2) / 3];
     ringOffsets.forEach((offset, i) => {
@@ -295,12 +307,12 @@ export function buildSelectionPulseLayers(
       const ringSize = 30 + 60 * eased;
       const fade = 1 - t;
       const ringAlpha = Math.round(70 * fade * fade * fade * fade * op);
-      if (ringAlpha < 2) return;
 
       layers.push(
         new IconLayer({
-          id: `${target.prefix}-ring-${i}`,
-          data: [{ position: pos }],
+          id: `${prefix}-ring-${i}`,
+          visible: active && ringAlpha >= 2,
+          data,
           opacity: globeFade,
           getPosition: (d: { position: [number, number, number] }) =>
             d.position,

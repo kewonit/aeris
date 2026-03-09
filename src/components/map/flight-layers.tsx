@@ -8,7 +8,6 @@ import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
-import { type TrailEntry } from "@/hooks/use-trail-history";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
 import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
@@ -96,9 +95,13 @@ export function FlightLayers({
     onClickRef,
   );
 
+  // Stabilize updateGlobeDots via ref so the animation loop doesn't restart on every render
+  const updateGlobeDotsRef = useRef(updateGlobeDots);
+
   // ── Sync props into refs ───────────────────────────────────────────
 
   useEffect(() => {
+    updateGlobeDotsRef.current = updateGlobeDots;
     flightsRef.current = flights;
     trailsRef.current = trails;
     showTrailsRef.current = showTrails;
@@ -116,6 +119,7 @@ export function FlightLayers({
     }
     selectedIcao24Ref.current = selectedIcao24;
   }, [
+    updateGlobeDots,
     flights,
     trails,
     onClick,
@@ -261,6 +265,7 @@ export function FlightLayers({
     return () => {
       if (overlayRef.current) {
         try {
+          overlayRef.current.finalize();
           map.removeControl(
             overlayRef.current as unknown as maplibregl.IControl,
           );
@@ -287,20 +292,22 @@ export function FlightLayers({
       const now = performance.now();
       const isGlobe = globeModeRef.current;
 
-      updateGlobeDots(isGlobe, currentZoom, now);
+      updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
       let globeFade = 1;
+      let layersVisible = true;
       if (isGlobe) {
         if (currentZoom < GLOBE_FADE_ZOOM_FLOOR) {
-          overlay.setProps({ layers: [] });
-          return;
+          layersVisible = false;
+          globeFade = 0;
+        } else {
+          const linearFade = Math.min(
+            1,
+            (currentZoom - GLOBE_FADE_ZOOM_FLOOR) /
+              (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR),
+          );
+          globeFade = smoothStep(linearFade);
         }
-        const linearFade = Math.min(
-          1,
-          (currentZoom - GLOBE_FADE_ZOOM_FLOOR) /
-            (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR),
-        );
-        globeFade = smoothStep(linearFade);
       }
 
       try {
@@ -367,44 +374,42 @@ export function FlightLayers({
 
         const layers = [];
 
-        // Shadow layer
-        if (showShadowsRef.current) {
-          layers.push(
-            new IconLayer<FlightState>({
-              id: "flight-shadows",
-              data: visibleFlights,
-              opacity: globeFade,
-              getPosition: (d) => [d.longitude!, d.latitude!, 0],
-              getIcon: () => "aircraft",
-              getSize: (d) => 20 * categorySizeMultiplier(d.category),
-              getColor: () => [0, 0, 0, 60],
-              getAngle: (d) =>
-                360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
-              iconAtlas: atlasUrl,
-              iconMapping: AIRCRAFT_ICON_MAPPING,
-              billboard: false,
-              sizeUnits: "pixels",
-              sizeScale: 1,
-            }),
-          );
-        }
+        // Shadow layer — always included, toggled via `visible` to retain WebGL state
+        layers.push(
+          new IconLayer<FlightState>({
+            id: "flight-shadows",
+            visible: layersVisible && showShadowsRef.current,
+            data: visibleFlights,
+            opacity: globeFade,
+            getPosition: (d) => [d.longitude!, d.latitude!, 0],
+            getIcon: () => "aircraft",
+            getSize: (d) => 20 * categorySizeMultiplier(d.category),
+            getColor: () => [0, 0, 0, 60],
+            getAngle: (d) =>
+              360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
+            iconAtlas: atlasUrl,
+            iconMapping: AIRCRAFT_ICON_MAPPING,
+            billboard: false,
+            sizeUnits: "pixels",
+            sizeScale: 1,
+          }),
+        );
 
-        // Trail layer
-        if (showTrailsRef.current) {
-          layers.push(
-            buildTrailLayers({
-              interpolated,
-              interpolatedMap,
-              currentTrails,
-              trailDistance: trailDistanceRef.current,
-              trailThickness: trailThicknessRef.current,
-              altColors,
-              defaultColor,
-              elapsed,
-              globeFade,
-            }),
-          );
-        }
+        // Trail layer — always included, toggled via `visible` to retain WebGL state
+        layers.push(
+          buildTrailLayers({
+            interpolated,
+            interpolatedMap,
+            currentTrails,
+            trailDistance: trailDistanceRef.current,
+            trailThickness: trailThicknessRef.current,
+            altColors,
+            defaultColor,
+            elapsed,
+            globeFade,
+            visible: layersVisible && showTrailsRef.current,
+          }),
+        );
 
         // Selection pulse layers (halo + rings)
         const pulseResult = buildSelectionPulseLayers({
@@ -416,16 +421,19 @@ export function FlightLayers({
           globeFade,
           haloUrl,
           ringUrl,
+          layersVisible,
         });
         layers.push(...pulseResult.layers);
         if (pulseResult.shouldClearPrev) {
           prevSelectedRef.current = null;
         }
 
-        // Aircraft 3D model layer
+        // Aircraft 3D model layer — always included with `visible` to avoid
+        // re-fetching the .glb model on every zoom in/out cycle
         layers.push(
           new ScenegraphLayer<FlightState>({
             id: "flight-aircraft",
+            visible: layersVisible,
             data: visibleFlights,
             opacity: globeFade,
             getPosition: (d) => [
@@ -471,15 +479,7 @@ export function FlightLayers({
 
     buildAndPushLayers();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [
-    atlasUrl,
-    haloUrl,
-    ringUrl,
-    handleHover,
-    handleClick,
-    map,
-    updateGlobeDots,
-  ]);
+  }, [atlasUrl, haloUrl, ringUrl, handleHover, handleClick, map]);
 
   return null;
 }
