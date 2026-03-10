@@ -85,6 +85,7 @@ export interface TrailLayerParams {
   defaultColor: [number, number, number, number];
   elapsed: number;
   globeFade: number;
+  currentZoom: number;
   visible?: boolean;
 }
 
@@ -99,6 +100,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
     defaultColor,
     elapsed,
     globeFade,
+    currentZoom,
     visible = true,
   } = params;
 
@@ -161,6 +163,15 @@ export function buildTrailLayers(params: TrailLayerParams) {
     },
     getPath: (d) => {
       const animFlight = interpolatedMap.get(d.icao24);
+      // Scale elevation exaggeration by zoom:
+      // At globe zoom (<5) altitude spikes look absurd, so reduce.
+      // At city zoom (>8) full exaggeration is needed for visual depth.
+      const elevScale =
+        currentZoom < 5
+          ? 0.15 + (currentZoom / 5) * 0.35
+          : currentZoom < 8
+            ? 0.5 + ((currentZoom - 5) / 3) * 0.5
+            : 1.0;
       const raw = getVisibleTrailPoints(d, animFlight).map(
         (p) =>
           [
@@ -168,7 +179,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
             p[1],
             Math.max(
               0,
-              altitudeToElevation(p[2]) - TRAIL_BELOW_AIRCRAFT_METERS,
+              (altitudeToElevation(p[2]) - TRAIL_BELOW_AIRCRAFT_METERS) *
+                elevScale,
             ),
           ] as [number, number, number],
       );
@@ -212,6 +224,7 @@ export interface SelectionPulseParams {
   interpolated: FlightState[];
   elapsed: number;
   globeFade: number;
+  currentZoom: number;
   haloUrl: string;
   ringUrl: string;
   layersVisible?: boolean;
@@ -235,10 +248,19 @@ export function buildSelectionPulseLayers(
     interpolated,
     elapsed,
     globeFade,
+    currentZoom,
     haloUrl,
     ringUrl,
     layersVisible = true,
   } = params;
+
+  // Zoom-dependent elevation scale (matches trail/aircraft scaling)
+  const elevScale =
+    currentZoom < 5
+      ? 0.15 + (currentZoom / 5) * 0.35
+      : currentZoom < 8
+        ? 0.5 + ((currentZoom - 5) / 3) * 0.5
+        : 1.0;
 
   const layers: IconLayer[] = [];
   const fadeElapsed = performance.now() - selectionChangeTime;
@@ -270,7 +292,7 @@ export function buildSelectionPulseLayers(
       ? [
           flight!.longitude!,
           flight!.latitude!,
-          altitudeToElevation(flight!.baroAltitude),
+          altitudeToElevation(flight!.baroAltitude) * elevScale,
         ]
       : [0, 0, 0];
     const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;

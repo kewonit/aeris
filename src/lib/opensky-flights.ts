@@ -101,12 +101,15 @@ export function bboxFromCenter(
       ? radiusDeg
       : MAX_1_CREDIT_RADIUS_DEG;
   const safeRadius = Math.min(safeRadiusRaw, MAX_1_CREDIT_RADIUS_DEG);
-  return [
-    lat - safeRadius,
-    lat + safeRadius,
-    lng - safeRadius,
-    lng + safeRadius,
-  ];
+
+  // Compensate longitude extent for converging meridians at higher latitudes.
+  // At the equator cos(0)=1 so lngRadius equals safeRadius (no change).
+  // At 60°N cos(60°)=0.5 so lngRadius doubles to cover the same ground distance.
+  // Clamp near poles to avoid division by near-zero.
+  const cosLat = Math.cos((Math.abs(lat) * Math.PI) / 180);
+  const lngRadius = Math.min(180, safeRadius / Math.max(cosLat, 0.01));
+
+  return [lat - safeRadius, lat + safeRadius, lng - lngRadius, lng + lngRadius];
 }
 
 // ── Single Aircraft by ICAO24 ──────────────────────────────────────────
@@ -174,6 +177,10 @@ const callsignLookupCache = new Map<
   { timestamp: number; result: CallsignLookupResult }
 >();
 
+// In-flight promise dedup: prevents concurrent 4-credit global fetches
+// for the same normalized callsign query.
+const callsignInFlight = new Map<string, Promise<CallsignLookupResult>>();
+
 export async function fetchFlightByCallsign(
   callsign: string,
   signal?: AbortSignal,
@@ -193,6 +200,24 @@ export async function fetchFlightByCallsign(
     return cached.result;
   }
 
+  // If there's already an in-flight request for this query, piggyback on it
+  const existing = callsignInFlight.get(normalizedQuery);
+  if (existing) return existing;
+
+  const promise = fetchFlightByCallsignImpl(normalizedQuery, signal);
+  callsignInFlight.set(normalizedQuery, promise);
+
+  try {
+    return await promise;
+  } finally {
+    callsignInFlight.delete(normalizedQuery);
+  }
+}
+
+async function fetchFlightByCallsignImpl(
+  normalizedQuery: string,
+  signal?: AbortSignal,
+): Promise<CallsignLookupResult> {
   const url = `${OPENSKY_API}/states/all?extended=1`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

@@ -13,6 +13,7 @@ type TrackCacheEntry = {
 const DEFAULT_REFRESH_MS = 0;
 const TRACK_CACHE_TTL_MS_EFFECTIVE = 10 * 60_000;
 const NEGATIVE_CACHE_TTL_MS_EFFECTIVE = 60_000;
+const TRACK_CACHE_MAX_ENTRIES = 100;
 
 const trackCache = new Map<string, TrackCacheEntry>();
 
@@ -28,7 +29,9 @@ function loadGlobalBackoff(): void {
   if (typeof window === "undefined") return;
   try {
     const nextAllowedRaw = sessionStorage.getItem(GLOBAL_BACKOFF_KEY);
-    const nextAllowed = nextAllowedRaw ? Number.parseInt(nextAllowedRaw, 10) : 0;
+    const nextAllowed = nextAllowedRaw
+      ? Number.parseInt(nextAllowedRaw, 10)
+      : 0;
     if (Number.isFinite(nextAllowed) && nextAllowed > 0) {
       globalNextAllowedAt = Math.max(globalNextAllowedAt, nextAllowed);
     }
@@ -36,7 +39,10 @@ function loadGlobalBackoff(): void {
     const backoffRaw = sessionStorage.getItem(GLOBAL_BACKOFF_MS_KEY);
     const backoff = backoffRaw ? Number.parseInt(backoffRaw, 10) : 0;
     if (Number.isFinite(backoff) && backoff > 0) {
-      globalBackoffMs = Math.min(GLOBAL_BACKOFF_MAX_MS, Math.max(60_000, backoff));
+      globalBackoffMs = Math.min(
+        GLOBAL_BACKOFF_MAX_MS,
+        Math.max(60_000, backoff),
+      );
     }
   } catch {
     // ignore
@@ -112,6 +118,13 @@ export function useFlightTrack(
     async function load() {
       const now = Date.now();
 
+      // Sweep stale entries to bound memory growth over time
+      for (const [k, entry] of trackCache) {
+        if (now - entry.fetchedAt > cacheTtlMs(entry.track)) {
+          trackCache.delete(k);
+        }
+      }
+
       if (now < globalNextAllowedAt) {
         return;
       }
@@ -164,6 +177,14 @@ export function useFlightTrack(
           nextAllowedAt,
           track: nextTrack,
         });
+
+        // Evict oldest entries when cache exceeds max size (FIFO via Map insertion order)
+        if (trackCache.size > TRACK_CACHE_MAX_ENTRIES) {
+          const oldestKey = trackCache.keys().next().value as
+            | string
+            | undefined;
+          if (oldestKey && oldestKey !== key) trackCache.delete(oldestKey);
+        }
 
         setFetchedAtMs(fetchedAt);
 

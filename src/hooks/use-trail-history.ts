@@ -73,7 +73,10 @@ class TrailStore {
   private seen = new Set<string>();
   private bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
 
-  private filterAltitude(id: string, rawAltitude: number | null): number | null {
+  private filterAltitude(
+    id: string,
+    rawAltitude: number | null,
+  ): number | null {
     if (rawAltitude == null) return null;
 
     const state =
@@ -91,7 +94,8 @@ class TrailStore {
     const absoluteDeviations = state.recent.map((x) => Math.abs(x - med));
     const mad = median(absoluteDeviations);
     const outlierThreshold =
-      ALTITUDE_OUTLIER_BASE_METERS + ALTITUDE_OUTLIER_SCALE * Math.max(120, mad);
+      ALTITUDE_OUTLIER_BASE_METERS +
+      ALTITUDE_OUTLIER_SCALE * Math.max(120, mad);
 
     const isOutlier = Math.abs(rawAltitude - med) > outlierThreshold;
     state.outlierStreak = isOutlier ? state.outlierStreak + 1 : 0;
@@ -104,10 +108,7 @@ class TrailStore {
       : ALTITUDE_SMOOTHING_ALPHA_GUARDED;
 
     const delta = rawAltitude - state.filtered;
-    const clampedDelta = Math.max(
-      -maxStep,
-      Math.min(maxStep, delta),
-    );
+    const clampedDelta = Math.max(-maxStep, Math.min(maxStep, delta));
 
     const filtered = state.filtered + clampedDelta * alpha;
     state.filtered = filtered;
@@ -158,6 +159,7 @@ class TrailStore {
       const dy = pos.position[1] - last[1];
       if (dx * dx + dy * dy > JUMP_THRESHOLD_DEG * JUMP_THRESHOLD_DEG) {
         trail.length = 0;
+        this.altitudeStates.delete(id);
       }
 
       trail.push(pos);

@@ -10,6 +10,8 @@ import {
   Globe,
   X,
   Github,
+  Info,
+  Clock,
 } from "lucide-react";
 import type { City } from "@/lib/cities";
 import type { MapStyle } from "@/lib/map-styles";
@@ -19,9 +21,17 @@ import { StyleContent } from "@/components/ui/control-panel-styles";
 import {
   SettingsContent,
   ShortcutsContent,
+  AboutContent,
+  ChangelogContent,
 } from "@/components/ui/control-panel-settings";
 
-type TabId = "search" | "style" | "settings" | "shortcuts";
+type TabId =
+  | "search"
+  | "style"
+  | "settings"
+  | "shortcuts"
+  | "changelog"
+  | "about";
 
 const MAIN_TABS: {
   id: TabId;
@@ -30,12 +40,14 @@ const MAIN_TABS: {
 }[] = [
   { id: "search", icon: Search, label: "Search" },
   { id: "style", icon: MapIcon, label: "Map Style" },
-  { id: "settings", icon: Settings, label: "Settings" },
 ];
 
 const PANEL_TABS = [
   ...MAIN_TABS,
+  { id: "settings" as TabId, icon: Settings, label: "Settings" },
   { id: "shortcuts" as TabId, icon: Keyboard, label: "Shortcuts" },
+  { id: "changelog" as TabId, icon: Clock, label: "Changelog" },
+  { id: "about" as TabId, icon: Info, label: "About" },
 ];
 
 type ControlPanelProps = {
@@ -123,6 +135,22 @@ export function ControlPanel({
         title={globeMode ? "Globe mode (on)" : "Globe mode (off)"}
       >
         <Globe className="h-4 w-4" />
+      </motion.button>
+
+      <motion.button
+        onClick={() => open("settings")}
+        className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
+        style={{
+          borderWidth: 1,
+          borderColor: "rgb(var(--ui-fg) / 0.06)",
+          backgroundColor: "rgb(var(--ui-fg) / 0.03)",
+          color: "rgb(var(--ui-fg) / 0.5)",
+        }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="Settings"
+      >
+        <Settings className="h-4 w-4" />
       </motion.button>
 
       <AnimatePresence>
@@ -224,7 +252,7 @@ function PanelDialog({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-80 bg-black/60 backdrop-blur-xl"
+        className="fixed inset-0 z-80 bg-black/70"
         onClick={onClose}
       />
 
@@ -244,7 +272,7 @@ function PanelDialog({
         aria-modal="true"
         aria-labelledby="panel-dialog-title"
       >
-        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-white/8 bg-[#0c0c0e]/92 shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-3xl backdrop-saturate-[1.8] h-[75vh] sm:h-auto sm:max-h-[85vh]">
+        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-white/8 bg-[#0c0c0e] shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}
           <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-white/6 py-5 px-3">
             <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-white/20">
@@ -299,7 +327,7 @@ function PanelDialog({
               </a>
               <div className="border-t border-white/3 pt-2 px-2.5">
                 <p className="text-[10px] font-medium text-white/10 tracking-wide">
-                  v0.1 · OpenSky Network
+                  Powered by OpenSky Network
                 </p>
               </div>
             </div>
@@ -369,24 +397,35 @@ function PanelDialog({
                     <ShortcutsContent />
                   </TabContent>
                 )}
+                {activeTab === "changelog" && (
+                  <TabContent key="changelog">
+                    <ChangelogContent />
+                  </TabContent>
+                )}
+                {activeTab === "about" && (
+                  <TabContent key="about">
+                    <AboutContent />
+                  </TabContent>
+                )}
               </AnimatePresence>
             </div>
           </div>
 
           {/* Mobile tab bar */}
-          <div className="flex sm:hidden items-center gap-1 border-t border-white/6 px-3 pt-2 pb-3">
-            <nav className="flex flex-1 gap-1">
+          <div className="flex sm:hidden items-center gap-0.5 border-t border-white/6 px-2 pt-2 pb-3">
+            <nav className="flex flex-1 gap-0.5">
               {PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button
                     key={id}
                     onClick={() => onTabChange(id)}
-                    className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center transition-colors ${
+                    className={`relative flex flex-1 items-center justify-center rounded-lg py-2.5 transition-colors ${
                       active
                         ? "text-white/90"
                         : "text-white/35 active:bg-white/6"
                     }`}
+                    aria-label={label}
                   >
                     {active && (
                       <motion.div
@@ -399,17 +438,14 @@ function PanelDialog({
                         }}
                       />
                     )}
-                    <Icon className="relative h-3.5 w-3.5 shrink-0" />
-                    <span className="relative text-[12px] font-semibold">
-                      {label}
-                    </span>
+                    <Icon className="relative h-4 w-4 shrink-0" />
                   </button>
                 );
               })}
             </nav>
             <motion.button
               onClick={onClose}
-              className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/6 transition-colors active:bg-white/12"
+              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/6 transition-colors active:bg-white/12"
               whileTap={{ scale: 0.9 }}
               aria-label="Close"
             >

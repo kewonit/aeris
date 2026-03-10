@@ -1,6 +1,11 @@
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
-import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
+import {
+  snapLngToReference,
+  unwrapLngPath,
+  greatCircleIntermediate,
+  gcDistanceDeg,
+} from "@/lib/geo";
 import { roundSharpCorners2D } from "@/lib/trail-smoothing";
 import type { ElevatedPoint, Snapshot } from "./flight-layer-constants";
 import {
@@ -144,18 +149,37 @@ export function densifyElevatedPath(
 ): ElevatedPoint[] {
   if (points.length < 2 || subdivisions <= 1) return points;
 
+  // Threshold in degrees above which we use great-circle interpolation
+  // instead of linear.  ~0.5° ≈ 55 km at the equator.
+  const GC_THRESHOLD_DEG = 0.4;
+
   const out: ElevatedPoint[] = [];
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     out.push(a);
-    for (let j = 1; j < subdivisions; j++) {
-      const t = j / subdivisions;
-      out.push([
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t,
-      ]);
+
+    const dist = gcDistanceDeg(a[0], a[1], b[0], b[1]);
+    const useGC = dist > GC_THRESHOLD_DEG;
+
+    // For longer segments, add extra subdivisions proportional to distance
+    const effectiveSubs = useGC
+      ? Math.max(subdivisions, Math.min(16, Math.ceil(dist / 0.3)))
+      : subdivisions;
+
+    for (let j = 1; j < effectiveSubs; j++) {
+      const t = j / effectiveSubs;
+      if (useGC) {
+        const [lng, lat] = greatCircleIntermediate(a[0], a[1], b[0], b[1], t);
+        const alt = a[2] + (b[2] - a[2]) * t;
+        out.push([lng, lat, alt]);
+      } else {
+        out.push([
+          a[0] + (b[0] - a[0]) * t,
+          a[1] + (b[1] - a[1]) * t,
+          a[2] + (b[2] - a[2]) * t,
+        ]);
+      }
     }
   }
   out.push(points[points.length - 1]);
@@ -180,7 +204,7 @@ export function smoothNumericSeries(values: number[]): number[] {
  * altitude transitions over more trail points, producing a gradual
  * climb/descent gradient that looks natural with elevation exaggeration.
  */
-export function smoothAltitudeProfile(
+export function smoothAnimationAltitudes(
   values: number[],
   passes: number = 3,
 ): number[] {
@@ -374,7 +398,7 @@ export function buildVisibleTrailPoints(
   );
   const altitudeMeters = isFullHistory
     ? rawAltitudes
-    : smoothAltitudeProfile(rawAltitudes, 3);
+    : smoothAnimationAltitudes(rawAltitudes, 3);
 
   const basePath = smoothPathSlice.map((p, i) => [
     p[0],

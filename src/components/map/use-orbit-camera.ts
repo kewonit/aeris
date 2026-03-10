@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type MutableRefObject } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import type maplibregl from "maplibre-gl";
 import { smoothstep } from "./camera-controller-utils";
 import type { City } from "@/lib/cities";
@@ -21,6 +21,13 @@ export function useOrbitCamera(
   orbitFrameRef: MutableRefObject<number | null>,
   idleTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>,
 ) {
+  // Store speed in a ref so tick() reads the latest value without effect re-runs
+  const speedRef = useRef(0);
+  useEffect(() => {
+    speedRef.current =
+      settings.orbitSpeed * (settings.orbitDirection === "clockwise" ? 1 : -1);
+  }, [settings.orbitSpeed, settings.orbitDirection]);
+
   useEffect(() => {
     if (
       !map ||
@@ -39,10 +46,6 @@ export function useOrbitCamera(
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     if (prefersReducedMotion) return;
 
-    const directionMultiplier =
-      settings.orbitDirection === "clockwise" ? 1 : -1;
-    const speed = settings.orbitSpeed * directionMultiplier;
-
     function startOrbit() {
       if (!map || isInteractingRef.current) return;
 
@@ -53,7 +56,7 @@ export function useOrbitCamera(
         const resumeElapsed = performance.now() - resumeStart;
         const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
         const easeFactor = smoothstep(t);
-        const bearing = map.getBearing() + speed * easeFactor;
+        const bearing = map.getBearing() + speedRef.current * easeFactor;
         map.setBearing(bearing % 360);
         orbitFrameRef.current = requestAnimationFrame(tick);
       }
@@ -114,14 +117,5 @@ export function useOrbitCamera(
       map.off("movestart", onMoveStart);
       window.removeEventListener("aeris:camera-stop", onCameraStop);
     };
-  }, [
-    map,
-    isLoaded,
-    city,
-    followFlight,
-    fpvFlight,
-    settings.autoOrbit,
-    settings.orbitSpeed,
-    settings.orbitDirection,
-  ]);
+  }, [map, isLoaded, city, followFlight, fpvFlight, settings.autoOrbit]);
 }

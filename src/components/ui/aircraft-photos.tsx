@@ -53,7 +53,7 @@ const Thumbnail = memo(function Thumbnail({
       ref={ref}
       type="button"
       onClick={() => onClick(index)}
-      className="group relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-white/8 bg-white/5 transition-all hover:border-white/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+      className="group relative h-16 w-24 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/8 bg-white/5 transition-all hover:border-white/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
       aria-label={`View photo ${index + 1}${photo.photographer ? ` by ${photo.photographer}` : ""}`}
     >
       {!loaded && (
@@ -78,7 +78,7 @@ const Thumbnail = memo(function Thumbnail({
   );
 });
 
-function Lightbox({
+export function Lightbox({
   photos,
   index,
   onClose,
@@ -238,6 +238,9 @@ type AircraftPhotosProps = {
   loading: boolean;
   aircraft: AircraftDetails | null;
   error: boolean;
+  onPhotoClick?: (index: number) => void;
+  defaultExpanded?: boolean;
+  hideEmptyState?: boolean;
 };
 
 export function AircraftPhotos({
@@ -245,14 +248,24 @@ export function AircraftPhotos({
   loading,
   aircraft,
   error,
+  onPhotoClick,
+  defaultExpanded = false,
+  hideEmptyState = false,
 }: AircraftPhotosProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const openLightbox = useCallback((index: number) => {
-    setLightboxIndex(index);
-  }, []);
+  const handlePhotoClick = useCallback(
+    (index: number) => {
+      if (onPhotoClick) {
+        onPhotoClick(index);
+      } else {
+        setLightboxIndex(index);
+      }
+    },
+    [onPhotoClick],
+  );
 
   const closeLightbox = useCallback(() => {
     setLightboxIndex(null);
@@ -260,7 +273,9 @@ export function AircraftPhotos({
 
   const hasPhotos = photos.length > 0;
   const hasAircraft = aircraft !== null;
-  const showSection = loading || hasPhotos || hasAircraft;
+  const showSection = hideEmptyState
+    ? loading || hasPhotos
+    : loading || hasPhotos || hasAircraft;
 
   if (!showSection) return null;
 
@@ -335,7 +350,7 @@ export function AircraftPhotos({
                       key={photo.id}
                       photo={photo}
                       index={i}
-                      onClick={openLightbox}
+                      onClick={handlePhotoClick}
                     />
                   ))}
                 </div>
@@ -371,7 +386,8 @@ export function AircraftPhotos({
         </AnimatePresence>
       </div>
 
-      {typeof document !== "undefined" &&
+      {!onPhotoClick &&
+        typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
             {lightboxIndex !== null && (

@@ -38,6 +38,11 @@ export function fpvZoomForAltitude(altMeters: number): number {
  * Uses MapLibre's internal transform.locationToScreenPoint with a synthetic
  * terrain provider so the correct projection (Globe, Mercator, or the
  * automatic transition between them) handles elevation natively.
+ *
+ * There is no public MapLibre API for elevation-aware screen projection
+ * (map.project() is 2D only). This internal access is tested against
+ * MapLibre GL JS v5.18.x. A public-API fallback (without elevation) is
+ * provided for resilience against future internal refactors.
  */
 export function projectLngLatElevationPixelDelta(
   map: maplibregl.Map,
@@ -60,29 +65,42 @@ export function projectLngLatElevationPixelDelta(
   };
 
   const tr = (map as unknown as { transform?: TransformLike }).transform;
-  if (!tr || typeof tr.locationToScreenPoint !== "function") return null;
 
-  const fakeTerrain = {
-    getElevationForLngLat: () => elevationMeters,
-    getElevationForLngLatZoom: () => elevationMeters,
-  };
+  const canvas = map.getCanvas();
+  const cx = canvas.clientWidth / 2;
+  const cy = canvas.clientHeight / 2;
 
-  try {
-    const lnglat = new maplibregl.LngLat(lng, lat);
-    const screenPt = tr.locationToScreenPoint(lnglat, fakeTerrain);
+  // Try elevation-aware internal API first
+  if (tr && typeof tr.locationToScreenPoint === "function") {
+    const fakeTerrain = {
+      getElevationForLngLat: () => elevationMeters,
+      getElevationForLngLatZoom: () => elevationMeters,
+    };
 
-    if (!Number.isFinite(screenPt.x) || !Number.isFinite(screenPt.y)) {
-      return null;
+    try {
+      const lnglat = new maplibregl.LngLat(lng, lat);
+      const screenPt = tr.locationToScreenPoint(lnglat, fakeTerrain);
+
+      if (Number.isFinite(screenPt.x) && Number.isFinite(screenPt.y)) {
+        return { dx: screenPt.x - cx, dy: screenPt.y - cy };
+      }
+    } catch {
+      // Point may be behind the globe horizon — fall through to public API
     }
+  }
 
-    const canvas = map.getCanvas();
-    const cx = canvas.clientWidth / 2;
-    const cy = canvas.clientHeight / 2;
-    return { dx: screenPt.x - cx, dy: screenPt.y - cy };
+  // Fallback: public map.project() without elevation awareness.
+  // This gives correct 2D placement but ignores altitude offset.
+  try {
+    const projected = map.project(new maplibregl.LngLat(lng, lat));
+    if (Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
+      return { dx: projected.x - cx, dy: projected.y - cy };
+    }
   } catch {
     // Point may be behind the globe horizon
-    return null;
   }
+
+  return null;
 }
 
 export function setMapInteractionsEnabled(

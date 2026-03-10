@@ -398,3 +398,125 @@ function Toggle({ checked }: { checked: boolean }) {
     </div>
   );
 }
+
+const CHANGELOG = [
+  {
+    date: "Feb 22",
+    title: "Flight history tracking",
+    description:
+      "Full trail rendering for every tracked flight. Airline logo caching so they actually load.",
+  },
+  {
+    date: "Feb 21",
+    title: "First person view",
+    description:
+      "FPV mode — pick any plane and ride along with a HUD. Also added flight search by callsign.",
+  },
+  {
+    date: "Feb 17",
+    title: "Airline logos & attribution",
+    description:
+      "Proper logos for airlines, and attribution for OSM, OpenSky, CARTO, Esri, and everyone whose data makes this work.",
+  },
+  {
+    date: "Feb 15",
+    title: "9,000+ airports",
+    description:
+      "Went from a handful of cities to every airport we could find. Copilot helped build the dataset. Added keyboard shortcuts and click-to-select.",
+  },
+  {
+    date: "Feb 14",
+    title: "Day one",
+    description:
+      "Basic map, flight cards, trail rendering, orbit camera. Spent most of the day fighting Vercel timeouts and OpenSky IP blocks before realizing the API just supports CORS.",
+  },
+];
+
+export function AboutContent() {
+  return (
+    <ScrollArea className="h-full">
+      <div className="flex flex-col gap-5 p-5 pt-3">
+        <h3 className="text-[20px] font-bold tracking-tight text-white/90">
+          Aeris
+        </h3>
+
+        <div className="space-y-3 text-[13px] leading-relaxed text-white/40">
+          <p>
+            Live flight tracking in 3D. The planes you see are real — position
+            data comes from the OpenSky Network, updated every few seconds via
+            ADS-B receivers people run on their roofs worldwide.
+          </p>
+          <p>
+            You can search through 9,000+ airports, jump into first-person view
+            to ride along with any plane, or just leave it on a screen and watch
+            things move. Trails change color with altitude so you can tell
+            who&apos;s cruising at 35,000ft and who&apos;s on approach.
+          </p>
+        </div>
+
+        <div className="h-px w-full bg-white/6" />
+
+        <p className="text-[12px] leading-relaxed text-white/30">
+          Built by{" "}
+          <a
+            href="https://github.com/kewonit"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/55 underline decoration-white/15 underline-offset-2 hover:text-white/70 transition-colors"
+          >
+            kewonit
+          </a>
+          . Open to internships —{" "}
+          <a
+            href="mailto:kew@edbn.me"
+            className="text-white/55 underline decoration-white/15 underline-offset-2 hover:text-white/70 transition-colors"
+          >
+            kew@edbn.me
+          </a>
+        </p>
+        <p className="text-[12px] leading-relaxed text-white/30">
+          Source is on{" "}
+          <a
+            href="https://github.com/kewonit/aeris"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/55 underline decoration-white/15 underline-offset-2 hover:text-white/70 transition-colors"
+          >
+            GitHub
+          </a>
+          . Got a question or just wanna say hi?{" "}
+          <a
+            href="mailto:aeris@edbn.me"
+            className="text-white/55 underline decoration-white/15 underline-offset-2 hover:text-white/70 transition-colors"
+          >
+            aeris@edbn.me
+          </a>
+        </p>
+      </div>
+    </ScrollArea>
+  );
+}
+
+export function ChangelogContent() {
+  return (
+    <ScrollArea className="h-full">
+      <div className="flex flex-col gap-4 p-5 pt-3">
+        {CHANGELOG.map((entry) => (
+          <div key={entry.date} className="flex gap-3">
+            <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-white/20 w-11">
+              {entry.date}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-white/55">
+                {entry.title}
+              </p>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-white/30">
+                {entry.description}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}

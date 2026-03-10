@@ -25,15 +25,24 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
-      if (INPUT_TAGS.has(target.tagName) || target.isContentEditable) return;
 
       const dialogOpen = !!document.querySelector(
         '[role="dialog"][aria-modal="true"]',
       );
 
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-
       const a = ref.current;
+
+      // Ctrl/Cmd+K opens search from anywhere (even inside inputs)
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        a.onOpenSearch();
+        return;
+      }
+
+      // Don't intercept other shortcuts when focused in input fields
+      if (INPUT_TAGS.has(target.tagName) || target.isContentEditable) return;
+
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (e.key === "Escape") {
         if (!dialogOpen) a.onDeselect();

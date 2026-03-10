@@ -1,6 +1,6 @@
 "use client";
 
-import maplibregl from "maplibre-gl";
+import maplibregl, { setMaxParallelImageRequests } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   createContext,
@@ -16,17 +16,19 @@ import {
 import { cn } from "@/lib/utils";
 import {
   createTerrainDemSource,
-  createHillshadeDemSource,
   DEFAULT_STYLE,
   DARK_TERRAIN_HILLSHADE_LAYER,
   DARK_TERRAIN_SKY,
   DARK_TERRAIN_SPEC,
   TERRAIN_DEM_SOURCE_ID,
-  HILLSHADE_DEM_SOURCE_ID,
   TERRAIN_HILLSHADE_LAYER_ID,
   type MapStyleSpec,
   type TerrainProfile,
 } from "@/lib/map-styles";
+
+// Increase parallel tile requests for faster DEM + base tile loading.
+// Default is 6; 16 allows terrain tiles to saturate HTTP/2 connections.
+setMaxParallelImageRequests(16);
 
 const GLOBE_MAX_PITCH = 80;
 
@@ -109,6 +111,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       maxPitch: GLOBE_MAX_PITCH,
       attributionControl: false,
       cancelPendingTileRequestsWhileZooming: true,
+      maxTileCacheZoomLevels: 3, // fewer cached zoom levels = less memory for DEM tiles
       renderWorldCopies: false,
     });
 
@@ -151,7 +154,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
             }
           }
 
-          if (terrainProfile === "dark") {
+          if (terrainProfile === "dark" && !globeMode) {
             applyDarkTerrainStyle(style);
             style.sky = DARK_TERRAIN_SKY as Record<string, unknown>;
           }
@@ -202,13 +205,12 @@ type MutableStyleSpecification = maplibregl.StyleSpecification & {
 function applyDarkTerrainStyle(style: MutableStyleSpecification): void {
   const sources = (style.sources ??=
     {}) as maplibregl.StyleSpecification["sources"];
+
+  // Single DEM source shared by both terrain mesh and hillshade layer.
+  // This halves tile downloads vs. having two separate sources.
   if (!sources[TERRAIN_DEM_SOURCE_ID]) {
     sources[TERRAIN_DEM_SOURCE_ID] =
       createTerrainDemSource() as maplibregl.SourceSpecification;
-  }
-  if (!sources[HILLSHADE_DEM_SOURCE_ID]) {
-    sources[HILLSHADE_DEM_SOURCE_ID] =
-      createHillshadeDemSource() as maplibregl.SourceSpecification;
   }
 
   style.terrain = DARK_TERRAIN_SPEC as maplibregl.TerrainSpecification;

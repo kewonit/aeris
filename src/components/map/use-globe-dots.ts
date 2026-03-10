@@ -5,8 +5,14 @@ import maplibregl from "maplibre-gl";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor } from "@/lib/flight-utils";
 import { type PickingInfo } from "@deck.gl/core";
+import type { TrailEntry } from "@/hooks/use-trail-history";
 import {
-  GLOBE_FADE_ZOOM_CEIL,
+  densifyGreatCircle2D,
+  splitAtAntimeridian,
+  unwrapLngPath,
+} from "@/lib/geo";
+import {
+  GLOBE_NATIVE_ZOOM_CEIL,
   GLOBE_FADE_ZOOM_FLOOR,
   GEOJSON_THROTTLE_MS,
   GEOJSON_DEBOUNCE_MS,
@@ -14,18 +20,23 @@ import {
 
 const SOURCE_ID = "globe-aircraft-source";
 const LAYER_ID = "globe-aircraft-dots";
+const TRAIL_SOURCE_ID = "globe-trail-source";
+const TRAIL_LAYER_ID = "globe-trail-lines";
 
 /**
- * Custom hook that manages a native MapLibre GeoJSON circle layer for
- * rendering aircraft dots at low globe zoom levels where deck.gl accuracy
- * degrades. Returns refs used by the RAF animation loop to update data.
+ * Custom hook that manages native MapLibre GeoJSON circle + line layers for
+ * rendering aircraft dots AND trail lines at low globe zoom levels where
+ * deck.gl accuracy degrades. Native MapLibre layers follow the globe
+ * curvature perfectly and handle antimeridian crossings automatically.
  */
 export function useGlobeDots(
   map: maplibregl.Map | null,
   isLoaded: boolean,
   flightsRef: MutableRefObject<FlightState[]>,
+  trailsRef: MutableRefObject<TrailEntry[]>,
   dataTimestampRef: MutableRefObject<number>,
   onClickRef: MutableRefObject<(info: PickingInfo<FlightState> | null) => void>,
+  showTrailsRef: MutableRefObject<boolean>,
 ) {
   const lastGeoJsonUpdateRef = useRef(0);
   const lastGeoJsonTimestampRef = useRef(0);
@@ -37,6 +48,7 @@ export function useGlobeDots(
     if (!map || !isLoaded) return;
 
     const ensureGlobeLayers = () => {
+      // ── Aircraft dots ──
       if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, {
           type: "geojson",
@@ -55,13 +67,13 @@ export function useGlobeDots(
               ["exponential", 1.5],
               ["zoom"],
               0,
-              1.5,
+              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 1.2, 1, 2.0],
               3,
-              2.5,
+              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 2.0, 1, 3.2],
               5,
-              3.5,
-              GLOBE_FADE_ZOOM_CEIL,
-              4.5,
+              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 3.0, 1, 4.5],
+              GLOBE_NATIVE_ZOOM_CEIL,
+              5.0,
             ],
             "circle-color": ["get", "color"],
             "circle-opacity": [
@@ -69,23 +81,69 @@ export function useGlobeDots(
               ["linear"],
               ["zoom"],
               GLOBE_FADE_ZOOM_FLOOR,
-              0.85,
-              GLOBE_FADE_ZOOM_CEIL,
+              0.9,
+              GLOBE_NATIVE_ZOOM_CEIL,
               0,
             ],
-            "circle-stroke-color": "rgba(255, 255, 255, 0.45)",
+            "circle-stroke-color": "rgba(255, 255, 255, 0.5)",
             "circle-stroke-width": [
               "interpolate",
               ["linear"],
               ["zoom"],
               0,
               0.3,
-              GLOBE_FADE_ZOOM_CEIL,
+              GLOBE_NATIVE_ZOOM_CEIL,
               0.8,
             ],
-            "circle-blur": 0.15,
+            "circle-blur": 0.1,
           },
         });
+      }
+
+      // ── Trail lines ──
+      if (!map.getSource(TRAIL_SOURCE_ID)) {
+        map.addSource(TRAIL_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      }
+
+      if (!map.getLayer(TRAIL_LAYER_ID)) {
+        map.addLayer(
+          {
+            id: TRAIL_LAYER_ID,
+            type: "line",
+            source: TRAIL_SOURCE_ID,
+            paint: {
+              "line-color": ["get", "color"],
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                0,
+                0.8,
+                3,
+                1.2,
+                GLOBE_NATIVE_ZOOM_CEIL,
+                1.8,
+              ],
+              "line-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                GLOBE_FADE_ZOOM_FLOOR,
+                0.65,
+                GLOBE_NATIVE_ZOOM_CEIL,
+                0,
+              ],
+            },
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+          },
+          LAYER_ID, // render trails below dots
+        );
       }
     };
 
@@ -119,6 +177,8 @@ export function useGlobeDots(
       map.off("mouseenter", LAYER_ID, onDotEnter);
       map.off("mouseleave", LAYER_ID, onDotLeave);
       try {
+        if (map.getLayer(TRAIL_LAYER_ID)) map.removeLayer(TRAIL_LAYER_ID);
+        if (map.getSource(TRAIL_SOURCE_ID)) map.removeSource(TRAIL_SOURCE_ID);
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       } catch {
@@ -128,14 +188,17 @@ export function useGlobeDots(
   }, [map, isLoaded, flightsRef, onClickRef]);
 
   /**
-   * Called from the RAF animation loop. Updates (or clears) the GeoJSON
-   * source based on current zoom level and globe mode.
+   * Called from the RAF animation loop. Updates (or clears) both the dot
+   * GeoJSON source and the trail line GeoJSON source based on current
+   * zoom level and globe mode.
    */
   function updateGlobeDots(isGlobe: boolean, currentZoom: number, now: number) {
     if (!map) return;
 
+    const MAX_ALTITUDE_METERS = 13000;
+
     if (isGlobe) {
-      if (currentZoom < GLOBE_FADE_ZOOM_CEIL) {
+      if (currentZoom < GLOBE_NATIVE_ZOOM_CEIL) {
         if (globeZoomEnteredAtRef.current === 0) {
           globeZoomEnteredAtRef.current = now;
         }
@@ -148,53 +211,146 @@ export function useGlobeDots(
             now - lastGeoJsonUpdateRef.current > GEOJSON_THROTTLE_MS;
 
           if (dataChanged || throttleExpired) {
-            const src = map.getSource(SOURCE_ID) as
+            // ── Update aircraft dots ──
+            const dotSrc = map.getSource(SOURCE_ID) as
               | maplibregl.GeoJSONSource
               | undefined;
-            if (src) {
-              const features = flightsRef.current
-                .filter((f) => f.longitude != null && f.latitude != null)
-                .map((f) => ({
+            if (dotSrc) {
+              const flights = flightsRef.current;
+              const features = [];
+              for (const f of flights) {
+                if (
+                  f.longitude == null ||
+                  f.latitude == null ||
+                  !Number.isFinite(f.longitude) ||
+                  !Number.isFinite(f.latitude)
+                )
+                  continue;
+                const c = altitudeToColor(f.baroAltitude);
+                const altNorm = Math.min(
+                  1,
+                  Math.max(0, (f.baroAltitude ?? 0) / MAX_ALTITUDE_METERS),
+                );
+                features.push({
                   type: "Feature" as const,
                   geometry: {
                     type: "Point" as const,
-                    coordinates: [f.longitude!, f.latitude!],
+                    coordinates: [f.longitude, f.latitude],
                   },
                   properties: {
                     icao24: f.icao24,
-                    color: (() => {
-                      const c = altitudeToColor(f.baroAltitude);
-                      return `rgb(${c[0]},${c[1]},${c[2]})`;
-                    })(),
+                    color: `rgb(${c[0]},${c[1]},${c[2]})`,
+                    alt_norm: altNorm,
                   },
-                }));
-              src.setData({ type: "FeatureCollection", features });
-              lastGeoJsonUpdateRef.current = now;
-              lastGeoJsonTimestampRef.current = dataTimestampRef.current;
-              geoJsonClearedRef.current = false;
+                });
+              }
+              dotSrc.setData({ type: "FeatureCollection", features });
             }
+
+            // ── Update trail lines ──
+            const trailSrc = map.getSource(TRAIL_SOURCE_ID) as
+              | maplibregl.GeoJSONSource
+              | undefined;
+            if (trailSrc) {
+              // Respect the showTrails user setting
+              if (!showTrailsRef.current) {
+                trailSrc.setData({ type: "FeatureCollection", features: [] });
+              } else {
+                const trails = trailsRef.current;
+                const trailFeatures: GeoJSON.Feature[] = [];
+
+                for (const trail of trails) {
+                  if (trail.path.length < 2) continue;
+
+                  // Get the trail color from the most recent altitude
+                  const lastAlt =
+                    trail.baroAltitude ??
+                    trail.altitudes[trail.altitudes.length - 1] ??
+                    0;
+                  const c = altitudeToColor(lastAlt);
+                  const color = `rgba(${c[0]},${c[1]},${c[2]},0.7)`;
+
+                  // Limit to last N points for performance at globe zoom
+                  const maxPts = 60;
+                  const rawPath =
+                    trail.path.length > maxPts
+                      ? trail.path.slice(trail.path.length - maxPts)
+                      : trail.path;
+
+                  // Unwrap longitudes for continuity
+                  const unwrapped = unwrapLngPath(rawPath);
+
+                  // Densify along great-circle arcs so trails curve
+                  // properly on the globe (segments > 0.3° get subdivided)
+                  const densified = densifyGreatCircle2D(unwrapped, 0.3, 16);
+
+                  // Normalize longitudes back to [-180, 180] range
+                  const normalized: [number, number][] = densified.map(
+                    ([lng, lat]) => {
+                      let normLng = lng;
+                      while (normLng > 180) normLng -= 360;
+                      while (normLng < -180) normLng += 360;
+                      return [normLng, lat];
+                    },
+                  );
+
+                  // Split at antimeridian crossings for MapLibre
+                  const segments = splitAtAntimeridian(normalized);
+
+                  for (const seg of segments) {
+                    if (seg.length < 2) continue;
+                    trailFeatures.push({
+                      type: "Feature",
+                      geometry: {
+                        type: "LineString",
+                        coordinates: seg,
+                      },
+                      properties: { color, icao24: trail.icao24 },
+                    });
+                  }
+                }
+
+                trailSrc.setData({
+                  type: "FeatureCollection",
+                  features: trailFeatures,
+                });
+              } // end showTrails check
+            }
+
+            lastGeoJsonUpdateRef.current = now;
+            lastGeoJsonTimestampRef.current = dataTimestampRef.current;
+            geoJsonClearedRef.current = false;
           }
         }
       } else {
         globeZoomEnteredAtRef.current = 0;
         if (!geoJsonClearedRef.current) {
-          const src = map.getSource(SOURCE_ID) as
-            | maplibregl.GeoJSONSource
-            | undefined;
-          if (src) {
-            src.setData({ type: "FeatureCollection", features: [] });
-            geoJsonClearedRef.current = true;
-          }
+          clearNativeSources();
         }
       }
     } else if (!geoJsonClearedRef.current) {
-      const src = map.getSource(SOURCE_ID) as
+      clearNativeSources();
+    }
+  }
+
+  function clearNativeSources() {
+    if (!map) return;
+    try {
+      const dotSrc = map.getSource(SOURCE_ID) as
         | maplibregl.GeoJSONSource
         | undefined;
-      if (src) {
-        src.setData({ type: "FeatureCollection", features: [] });
-        geoJsonClearedRef.current = true;
+      if (dotSrc) {
+        dotSrc.setData({ type: "FeatureCollection", features: [] });
       }
+      const trailSrc = map.getSource(TRAIL_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (trailSrc) {
+        trailSrc.setData({ type: "FeatureCollection", features: [] });
+      }
+      geoJsonClearedRef.current = true;
+    } catch {
+      /* source may be removed */
     }
   }
 

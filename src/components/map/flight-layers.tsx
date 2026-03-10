@@ -91,8 +91,10 @@ export function FlightLayers({
     map,
     isLoaded,
     flightsRef,
+    trailsRef,
     dataTimestampRef,
     onClickRef,
+    showTrailsRef,
   );
 
   // Stabilize updateGlobeDots via ref so the animation loop doesn't restart on every render
@@ -407,6 +409,7 @@ export function FlightLayers({
             defaultColor,
             elapsed,
             globeFade,
+            currentZoom,
             visible: layersVisible && showTrailsRef.current,
           }),
         );
@@ -419,6 +422,7 @@ export function FlightLayers({
           interpolated,
           elapsed,
           globeFade,
+          currentZoom,
           haloUrl,
           ringUrl,
           layersVisible,
@@ -427,6 +431,15 @@ export function FlightLayers({
         if (pulseResult.shouldClearPrev) {
           prevSelectedRef.current = null;
         }
+
+        // Zoom-dependent elevation scale to prevent absurd altitude spikes
+        // at globe zoom levels. Full exaggeration at city zoom (>8).
+        const elevScale =
+          currentZoom < 5
+            ? 0.15 + (currentZoom / 5) * 0.35
+            : currentZoom < 8
+              ? 0.5 + ((currentZoom - 5) / 3) * 0.5
+              : 1.0;
 
         // Aircraft 3D model layer — always included with `visible` to avoid
         // re-fetching the .glb model on every zoom in/out cycle
@@ -439,7 +452,7 @@ export function FlightLayers({
             getPosition: (d) => [
               d.longitude!,
               d.latitude!,
-              altitudeToElevation(d.baroAltitude),
+              altitudeToElevation(d.baroAltitude) * elevScale,
             ],
             getOrientation: (d) => {
               const pitch = pitchByIcao.get(d.icao24) ?? 0;

@@ -3,52 +3,53 @@ export type MapStyleSpec = string | Record<string, unknown>;
 export type TerrainProfile = "none" | "dark";
 
 export const TERRAIN_DEM_SOURCE_ID = "aeris-terrain-dem";
-export const HILLSHADE_DEM_SOURCE_ID = "aeris-hillshade-dem";
 export const TERRAIN_HILLSHADE_LAYER_ID = "aeris-terrain-hillshade";
 
+/**
+ * Single shared DEM source for both terrain mesh AND hillshade.
+ * Uses AWS Terrain Tiles (Mapzen/Tilezen) — free, reliable, globally cached on S3.
+ * Terrarium encoding: elevation = (R * 256 + G + B / 256) - 32768
+ * maxzoom capped at 12 (terrain detail beyond that is imperceptible for flight tracking).
+ */
 export function createTerrainDemSource(): Record<string, unknown> {
   return {
     type: "raster-dem",
     tiles: [
       "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     ],
+    encoding: "terrarium",
     tileSize: 256,
     maxzoom: 12,
-    encoding: "terrarium",
-    volatile: true,
-    attribution:
-      "<a href='https://registry.opendata.aws/terrain-tiles/'>Terrain Tiles</a> \u00b7 AWS Open Data",
-  };
-}
-
-export function createHillshadeDemSource(): Record<string, unknown> {
-  return {
-    type: "raster-dem",
-    tiles: [
-      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-    ],
-    tileSize: 256,
-    maxzoom: 12,
-    encoding: "terrarium",
     volatile: true,
   };
 }
 
 export const DARK_TERRAIN_SPEC: Record<string, unknown> = {
   source: TERRAIN_DEM_SOURCE_ID,
-  exaggeration: 1.0,
+  exaggeration: 0.8, // MapLibre terrain.exaggeration only accepts a number, not an expression
 };
 
 export const DARK_TERRAIN_HILLSHADE_LAYER: Record<string, unknown> = {
   id: TERRAIN_HILLSHADE_LAYER_ID,
   type: "hillshade",
-  source: HILLSHADE_DEM_SOURCE_ID,
+  source: TERRAIN_DEM_SOURCE_ID, // reuse same DEM source — no duplicate tile fetches
+  minzoom: 3, // skip hillshade at globe zoom (invisible anyway, saves GPU)
   layout: { visibility: "visible" },
   paint: {
     "hillshade-shadow-color": "#040608",
     "hillshade-highlight-color": "rgba(180,195,210,0.12)",
     "hillshade-accent-color": "#0d1117",
-    "hillshade-exaggeration": 0.5,
+    "hillshade-exaggeration": [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      3,
+      0, // invisible at low zoom
+      5,
+      0.3, // fade in gently
+      8,
+      0.5, // full hillshade at regional zoom
+    ],
   },
 };
 
@@ -188,8 +189,8 @@ export function getAttributions(styleId: string): AttributionEntry[] {
       );
       if (styleId === "dark-terrain") {
         base.push({
-          label: "Terrain Tiles",
-          url: "https://registry.opendata.aws/terrain-tiles/",
+          label: "MapLibre Terrain",
+          url: "https://demotiles.maplibre.org/",
         });
       }
       break;

@@ -32,12 +32,16 @@ export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 
 // Globe/Mercator crossfade thresholds
+// deck.gl layers fade in between FLOOR and CEIL.
+// MapLibre native dots/lines are visible from zoom 0 up to NATIVE_CEIL.
+// The overlap zone (FLOOR → NATIVE_CEIL) ensures no blank gap during transitions.
 export const GLOBE_FADE_ZOOM_CEIL = 5.5;
-export const GLOBE_FADE_ZOOM_FLOOR = 5.0;
+export const GLOBE_FADE_ZOOM_FLOOR = 4.0;
+export const GLOBE_NATIVE_ZOOM_CEIL = 6.0;
 
 // GeoJSON globe dot layer timing
-export const GEOJSON_THROTTLE_MS = 2000;
-export const GEOJSON_DEBOUNCE_MS = 600;
+export const GEOJSON_THROTTLE_MS = 1500;
+export const GEOJSON_DEBOUNCE_MS = 200;
 
 // ── Shared types ───────────────────────────────────────────────────────
 

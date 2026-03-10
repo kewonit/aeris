@@ -81,3 +81,65 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── cmdk styles ─────────────────────────────────────────────────────── */
+
+.aeris-cmdk [cmdk-input] {
+  border: none;
+  outline: none;
+  background: transparent;
+}
+
+.aeris-cmdk [cmdk-group-heading] {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(255 255 255 / 0.15);
+  user-select: none;
+}
+
+.aeris-cmdk [cmdk-list] {
+  overscroll-behavior: contain;
+}
+
+.aeris-cmdk [cmdk-group] + [cmdk-group] {
+  padding-top: 4px;
+}
+
+.aeris-cmdk [cmdk-empty] {
+  display: flex;
+}
+
+.aeris-cmdk .search-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  outline: none;
+  user-select: none;
+}
+
+.aeris-cmdk .search-item[data-selected="true"] {
+  background: rgb(255 255 255 / 0.05);
+}
+
+.aeris-cmdk
+  [cmdk-item][data-selected="true"]
+  .group-data-\[selected\=true\]\/item\:opacity-100 {
+  opacity: 1;
+}
+
+.aeris-cmdk .search-item[data-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.aeris-cmdk .search-item:active:not([data-disabled="true"]) {
+  background: rgb(255 255 255 / 0.07);
+}
