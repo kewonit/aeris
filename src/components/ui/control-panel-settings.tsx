@@ -24,7 +24,7 @@ const ORBIT_SPEED_PRESETS = [
 const ORBIT_SPEED_MIN = 0.02;
 const ORBIT_SPEED_MAX = 0.5;
 const ORBIT_SNAP_THRESHOLD = 0.025;
-const TRAIL_THICKNESS_MIN = 1;
+const TRAIL_THICKNESS_MIN = 0.5;
 const TRAIL_THICKNESS_MAX = 8;
 const TRAIL_DISTANCE_MIN = 12;
 const TRAIL_DISTANCE_MAX = 100;
@@ -108,6 +108,7 @@ export function SettingsContent() {
           description="Display earth as a 3D sphere when zoomed out"
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
+          badge="BETA"
         />
 
         <div className="mx-3 my-2 h-px bg-white/4" />
@@ -295,12 +296,14 @@ function SettingRow({
   description,
   checked,
   onChange,
+  badge,
 }: {
   icon: ReactNode;
   title: string;
   description: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  badge?: string;
 }) {
   return (
     <button
@@ -313,7 +316,14 @@ function SettingRow({
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium text-white/80">{title}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-[13px] font-medium text-white/80">{title}</p>
+          {badge && (
+            <span className="inline-flex items-center rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-indigo-300 ring-1 ring-indigo-400/20">
+              {badge}
+            </span>
+          )}
+        </div>
         <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-white/22">
           {description}
         </p>
@@ -400,6 +410,12 @@ function Toggle({ checked }: { checked: boolean }) {
 }
 
 const CHANGELOG = [
+  {
+    date: "Mar 11",
+    title: "Globe mode & aircraft photos",
+    description:
+      "Zoom out to see the entire earth as a 3D sphere with altitude-colored dots for every flight. Trails are now interpolated with centripetal Catmull\u2013Rom splines — a C\u00B9-continuous piecewise cubic that passes through every waypoint without overshooting, using \u03B1\u2009=\u20090.5 parameterization for natural curvature. Dark terrain, aircraft photo banners in flight cards, and a hard dot-to-flight cutover with zero overlap. Globe mode is in beta — find it in Settings.",
+  },
   {
     date: "Feb 22",
     title: "Flight history tracking",

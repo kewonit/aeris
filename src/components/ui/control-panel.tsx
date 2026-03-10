@@ -7,7 +7,6 @@ import {
   Map as MapIcon,
   Settings,
   Keyboard,
-  Globe,
   X,
   Github,
   Info,
@@ -58,8 +57,6 @@ type ControlPanelProps = {
   flights: FlightState[];
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
-  globeMode: boolean;
-  onToggleGlobe: () => void;
 };
 
 export function ControlPanel({
@@ -70,8 +67,6 @@ export function ControlPanel({
   flights,
   activeFlightIcao24,
   onLookupFlight,
-  globeMode,
-  onToggleGlobe,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
 
@@ -113,29 +108,6 @@ export function ControlPanel({
           <Icon className="h-4 w-4" />
         </motion.button>
       ))}
-
-      <motion.button
-        onClick={onToggleGlobe}
-        className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-        style={{
-          borderWidth: 1,
-          borderColor: globeMode
-            ? "rgb(var(--ui-fg) / 0.18)"
-            : "rgb(var(--ui-fg) / 0.06)",
-          backgroundColor: globeMode
-            ? "rgb(var(--ui-fg) / 0.1)"
-            : "rgb(var(--ui-fg) / 0.03)",
-          color: globeMode
-            ? "rgb(var(--ui-fg) / 0.85)"
-            : "rgb(var(--ui-fg) / 0.5)",
-        }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        aria-label={globeMode ? "Switch to Mercator" : "Switch to Globe"}
-        title={globeMode ? "Globe mode (on)" : "Globe mode (off)"}
-      >
-        <Globe className="h-4 w-4" />
-      </motion.button>
 
       <motion.button
         onClick={() => open("settings")}

@@ -13,7 +13,7 @@ import {
 } from "@/lib/geo";
 import {
   GLOBE_NATIVE_ZOOM_CEIL,
-  GLOBE_FADE_ZOOM_FLOOR,
+  GLOBE_SWITCH_ZOOM,
   GEOJSON_THROTTLE_MS,
   GEOJSON_DEBOUNCE_MS,
 } from "./flight-layer-constants";
@@ -68,21 +68,19 @@ export function useGlobeDots(
               ["zoom"],
               0,
               ["interpolate", ["linear"], ["get", "alt_norm"], 0, 1.2, 1, 2.0],
-              3,
-              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 2.0, 1, 3.2],
-              5,
-              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 3.0, 1, 4.5],
+              2,
+              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 1.8, 1, 2.8],
               GLOBE_NATIVE_ZOOM_CEIL,
-              5.0,
+              ["interpolate", ["linear"], ["get", "alt_norm"], 0, 3.0, 1, 5.0],
             ],
             "circle-color": ["get", "color"],
             "circle-opacity": [
               "interpolate",
               ["linear"],
               ["zoom"],
-              GLOBE_FADE_ZOOM_FLOOR,
+              GLOBE_SWITCH_ZOOM - 0.05,
               0.9,
-              GLOBE_NATIVE_ZOOM_CEIL,
+              GLOBE_SWITCH_ZOOM,
               0,
             ],
             "circle-stroke-color": "rgba(255, 255, 255, 0.5)",
@@ -92,7 +90,7 @@ export function useGlobeDots(
               ["zoom"],
               0,
               0.3,
-              GLOBE_NATIVE_ZOOM_CEIL,
+              GLOBE_SWITCH_ZOOM,
               0.8,
             ],
             "circle-blur": 0.1,
@@ -122,7 +120,7 @@ export function useGlobeDots(
                 ["zoom"],
                 0,
                 0.8,
-                3,
+                2,
                 1.2,
                 GLOBE_NATIVE_ZOOM_CEIL,
                 1.8,
@@ -131,9 +129,9 @@ export function useGlobeDots(
                 "interpolate",
                 ["linear"],
                 ["zoom"],
-                GLOBE_FADE_ZOOM_FLOOR,
+                GLOBE_SWITCH_ZOOM - 0.05,
                 0.65,
-                GLOBE_NATIVE_ZOOM_CEIL,
+                GLOBE_SWITCH_ZOOM,
                 0,
               ],
             },
@@ -196,6 +194,27 @@ export function useGlobeDots(
     if (!map) return;
 
     const MAX_ALTITUDE_METERS = 13000;
+
+    // Hide layers unless globe mode AND below switch zoom
+    const dotsVisible = isGlobe && currentZoom < GLOBE_NATIVE_ZOOM_CEIL;
+    try {
+      if (map.getLayer(LAYER_ID)) {
+        map.setLayoutProperty(
+          LAYER_ID,
+          "visibility",
+          dotsVisible ? "visible" : "none",
+        );
+      }
+      if (map.getLayer(TRAIL_LAYER_ID)) {
+        map.setLayoutProperty(
+          TRAIL_LAYER_ID,
+          "visibility",
+          dotsVisible ? "visible" : "none",
+        );
+      }
+    } catch {
+      /* layer may not exist yet */
+    }
 
     if (isGlobe) {
       if (currentZoom < GLOBE_NATIVE_ZOOM_CEIL) {

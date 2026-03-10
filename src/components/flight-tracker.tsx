@@ -452,8 +452,6 @@ function FlightTrackerInner() {
               flights={displayFlights}
               activeFlightIcao24={selectedIcao24}
               onLookupFlight={handleLookupFlight}
-              globeMode={settings.globeMode}
-              onToggleGlobe={() => update("globeMode", !settings.globeMode)}
             />
           </div>
         )}

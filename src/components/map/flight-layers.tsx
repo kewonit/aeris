@@ -302,13 +302,11 @@ export function FlightLayers({
         if (currentZoom < GLOBE_FADE_ZOOM_FLOOR) {
           layersVisible = false;
           globeFade = 0;
-        } else {
-          const linearFade = Math.min(
-            1,
+        } else if (currentZoom < GLOBE_FADE_ZOOM_CEIL) {
+          const t =
             (currentZoom - GLOBE_FADE_ZOOM_FLOOR) /
-              (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR),
-          );
-          globeFade = smoothStep(linearFade);
+            (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR);
+          globeFade = t * t * t;
         }
       }
 
