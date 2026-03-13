@@ -50,7 +50,7 @@ export function normalizeBounds(
 export function parseStateRow(
   rawState: (string | number | boolean | null)[],
 ): FlightState | null {
-  if (rawState.length < 17) return null;
+  if (rawState.length < 18) return null;
 
   const icao24 =
     typeof rawState[0] === "string" ? rawState[0].toLowerCase() : "";

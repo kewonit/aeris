@@ -29,7 +29,7 @@ export function StyleContent({
       </div>
       <div className="border-t border-white/4 px-5 py-3">
         <p className="text-[11px] font-medium text-white/12">
-          Satellite © Esri · Terrain © OpenTopoMap / Terrain Tiles · Base maps ©
+          Satellite © Esri · Terrain © AWS/Mapzen Terrain Tiles · Base maps ©
           CARTO
         </p>
       </div>

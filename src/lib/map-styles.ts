@@ -189,8 +189,8 @@ export function getAttributions(styleId: string): AttributionEntry[] {
       );
       if (styleId === "dark-terrain") {
         base.push({
-          label: "MapLibre Terrain",
-          url: "https://demotiles.maplibre.org/",
+          label: "AWS/Mapzen Terrain",
+          url: "https://registry.opendata.aws/terrain-tiles/",
         });
       }
       break;

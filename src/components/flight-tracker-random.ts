@@ -65,7 +65,7 @@ export function cityFromFlight(flight: FlightState): City | null {
     id: `trk-${flight.icao24}`,
     name: `Flight ${code}`,
     country: flight.originCountry || "Unknown",
-    iata: code.slice(0, 3),
+    iata: code,
     coordinates: [flight.longitude, flight.latitude],
     radius: 2,
   };

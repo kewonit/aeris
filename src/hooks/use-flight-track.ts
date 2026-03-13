@@ -179,11 +179,12 @@ export function useFlightTrack(
         });
 
         // Evict oldest entries when cache exceeds max size (FIFO via Map insertion order)
-        if (trackCache.size > TRACK_CACHE_MAX_ENTRIES) {
+        while (trackCache.size > TRACK_CACHE_MAX_ENTRIES) {
           const oldestKey = trackCache.keys().next().value as
             | string
             | undefined;
-          if (oldestKey && oldestKey !== key) trackCache.delete(oldestKey);
+          if (!oldestKey) break;
+          trackCache.delete(oldestKey);
         }
 
         setFetchedAtMs(fetchedAt);

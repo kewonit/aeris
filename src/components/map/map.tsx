@@ -90,9 +90,6 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   const isDarkRef = useRef(isDark);
   isDarkRef.current = isDark;
 
-  const globeModeRef = useRef(globeMode);
-  globeModeRef.current = globeMode;
-
   // ── Map creation ──────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -165,13 +162,15 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     );
 
     // Set projection imperatively so it takes effect immediately.
-    mapInstance.once("style.load", () => {
+    const onStyleLoad = () => {
       mapInstance.setProjection({ type: globeMode ? "globe" : "mercator" });
       addAerowayLayers(mapInstance, isDarkRef.current);
-    });
+    };
+
+    mapInstance.once("style.load", onStyleLoad);
 
     return () => {
-      mapInstance.off("style.load", () => {});
+      mapInstance.off("style.load", onStyleLoad);
     };
   }, [mapInstance, isLoaded, mapStyle, terrainProfile, globeMode]);
 
