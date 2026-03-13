@@ -25,9 +25,10 @@ export const STARTUP_TRAIL_POLLS = 3;
 export const STARTUP_TRAIL_STEP_SEC = 12;
 export const TRACK_DAMPING = 0.18;
 export const TRAIL_SMOOTHING_ITERATIONS = 3;
-export const AIRCRAFT_SCENEGRAPH_URL = "/models/airplane.glb";
 export const AIRCRAFT_PX_PER_UNIT = 0.3;
 export const BASE_AIRCRAFT_SIZE = 25;
+export const AIRCRAFT_MIN_PIXELS = 0.8;
+export const AIRCRAFT_MAX_PIXELS = 22;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 

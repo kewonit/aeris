@@ -30,11 +30,8 @@ import { useMergedTrails } from "@/hooks/use-merged-trails";
 import { useFlightMonitors } from "@/hooks/use-flight-monitors";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
-import {
-  fetchFlightByIcao24,
-  fetchFlightByCallsign,
-  type FlightState,
-} from "@/lib/opensky";
+import type { FlightState } from "@/lib/opensky";
+import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
 import { Github, Star } from "lucide-react";
@@ -308,7 +305,7 @@ function FlightTrackerInner() {
       }
 
       const result = ICAO24_REGEX.test(compactQuery)
-        ? await fetchFlightByIcao24(compactQuery)
+        ? await fetchFlightByHex(compactQuery)
         : await fetchFlightByCallsign(compactQuery);
 
       if (!result.flight) return false;

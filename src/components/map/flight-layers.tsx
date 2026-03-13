@@ -4,9 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
-import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import { useMap } from "./map";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
@@ -17,9 +15,6 @@ import {
   MAX_ANIM_DURATION_MS,
   TELEPORT_THRESHOLD,
   TRACK_DAMPING,
-  AIRCRAFT_SCENEGRAPH_URL,
-  AIRCRAFT_PX_PER_UNIT,
-  BASE_AIRCRAFT_SIZE,
   AIRCRAFT_PICK_RADIUS_PX,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
@@ -28,7 +23,6 @@ import {
 
 import {
   categorySizeMultiplier,
-  tintAircraftColor,
   AIRCRAFT_ICON_MAPPING,
   getHaloUrl,
   getRingUrl,
@@ -39,11 +33,14 @@ import {
   lerpAngle,
   smoothStep,
   computePitchByIcao,
+  computeBankByIcao,
   computeInterpolatedFlights,
 } from "./flight-animation-helpers";
 
 import { buildTrailLayers } from "./flight-layer-builders";
 import { buildSelectionPulseLayers } from "./flight-layer-builders";
+import { buildAircraftModelLayers } from "./aircraft-model-layers";
+import { preloadAllModels } from "./aircraft-model-mapping";
 import { useGlobeDots } from "./use-globe-dots";
 
 export function FlightLayers({
@@ -262,6 +259,7 @@ export function FlightLayers({
         layers: [],
       });
       map.addControl(overlayRef.current as unknown as maplibregl.IControl);
+      preloadAllModels();
     }
 
     return () => {
@@ -372,6 +370,13 @@ export function FlightLayers({
           prevSnapshotsRef.current,
         );
 
+        const bankByIcao = computeBankByIcao(
+          interpolated,
+          prevSnapshotsRef.current,
+          currSnapshotsRef.current,
+          tAngle,
+        );
+
         const layers = [];
 
         // Shadow layer — always included, toggled via `visible` to retain WebGL state
@@ -439,44 +444,20 @@ export function FlightLayers({
               ? 0.5 + ((currentZoom - 5) / 3) * 0.5
               : 1.0;
 
-        // Aircraft 3D model layer — always included with `visible` to avoid
-        // re-fetching the .glb model on every zoom in/out cycle
+        // Aircraft 3D model layers — one ScenegraphLayer per model type,
+        // always included with `visible` to avoid re-fetching .glb files
         layers.push(
-          new ScenegraphLayer<FlightState>({
-            id: "flight-aircraft",
-            visible: layersVisible,
-            data: visibleFlights,
-            opacity: globeFade,
-            getPosition: (d) => [
-              d.longitude!,
-              d.latitude!,
-              altitudeToElevation(d.baroAltitude) * elevScale,
-            ],
-            getOrientation: (d) => {
-              const pitch = pitchByIcao.get(d.icao24) ?? 0;
-              const yaw = -(Number.isFinite(d.trueTrack) ? d.trueTrack! : 0);
-              return [pitch, yaw, 90];
-            },
-            getColor: (d) => {
-              const base = altColors
-                ? altitudeToColor(d.baroAltitude)
-                : defaultColor;
-              return tintAircraftColor(base, d.category);
-            },
-            scenegraph: AIRCRAFT_SCENEGRAPH_URL,
-            getScale: (d) => {
-              const scale = categorySizeMultiplier(d.category);
-              return [scale, scale, scale];
-            },
-            sizeScale: BASE_AIRCRAFT_SIZE,
-            sizeMinPixels: AIRCRAFT_PX_PER_UNIT,
-            sizeMaxPixels: AIRCRAFT_PX_PER_UNIT,
-            _lighting: "pbr",
-            pickable: true,
-            onHover: handleHover,
-            onClick: handleClick,
-            autoHighlight: true,
-            highlightColor: [255, 255, 255, 80],
+          ...buildAircraftModelLayers({
+            visibleFlights,
+            layersVisible,
+            globeFade,
+            elevScale,
+            altColors,
+            defaultColor,
+            pitchByIcao,
+            bankByIcao,
+            handleHover,
+            handleClick,
           }),
         );
 

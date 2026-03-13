@@ -1,37 +1,26 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  fetchFlightsByBbox,
-  bboxFromCenter,
-  type FlightState,
-} from "@/lib/opensky";
+import type { FlightState } from "@/lib/opensky";
+import { fetchFlightsByPoint } from "@/lib/flight-api";
 import type { City } from "@/lib/cities";
 
-const BASE_POLL_MS = 30_000;
-const CONSERVATIVE_POLL_MS = 60_000;
-const CAUTIOUS_POLL_MS = 120_000;
-const EMERGENCY_POLL_MS = 300_000;
+/** Normal polling interval — readsb allows 1 req/s; 5s is conservative. */
+const POLL_INTERVAL_MS = 5_000;
 
-const CREDIT_TIER_CONSERVATIVE = 2_000;
-const CREDIT_TIER_CAUTIOUS = 800;
-const CREDIT_TIER_EMERGENCY = 200;
+/** Backoff on rate limit (429) or repeated errors. */
+const RATE_LIMIT_BACKOFF_MS = 15_000;
 
-const RATE_LIMIT_BACKOFF_MS = 30_000;
-const VISIBILITY_RESUME_STALE_MS = 60_000;
-const FPV_BBOX_RADIUS = 2;
+/** If tab was hidden longer than this, fetch immediately on resume. */
+const VISIBILITY_RESUME_STALE_MS = 15_000;
 
-function adaptiveInterval(creditsRemaining: number | null): number {
-  if (creditsRemaining === null) return BASE_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_EMERGENCY) return EMERGENCY_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_CAUTIOUS) return CAUTIOUS_POLL_MS;
-  if (creditsRemaining < CREDIT_TIER_CONSERVATIVE) return CONSERVATIVE_POLL_MS;
-  return BASE_POLL_MS;
-}
+/** Radius (degrees) for FPV point queries — ~120 nautical miles. */
+const FPV_POINT_RADIUS = 2;
 
 /**
- * Fetches flights via OpenSky. In FPV mode the bbox moves with the tracked
- * aircraft (4×4° = 1 API credit). City changes are ignored while in FPV.
+ * Fetches flights via readsb (Airplanes.live → adsb.lol fallback).
+ * In FPV mode the query center moves with the tracked aircraft.
+ * City changes are ignored while in FPV.
  */
 export function useFlights(
   city: City | null,
@@ -43,13 +32,11 @@ export function useFlights(
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
-  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const creditsRef = useRef<number | null>(null);
   const lastFetchRef = useRef(0);
   const fpvCenterRef = useRef<{ lng: number; lat: number } | null>(null);
   const fpvSeedCenterRef = useRef<{ lng: number; lat: number } | null>(
@@ -69,9 +56,7 @@ export function useFlights(
     }
     if (fpvSeedRef.current === fpvIcao24) return;
 
-    const match = flights.find(
-      (f) => f.icao24.toLowerCase() === fpvIcao24,
-    );
+    const match = flights.find((f) => f.icao24.toLowerCase() === fpvIcao24);
     if (match?.longitude != null && match?.latitude != null) {
       fpvCenterRef.current = { lng: match.longitude, lat: match.latitude };
     }
@@ -110,7 +95,10 @@ export function useFlights(
   const scheduleNext = useCallback(
     (target: City, delayMs: number) => {
       clearSchedule();
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
 
@@ -130,50 +118,46 @@ export function useFlights(
       try {
         setLoading(true);
         setError(null);
-        let bbox: [number, number, number, number];
+
         const inFpv = fpvIcao24Ref.current !== null;
+        let lat: number;
+        let lon: number;
+        let radiusDeg: number;
 
         if (inFpv && fpvCenterRef.current) {
-          bbox = bboxFromCenter(
-            fpvCenterRef.current.lng,
-            fpvCenterRef.current.lat,
-            FPV_BBOX_RADIUS,
-          );
+          lat = fpvCenterRef.current.lat;
+          lon = fpvCenterRef.current.lng;
+          radiusDeg = FPV_POINT_RADIUS;
         } else if (inFpv && fpvSeedCenterRef.current) {
           fpvCenterRef.current = fpvSeedCenterRef.current;
-          bbox = bboxFromCenter(
-            fpvSeedCenterRef.current.lng,
-            fpvSeedCenterRef.current.lat,
-            FPV_BBOX_RADIUS,
-          );
+          lat = fpvSeedCenterRef.current.lat;
+          lon = fpvSeedCenterRef.current.lng;
+          radiusDeg = FPV_POINT_RADIUS;
         } else if (inFpv) {
           fpvCenterRef.current = {
             lng: target.coordinates[0],
             lat: target.coordinates[1],
           };
-          bbox = bboxFromCenter(
-            target.coordinates[0],
-            target.coordinates[1],
-            FPV_BBOX_RADIUS,
-          );
+          lat = target.coordinates[1];
+          lon = target.coordinates[0];
+          radiusDeg = FPV_POINT_RADIUS;
         } else {
-          bbox = bboxFromCenter(
-            target.coordinates[0],
-            target.coordinates[1],
-            target.radius,
-          );
+          lat = target.coordinates[1];
+          lon = target.coordinates[0];
+          radiusDeg = target.radius;
         }
 
-        const result = await fetchFlightsByBbox(...bbox, controller.signal);
+        const result = await fetchFlightsByPoint(
+          lat,
+          lon,
+          radiusDeg,
+          controller.signal,
+        );
 
         if (result.rateLimited) {
-          const retryDelayMs =
-            result.retryAfterSeconds && result.retryAfterSeconds > 0
-              ? result.retryAfterSeconds * 1000
-              : RATE_LIMIT_BACKOFF_MS;
           setRateLimited(true);
-          startCountdown(retryDelayMs);
-          scheduleNext(target, retryDelayMs);
+          startCountdown(RATE_LIMIT_BACKOFF_MS);
+          scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
           return;
         }
 
@@ -181,6 +165,8 @@ export function useFlights(
         clearCountdown();
         setFlights(result.flights);
         lastFetchRef.current = Date.now();
+
+        // Update FPV center to follow tracked aircraft
         if (inFpv && fpvIcao24Ref.current) {
           const tracked = result.flights.find(
             (f) => f.icao24.toLowerCase() === fpvIcao24Ref.current,
@@ -193,13 +179,7 @@ export function useFlights(
           }
         }
 
-        if (result.creditsRemaining !== null) {
-          creditsRef.current = result.creditsRemaining;
-          setCreditsRemaining(result.creditsRemaining);
-        }
-
-        const nextInterval = adaptiveInterval(creditsRef.current);
-        scheduleNext(target, nextInterval);
+        scheduleNext(target, POLL_INTERVAL_MS);
       } catch (err) {
         const isAbort = err instanceof Error && err.name === "AbortError";
         if (isAbort) return;
@@ -225,7 +205,6 @@ export function useFlights(
 
     function onVisibilityChange() {
       if (document.visibilityState !== "visible") {
-        // Fully pause polling while hidden.
         clearSchedule();
         abortRef.current?.abort();
         return;
@@ -237,8 +216,7 @@ export function useFlights(
         clearSchedule();
         fetchData(activeCity);
       } else {
-        const interval = adaptiveInterval(creditsRef.current);
-        const remaining = Math.max(1_000, interval - elapsed);
+        const remaining = Math.max(1_000, POLL_INTERVAL_MS - elapsed);
         clearSchedule();
         scheduleNext(activeCity, remaining);
       }
@@ -299,5 +277,12 @@ export function useFlights(
     };
   }, [clearSchedule, clearCountdown]);
 
-  return { flights, loading, error, rateLimited, retryIn, creditsRemaining };
+  return {
+    flights,
+    loading,
+    error,
+    rateLimited,
+    retryIn,
+    creditsRemaining: null as number | null,
+  };
 }

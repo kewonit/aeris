@@ -243,10 +243,13 @@ export function useAircraftPhotos(
 
   useEffect(() => {
     if (!icao24) {
-      setPhotos([]);
-      setAircraft(null);
-      setLoading(false);
-      setError(false);
+      const clear = () => {
+        setPhotos([]);
+        setAircraft(null);
+        setLoading(false);
+        setError(false);
+      };
+      clear();
       return;
     }
 
@@ -254,20 +257,26 @@ export function useAircraftPhotos(
 
     const cached = getCached(normalized);
     if (cached) {
-      setPhotos(cached.photos);
-      setAircraft(cached.aircraft);
-      setLoading(false);
-      setError(false);
+      const applyCached = () => {
+        setPhotos(cached.photos);
+        setAircraft(cached.aircraft);
+        setLoading(false);
+        setError(false);
+      };
+      applyCached();
       return;
     }
 
     let cancelled = false;
     const controller = new AbortController();
 
-    setLoading(true);
-    setError(false);
-    setPhotos([]);
-    setAircraft(null);
+    const startFetch = () => {
+      setLoading(true);
+      setError(false);
+      setPhotos([]);
+      setAircraft(null);
+    };
+    startFetch();
 
     fetchAll(normalized, controller.signal).then(
       (result) => {

@@ -508,6 +508,44 @@ export function computePitchByIcao(
   return pitchByIcao;
 }
 
+// ── Bank (Roll) Calculation ────────────────────────────────────────────
+
+const MAX_BANK_DEG = 25;
+
+/**
+ * Compute a turn-coupled bank angle for each aircraft.
+ * The bank follows a sine-bell curve over the animation cycle so it
+ * peaks mid-turn and eases to zero at the start/end — mimicking how
+ * real aircraft roll into and out of turns.
+ */
+export function computeBankByIcao(
+  interpolated: FlightState[],
+  prevSnapshots: Map<string, Snapshot>,
+  currSnapshots: Map<string, Snapshot>,
+  tAngle: number,
+): Map<string, number> {
+  const bankByIcao = new Map<string, number>();
+  for (const f of interpolated) {
+    const prev = prevSnapshots.get(f.icao24);
+    const curr = currSnapshots.get(f.icao24);
+    if (!prev || !curr) continue;
+
+    // Shortest-path heading delta: positive = turning right
+    const headingDelta = ((curr.track - prev.track + 540) % 360) - 180;
+
+    // Bank proportional to turn magnitude, clamped
+    const bankTarget = Math.max(
+      -MAX_BANK_DEG,
+      Math.min(MAX_BANK_DEG, headingDelta * 0.8),
+    );
+
+    // Sine bell curve: 0 → 1 → 0 over the animation cycle
+    const bankEase = Math.sin(tAngle * Math.PI);
+    bankByIcao.set(f.icao24, bankTarget * bankEase);
+  }
+  return bankByIcao;
+}
+
 // ── Flight Interpolation (extracted from RAF loop) ─────────────────────
 
 export function computeInterpolatedFlights(

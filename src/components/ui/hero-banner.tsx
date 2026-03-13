@@ -14,8 +14,12 @@ export function HeroBanner({ photo, loading }: HeroBannerProps) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
+    // Reset load state when photo changes
+    const reset = () => {
+      setLoaded(false);
+      setFailed(false);
+    };
+    reset();
   }, [photo?.id]);
 
   const hasPhoto = photo != null && !failed;

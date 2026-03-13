@@ -304,8 +304,6 @@ export function SearchContent({
       .slice(0, 15);
   }, [flights, compactQuery]);
 
-  const hasResults =
-    featured.length > 0 || airports.length > 0 || flightMatches.length > 0;
   const showRecents = !query && recents.length > 0;
 
   // Total result count for screen reader

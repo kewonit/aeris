@@ -212,7 +212,7 @@ export function splitAtAntimeridian(
       const currLat = path[i][1];
 
       // Normalize longitudes for interpolation
-      let norm1 = prevLng;
+      const norm1 = prevLng;
       let norm2 = currLng;
       if (norm2 - norm1 > 180) norm2 -= 360;
       else if (norm1 - norm2 > 180) norm2 += 360;

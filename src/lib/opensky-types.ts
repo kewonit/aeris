@@ -31,6 +31,10 @@ export type FlightState = {
   spiFlag: boolean;
   positionSource: number;
   category: number | null;
+  /** ICAO type designator (e.g. "A320", "B738") — available from readsb */
+  typeCode?: string | null;
+  /** Aircraft registration (e.g. "N12345", "G-KELS") — available from readsb */
+  registration?: string | null;
 };
 
 export type FetchResult = {

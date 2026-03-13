@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { fetchFlightByIcao24, type FlightState } from "@/lib/opensky";
+import type { FlightState } from "@/lib/opensky";
+import { fetchFlightByHex } from "@/lib/flight-api";
 import { cityFromFlight } from "@/components/flight-tracker-random";
 import {
   syncFpvToUrl,
@@ -86,7 +87,7 @@ export function useFlightMonitors(
     if (!fpvLookupDoneRef.current && displayFlights.length > 0) {
       fpvLookupDoneRef.current = true;
       const controller = new AbortController();
-      fetchFlightByIcao24(pending, controller.signal)
+      fetchFlightByHex(pending, controller.signal)
         .then((result) => {
           if (
             result.flight &&

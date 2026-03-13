@@ -94,8 +94,12 @@ export function Lightbox({
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
-    setLoaded(false);
-    setImgError(false);
+    // Reset image state when navigating between photos
+    const reset = () => {
+      setLoaded(false);
+      setImgError(false);
+    };
+    reset();
   }, [index]);
 
   const goPrev = useCallback(() => {

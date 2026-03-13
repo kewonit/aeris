@@ -4,7 +4,7 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   name: "Aeris",
-  url: "https://aeris-flight.vercel.app",
+  url: "https://aeris.edbn.me",
   description:
     "Track live flights in 3D over the world's busiest airspaces. Altitude-aware, beautifully rendered, and completely free.",
   applicationCategory: "TravelApplication",
