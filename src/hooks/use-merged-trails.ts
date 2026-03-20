@@ -18,16 +18,26 @@ export function useMergedTrails(
   displayTrails: TrailEntry[],
   displayFlights: FlightState[],
 ): TrailEntry[] {
-  return useMemo(() => {
-    if (!selectedIcao24 || !selectedTrack) return displayTrails;
-
+  // Extract stable position for the selected flight so that the main memo
+  // doesn't depend on the entire displayFlights array (which changes every poll).
+  const selectedLivePos = useMemo((): {
+    pos: [number, number] | null;
+    flight: FlightState | null;
+  } => {
+    if (!selectedIcao24) return { pos: null, flight: null };
     const flight =
       displayFlights.find((f) => f.icao24 === selectedIcao24) ?? null;
-
-    const livePos: [number, number] | null =
+    const pos: [number, number] | null =
       flight && flight.longitude != null && flight.latitude != null
         ? [flight.longitude, flight.latitude]
         : null;
+    return { pos, flight };
+  }, [selectedIcao24, displayFlights]);
+
+  return useMemo(() => {
+    if (!selectedIcao24 || !selectedTrack) return displayTrails;
+
+    const { pos: livePos, flight } = selectedLivePos;
 
     const existingTrail =
       displayTrails.find((t) => t.icao24 === selectedIcao24) ?? null;
@@ -75,6 +85,6 @@ export function useMergedTrails(
     selectedTrack,
     selectedTrackFetchedAtMs,
     displayTrails,
-    displayFlights,
+    selectedLivePos,
   ]);
 }

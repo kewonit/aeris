@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, X, MapPin, ChevronRight } from "lucide-react";
 import { CITIES, type City } from "@/lib/cities";
@@ -226,7 +226,7 @@ export function AirportSearchInput({
   );
 }
 
-function DropdownRow({
+const DropdownRow = memo(function DropdownRow({
   name,
   detail,
   isActive,
@@ -254,4 +254,4 @@ function DropdownRow({
       <ChevronRight className="h-3 w-3 shrink-0 text-white/10 group-hover:text-white/20" />
     </button>
   );
-}
+});

@@ -328,13 +328,35 @@ export function trimPathAheadOfAircraft(
   return trimmed;
 }
 
-// ── Visible Trail Point Builder (extracted from component) ─────────────
+// ── Trail Base Path Cache ──────────────────────────────────────────────
 
-export function buildVisibleTrailPoints(
+/**
+ * Generates a cache key for trail base path computation.
+ * The base path only changes when trail data grows, trail distance changes,
+ * or fullHistory mode toggles. Keyed on the last point so appends invalidate.
+ */
+export function trailBasePathCacheKey(
   trail: TrailEntry,
-  animFlight: FlightState | undefined,
   trailDistance: number,
-  smoothingIterations: number,
+): string {
+  const n = trail.path.length;
+  const last = n > 0 ? trail.path[n - 1] : null;
+  const lastAlt =
+    trail.altitudes.length > 0
+      ? trail.altitudes[trail.altitudes.length - 1]
+      : null;
+  return `${n}|${trailDistance}|${trail.fullHistory ? 1 : 0}|${last?.[0]}|${last?.[1]}|${lastAlt}`;
+}
+
+/**
+ * Computes the expensive base path (smoothing + densification) for a trail.
+ * This result is cacheable across animation frames — it only depends on
+ * trail.path, trail.altitudes, trailDistance, and fullHistory.
+ * The per-frame head attachment (trimPathAheadOfAircraft) is NOT included.
+ */
+export function buildTrailBasePath(
+  trail: TrailEntry,
+  trailDistance: number,
   denseSubdivisions: number,
 ): ElevatedPoint[] {
   const isFullHistory = trail.fullHistory === true;
@@ -393,9 +415,8 @@ export function buildVisibleTrailPoints(
     ? pathSlice
     : smoothPlanarPath(pathSlice);
 
-  const rawAltitudes = altitudeSlice.map(
-    (a) => a ?? trail.baroAltitude ?? animFlight?.baroAltitude ?? 0,
-  );
+  // Use trail.baroAltitude as fallback (not animFlight) since base path is cached
+  const rawAltitudes = altitudeSlice.map((a) => a ?? trail.baroAltitude ?? 0);
   const altitudeMeters = isFullHistory
     ? rawAltitudes
     : smoothAnimationAltitudes(rawAltitudes, 3);
@@ -405,10 +426,29 @@ export function buildVisibleTrailPoints(
     p[1],
     Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
   ]) as ElevatedPoint[];
-  const denseBasePath = densifyElevatedPath(
-    basePath,
-    isFullHistory ? 1 : denseSubdivisions,
-  );
+
+  return densifyElevatedPath(basePath, isFullHistory ? 1 : denseSubdivisions);
+}
+
+// ── Visible Trail Point Builder (extracted from component) ─────────────
+
+/**
+ * Builds the final visible trail points for rendering.
+ * When cachedBasePath is provided, skips the expensive smoothing/densification
+ * and only performs the cheap per-frame head attachment + final smoothing.
+ */
+export function buildVisibleTrailPoints(
+  trail: TrailEntry,
+  animFlight: FlightState | undefined,
+  trailDistance: number,
+  smoothingIterations: number,
+  denseSubdivisions: number,
+  cachedBasePath?: ElevatedPoint[],
+): ElevatedPoint[] {
+  const isFullHistory = trail.fullHistory === true;
+  const denseBasePath =
+    cachedBasePath ??
+    buildTrailBasePath(trail, trailDistance, denseSubdivisions);
 
   if (
     animFlight &&
@@ -450,8 +490,10 @@ export function computePitchByIcao(
   trailByIcao: Map<string, TrailEntry>,
   currSnapshots: Map<string, Snapshot>,
   prevSnapshots: Map<string, Snapshot>,
+  out?: Map<string, number>,
 ): Map<string, number> {
-  const pitchByIcao = new Map<string, number>();
+  const pitchByIcao = out ?? new Map<string, number>();
+  pitchByIcao.clear();
 
   for (const f of interpolated) {
     const curr = currSnapshots.get(f.icao24);
@@ -523,8 +565,10 @@ export function computeBankByIcao(
   prevSnapshots: Map<string, Snapshot>,
   currSnapshots: Map<string, Snapshot>,
   tAngle: number,
+  out?: Map<string, number>,
 ): Map<string, number> {
-  const bankByIcao = new Map<string, number>();
+  const bankByIcao = out ?? new Map<string, number>();
+  bankByIcao.clear();
   for (const f of interpolated) {
     const prev = prevSnapshots.get(f.icao24);
     const curr = currSnapshots.get(f.icao24);
@@ -605,4 +649,77 @@ export function computeInterpolatedFlights(
       trueTrack: trackFromDelta(moveDx, moveDy, curr.track),
     };
   });
+}
+
+/**
+ * In-place position update for an existing interpolated array.
+ *
+ * Called on animation frames between data polls. Instead of creating new
+ * FlightState objects with `{...f}`, this mutates the existing objects'
+ * position fields directly. Combined with a stable array reference this
+ * eliminates ~18K object allocations/sec and ~360K property copies/sec.
+ *
+ * `rawFlights` must be the SAME array that was used to create `out` via
+ * `computeInterpolatedFlights` (i.e. `flightsRef.current` hasn't changed).
+ * Elements where `out[i] === rawFlights[i]` are raw references (no
+ * interpolation was needed) and are left untouched.
+ */
+export function updateInterpolatedInPlace(
+  out: FlightState[],
+  rawFlights: FlightState[],
+  prevSnapshots: Map<string, Snapshot>,
+  currSnapshots: Map<string, Snapshot>,
+  tPos: number,
+  tAngle: number,
+  rawT: number,
+  animDuration: number,
+): void {
+  for (let i = 0; i < out.length; i++) {
+    const o = out[i];
+    const f = rawFlights[i];
+    if (!o || !f) continue;
+
+    // Skip raw references — these flights had no position or snapshot,
+    // so computeInterpolatedFlights returned the raw object directly.
+    // Mutating them would corrupt the source data.
+    if (o === f) continue;
+
+    const curr = currSnapshots.get(f.icao24);
+    if (!curr) continue;
+
+    const prev = prevSnapshots.get(f.icao24);
+    if (!prev) {
+      o.longitude = curr.lng;
+      o.latitude = curr.lat;
+      o.baroAltitude = curr.alt;
+      o.trueTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track;
+      continue;
+    }
+
+    const dx = curr.lng - prev.lng;
+    const dy = curr.lat - prev.lat;
+    if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) continue;
+
+    if (rawT <= 1) {
+      o.longitude = prev.lng + dx * tPos;
+      o.latitude = prev.lat + dy * tPos;
+      o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
+      o.trueTrack = trackFromDelta(
+        dx,
+        dy,
+        lerpAngle(prev.track, curr.track, tAngle),
+      );
+    } else {
+      const heading = (curr.track * Math.PI) / 180;
+      const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
+      const extraSec = ((rawT - 1) * animDuration) / 1000;
+      const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
+      const moveDx = Math.sin(heading) * extraDeg;
+      const moveDy = Math.cos(heading) * extraDeg;
+      o.longitude = curr.lng + moveDx;
+      o.latitude = curr.lat + moveDy;
+      o.baroAltitude = curr.alt;
+      o.trueTrack = trackFromDelta(moveDx, moveDy, curr.track);
+    }
+  }
 }

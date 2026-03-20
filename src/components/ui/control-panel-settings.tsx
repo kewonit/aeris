@@ -9,8 +9,16 @@ import {
   Palette,
   Globe,
   ArrowLeftRight,
+  Shield,
+  Flame,
+  Eye,
 } from "lucide-react";
-import { useSettings, type OrbitDirection } from "@/hooks/use-settings";
+import {
+  useSettings,
+  AIRSPACE_OPACITY_MIN,
+  AIRSPACE_OPACITY_MAX,
+  type OrbitDirection,
+} from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
@@ -102,6 +110,29 @@ export function SettingsContent() {
 
         <div className="mx-3 my-2 h-px bg-white/4" />
 
+        <SettingRow
+          icon={<Shield className="h-4 w-4" />}
+          title="Airspace overlay"
+          description="Show classified airspace boundaries (OpenAIP)"
+          checked={settings.showAirspace}
+          onChange={(v) => update("showAirspace", v)}
+        />
+
+        {settings.showAirspace && (
+          <>
+            <AirspaceOpacitySlider
+              value={settings.airspaceOpacity}
+              onChange={(v) => update("airspaceOpacity", v)}
+            />
+            <SettingRow
+              icon={<Flame className="h-4 w-4" />}
+              title="Thermal hotspots"
+              description="Glider & paraglider thermal activity areas"
+              checked={settings.showAirspaceHotspots}
+              onChange={(v) => update("showAirspaceHotspots", v)}
+            />
+          </>
+        )}
         <SettingRow
           icon={<Globe className="h-4 w-4" />}
           title="Globe mode"
@@ -284,6 +315,40 @@ function TrailDistanceSlider({
           value={[value]}
           onValueChange={(vals) => onChange(vals[0])}
           aria-label="Trail distance"
+        />
+      </div>
+    </div>
+  );
+}
+
+function AirspaceOpacitySlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/35 ring-1 ring-white/6">
+        <Eye className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-white/80">
+            Airspace opacity
+          </p>
+          <span className="text-[11px] font-semibold text-white/40 tabular-nums">
+            {Math.round(value * 100)}%
+          </span>
+        </div>
+        <Slider
+          min={AIRSPACE_OPACITY_MIN}
+          max={AIRSPACE_OPACITY_MAX}
+          step={0.05}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Airspace opacity"
         />
       </div>
     </div>

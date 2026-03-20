@@ -48,33 +48,51 @@ export function adaptiveDownsample(
   return bestResult;
 }
 
-/** Ramer-Douglas-Peucker simplification for 3D points. */
+/** Iterative Ramer-Douglas-Peucker simplification for 3D points.
+ *  Uses an explicit stack instead of recursion to avoid stack overflow
+ *  on trails with 5000+ points, and eliminates per-call .slice() allocations. */
 function rdpSimplify(
   points: ElevatedPoint[],
   epsilon: number,
 ): ElevatedPoint[] {
-  if (points.length <= 2) return points.slice();
+  const n = points.length;
+  if (n <= 2) return points.slice();
 
-  const first = points[0];
-  const last = points[points.length - 1];
-  let maxDist = 0;
-  let maxIdx = 0;
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[n - 1] = 1;
 
-  for (let i = 1; i < points.length - 1; i++) {
-    const d = perpendicularDistance(points[i], first, last);
-    if (d > maxDist) {
-      maxDist = d;
-      maxIdx = i;
+  // Explicit stack of [startIndex, endIndex] ranges to process
+  const stack: [number, number][] = [[0, n - 1]];
+
+  while (stack.length > 0) {
+    const [start, end] = stack.pop()!;
+    let maxDist = 0;
+    let maxIdx = start;
+
+    const first = points[start];
+    const last = points[end];
+
+    for (let i = start + 1; i < end; i++) {
+      const d = perpendicularDistance(points[i], first, last);
+      if (d > maxDist) {
+        maxDist = d;
+        maxIdx = i;
+      }
+    }
+
+    if (maxDist > epsilon) {
+      keep[maxIdx] = 1;
+      if (maxIdx - start > 1) stack.push([start, maxIdx]);
+      if (end - maxIdx > 1) stack.push([maxIdx, end]);
     }
   }
 
-  if (maxDist > epsilon) {
-    const left = rdpSimplify(points.slice(0, maxIdx + 1), epsilon);
-    const right = rdpSimplify(points.slice(maxIdx), epsilon);
-    return [...left.slice(0, -1), ...right];
+  const result: ElevatedPoint[] = [];
+  for (let i = 0; i < n; i++) {
+    if (keep[i]) result.push(points[i]);
   }
-
-  return [first, last];
+  return result;
 }
 
 /** Perpendicular distance from a point to a line segment (2D, using lng/lat). */

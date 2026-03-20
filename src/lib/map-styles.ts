@@ -172,7 +172,10 @@ export type AttributionEntry = {
 };
 
 /** Returns the proper attribution entries for a given map style. */
-export function getAttributions(styleId: string): AttributionEntry[] {
+export function getAttributions(
+  styleId: string,
+  options?: { showAirspace?: boolean },
+): AttributionEntry[] {
   const base: AttributionEntry[] = [];
 
   switch (styleId) {
@@ -214,6 +217,10 @@ export function getAttributions(styleId: string): AttributionEntry[] {
   }
 
   base.push({ label: "MapLibre", url: "https://maplibre.org/" });
+
+  if (options?.showAirspace) {
+    base.push({ label: "OpenAIP", url: "https://www.openaip.net" });
+  }
 
   return base;
 }

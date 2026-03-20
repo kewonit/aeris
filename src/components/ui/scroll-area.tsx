@@ -55,6 +55,7 @@ export const ScrollArea = forwardRef<HTMLDivElement, ScrollAreaProps>(
       return () => {
         vp.removeEventListener("scroll", onScroll);
         observer.disconnect();
+        if (hideTimer.current) clearTimeout(hideTimer.current);
       };
     }, [updateThumb]);
 

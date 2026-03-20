@@ -51,8 +51,11 @@ const MODEL_BASE_PATH = "/models/aircraft";
 const MODEL_VERSION = 5;
 
 // A380 reuses the widebody-4eng mesh (it IS the A380 from FlightAirMap).
+// generic.glb and narrowbody.glb are identical files; drone.glb and light-prop.glb likewise.
 const MODEL_URL_OVERRIDES: Partial<Record<AircraftModelKey, string>> = {
   a380: "widebody-4eng",
+  generic: "narrowbody",
+  drone: "light-prop",
 };
 
 export function modelUrl(key: AircraftModelKey): string {
@@ -85,6 +88,37 @@ const MODEL_NORMALIZE: Readonly<Record<AircraftModelKey, number>> = {
 /** Returns the size normalization factor for a model type */
 export function modelNormScale(key: AircraftModelKey): number {
   return MODEL_NORMALIZE[key];
+}
+
+// ── Per-Model Yaw Offset ───────────────────────────────────────────────
+//
+// Each GLB was authored/exported with a different nose direction in model space.
+// These offsets rotate each model so that at yaw=0 the nose faces North.
+// Combined formula: yaw = MODEL_YAW_OFFSET[key] - trueTrack
+//
+// Determined by analysing each model's node rotations and nose-indicator
+// node translations (CockpitWindows, pilot_tubes, windscreen, etc.).
+
+const MODEL_YAW_OFFSET: Readonly<Record<AircraftModelKey, number>> = {
+  b737: 0, // no node rotation, nose at -Z → already faces North
+  narrowbody: 90, // 180° Y rotation, nose raw +X → model +X → East at yaw=0
+  generic: 90, // identical mesh to narrowbody
+  "widebody-2eng": 180, // 90° Y rotation, nose raw +Z → model -X → South
+  "widebody-4eng": 180, // same rotation family
+  a380: 180, // uses widebody-4eng mesh
+  "regional-jet": 180, // 90° Y rotation, nose indicators at +Z
+  bizjet: 180, // 90° Y rotation, Glass.inside near +Z
+  helicopter: 180, // 90° Y rotation, body extends +Z
+  glider: 180, // 90° Y rotation, windowR near +Z
+  fighter: 180, // 90° Y rotation
+  turboprop: 180, // 120° diagonal rotation, cylinder at +Z
+  "light-prop": 180, // 120° diagonal rotation
+  drone: 180, // identical mesh to light-prop
+};
+
+/** Returns the yaw offset in degrees to orient the model's nose North */
+export function modelYawOffset(key: AircraftModelKey): number {
+  return MODEL_YAW_OFFSET[key];
 }
 
 // ── Category → Model Key (DO-260B emitter categories) ──────────────────
@@ -201,14 +235,52 @@ export function resolveModelKey(
   return categoryToModelKey(category);
 }
 
+// ── Per-Aircraft Model Key Cache ───────────────────────────────────────
+//
+// Avoids re-running up to 15 regex tests per flight per frame.
+// Key = icao24, value = resolved model key.
+// Cache is wiped when the flight data array changes (new poll).
+
+const modelKeyCache = new Map<string, AircraftModelKey>();
+
+/** Resolves model key with per-icao24 caching. */
+export function resolveModelKeyCached(flight: FlightState): AircraftModelKey {
+  const cached = modelKeyCache.get(flight.icao24);
+  if (cached !== undefined) return cached;
+  const key = resolveModelKey(flight.category, flight.typeCode);
+  modelKeyCache.set(flight.icao24, key);
+  return key;
+}
+
+/** Clear the model key cache when flight data changes. */
+export function invalidateModelKeyCache(): void {
+  modelKeyCache.clear();
+}
+
 // ── Flight Bucketing ───────────────────────────────────────────────────
+//
+// Cached bucketing: only recomputes when the flights array reference changes.
+// This prevents 60fps re-bucketing + new array allocations that cause
+// deck.gl to regenerate GPU buffers every frame.
+
+let cachedBucketInput: FlightState[] | null = null;
+let cachedBuckets: Map<AircraftModelKey, FlightState[]> | null = null;
+
 export function bucketFlightsByModel(
   flights: FlightState[],
 ): Map<AircraftModelKey, FlightState[]> {
+  // Return cached result if the flights array reference hasn't changed
+  if (flights === cachedBucketInput && cachedBuckets) {
+    return cachedBuckets;
+  }
+
+  // Invalidate model key cache on new data (new aircraft may appear)
+  invalidateModelKeyCache();
+
   const buckets = new Map<AircraftModelKey, FlightState[]>();
 
   for (const flight of flights) {
-    const key = resolveModelKey(flight.category, flight.typeCode);
+    const key = resolveModelKeyCached(flight);
     const bucket = buckets.get(key);
     if (bucket) {
       bucket.push(flight);
@@ -217,6 +289,8 @@ export function bucketFlightsByModel(
     }
   }
 
+  cachedBucketInput = flights;
+  cachedBuckets = buckets;
   return buckets;
 }
 
@@ -225,13 +299,9 @@ export function bucketFlightsByModel(
 let preloaded = false;
 
 const PREFETCH_KEYS: AircraftModelKey[] = [
-  "generic",
   "narrowbody",
   "b737",
-  "light-prop",
   "widebody-2eng",
-  "turboprop",
-  "helicopter",
 ];
 
 export function preloadAllModels(): void {

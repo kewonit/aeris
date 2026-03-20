@@ -1,8 +1,9 @@
 import { CITIES, type City } from "@/lib/cities";
 import { findByIata, airportToCity } from "@/lib/airports";
 import { MAP_STYLES, DEFAULT_STYLE, type MapStyle } from "@/lib/map-styles";
+import { ICAO24_REGEX } from "@/lib/flight-api-types";
 
-export { DEFAULT_STYLE };
+export { DEFAULT_STYLE, ICAO24_REGEX };
 
 export const DEFAULT_CITY_ID = "sfo";
 export const STYLE_STORAGE_KEY = "aeris:mapStyle";
@@ -10,7 +11,6 @@ export const DEFAULT_CITY =
   CITIES.find((c) => c.id === DEFAULT_CITY_ID) ?? CITIES[0];
 export const GITHUB_REPO_URL = "https://github.com/kewonit/aeris";
 export const GITHUB_REPO_API = "https://api.github.com/repos/kewonit/aeris";
-export const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
 
 export const subscribeNoop = () => () => {};
 
@@ -43,6 +43,7 @@ export function resolveInitialCity(): City {
     _cachedInitialCity = DEFAULT_CITY;
     return DEFAULT_CITY;
   } catch {
+    // Not in a browser environment (SSR) — fall back to default city
     _cachedInitialCity = DEFAULT_CITY;
     return DEFAULT_CITY;
   }
@@ -58,7 +59,7 @@ export function syncCityToUrl(city: City): void {
     url.searchParams.delete("fpv");
     window.history.replaceState(null, "", url.toString());
   } catch {
-    /* ignore */
+    // URL parsing or history API may fail in non-browser environments
   }
 }
 
@@ -79,7 +80,7 @@ export function syncFpvToUrl(icao24: string | null, activeCity?: City): void {
     }
     window.history.replaceState(null, "", url.toString());
   } catch {
-    /* ignore */
+    // URL parsing or history API may fail in non-browser environments
   }
 }
 
@@ -89,6 +90,7 @@ export function resolveInitialFpv(): string | null {
     const raw = params.get("fpv")?.trim().toLowerCase();
     return raw && /^[0-9a-f]{6}$/.test(raw) ? raw : null;
   } catch {
+    // Not in a browser environment (SSR)
     return null;
   }
 }
@@ -99,6 +101,7 @@ export function loadMapStyle(): MapStyle {
     if (!id) return DEFAULT_STYLE;
     return MAP_STYLES.find((s) => s.id === id) ?? DEFAULT_STYLE;
   } catch {
+    // localStorage unavailable (SSR, private browsing, or quota exceeded)
     return DEFAULT_STYLE;
   }
 }
@@ -108,7 +111,7 @@ export function saveMapStyle(style: MapStyle): void {
   try {
     localStorage.setItem(STYLE_STORAGE_KEY, style.id);
   } catch {
-    /* blocked */
+    // localStorage unavailable (private browsing or quota exceeded)
   }
 }
 

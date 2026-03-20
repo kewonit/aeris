@@ -195,7 +195,8 @@ function PanelDialog({
 
     function trapFocus(e: KeyboardEvent) {
       if (e.key !== "Tab") return;
-      const elements = dialog!.querySelectorAll<HTMLElement>(
+      if (!dialog) return;
+      const elements = dialog.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
       const f = elements[0];

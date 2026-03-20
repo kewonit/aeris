@@ -7,7 +7,11 @@
  * thresholds are named constants.
  */
 
-import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
+import {
+  snapLngToReference,
+  unwrapLngPath,
+  greatCircleIntermediate,
+} from "@/lib/geo";
 import {
   catmullRomSpline3D,
   filterGroundSegments,
@@ -82,63 +86,31 @@ const MAX_SPLINED_POINTS = 1800;
  * Spherical linear interpolation between two [lng, lat] points.
  * More accurate than linear interpolation for gaps > ~0.1°.
  */
-function slerpBridge(
-  aLng: number,
-  aLat: number,
-  bLng: number,
-  bLat: number,
-  t: number,
-): [number, number] {
-  // For very small distances, linear interpolation is fine and avoids
-  // numerical issues in the slerp formula.
-  const dLng = bLng - aLng;
-  const dLat = bLat - aLat;
-  if (dLng * dLng + dLat * dLat < 0.01 * 0.01) {
-    return [aLng + dLng * t, aLat + dLat * t];
-  }
-
-  // Convert to radians.
-  const toRad = Math.PI / 180;
-  const la1 = aLat * toRad;
-  const lo1 = aLng * toRad;
-  const la2 = bLat * toRad;
-  const lo2 = bLng * toRad;
-
-  // Great-circle angular distance.
-  const dLat2 = la2 - la1;
-  const dLon2 = lo2 - lo1;
-  const a =
-    Math.sin(dLat2 / 2) ** 2 +
-    Math.cos(la1) * Math.cos(la2) * Math.sin(dLon2 / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  if (c < 1e-10) {
-    return [aLng + dLng * t, aLat + dLat * t];
-  }
-
-  const sinC = Math.sin(c);
-  const A = Math.sin((1 - t) * c) / sinC;
-  const B = Math.sin(t * c) / sinC;
-
-  const x =
-    A * Math.cos(la1) * Math.cos(lo1) + B * Math.cos(la2) * Math.cos(lo2);
-  const y =
-    A * Math.cos(la1) * Math.sin(lo1) + B * Math.cos(la2) * Math.sin(lo2);
-  const z = A * Math.sin(la1) + B * Math.sin(la2);
-
-  const toDeg = 180 / Math.PI;
-  return [
-    Math.atan2(y, x) * toDeg,
-    Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg,
-  ];
-}
-
 /**
  * Cubic ease-in-out for altitude interpolation during bridge segments.
  * Produces a more natural transition than linear.
  */
 function cubicEaseInOut(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// ---------------------------------------------------------------------------
+// Spline cache — avoids recomputing the expensive Steps 1-4 pipeline when
+// the historical track hasn't changed between poll cycles.
+// ---------------------------------------------------------------------------
+
+type SplinedTrack = {
+  key: string;
+  trackPositions: [number, number][];
+  resultPath: [number, number][];
+  resultAltitudes: Array<number | null>;
+  lastWaypointTime: number | undefined;
+};
+
+let splinedTrackCache: SplinedTrack | null = null;
+
+function makeTrackCacheKey(track: FlightTrack): string {
+  return `${track.icao24}|${track.startTime}|${track.endTime}|${track.path.length}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,27 +142,79 @@ export function stitchHistoricalTrail(
   flight: FlightState | null,
   fetchedAtMs: number,
 ): StitchResult {
-  // --- Step 1: Filter ground segments ---
-  const airborneWaypoints = filterGroundSegments(track.path);
-  const waypoints = airborneWaypoints ?? track.path;
+  // --- Steps 1-2 & 4: Use cached spline if the historical track is unchanged ---
+  const cacheKey = makeTrackCacheKey(track);
+  let trackPositions: [number, number][];
+  let resultPath: [number, number][];
+  let resultAltitudes: Array<number | null>;
+  let lastWaypointTime: number | undefined;
 
-  // --- Step 2: Extract and unwrap positions ---
-  const rawPositions: [number, number][] = [];
-  const rawAltitudes: Array<number | null> = [];
+  if (splinedTrackCache && splinedTrackCache.key === cacheKey) {
+    // Cache hit — reuse expensive spline result, clone since Steps 5-8 mutate.
+    trackPositions = splinedTrackCache.trackPositions;
+    resultPath = splinedTrackCache.resultPath.map(
+      (p) => [...p] as [number, number],
+    );
+    resultAltitudes = [...splinedTrackCache.resultAltitudes];
+    lastWaypointTime = splinedTrackCache.lastWaypointTime;
+  } else {
+    // Cache miss — run full Steps 1-2 & 4 pipeline.
 
-  for (const p of waypoints) {
-    if (p.longitude == null || p.latitude == null) continue;
-    rawPositions.push([p.longitude, p.latitude]);
-    rawAltitudes.push(p.baroAltitude ?? null);
+    // --- Step 1: Filter ground segments ---
+    const airborneWaypoints = filterGroundSegments(track.path);
+    const waypoints = airborneWaypoints ?? track.path;
+
+    // --- Step 2: Extract and unwrap positions ---
+    const rawPositions: [number, number][] = [];
+    const rawAltitudes: Array<number | null> = [];
+
+    for (const p of waypoints) {
+      if (p.longitude == null || p.latitude == null) continue;
+      rawPositions.push([p.longitude, p.latitude]);
+      rawAltitudes.push(p.baroAltitude ?? null);
+    }
+
+    if (rawPositions.length < 2) {
+      return { path: [], altitudes: [], valid: false };
+    }
+
+    // Unwrap longitudes to avoid dateline artifacts.
+    trackPositions = unwrapLngPath(rawPositions);
+
+    // --- Step 4: Apply Catmull-Rom spline smoothing ---
+    const defaultAlt =
+      flight?.baroAltitude ?? rawAltitudes.find((a) => a != null) ?? 0;
+    const smoothedAlts = smoothAltitudeProfile([...rawAltitudes], defaultAlt);
+
+    const elevatedWaypoints: [number, number, number][] = trackPositions.map(
+      (p, i) => [p[0], p[1], smoothedAlts[i] ?? defaultAlt],
+    );
+
+    const roundedWaypoints = roundSharpCorners3D(elevatedWaypoints, 20);
+    let splinedPath = catmullRomSpline3D(roundedWaypoints, 6, 28);
+    splinedPath = removePathLoops(splinedPath);
+
+    if (splinedPath.length > MAX_SPLINED_POINTS) {
+      splinedPath = adaptiveDownsample(splinedPath, MAX_SPLINED_POINTS);
+    }
+
+    lastWaypointTime = waypoints[waypoints.length - 1]?.time;
+
+    // Store in cache for next poll cycle.
+    const cachedPath = splinedPath.map<[number, number]>((p) => [p[0], p[1]]);
+    const cachedAlts = splinedPath.map<number | null>((p) => p[2]);
+    splinedTrackCache = {
+      key: cacheKey,
+      trackPositions,
+      resultPath: cachedPath,
+      resultAltitudes: cachedAlts,
+      lastWaypointTime,
+    };
+
+    // Clone for mutation in Steps 5-8.
+    resultPath = cachedPath.map((p) => [...p] as [number, number]);
+    resultAltitudes = [...cachedAlts];
   }
-
-  if (rawPositions.length < 2) {
-    return { path: [], altitudes: [], valid: false };
-  }
-
-  // Unwrap longitudes to avoid dateline artifacts.
-  const trackPositions = unwrapLngPath(rawPositions);
-  const trackAltitudes = [...rawAltitudes];
 
   // --- Step 3: Validate track proximity to live position ---
   const livePosAdjusted: [number, number] | null =
@@ -204,7 +228,6 @@ export function stitchHistoricalTrail(
         ]
       : livePosition;
 
-  const lastWaypointTime = waypoints[waypoints.length - 1]?.time;
   const nowSec = fetchedAtMs > 0 ? Math.floor(fetchedAtMs / 1000) : 0;
   const lastWaypointAgeSec =
     typeof lastWaypointTime === "number" && Number.isFinite(lastWaypointTime)
@@ -248,36 +271,6 @@ export function stitchHistoricalTrail(
       return { path: [], altitudes: [], valid: false };
     }
   }
-
-  // --- Step 4: Apply Catmull-Rom spline smoothing ---
-  // Build elevated points for spline interpolation.
-  const defaultAlt =
-    flight?.baroAltitude ?? rawAltitudes.find((a) => a != null) ?? 0;
-  const smoothedAlts = smoothAltitudeProfile(trackAltitudes, defaultAlt);
-
-  const elevatedWaypoints: [number, number, number][] = trackPositions.map(
-    (p, i) => [p[0], p[1], smoothedAlts[i] ?? defaultAlt],
-  );
-
-  // Pre-process: round sharp corners with Bézier arcs so the spline
-  // doesn't overshoot into self-intersecting loops at sharp turns.
-  const roundedWaypoints = roundSharpCorners3D(elevatedWaypoints, 20);
-
-  // Apply Catmull-Rom spline to produce a smooth path.
-  let splinedPath = catmullRomSpline3D(roundedWaypoints, 6, 28);
-
-  // Safety net: detect and remove any self-intersecting loops the
-  // spline may still have produced (e.g. from outlier waypoints).
-  splinedPath = removePathLoops(splinedPath);
-
-  // Downsample if the splined path is very dense.
-  if (splinedPath.length > MAX_SPLINED_POINTS) {
-    splinedPath = adaptiveDownsample(splinedPath, MAX_SPLINED_POINTS);
-  }
-
-  // Separate back into 2D path + altitudes for compatibility with TrailEntry.
-  const resultPath: [number, number][] = splinedPath.map((p) => [p[0], p[1]]);
-  const resultAltitudes: Array<number | null> = splinedPath.map((p) => p[2]);
 
   // --- Step 5: Merge live tail ---
   if (liveTail && liveTail.path.length >= 2) {
@@ -370,7 +363,7 @@ export function stitchHistoricalTrail(
 
             for (let s = 1; s < steps; s++) {
               const t = s / steps;
-              const [lng, lat] = slerpBridge(
+              const [lng, lat] = greatCircleIntermediate(
                 last[0],
                 last[1],
                 firstTail[0],

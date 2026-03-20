@@ -56,6 +56,7 @@ function getRecents(): string[] {
     }
     return valid.map((e) => e.q);
   } catch {
+    // localStorage unavailable or corrupted — return empty recent list
     return [];
   }
 }
@@ -76,7 +77,7 @@ function addRecent(query: string) {
     const next = [{ q, ts: Date.now() }, ...filtered].slice(0, RECENT_MAX);
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch {
-    /* quota exceeded — ignore */
+    // localStorage unavailable or quota exceeded
   }
 }
 
@@ -93,7 +94,7 @@ function removeRecent(query: string) {
     );
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch {
-    /* ignore */
+    // localStorage unavailable or corrupted
   }
 }
 
@@ -101,7 +102,7 @@ function clearRecents() {
   try {
     localStorage.removeItem(RECENT_KEY);
   } catch {
-    /* ignore */
+    // localStorage unavailable
   }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { READSB_FETCH_TIMEOUT_MS, MAX_RADIUS_NM } from "@/lib/flight-api-types";
 
 // ── adsb.lol Proxy ─────────────────────────────────────────────────────
 //
@@ -6,8 +7,6 @@ import { NextRequest, NextResponse } from "next/server";
 // Validates path patterns to prevent SSRF.
 
 const ADSB_LOL_BASE = "https://api.adsb.lol/v2";
-
-const FETCH_TIMEOUT_MS = 10_000;
 
 // ── Path validation (SSRF prevention) ──────────────────────────────────
 
@@ -21,6 +20,11 @@ const VALID_PATH =
   /^\/(?:point\/-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?\/\d{1,3}|hex\/[0-9a-f]{6}|callsign\/[A-Z0-9-]{1,8})$/i;
 
 // ── Rate limiter (in-memory) ───────────────────────────────────────────
+// NOTE: This is per-instance, per-cold-start. In serverless/edge
+// deployments each instance has its own counter, so the effective global
+// rate can exceed RATE_MS when multiple instances serve concurrent
+// traffic. For strict rate limiting, use a shared store (e.g., Upstash
+// Redis or Vercel KV).
 
 let lastRequestTime = 0;
 const RATE_MS = 500; // self-imposed: 2 req/s for adsb.lol
@@ -33,6 +37,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!path || !VALID_PATH.test(path)) {
     return NextResponse.json(
       { error: "Invalid or missing 'path' parameter" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  // Validate radius for /point endpoints against max allowed
+  const pointMatch = path.match(/^\/point\/[^/]+\/[^/]+\/(\d+)$/);
+  if (pointMatch && parseInt(pointMatch[1], 10) > MAX_RADIUS_NM) {
+    return NextResponse.json(
+      { error: `Radius exceeds maximum of ${MAX_RADIUS_NM} NM` },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -51,7 +64,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   lastRequestTime = Date.now();
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), READSB_FETCH_TIMEOUT_MS);
 
   try {
     const upstream = await fetch(`${ADSB_LOL_BASE}${path}`, {
@@ -77,11 +90,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status: 200,
       headers: { "Cache-Control": "public, max-age=3, s-maxage=3" },
     });
-  } catch {
+  } catch (err) {
     clearTimeout(timer);
+
+    const isTimeout = err instanceof DOMException && err.name === "AbortError";
+
     return NextResponse.json(
-      { error: "adsb.lol request failed" },
-      { status: 502, headers: { "Cache-Control": "no-store" } },
+      {
+        error: isTimeout
+          ? "adsb.lol request timed out"
+          : "adsb.lol request failed",
+      },
+      {
+        status: isTimeout ? 504 : 502,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 }

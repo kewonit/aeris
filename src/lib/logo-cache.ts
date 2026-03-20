@@ -1,4 +1,19 @@
+const MAX_LOADED_URLS = 1000;
 export const loadedAirlineLogoUrls = new Set<string>();
+
+/**
+ * Track a successfully loaded logo URL. Evicts oldest entry when the
+ * Set exceeds MAX_LOADED_URLS to prevent unbounded growth.
+ */
+export function trackAirlineLogoLoaded(url: string): void {
+  if (!url) return;
+  loadedAirlineLogoUrls.add(url);
+  if (loadedAirlineLogoUrls.size > MAX_LOADED_URLS) {
+    // Set iterates in insertion order — first entry is oldest
+    const oldest = loadedAirlineLogoUrls.values().next().value;
+    if (oldest) loadedAirlineLogoUrls.delete(oldest);
+  }
+}
 
 const FAILED_TTL_MS = 10 * 60_000;
 const MAX_FAILED_ENTRIES = 500;
@@ -20,22 +35,16 @@ export function markAirlineLogoFailed(url: string): void {
   const now = Date.now();
   failedAirlineLogoTimestamps.set(url, now);
 
-  // Opportunistically prune expired entries so the cache doesn't skew toward old URLs.
+  // Prune expired entries
   for (const [key, ts] of failedAirlineLogoTimestamps) {
     if (now - ts > FAILED_TTL_MS) {
       failedAirlineLogoTimestamps.delete(key);
     }
   }
 
-  if (failedAirlineLogoTimestamps.size <= MAX_FAILED_ENTRIES) return;
-
-  let oldestUrl: string | null = null;
-  let oldestTs = Number.POSITIVE_INFINITY;
-  for (const [key, ts] of failedAirlineLogoTimestamps) {
-    if (ts < oldestTs) {
-      oldestTs = ts;
-      oldestUrl = key;
-    }
+  // Evict oldest if over limit — Map iterates in insertion order
+  if (failedAirlineLogoTimestamps.size > MAX_FAILED_ENTRIES) {
+    const oldest = failedAirlineLogoTimestamps.keys().next().value;
+    if (oldest) failedAirlineLogoTimestamps.delete(oldest);
   }
-  if (oldestUrl) failedAirlineLogoTimestamps.delete(oldestUrl);
 }

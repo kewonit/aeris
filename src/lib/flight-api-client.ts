@@ -40,9 +40,23 @@ const AIRPLANES_LIVE_BASE = "https://api.airplanes.live/v2";
 const DIRECT_TIMEOUT_MS = 10_000;
 const PROXY_TIMEOUT_MS = 15_000;
 
-// Client-side rate limiter for direct airplanes.live (1 req/s + margin)
+// Client-side rate limiter for direct airplanes.live (1 req/s + margin).
+// Uses a Promise chain to serialize slot acquisition — concurrent callers
+// queue up instead of both reading the same timestamp and firing together.
 const DIRECT_RATE_MS = 1_100;
 let lastDirectTime = 0;
+let rateQueue: Promise<void> = Promise.resolve();
+
+async function acquireDirectSlot(): Promise<void> {
+  const slot = rateQueue.then(async () => {
+    const elapsed = Date.now() - lastDirectTime;
+    const wait = Math.max(0, DIRECT_RATE_MS - elapsed);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastDirectTime = Date.now();
+  });
+  rateQueue = slot;
+  await slot;
+}
 
 // ── Internal Helpers ───────────────────────────────────────────────────
 
@@ -101,14 +115,9 @@ async function fetchDirectAirplanesLive(
   path: string,
   signal?: AbortSignal,
 ): Promise<ReadsbApiResponse> {
-  // Client-side rate limiting (per-user IP)
-  const elapsed = Date.now() - lastDirectTime;
-  const wait = Math.max(0, DIRECT_RATE_MS - elapsed);
-  if (wait > 0) {
-    await new Promise((r) => setTimeout(r, wait));
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  }
-  lastDirectTime = Date.now();
+  // Serialized rate limiting — concurrent callers queue up
+  await acquireDirectSlot();
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   return withTimeout(
     async (innerSignal) => {
@@ -215,7 +224,9 @@ export async function fetchFlightsByPoint(
   const override = getProviderOverride();
   const tiers: TierFn[] = [];
 
-  if (override === "auto" || override === "airplanes") {
+  // Skip direct airplanes.live in the browser — CORS blocks it.
+  // Only attempt when explicitly overridden via ?provider=airplanes.
+  if (override === "airplanes") {
     tiers.push(async () => {
       const resp = await fetchDirectAirplanesLive(readsbPath, signal);
       return parseAircraftList(resp.ac, options);
@@ -257,7 +268,7 @@ export async function fetchFlightByHex(
   const override = getProviderOverride();
   const tiers: TierFn[] = [];
 
-  if (override === "auto" || override === "airplanes") {
+  if (override === "airplanes") {
     tiers.push(async () => {
       const resp = await fetchDirectAirplanesLive(readsbPath, signal);
       return parseAircraftList(resp.ac, parseOpts);
@@ -305,7 +316,7 @@ export async function fetchFlightByCallsign(
   const override = getProviderOverride();
   const tiers: TierFn[] = [];
 
-  if (override === "auto" || override === "airplanes") {
+  if (override === "airplanes") {
     tiers.push(async () => {
       const resp = await fetchDirectAirplanesLive(readsbPath, signal);
       return parseAircraftList(resp.ac, parseOpts);

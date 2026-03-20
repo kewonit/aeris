@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const JETAPI_BASE = "https://www.jetapi.dev/api";
 const FETCH_TIMEOUT_MS = 12_000;
-const REG_REGEX = /^[A-Z0-9-]{2,10}$/i;
+const RATE_MS = 500; // self-imposed: 2 req/s for jetapi.dev
+// Aircraft registrations: start/end with alphanumeric, dashes only as separators, 2-10 chars.
+const REG_REGEX = /^[A-Z0-9][A-Z0-9-]{0,8}[A-Z0-9]$/i;
+
+let lastRequestTime = 0;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const reg = request.nextUrl.searchParams.get("reg")?.trim();
@@ -13,6 +17,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+
+  // Rate limit check
+  const elapsed = Date.now() - lastRequestTime;
+  if (elapsed < RATE_MS) {
+    return NextResponse.json(
+      { error: "Rate limited" },
+      {
+        status: 429,
+        headers: { "Cache-Control": "no-store", "Retry-After": "1" },
+      },
+    );
+  }
+  lastRequestTime = Date.now();
 
   const params = new URLSearchParams({
     reg,

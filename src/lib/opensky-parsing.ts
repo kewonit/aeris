@@ -50,7 +50,7 @@ export function normalizeBounds(
 export function parseStateRow(
   rawState: (string | number | boolean | null)[],
 ): FlightState | null {
-  if (rawState.length < 18) return null;
+  if (!Array.isArray(rawState) || rawState.length < 18) return null;
 
   const icao24 =
     typeof rawState[0] === "string" ? rawState[0].toLowerCase() : "";
@@ -103,7 +103,9 @@ export function parseStates(
 
 // ── Callsign Normalization ─────────────────────────────────────────────
 
+const WHITESPACE_RE = /\s+/g;
+
 export function normalizeCallsign(value: string | null): string {
   if (!value) return "";
-  return value.trim().toUpperCase().replace(/\s+/g, "");
+  return value.trim().toUpperCase().replace(WHITESPACE_RE, "");
 }

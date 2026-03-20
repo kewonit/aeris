@@ -13,7 +13,7 @@ import type { City } from "@/lib/cities";
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface UseFlightMonitorsOptions {
-  pendingFpvRef: React.RefObject<string | null>;
+  pendingFpvRef: React.MutableRefObject<string | null>;
   fpvIcao24: string | null;
   fpvFlight: FlightState | null;
   followIcao24: string | null;
@@ -71,12 +71,12 @@ export function useFlightMonitors(
     );
     if (match && match.longitude != null && match.latitude != null) {
       if (match.onGround) {
-        (pendingFpvRef as React.MutableRefObject<string | null>).current = null;
+        pendingFpvRef.current = null;
         syncFpvToUrl(null, activeCity);
         setSelectedIcao24(match.icao24);
         return;
       }
-      (pendingFpvRef as React.MutableRefObject<string | null>).current = null;
+      pendingFpvRef.current = null;
       fpvLookupDoneRef.current = false;
       setFpvSeedCenter({ lng: match.longitude, lat: match.latitude });
       setFpvIcao24(pending);
@@ -104,13 +104,11 @@ export function useFlightMonitors(
               lng: result.flight.longitude,
               lat: result.flight.latitude,
             });
-            (pendingFpvRef as React.MutableRefObject<string | null>).current =
-              null;
+            pendingFpvRef.current = null;
             setFpvIcao24(pending);
             setFollowIcao24(null);
           } else if (pendingFpvRef.current === pending) {
-            (pendingFpvRef as React.MutableRefObject<string | null>).current =
-              null;
+            pendingFpvRef.current = null;
             syncFpvToUrl(null, activeCity);
             if (result.flight) {
               setSelectedIcao24(result.flight.icao24);
@@ -118,9 +116,9 @@ export function useFlightMonitors(
           }
         })
         .catch(() => {
+          // Flight lookup failed (network error, timeout, or abort) — reset pending state
           if (pendingFpvRef.current === pending) {
-            (pendingFpvRef as React.MutableRefObject<string | null>).current =
-              null;
+            pendingFpvRef.current = null;
           }
         });
       return () => controller.abort();
@@ -228,14 +226,14 @@ export function useFlightMonitors(
 
     async function loadRepoStars() {
       try {
-        const res = await fetch(GITHUB_REPO_API, { cache: "no-store" });
+        const res = await fetch(GITHUB_REPO_API);
         if (!res.ok) return;
         const data = (await res.json()) as { stargazers_count?: number };
         if (mounted && typeof data.stargazers_count === "number") {
           setRepoStars(data.stargazers_count);
         }
       } catch {
-        /* silent fallback */
+        // GitHub API failures are non-critical — star count is cosmetic
       }
     }
 

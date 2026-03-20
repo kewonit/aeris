@@ -10,6 +10,7 @@ import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
   loadedAirlineLogoUrls,
+  trackAirlineLogoLoaded,
   markAirlineLogoFailed,
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
@@ -232,7 +233,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                   className="relative object-contain p-1"
                   unoptimized
                   onLoad={() => {
-                    if (logoUrl) loadedAirlineLogoUrls.add(logoUrl);
+                    if (logoUrl) trackAirlineLogoLoaded(logoUrl);
                     setLogoLoadedByKey((current) => ({
                       ...current,
                       [logoLoadKey]: true,

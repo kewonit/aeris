@@ -51,16 +51,15 @@ export function useKeyboardCamera(
     }
 
     function applyDelta(type: CameraActionType, delta: number) {
+      if (!map) return;
       if (type === "zoom") {
-        const z = map!.getZoom() + delta;
-        map!.setZoom(
-          Math.min(Math.max(z, map!.getMinZoom()), map!.getMaxZoom()),
-        );
+        const z = map.getZoom() + delta;
+        map.setZoom(Math.min(Math.max(z, map.getMinZoom()), map.getMaxZoom()));
       } else if (type === "pitch") {
-        const p = map!.getPitch() + delta;
-        map!.setPitch(Math.min(Math.max(p, 0), map!.getMaxPitch()));
+        const p = map.getPitch() + delta;
+        map.setPitch(Math.min(Math.max(p, 0), map.getMaxPitch()));
       } else {
-        map!.setBearing(map!.getBearing() + delta);
+        map.setBearing(map.getBearing() + delta);
       }
     }
 

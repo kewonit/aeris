@@ -46,11 +46,17 @@ next-env.d.ts
 docs.txt
 ROADMAP.local.md
 
+# heap snapshots & analysis artifacts
+*.heapsnapshot
+scripts/heap-analysis/output/
+scripts/heap-analysis/__pycache__/
+
 # internal planning docs (not for public release)
 docs/internal/
 
-# build scripts & heap analysis (local tooling)
+# heap analysis tooling & output
 scripts/
+scripts/heap-analysis/
 
 # editor settings
 .vscode/

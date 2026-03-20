@@ -144,10 +144,12 @@ export function CameraController({
     const onNorthUp = () => {
       if (isFpvActiveRef.current) return;
       if (northUpRafId != null) cancelAnimationFrame(northUpRafId);
-      const startBearing = map.getBearing();
+      if (!map) return;
+      const m = map;
+      const startBearing = m.getBearing();
       const delta = ((0 - startBearing + 540) % 360) - 180;
       if (Math.abs(delta) < 0.5) {
-        map.setBearing(0);
+        m.setBearing(0);
         return;
       }
       const duration = 650;
@@ -155,7 +157,7 @@ export function CameraController({
       function animateBearing() {
         const t = Math.min((performance.now() - start) / duration, 1);
         const eased = smoothstep(t);
-        map!.setBearing(startBearing + delta * eased);
+        m.setBearing(startBearing + delta * eased);
         if (t < 1) {
           northUpRafId = requestAnimationFrame(animateBearing);
         } else {

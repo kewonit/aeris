@@ -7,13 +7,14 @@ import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
 
 type MapAttributionProps = {
   styleId: string;
+  showAirspace?: boolean;
 };
 
 const SM_BREAKPOINT = 640;
 
-export function MapAttribution({ styleId }: MapAttributionProps) {
+export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
-  const attributions = getAttributions(styleId);
+  const attributions = getAttributions(styleId, { showAirspace });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);

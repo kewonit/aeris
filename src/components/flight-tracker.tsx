@@ -9,14 +9,20 @@ import {
   useSyncExternalStore,
 } from "react";
 import { AnimatePresence } from "motion/react";
+import dynamic from "next/dynamic";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
+import { AirspaceLayer } from "@/components/map/airspace-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
-import { FlightCard } from "@/components/ui/flight-card";
+const FlightCard = dynamic(() =>
+  import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
+);
 import { FpvHud } from "@/components/ui/fpv-hud";
-import { ControlPanel } from "@/components/ui/control-panel";
+const ControlPanel = dynamic(() =>
+  import("@/components/ui/control-panel").then((mod) => mod.ControlPanel),
+);
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
@@ -55,6 +61,9 @@ import {
 } from "@/components/flight-tracker-random";
 
 function FlightTrackerInner() {
+  // useSyncExternalStore with a no-op subscriber reads localStorage once
+  // on the client while returning DEFAULT_CITY on the server — SSR-safe
+  // hydration without useEffect flicker.
   const hydratedCity = useSyncExternalStore(
     subscribeNoop,
     resolveInitialCity,
@@ -112,10 +121,17 @@ function FlightTrackerInner() {
   const displayFlights = flights;
   const displayTrails = useTrailHistory(displayFlights);
 
+  // Single Map for O(1) flight lookups — replaces 4× O(n) find() calls per poll
+  const displayFlightMap = useMemo(() => {
+    const m = new Map<string, FlightState>();
+    for (const f of displayFlights) m.set(f.icao24, f);
+    return m;
+  }, [displayFlights]);
+
   const selectedFlightForTrack = useMemo(() => {
     if (!selectedIcao24) return null;
-    return displayFlights.find((f) => f.icao24 === selectedIcao24) ?? null;
-  }, [selectedIcao24, displayFlights]);
+    return displayFlightMap.get(selectedIcao24) ?? null;
+  }, [selectedIcao24, displayFlightMap]);
 
   const shouldFetchSelectedTrack =
     !!selectedIcao24 &&
@@ -137,26 +153,18 @@ function FlightTrackerInner() {
 
   const selectedFlight = useMemo(() => {
     if (!selectedIcao24) return null;
-    return (
-      displayFlights.find((f) => f.icao24.toLowerCase() === selectedIcao24) ??
-      null
-    );
-  }, [selectedIcao24, displayFlights]);
+    return displayFlightMap.get(selectedIcao24) ?? null;
+  }, [selectedIcao24, displayFlightMap]);
 
   const followFlight = useMemo(() => {
     if (!followIcao24) return null;
-    return (
-      displayFlights.find((f) => f.icao24.toLowerCase() === followIcao24) ??
-      null
-    );
-  }, [followIcao24, displayFlights]);
+    return displayFlightMap.get(followIcao24) ?? null;
+  }, [followIcao24, displayFlightMap]);
 
   const fpvFlight = useMemo(() => {
     if (!fpvIcao24) return null;
-    return (
-      displayFlights.find((f) => f.icao24.toLowerCase() === fpvIcao24) ?? null
-    );
-  }, [fpvIcao24, displayFlights]);
+    return displayFlightMap.get(fpvIcao24) ?? null;
+  }, [fpvIcao24, displayFlightMap]);
 
   useEffect(() => {
     syncFpvToUrl(fpvIcao24, activeCity);
@@ -209,8 +217,8 @@ function FlightTrackerInner() {
     (icao24: string) => {
       const targetIcao24 = icao24.toLowerCase();
       const flight =
-        displayFlights.find((f) => f.icao24.toLowerCase() === targetIcao24) ??
-        flights.find((f) => f.icao24.toLowerCase() === targetIcao24);
+        displayFlightMap.get(targetIcao24) ??
+        flights.find((f) => f.icao24 === targetIcao24);
       if (!flight) return;
       if (flight.longitude == null || flight.latitude == null) return;
       if (flight.onGround) return;
@@ -225,7 +233,7 @@ function FlightTrackerInner() {
       });
       setFollowIcao24(null);
     },
-    [displayFlights, flights],
+    [displayFlightMap, flights],
   );
 
   const handleExitFpv = useCallback(() => {
@@ -277,7 +285,7 @@ function FlightTrackerInner() {
       if (!compactQuery) return false;
 
       const localMatch =
-        displayFlights.find((f) => f.icao24.toLowerCase() === compactQuery) ??
+        displayFlightMap.get(compactQuery) ??
         displayFlights.find((f) =>
           formatCallsign(f.callsign)
             .toLowerCase()
@@ -332,7 +340,7 @@ function FlightTrackerInner() {
       }
       return true;
     },
-    [displayFlights],
+    [displayFlights, displayFlightMap],
   );
 
   useKeyboardShortcuts({
@@ -364,6 +372,11 @@ function FlightTrackerInner() {
           activeCity={activeCity}
           onSelectAirport={setActiveCity}
           isDark={mapStyle.dark}
+        />
+        <AirspaceLayer
+          visible={settings.showAirspace}
+          opacity={settings.airspaceOpacity}
+          showHotspots={settings.showAirspaceHotspots}
         />
         <FlightLayers
           flights={displayFlights}
@@ -477,7 +490,10 @@ function FlightTrackerInner() {
               <AltitudeLegend />
             </div>
             <div className="pointer-events-auto">
-              <MapAttribution styleId={mapStyle.id} />
+              <MapAttribution
+                styleId={mapStyle.id}
+                showAirspace={settings.showAirspace}
+              />
             </div>
           </div>
         )}

@@ -81,13 +81,25 @@ const REG_PREFIX_TO_COUNTRY: readonly [string, string][] = [
   ["N", "United States"],
 ];
 
+// Pre-build Maps by prefix length for O(1) lookup instead of O(42) linear scan
+const REG_BY_3 = new Map<string, string>();
+const REG_BY_2 = new Map<string, string>();
+const REG_BY_1 = new Map<string, string>();
+for (const [prefix, country] of REG_PREFIX_TO_COUNTRY) {
+  if (prefix.length >= 3) REG_BY_3.set(prefix, country);
+  else if (prefix.length === 2) REG_BY_2.set(prefix, country);
+  else REG_BY_1.set(prefix, country);
+}
+
 function countryFromRegistration(reg: string | undefined): string {
   if (!reg) return "Unknown";
   const upper = reg.toUpperCase();
-  for (const [prefix, country] of REG_PREFIX_TO_COUNTRY) {
-    if (upper.startsWith(prefix)) return country;
-  }
-  return "Unknown";
+  return (
+    REG_BY_3.get(upper.slice(0, 3)) ??
+    REG_BY_2.get(upper.slice(0, 2)) ??
+    REG_BY_1.get(upper[0]) ??
+    "Unknown"
+  );
 }
 
 // ── Category Conversion ────────────────────────────────────────────────

@@ -6,9 +6,14 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
+import type { TrailEntry } from "@/hooks/use-trail-history";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
-import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
+import type {
+  DeckGLOverlay,
+  ElevatedPoint,
+  Snapshot,
+} from "./flight-layer-constants";
 import {
   DEFAULT_ANIM_DURATION_MS,
   MIN_ANIM_DURATION_MS,
@@ -35,6 +40,7 @@ import {
   computePitchByIcao,
   computeBankByIcao,
   computeInterpolatedFlights,
+  updateInterpolatedInPlace,
 } from "./flight-animation-helpers";
 
 import { buildTrailLayers } from "./flight-layer-builders";
@@ -68,6 +74,39 @@ export function FlightLayers({
   const dataTimestampRef = useRef(0);
   const animDurationRef = useRef(DEFAULT_ANIM_DURATION_MS);
   const animFrameRef = useRef(0);
+
+  // Persistent caches reused across animation frames to reduce GC pressure
+  const trailBasePathCacheRef = useRef(
+    new Map<string, { key: string; basePath: ElevatedPoint[] }>(),
+  );
+  const interpolatedMapRef = useRef(new Map<string, FlightState>());
+  const pitchMapRef = useRef(new Map<string, number>());
+  const bankMapRef = useRef(new Map<string, number>());
+  // Reusable containers for buildTrailLayers — clear+reuse each frame
+  const handledIdsRef = useRef(new Set<string>());
+  const visibleTrailCacheRef = useRef(new Map<string, ElevatedPoint[]>());
+  const activeIcaosRef = useRef(new Set<string>());
+  // Persistent caches for slope-limited trail paths and colors across frames
+  const trailPathCacheRef = useRef(
+    new Map<string, { key: string; result: [number, number, number][] }>(),
+  );
+  const trailColorCacheRef = useRef(
+    new Map<
+      string,
+      { key: string; result: [number, number, number, number][] }
+    >(),
+  );
+  // Cached trail-by-icao24 Map — rebuilt only when trailsRef changes, not every frame
+  const trailMapRef = useRef(new Map<string, TrailEntry>());
+  const lastTrailsForMapRef = useRef<TrailEntry[] | null>(null);
+
+  // Interpolation pool — reuse FlightState objects between animation frames
+  // to avoid ~18K object allocations/sec from spread syntax
+  const interpArrayRef = useRef<FlightState[]>([]);
+  const lastFlightsForInterpRef = useRef<FlightState[] | null>(null);
+
+  // Data version increments when raw flight data changes — drives color/scale updateTriggers
+  const dataVersionRef = useRef(0);
 
   const flightsRef = useRef(flights);
   const trailsRef = useRef(trails);
@@ -193,6 +232,8 @@ export function FlightLayers({
       );
     }
     dataTimestampRef.current = now;
+    // Increment data version so model layers know color/scale need recomputation
+    dataVersionRef.current++;
   }, [flights]);
 
   // ── Cursor management ──────────────────────────────────────────────
@@ -217,6 +258,21 @@ export function FlightLayers({
       if (info.object) onClick(info);
     },
     [onClick],
+  );
+
+  // Stable refs for event handlers — prevents RAF loop restart when handlers change
+  const handleHoverRef = useRef(handleHover);
+  const handleClickRef = useRef(handleClick);
+  handleHoverRef.current = handleHover;
+  handleClickRef.current = handleClick;
+
+  const stableHover = useCallback(
+    (info: PickingInfo<FlightState>) => handleHoverRef.current(info),
+    [],
+  );
+  const stableClick = useCallback(
+    (info: PickingInfo<FlightState>) => handleClickRef.current(info),
+    [],
   );
 
   // ── Map click pass-through ─────────────────────────────────────────
@@ -256,6 +312,7 @@ export function FlightLayers({
         interleaved: false,
         views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
+        useDevicePixels: 1,
         layers: [],
       });
       map.addControl(overlayRef.current as unknown as maplibregl.IControl);
@@ -265,10 +322,10 @@ export function FlightLayers({
     return () => {
       if (overlayRef.current) {
         try {
-          overlayRef.current.finalize();
           map.removeControl(
             overlayRef.current as unknown as maplibregl.IControl,
           );
+          overlayRef.current.finalize();
         } catch {
           /* unmounted */
         }
@@ -277,10 +334,29 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
+  // Frame pacing: only push layer updates to deck.gl every TARGET_FRAME_MS
+  // to avoid overloading the GPU/attribute pipeline. Interpolation still
+  // happens every rAF for smooth FPV camera tracking.
+  const lastSetPropsTimeRef = useRef(0);
+  // Visual frame counter — only increments when we actually push layers
+  // to deck.gl. Used in updateTriggers so deck.gl doesn't recompute
+  // attribute buffers on skipped frames.
+  const visualFrameRef = useRef(0);
+
   // ── Main animation loop ────────────────────────────────────────────
 
   useEffect(() => {
     if (!atlasUrl) return;
+
+    // Target ~24fps for deck.gl layer updates. The rAF still fires at
+    // ~60fps for smooth interpolation / FPV camera, but layer construction
+    // + overlay.setProps are skipped on intermediate frames.
+    const TARGET_FRAME_MS = 42;
+
+    // Hoisted constant — avoids allocating a new array every frame
+    const DEFAULT_COLOR: [number, number, number, number] = [
+      180, 220, 255, 200,
+    ];
 
     function buildAndPushLayers() {
       animFrameRef.current = requestAnimationFrame(buildAndPushLayers);
@@ -291,8 +367,6 @@ export function FlightLayers({
       const currentZoom = map?.getZoom() ?? 10;
       const now = performance.now();
       const isGlobe = globeModeRef.current;
-
-      updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
       let globeFade = 1;
       let layersVisible = true;
@@ -316,33 +390,50 @@ export function FlightLayers({
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
-        const altColors = showAltColorsRef.current;
-        const defaultColor: [number, number, number, number] = [
-          180, 220, 255, 200,
-        ];
 
-        const interpolated = computeInterpolatedFlights(
-          currentFlights,
-          prevSnapshotsRef.current,
-          currSnapshotsRef.current,
-          tPos,
-          tAngle,
-          rawT,
-          animDurationRef.current,
-        );
+        // On new poll data: full interpolation (creates new FlightState objects).
+        // Between polls: mutate positions in-place (zero object allocations).
+        let interpolated: FlightState[];
+        if (currentFlights !== lastFlightsForInterpRef.current) {
+          interpolated = computeInterpolatedFlights(
+            currentFlights,
+            prevSnapshotsRef.current,
+            currSnapshotsRef.current,
+            tPos,
+            tAngle,
+            rawT,
+            animDurationRef.current,
+          );
+          interpArrayRef.current = interpolated;
+          lastFlightsForInterpRef.current = currentFlights;
 
-        const interpolatedMap = new Map<string, FlightState>();
-        for (const f of interpolated) {
-          interpolatedMap.set(f.icao24, f);
+          // Rebuild Map only on new poll — updateInterpolatedInPlace mutates
+          // the same FlightState objects in-place, so existing Map entries
+          // remain valid between polls.
+          const interpolatedMap = interpolatedMapRef.current;
+          interpolatedMap.clear();
+          for (const f of interpolated) {
+            interpolatedMap.set(f.icao24, f);
+          }
+        } else {
+          interpolated = interpArrayRef.current;
+          updateInterpolatedInPlace(
+            interpolated,
+            currentFlights,
+            prevSnapshotsRef.current,
+            currSnapshotsRef.current,
+            tPos,
+            tAngle,
+            rawT,
+            animDurationRef.current,
+          );
         }
 
-        // FPV position output
+        // FPV position output — O(1) Map lookup instead of O(n) find
         const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
-        const visibleFlights = interpolated;
         const fpvPosOut = fpvPosRef.current;
         if (fpvPosOut && fpvId) {
-          const fpvF =
-            interpolated.find((f) => f.icao24.toLowerCase() === fpvId) ?? null;
+          const fpvF = interpolatedMapRef.current.get(fpvId) ?? null;
           if (
             fpvF &&
             Number.isFinite(fpvF.longitude) &&
@@ -363,26 +454,71 @@ export function FlightLayers({
           fpvPosOut.current = null;
         }
 
-        const pitchByIcao = computePitchByIcao(
-          interpolated,
-          new Map(currentTrails.map((t) => [t.icao24, t])),
-          currSnapshotsRef.current,
-          prevSnapshotsRef.current,
-        );
+        // Rebuild trail-by-icao24 Map only when trails reference changes
+        if (currentTrails !== lastTrailsForMapRef.current) {
+          trailMapRef.current.clear();
+          for (const t of currentTrails) {
+            trailMapRef.current.set(t.icao24, t);
+          }
+          lastTrailsForMapRef.current = currentTrails;
+        }
 
-        const bankByIcao = computeBankByIcao(
-          interpolated,
-          prevSnapshotsRef.current,
-          currSnapshotsRef.current,
-          tAngle,
-        );
+        // ── Frame throttle ──────────────────────────────────────────
+        // Interpolation + FPV updates above still run every rAF for
+        // smooth position tracking. Everything below (layer construction,
+        // pitch/bank, globe dots, overlay.setProps) is throttled to
+        // ~24fps to halve deck.gl's internal attribute recomputation,
+        // WebGL draw calls, and MapLibre GeoJSON updates.
+        if (now - lastSetPropsTimeRef.current < TARGET_FRAME_MS) return;
+        lastSetPropsTimeRef.current = now;
+        visualFrameRef.current++;
+
+        // Globe dots — throttled along with deck.gl updates
+        updateGlobeDotsRef.current(isGlobe, currentZoom, now);
+
+        const altColors = showAltColorsRef.current;
+        const visibleFlights = interpolated;
+
+        // Pitch/bank change slowly — recompute every 3rd visual frame (~8fps)
+        // to avoid iterating all flights at 24fps. Values are retained in
+        // pitchMapRef/bankMapRef between compute frames.
+        if (visualFrameRef.current % 3 === 0) {
+          computePitchByIcao(
+            interpolated,
+            trailMapRef.current,
+            currSnapshotsRef.current,
+            prevSnapshotsRef.current,
+            pitchMapRef.current,
+          );
+
+          computeBankByIcao(
+            interpolated,
+            prevSnapshotsRef.current,
+            currSnapshotsRef.current,
+            tAngle,
+            bankMapRef.current,
+          );
+        }
+        const pitchByIcao = pitchMapRef.current;
+        const bankByIcao = bankMapRef.current;
 
         const layers = [];
+
+        // Zoom-dependent elevation scale to prevent absurd altitude spikes
+        // at globe zoom levels. Full exaggeration at city zoom (>8).
+        // Computed once per frame and passed to all builders.
+        const elevScale =
+          currentZoom < 5
+            ? 0.15 + (currentZoom / 5) * 0.35
+            : currentZoom < 8
+              ? 0.5 + ((currentZoom - 5) / 3) * 0.5
+              : 1.0;
 
         // Shadow layer — always included, toggled via `visible` to retain WebGL state
         layers.push(
           new IconLayer<FlightState>({
             id: "flight-shadows",
+            pickable: false,
             visible: layersVisible && showShadowsRef.current,
             data: visibleFlights,
             opacity: globeFade,
@@ -397,6 +533,10 @@ export function FlightLayers({
             billboard: false,
             sizeUnits: "pixels",
             sizeScale: 1,
+            updateTriggers: {
+              getPosition: visualFrameRef.current,
+              getAngle: visualFrameRef.current,
+            },
           }),
         );
 
@@ -404,60 +544,69 @@ export function FlightLayers({
         layers.push(
           buildTrailLayers({
             interpolated,
-            interpolatedMap,
+            interpolatedMap: interpolatedMapRef.current,
             currentTrails,
+            trailMap: trailMapRef.current,
             trailDistance: trailDistanceRef.current,
             trailThickness: trailThicknessRef.current,
             altColors,
-            defaultColor,
+            defaultColor: DEFAULT_COLOR,
             elapsed,
+            visualFrame: visualFrameRef.current,
             globeFade,
             currentZoom,
+            elevScale,
             visible: layersVisible && showTrailsRef.current,
+            trailBasePathCache: trailBasePathCacheRef.current,
+            trailPathCache: trailPathCacheRef.current,
+            trailColorCache: trailColorCacheRef.current,
+            handledIdsSet: handledIdsRef.current,
+            visibleTrailCacheMap: visibleTrailCacheRef.current,
+            activeIcaosSet: activeIcaosRef.current,
           }),
         );
 
-        // Selection pulse layers (halo + rings)
-        const pulseResult = buildSelectionPulseLayers({
-          selectionChangeTime: selectionChangeTimeRef.current,
-          selectedId: selectedIcao24Ref.current,
-          prevId: prevSelectedRef.current,
-          interpolated,
-          elapsed,
-          globeFade,
-          currentZoom,
-          haloUrl,
-          ringUrl,
-          layersVisible,
-        });
-        layers.push(...pulseResult.layers);
-        if (pulseResult.shouldClearPrev) {
-          prevSelectedRef.current = null;
+        // Selection pulse layers (halo + rings) — skip entirely when
+        // nothing is selected and no fade-out is in progress. Saves
+        // constructing 8 IconLayer objects + deck.gl diffing per frame.
+        if (selectedIcao24Ref.current || prevSelectedRef.current) {
+          const pulseResult = buildSelectionPulseLayers({
+            selectionChangeTime: selectionChangeTimeRef.current,
+            selectedId: selectedIcao24Ref.current,
+            prevId: prevSelectedRef.current,
+            interpolated,
+            interpolatedMap: interpolatedMapRef.current,
+            elapsed,
+            globeFade,
+            currentZoom,
+            elevScale,
+            haloUrl,
+            ringUrl,
+            layersVisible,
+          });
+          layers.push(...pulseResult.layers);
+          if (pulseResult.shouldClearPrev) {
+            prevSelectedRef.current = null;
+          }
         }
-
-        // Zoom-dependent elevation scale to prevent absurd altitude spikes
-        // at globe zoom levels. Full exaggeration at city zoom (>8).
-        const elevScale =
-          currentZoom < 5
-            ? 0.15 + (currentZoom / 5) * 0.35
-            : currentZoom < 8
-              ? 0.5 + ((currentZoom - 5) / 3) * 0.5
-              : 1.0;
 
         // Aircraft 3D model layers — one ScenegraphLayer per model type,
         // always included with `visible` to avoid re-fetching .glb files
         layers.push(
           ...buildAircraftModelLayers({
-            visibleFlights,
+            rawFlights: currentFlights,
+            interpolatedMap: interpolatedMapRef.current,
+            frameCounter: visualFrameRef.current,
+            dataVersion: dataVersionRef.current,
             layersVisible,
             globeFade,
             elevScale,
             altColors,
-            defaultColor,
+            defaultColor: DEFAULT_COLOR,
             pitchByIcao,
             bankByIcao,
-            handleHover,
-            handleClick,
+            handleHover: stableHover,
+            handleClick: stableClick,
           }),
         );
 
@@ -471,7 +620,7 @@ export function FlightLayers({
 
     buildAndPushLayers();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [atlasUrl, haloUrl, ringUrl, handleHover, handleClick, map]);
+  }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
 
   return null;
 }

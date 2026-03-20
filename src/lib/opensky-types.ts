@@ -1,14 +1,17 @@
 /** @see https://openskynetwork.github.io/opensky-api/rest.html */
 
+import { ICAO24_REGEX } from "./flight-api-types";
+import { clamp } from "./utils";
+export { ICAO24_REGEX, clamp };
+
 // ── API Constants ──────────────────────────────────────────────────────
 
 export const OPENSKY_API = "https://opensky-network.org/api";
 export const FETCH_TIMEOUT_MS = 15_000;
-export const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
 /** Callsign lookup scans global /states/all (4 credits); cache longer to reduce spikes. */
 export const CALLSIGN_CACHE_TTL_MS = 2 * 60_000;
 export const CALLSIGN_CACHE_MAX_ENTRIES = 200;
-/** Keep bbox queries inside OpenSky's 0–25 sq-deg (1 credit) tier. */
+/** Bbox is ±radius → side = 2×2.49 = 4.98° → area ≈ 24.8 sq-deg < 25 (1 credit tier). */
 export const MAX_1_CREDIT_RADIUS_DEG = 2.49;
 /** Delay between sequential segment fetches to avoid burst rate limits. */
 export const SEGMENT_DELAY_MS = 200;
@@ -101,8 +104,3 @@ export type OpenSkyTrackResponse = {
   calllsign?: unknown;
   path?: unknown;
 };
-
-// ── Shared Utilities ───────────────────────────────────────────────────
-
-export const clamp = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max);

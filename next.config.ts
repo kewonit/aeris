@@ -4,6 +4,10 @@ const isDev = process.env.NODE_ENV === "development";
 
 // Content Security Policy — allows only the external resources Aeris actually uses.
 // https://nextjs.org/docs/app/guides/content-security-policy
+//
+// NOTE: jetapi.dev is intentionally absent from connect-src. It is only
+// accessed server-side via the /api/aircraft-photos proxy route, so CSP
+// does not apply. If client-side direct access is ever needed, add it here.
 const cspHeader = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};

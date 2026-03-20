@@ -42,6 +42,8 @@ export function useGlobeDots(
   const lastGeoJsonTimestampRef = useRef(0);
   const geoJsonClearedRef = useRef(false);
   const globeZoomEnteredAtRef = useRef(0);
+  // Cache last visibility state to avoid calling setLayoutProperty every frame
+  const lastDotsVisibleRef = useRef<boolean | null>(null);
 
   // Set up MapLibre source, layer, and event handlers
   useEffect(() => {
@@ -197,23 +199,27 @@ export function useGlobeDots(
 
     // Hide layers unless globe mode AND below switch zoom
     const dotsVisible = isGlobe && currentZoom < GLOBE_NATIVE_ZOOM_CEIL;
-    try {
-      if (map.getLayer(LAYER_ID)) {
-        map.setLayoutProperty(
-          LAYER_ID,
-          "visibility",
-          dotsVisible ? "visible" : "none",
-        );
+    // Only call setLayoutProperty when visibility actually changes
+    if (dotsVisible !== lastDotsVisibleRef.current) {
+      lastDotsVisibleRef.current = dotsVisible;
+      try {
+        if (map.getLayer(LAYER_ID)) {
+          map.setLayoutProperty(
+            LAYER_ID,
+            "visibility",
+            dotsVisible ? "visible" : "none",
+          );
+        }
+        if (map.getLayer(TRAIL_LAYER_ID)) {
+          map.setLayoutProperty(
+            TRAIL_LAYER_ID,
+            "visibility",
+            dotsVisible ? "visible" : "none",
+          );
+        }
+      } catch {
+        /* layer may not exist yet */
       }
-      if (map.getLayer(TRAIL_LAYER_ID)) {
-        map.setLayoutProperty(
-          TRAIL_LAYER_ID,
-          "visibility",
-          dotsVisible ? "visible" : "none",
-        );
-      }
-    } catch {
-      /* layer may not exist yet */
     }
 
     if (isGlobe) {

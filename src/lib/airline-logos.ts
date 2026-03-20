@@ -1,19 +1,19 @@
+const DIACRITICS_RE = /[\u0300-\u036f]/g;
+const NON_ALNUM_RE = /[^a-z0-9]+/g;
+const LEADING_TRAILING_DASH_RE = /^-+|-+$/g;
+
 function normalizeAirlineText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+  return value.normalize("NFD").replace(DIACRITICS_RE, "").toLowerCase().trim();
 }
 
-function toAirlineLogoSlug(airlineName: string): string {
-  return normalizeAirlineText(airlineName)
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+function slugFromNormalized(normalized: string): string {
+  return normalized
+    .replace(NON_ALNUM_RE, "-")
+    .replace(LEADING_TRAILING_DASH_RE, "");
 }
 
-function toAirlineAliasKey(airlineName: string): string {
-  return normalizeAirlineText(airlineName).replace(/[^a-z0-9]+/g, "");
+function aliasKeyFromNormalized(normalized: string): string {
+  return normalized.replace(NON_ALNUM_RE, "");
 }
 
 const LOGO_SLUG_ALIASES: Record<string, string> = {
@@ -54,8 +54,10 @@ function buildSlugVariants(baseSlug: string): string[] {
 export function airlineLogoCandidates(airlineName: string | null): string[] {
   if (!airlineName) return [];
 
-  const slug = toAirlineLogoSlug(airlineName);
-  const aliasKey = toAirlineAliasKey(airlineName);
+  // Normalize once, derive both slug and alias key from it
+  const normalized = normalizeAirlineText(airlineName);
+  const slug = slugFromNormalized(normalized);
+  const aliasKey = aliasKeyFromNormalized(normalized);
   const aliasSlug = LOGO_SLUG_ALIASES[aliasKey] ?? null;
 
   const orderedSlugs = Array.from(

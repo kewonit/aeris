@@ -11,6 +11,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { clamp } from "@/lib/opensky-types";
+
 export type OrbitDirection = "clockwise" | "counter-clockwise";
 
 export type Settings = {
@@ -24,6 +26,9 @@ export type Settings = {
   showAltitudeColors: boolean;
   fpvChaseDistance: number;
   globeMode: boolean;
+  showAirspace: boolean;
+  airspaceOpacity: number;
+  showAirspaceHotspots: boolean;
 };
 
 const TRAIL_THICKNESS_MIN = 0.5;
@@ -32,10 +37,8 @@ const TRAIL_DISTANCE_MIN = 12;
 const TRAIL_DISTANCE_MAX = 100;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+export const AIRSPACE_OPACITY_MIN = 0.25;
+export const AIRSPACE_OPACITY_MAX = 1.0;
 
 function normalizeSettings(input: Settings): Settings {
   return {
@@ -54,6 +57,11 @@ function normalizeSettings(input: Settings): Settings {
       FPV_CHASE_DISTANCE_MIN,
       FPV_CHASE_DISTANCE_MAX,
     ),
+    airspaceOpacity: clamp(
+      input.airspaceOpacity,
+      AIRSPACE_OPACITY_MIN,
+      AIRSPACE_OPACITY_MAX,
+    ),
   };
 }
 
@@ -68,6 +76,9 @@ const DEFAULT_SETTINGS: Settings = {
   showAltitudeColors: true,
   fpvChaseDistance: 0.0048,
   globeMode: false,
+  showAirspace: false,
+  airspaceOpacity: 0.78,
+  showAirspaceHotspots: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -102,7 +113,13 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.fpvChaseDistance) &&
     s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
     s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
-    typeof s.globeMode === "boolean"
+    typeof s.globeMode === "boolean" &&
+    typeof s.showAirspace === "boolean" &&
+    typeof s.airspaceOpacity === "number" &&
+    Number.isFinite(s.airspaceOpacity) &&
+    s.airspaceOpacity >= AIRSPACE_OPACITY_MIN &&
+    s.airspaceOpacity <= AIRSPACE_OPACITY_MAX &&
+    typeof s.showAirspaceHotspots === "boolean"
   );
 }
 
@@ -126,6 +143,7 @@ function loadSettings(): Settings {
     }
     return normalizeSettings({ ...DEFAULT_SETTINGS, ...envelope.data });
   } catch {
+    // Corrupted or unreadable localStorage — fall back to defaults
     return DEFAULT_SETTINGS;
   }
 }
@@ -136,7 +154,7 @@ function saveSettings(settings: Settings): void {
     const envelope: StorageEnvelope = { v: STORAGE_VERSION, data: settings };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   } catch {
-    /* noop */
+    // localStorage may be full or unavailable (private browsing)
   }
 }
 

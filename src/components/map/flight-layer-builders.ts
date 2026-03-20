@@ -17,6 +17,8 @@ import {
 import {
   buildStartupFallbackTrail,
   buildVisibleTrailPoints,
+  buildTrailBasePath,
+  trailBasePathCacheKey,
   smoothStep,
 } from "./flight-animation-helpers";
 
@@ -79,14 +81,36 @@ export interface TrailLayerParams {
   interpolated: FlightState[];
   interpolatedMap: Map<string, FlightState>;
   currentTrails: TrailEntry[];
+  /** Pre-built trail-by-icao24 Map — passed from parent to avoid per-frame allocation */
+  trailMap: Map<string, TrailEntry>;
   trailDistance: number;
   trailThickness: number;
   altColors: boolean;
   defaultColor: [number, number, number, number];
   elapsed: number;
+  /** Visual frame counter — throttled counter that only increments on rendered frames */
+  visualFrame: number;
   globeFade: number;
   currentZoom: number;
+  /** Pre-computed zoom-dependent elevation scale — avoids recomputing per accessor call */
+  elevScale: number;
   visible?: boolean;
+  /** Persistent cache for expensive base path computations across frames */
+  trailBasePathCache?: Map<string, { key: string; basePath: ElevatedPoint[] }>;
+  /** Persistent cache for slope-limited trail paths across frames */
+  trailPathCache?: Map<
+    string,
+    { key: string; result: [number, number, number][] }
+  >;
+  /** Persistent cache for trail colors across frames */
+  trailColorCache?: Map<
+    string,
+    { key: string; result: [number, number, number, number][] }
+  >;
+  /** Reusable containers — cleared and reused each frame to avoid per-frame allocations */
+  handledIdsSet?: Set<string>;
+  visibleTrailCacheMap?: Map<string, ElevatedPoint[]>;
+  activeIcaosSet?: Set<string>;
 }
 
 export function buildTrailLayers(params: TrailLayerParams) {
@@ -94,36 +118,66 @@ export function buildTrailLayers(params: TrailLayerParams) {
     interpolated,
     interpolatedMap,
     currentTrails,
+    trailMap,
     trailDistance,
     trailThickness,
     altColors,
     defaultColor,
-    elapsed,
+    visualFrame,
     globeFade,
-    currentZoom,
+    elevScale,
     visible = true,
+    trailBasePathCache,
+    trailPathCache,
+    trailColorCache,
+    handledIdsSet,
+    visibleTrailCacheMap,
+    activeIcaosSet,
   } = params;
 
-  const trailMap = new Map(currentTrails.map((t) => [t.icao24, t]));
-  const handledIds = new Set<string>();
+  const handledIds = handledIdsSet ?? new Set<string>();
+  handledIds.clear();
   const trailData: TrailEntry[] = [];
   const denseSubdivisions = 2;
   const smoothingIters =
     interpolated.length > 220 ? 2 : TRAIL_SMOOTHING_ITERATIONS;
 
-  const visibleTrailCache = new Map<string, ElevatedPoint[]>();
+  const visibleTrailCache =
+    visibleTrailCacheMap ?? new Map<string, ElevatedPoint[]>();
+  visibleTrailCache.clear();
+  const activeIcaos = trailBasePathCache
+    ? (activeIcaosSet ?? new Set<string>())
+    : null;
+  activeIcaos?.clear();
+
   const getVisibleTrailPoints = (
     trail: TrailEntry,
     animFlight: FlightState | undefined,
   ): ElevatedPoint[] => {
     const cached = visibleTrailCache.get(trail.icao24);
     if (cached) return cached;
+
+    // Try to use cached base path (expensive smoothing/densification)
+    let basePath: ElevatedPoint[] | undefined;
+    if (trailBasePathCache) {
+      const key = trailBasePathCacheKey(trail, trailDistance);
+      const entry = trailBasePathCache.get(trail.icao24);
+      if (entry && entry.key === key) {
+        basePath = entry.basePath;
+      } else {
+        basePath = buildTrailBasePath(trail, trailDistance, denseSubdivisions);
+        trailBasePathCache.set(trail.icao24, { key, basePath });
+      }
+      activeIcaos?.add(trail.icao24);
+    }
+
     const computed = buildVisibleTrailPoints(
       trail,
       animFlight,
       trailDistance,
       smoothingIters,
       denseSubdivisions,
+      basePath,
     );
     visibleTrailCache.set(trail.icao24, computed);
     return computed;
@@ -133,6 +187,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
     if (f.longitude == null || f.latitude == null) continue;
     const existing = trailMap.get(f.icao24);
     handledIds.add(f.icao24);
+    activeIcaos?.add(f.icao24);
     if (existing && existing.path.length >= 2) {
       trailData.push(existing);
       continue;
@@ -149,29 +204,57 @@ export function buildTrailLayers(params: TrailLayerParams) {
   }
 
   for (const d of currentTrails) {
-    if (!handledIds.has(d.icao24)) trailData.push(d);
+    if (!handledIds.has(d.icao24)) {
+      trailData.push(d);
+      activeIcaos?.add(d.icao24);
+    }
+  }
+
+  // Sweep stale entries from persistent caches
+  if (trailBasePathCache && activeIcaos) {
+    for (const icao of trailBasePathCache.keys()) {
+      if (!activeIcaos.has(icao)) {
+        trailBasePathCache.delete(icao);
+      }
+    }
+  }
+  if (trailPathCache && activeIcaos) {
+    for (const icao of trailPathCache.keys()) {
+      if (!activeIcaos.has(icao)) trailPathCache.delete(icao);
+    }
+  }
+  if (trailColorCache && activeIcaos) {
+    for (const icao of trailColorCache.keys()) {
+      if (!activeIcaos.has(icao)) trailColorCache.delete(icao);
+    }
   }
 
   return new PathLayer<TrailEntry>({
     id: "flight-trails",
+    pickable: false,
     visible,
     data: trailData,
     opacity: globeFade,
     updateTriggers: {
-      getPath: [elapsed, trailDistance],
-      getColor: [elapsed, altColors, trailDistance],
+      getPath: [visualFrame, trailDistance, elevScale],
+      getColor: [visualFrame, altColors, trailDistance],
     },
     getPath: (d) => {
       const animFlight = interpolatedMap.get(d.icao24);
-      // Scale elevation exaggeration by zoom:
-      // At globe zoom (<5) altitude spikes look absurd, so reduce.
-      // At city zoom (>8) full exaggeration is needed for visual depth.
-      const elevScale =
-        currentZoom < 5
-          ? 0.15 + (currentZoom / 5) * 0.35
-          : currentZoom < 8
-            ? 0.5 + ((currentZoom - 5) / 3) * 0.5
-            : 1.0;
+
+      // Cache key: trail point count + rounded head position (~11m grid)
+      // + elevScale. Gives ~6 frame cache hits between invalidations at
+      // typical aircraft speed, reducing slope-limit computation from
+      // 60fps to ~10fps per trail.
+      const headLng = animFlight?.longitude?.toFixed(4) ?? "";
+      const headLat = animFlight?.latitude?.toFixed(4) ?? "";
+      const pathKey = `${d.path.length}_${headLng}_${headLat}_${elevScale.toFixed(3)}`;
+
+      if (trailPathCache) {
+        const cached = trailPathCache.get(d.icao24);
+        if (cached && cached.key === pathKey) return cached.result;
+      }
+
       const raw = getVisibleTrailPoints(d, animFlight).map(
         (p) =>
           [
@@ -184,15 +267,26 @@ export function buildTrailLayers(params: TrailLayerParams) {
             ),
           ] as [number, number, number],
       );
-      return limitTrailSlope(raw);
+      const result = limitTrailSlope(raw);
+      trailPathCache?.set(d.icao24, { key: pathKey, result });
+      return result;
     },
     getColor: (d) => {
       const animFlight = interpolatedMap.get(d.icao24);
       const visiblePoints = getVisibleTrailPoints(d, animFlight);
       const len = visiblePoints.length;
-      const isFullHist = d.fullHistory === true;
 
-      return visiblePoints.map((point, i) => {
+      // Color depends on point count, altColors toggle, and fullHistory flag.
+      // These change rarely (only on poll or user toggle), so cache hit rate
+      // is very high (~99%).
+      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}`;
+      if (trailColorCache) {
+        const cached = trailColorCache.get(d.icao24);
+        if (cached && cached.key === colorKey) return cached.result;
+      }
+
+      const isFullHist = d.fullHistory === true;
+      const result = visiblePoints.map((point, i) => {
         const tVal = len > 1 ? i / (len - 1) : 1;
         const fade = isFullHist
           ? 0.35 + 0.65 * Math.pow(tVal, 1.1)
@@ -203,6 +297,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
           : Math.round(60 + fade * 160);
         return [base[0], base[1], base[2], alpha];
       }) as [number, number, number, number][];
+      trailColorCache?.set(d.icao24, { key: colorKey, result });
+      return result;
     },
     getWidth: trailThickness,
     widthUnits: "pixels",
@@ -222,9 +318,12 @@ export interface SelectionPulseParams {
   selectedId: string | null;
   prevId: string | null;
   interpolated: FlightState[];
+  interpolatedMap: Map<string, FlightState>;
   elapsed: number;
   globeFade: number;
   currentZoom: number;
+  /** Pre-computed zoom-dependent elevation scale */
+  elevScale: number;
   haloUrl: string;
   ringUrl: string;
   layersVisible?: boolean;
@@ -245,22 +344,14 @@ export function buildSelectionPulseLayers(
     selectionChangeTime,
     selectedId,
     prevId,
-    interpolated,
+    interpolatedMap,
     elapsed,
     globeFade,
-    currentZoom,
+    elevScale,
     haloUrl,
     ringUrl,
     layersVisible = true,
   } = params;
-
-  // Zoom-dependent elevation scale (matches trail/aircraft scaling)
-  const elevScale =
-    currentZoom < 5
-      ? 0.15 + (currentZoom / 5) * 0.35
-      : currentZoom < 8
-        ? 0.5 + ((currentZoom - 5) / 3) * 0.5
-        : 1.0;
 
   const layers: IconLayer[] = [];
   const fadeElapsed = performance.now() - selectionChangeTime;
@@ -281,20 +372,19 @@ export function buildSelectionPulseLayers(
     const targetId = isSelected ? selectedId : prevId;
     const op = isSelected ? fadeIn : fadeOut;
 
-    const flight = targetId
-      ? interpolated.find((f) => f.icao24 === targetId)
-      : undefined;
+    const flight = targetId ? interpolatedMap.get(targetId) : undefined;
     const hasPosition =
       flight && flight.longitude != null && flight.latitude != null;
 
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
-    const pos: [number, number, number] = hasPosition
-      ? [
-          flight!.longitude!,
-          flight!.latitude!,
-          altitudeToElevation(flight!.baroAltitude) * elevScale,
-        ]
-      : [0, 0, 0];
+    const pos: [number, number, number] =
+      flight && flight.longitude != null && flight.latitude != null
+        ? [
+            flight.longitude,
+            flight.latitude,
+            altitudeToElevation(flight.baroAltitude) * elevScale,
+          ]
+        : [0, 0, 0];
     const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;
 
     const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
@@ -307,6 +397,7 @@ export function buildSelectionPulseLayers(
     layers.push(
       new IconLayer({
         id: `${prefix}-halo`,
+        pickable: false,
         visible: active && haloAlpha > 0,
         data,
         opacity: globeFade,
@@ -333,6 +424,7 @@ export function buildSelectionPulseLayers(
       layers.push(
         new IconLayer({
           id: `${prefix}-ring-${i}`,
+          pickable: false,
           visible: active && ringAlpha >= 2,
           data,
           opacity: globeFade,

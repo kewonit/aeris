@@ -45,7 +45,7 @@ function loadGlobalBackoff(): void {
       );
     }
   } catch {
-    // ignore
+    // sessionStorage may be unavailable (SSR, private browsing, or storage quota exceeded)
   }
 }
 
@@ -55,7 +55,7 @@ function persistGlobalBackoff(): void {
     sessionStorage.setItem(GLOBAL_BACKOFF_KEY, String(globalNextAllowedAt));
     sessionStorage.setItem(GLOBAL_BACKOFF_MS_KEY, String(globalBackoffMs));
   } catch {
-    // ignore
+    // sessionStorage may be unavailable (SSR, private browsing, or storage quota exceeded)
   }
 }
 
@@ -99,9 +99,9 @@ export function useFlightTrack(
     const hasCachedTrack = cached?.track != null;
 
     // Stale-while-revalidate: keep cached track visible.
-    if (hasCachedTrack) {
-      setTrack(cached!.track);
-      setFetchedAtMs(cached!.fetchedAt);
+    if (cached && hasCachedTrack) {
+      setTrack(cached.track);
+      setFetchedAtMs(cached.fetchedAt);
     } else if (isKeyChange) {
       setTrack(null);
       setFetchedAtMs(0);
