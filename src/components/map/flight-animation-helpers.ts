@@ -117,9 +117,16 @@ export function smoothElevatedPath(
 ): ElevatedPoint[] {
   if (points.length < 3 || iterations <= 0) return points;
 
+  const effectiveIters =
+    points.length > 2000
+      ? Math.min(iterations, 1)
+      : points.length > 500
+        ? Math.min(iterations, 2)
+        : iterations;
+
   let current = points;
-  for (let iter = 0; iter < iterations; iter++) {
-    if (current.length < 3) break;
+  for (let iter = 0; iter < effectiveIters; iter++) {
+    if (current.length < 3 || current.length > 8000) break;
 
     const next: ElevatedPoint[] = [current[0]];
     for (let i = 0; i < current.length - 1; i++) {
@@ -162,7 +169,6 @@ export function densifyElevatedPath(
     const dist = gcDistanceDeg(a[0], a[1], b[0], b[1]);
     const useGC = dist > GC_THRESHOLD_DEG;
 
-    // For longer segments, add extra subdivisions proportional to distance
     const effectiveSubs = useGC
       ? Math.max(subdivisions, Math.min(16, Math.ceil(dist / 0.3)))
       : subdivisions;
@@ -297,7 +303,7 @@ export function trimPathAheadOfAircraft(
 
   let bestIndex = points.length - 2;
   let bestDistanceSq = Number.POSITIVE_INFINITY;
-  const searchStart = Math.max(0, points.length - 40);
+  const searchStart = Math.max(0, Math.floor(points.length * 0.9));
 
   for (let i = searchStart; i < points.length - 1; i++) {
     const a = points[i];
@@ -411,15 +417,11 @@ export function buildTrailBasePath(
   pathSlice = trimmed.path;
   altitudeSlice = trimmed.altitudes;
 
-  const smoothPathSlice = isFullHistory
-    ? pathSlice
-    : smoothPlanarPath(pathSlice);
+  const smoothPathSlice = smoothPlanarPath(pathSlice);
 
   // Use trail.baroAltitude as fallback (not animFlight) since base path is cached
   const rawAltitudes = altitudeSlice.map((a) => a ?? trail.baroAltitude ?? 0);
-  const altitudeMeters = isFullHistory
-    ? rawAltitudes
-    : smoothAnimationAltitudes(rawAltitudes, 3);
+  const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
   const basePath = smoothPathSlice.map((p, i) => [
     p[0],
@@ -427,7 +429,7 @@ export function buildTrailBasePath(
     Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
   ]) as ElevatedPoint[];
 
-  return densifyElevatedPath(basePath, isFullHistory ? 1 : denseSubdivisions);
+  return densifyElevatedPath(basePath, denseSubdivisions);
 }
 
 // ── Visible Trail Point Builder (extracted from component) ─────────────
@@ -445,7 +447,6 @@ export function buildVisibleTrailPoints(
   denseSubdivisions: number,
   cachedBasePath?: ElevatedPoint[],
 ): ElevatedPoint[] {
-  const isFullHistory = trail.fullHistory === true;
   const denseBasePath =
     cachedBasePath ??
     buildTrailBasePath(trail, trailDistance, denseSubdivisions);
@@ -467,7 +468,7 @@ export function buildVisibleTrailPoints(
     const smoothed =
       clipped.length < 4
         ? clipped
-        : smoothElevatedPath(clipped, isFullHistory ? 1 : smoothingIterations);
+        : smoothElevatedPath(clipped, smoothingIterations);
 
     return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
   }
@@ -475,10 +476,7 @@ export function buildVisibleTrailPoints(
   const smoothed =
     denseBasePath.length < 4
       ? denseBasePath
-      : smoothElevatedPath(
-          denseBasePath,
-          isFullHistory ? 1 : smoothingIterations,
-        );
+      : smoothElevatedPath(denseBasePath, smoothingIterations);
 
   return smoothed.map((p) => [p[0], p[1], Math.max(0, p[2])]);
 }

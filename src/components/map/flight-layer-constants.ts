@@ -28,7 +28,7 @@ export const TRAIL_SMOOTHING_ITERATIONS = 3;
 export const AIRCRAFT_PX_PER_UNIT = 0.3;
 export const BASE_AIRCRAFT_SIZE = 25;
 export const AIRCRAFT_MIN_PIXELS = 0.8;
-export const AIRCRAFT_MAX_PIXELS = 22;
+export const AIRCRAFT_MAX_PIXELS = 18;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 
@@ -37,6 +37,12 @@ export const GLOBE_SWITCH_ZOOM = 5.8;
 export const GLOBE_FADE_ZOOM_FLOOR = GLOBE_SWITCH_ZOOM - 0.05;
 export const GLOBE_FADE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM + 0.05;
 export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM;
+
+// LOD: switch between 3D ScenegraphLayers and 2D IconLayer.
+// Uses hysteresis to avoid flickering when hovering near the boundary.
+// Zoom in past LOD_3D_ZOOM_IN → 3D models; zoom out past LOD_3D_ZOOM_OUT → 2D icons.
+export const LOD_3D_ZOOM_IN = 7.5;
+export const LOD_3D_ZOOM_OUT = 6.5;
 
 // GeoJSON globe dot layer timing
 export const GEOJSON_THROTTLE_MS = 1500;
@@ -64,6 +70,7 @@ export type FlightLayerProps = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   globeMode?: boolean;
+  smoothAnimations?: boolean;
   fpvIcao24?: string | null;
   fpvPositionRef?: MutableRefObject<{
     lng: number;

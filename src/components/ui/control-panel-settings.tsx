@@ -12,6 +12,7 @@ import {
   Shield,
   Flame,
   Eye,
+  Zap,
 } from "lucide-react";
 import {
   useSettings,
@@ -48,6 +49,9 @@ export function SettingsContent() {
   return (
     <ScrollArea className="h-full">
       <div className="space-y-0.5 p-3 pt-1">
+        {/* ── Camera ── */}
+        <SectionHeader title="Camera" />
+
         <SettingRow
           icon={<RotateCw className="h-4 w-4" />}
           title="Auto-orbit"
@@ -72,7 +76,8 @@ export function SettingsContent() {
           </>
         )}
 
-        <div className="mx-3 my-2 h-px bg-white/4" />
+        {/* ── Visuals ── */}
+        <SectionHeader title="Visuals" />
 
         <SettingRow
           icon={<Route className="h-4 w-4" />}
@@ -108,7 +113,8 @@ export function SettingsContent() {
           onChange={(v) => update("showAltitudeColors", v)}
         />
 
-        <div className="mx-3 my-2 h-px bg-white/4" />
+        {/* ── Airspace ── */}
+        <SectionHeader title="Airspace" />
 
         <SettingRow
           icon={<Shield className="h-4 w-4" />}
@@ -133,6 +139,10 @@ export function SettingsContent() {
             />
           </>
         )}
+
+        {/* ── Performance ── */}
+        <SectionHeader title="Performance" />
+
         <SettingRow
           icon={<Globe className="h-4 w-4" />}
           title="Globe mode"
@@ -140,6 +150,14 @@ export function SettingsContent() {
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
           badge="BETA"
+        />
+
+        <SettingRow
+          icon={<Zap className="h-4 w-4" />}
+          title="Smooth animations"
+          description="Full refresh rate rendering (uses more CPU)"
+          checked={settings.smoothAnimations}
+          onChange={(v) => update("smoothAnimations", v)}
         />
 
         <div className="mx-3 my-2 h-px bg-white/4" />
@@ -351,6 +369,17 @@ function AirspaceOpacitySlider({
           aria-label="Airspace opacity"
         />
       </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+      <span className="text-[10px] font-bold tracking-widest text-white/25 uppercase">
+        {title}
+      </span>
+      <div className="h-px flex-1 bg-white/4" />
     </div>
   );
 }

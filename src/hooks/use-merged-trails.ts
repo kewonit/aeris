@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { stitchHistoricalTrail } from "@/lib/trail-stitching";
+import {
+  stitchHistoricalTrail,
+  clearSplinedTrackCache,
+} from "@/lib/trail-stitching";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { FlightState } from "@/lib/opensky";
 import type { FlightTrack } from "@/lib/opensky";
@@ -35,7 +38,10 @@ export function useMergedTrails(
   }, [selectedIcao24, displayFlights]);
 
   return useMemo(() => {
-    if (!selectedIcao24 || !selectedTrack) return displayTrails;
+    if (!selectedIcao24 || !selectedTrack) {
+      clearSplinedTrackCache();
+      return displayTrails;
+    }
 
     const { pos: livePos, flight } = selectedLivePos;
 

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 
+// ── Exported types (unchanged for backward compatibility) ───────────────────
+
 export type NormalizedPhoto = {
   id: string;
   url: string;
@@ -28,10 +30,12 @@ export type UseAircraftPhotosResult = {
   error: boolean;
 };
 
+// ── Cache ───────────────────────────────────────────────────────────────────
+
 const CACHE_TTL_MS = 10 * 60_000;
 const NEGATIVE_TTL_MS = 2 * 60_000;
 const CACHE_MAX = 200;
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 15_000;
 
 type CacheEntry = {
   aircraft: AircraftDetails | null;
@@ -69,172 +73,104 @@ function putCache(
   });
 }
 
+// ── API response types ───────────────────────────────────────────────────────────
+
+type ApiPhoto = {
+  id: string;
+  url: string;
+  thumbnail: string;
+  photographer: string | null;
+  location: string | null;
+  dateTaken: string | null;
+  link: string | null;
+};
+
+type ApiAircraft = {
+  registration: string;
+  manufacturer: string | null;
+  type: string | null;
+  typeCode: string | null;
+  owner: string | null;
+};
+
+type ApiResponse = {
+  photos?: ApiPhoto[];
+  aircraft?: ApiAircraft | null;
+};
+
+// ── Fetcher ─────────────────────────────────────────────────────────────────
+
 type FetchResult = {
   aircraft: AircraftDetails | null;
   photos: NormalizedPhoto[];
 };
 
-async function fetchJson<T>(
-  url: string,
+async function fetchPhotos(
+  icao24: string,
+  reg: string | null,
   signal?: AbortSignal,
-): Promise<T | null> {
+): Promise<FetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   signal?.addEventListener("abort", onAbort);
 
   try {
+    let url = `/api/aircraft-photos?hex=${encodeURIComponent(icao24)}`;
+    if (reg) url += `&reg=${encodeURIComponent(reg)}`;
+
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+
+    if (!res.ok) return { aircraft: null, photos: [] };
+
+    const data = (await res.json()) as ApiResponse;
+
+    const photos: NormalizedPhoto[] = (data.photos ?? [])
+      .filter(
+        (p): p is ApiPhoto =>
+          typeof p?.id === "string" &&
+          typeof p?.url === "string" &&
+          p.url.length > 0,
+      )
+      .map((p) => ({
+        id: p.id,
+        url: p.url,
+        thumbnail: p.thumbnail || p.url,
+        photographer: p.photographer ?? null,
+        location: p.location ?? null,
+        dateTaken: p.dateTaken ?? null,
+        link: p.link ?? null,
+      }));
+
+    let aircraft: AircraftDetails | null = null;
+    if (data.aircraft && typeof data.aircraft.registration === "string") {
+      aircraft = {
+        registration: data.aircraft.registration,
+        manufacturer: data.aircraft.manufacturer ?? null,
+        type: data.aircraft.type ?? null,
+        typeCode: data.aircraft.typeCode ?? null,
+        owner: data.aircraft.owner ?? null,
+        airline: data.aircraft.owner ?? null,
+      };
+    }
+
+    return { aircraft, photos };
   } catch {
-    return null;
+    return { aircraft: null, photos: [] };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
   }
 }
 
-type HexDbAircraft = {
-  ModeS?: string;
-  Registration?: string;
-  Manufacturer?: string;
-  ICAOTypeCode?: string;
-  Type?: string;
-  RegisteredOwners?: string;
-  OperatorFlagCode?: string;
-};
-
-async function fetchAircraftDetails(
-  icao24: string,
-  signal?: AbortSignal,
-): Promise<AircraftDetails | null> {
-  const data = await fetchJson<HexDbAircraft>(
-    `https://hexdb.io/api/v1/aircraft/${encodeURIComponent(icao24)}`,
-    signal,
-  );
-
-  if (!data?.Registration) return null;
-
-  return {
-    registration: data.Registration,
-    manufacturer: data.Manufacturer ?? null,
-    type: data.Type ?? null,
-    typeCode: data.ICAOTypeCode ?? null,
-    owner: data.RegisteredOwners ?? null,
-    airline: null,
-  };
-}
-
-type JetApiImage = {
-  Image?: string;
-  Thumbnail?: string;
-  Link?: string;
-  Photographer?: string;
-  Location?: string;
-  DateTaken?: string;
-  Aircraft?: string;
-  Airline?: string;
-};
-
-type JetApiResponse = {
-  JetPhotos?: {
-    Reg?: string;
-    Images?: JetApiImage[];
-  };
-  FlightRadar?: {
-    Aircraft?: string;
-    Airline?: string;
-    Operator?: string;
-    TypeCode?: string;
-    ModeS?: string;
-  };
-};
-
-function normalizePhotos(raw: JetApiImage[] | undefined): NormalizedPhoto[] {
-  if (!raw || !Array.isArray(raw)) return [];
-
-  const seen = new Set<string>();
-  const out: NormalizedPhoto[] = [];
-
-  for (const img of raw) {
-    const fullUrl = typeof img.Image === "string" ? img.Image : null;
-    if (!fullUrl) continue;
-
-    if (seen.has(fullUrl)) continue;
-    seen.add(fullUrl);
-
-    const thumb =
-      typeof img.Thumbnail === "string" && img.Thumbnail
-        ? img.Thumbnail
-        : fullUrl;
-
-    out.push({
-      id: `jp-${out.length}-${fullUrl.slice(-16).replace(/[^a-zA-Z0-9]/g, "")}`,
-      url: fullUrl,
-      thumbnail: thumb,
-      photographer:
-        typeof img.Photographer === "string" && img.Photographer
-          ? img.Photographer
-          : null,
-      location:
-        typeof img.Location === "string" && img.Location ? img.Location : null,
-      dateTaken:
-        typeof img.DateTaken === "string" && img.DateTaken
-          ? img.DateTaken
-          : null,
-      link: typeof img.Link === "string" && img.Link ? img.Link : null,
-    });
-  }
-
-  return out;
-}
-
-async function fetchPhotosViaProxy(
-  reg: string,
-  signal?: AbortSignal,
-): Promise<{ photos: NormalizedPhoto[]; airline: string | null }> {
-  const data = await fetchJson<JetApiResponse>(
-    `/api/aircraft-photos?reg=${encodeURIComponent(reg)}`,
-    signal,
-  );
-
-  if (!data) return { photos: [], airline: null };
-
-  const photos = normalizePhotos(data.JetPhotos?.Images);
-  const airline =
-    typeof data.FlightRadar?.Airline === "string"
-      ? data.FlightRadar.Airline
-      : null;
-
-  return { photos, airline };
-}
-
-async function fetchAll(
-  icao24: string,
-  signal?: AbortSignal,
-): Promise<FetchResult> {
-  const aircraft = await fetchAircraftDetails(icao24, signal);
-  if (!aircraft) return { aircraft: null, photos: [] };
-
-  const { photos, airline } = await fetchPhotosViaProxy(
-    aircraft.registration,
-    signal,
-  );
-
-  const enriched: AircraftDetails = {
-    ...aircraft,
-    airline: airline ?? aircraft.owner,
-  };
-
-  return { aircraft: enriched, photos };
-}
+// ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useAircraftPhotos(
   icao24: string | null,
+  registration?: string | null,
 ): UseAircraftPhotosResult {
   const [photos, setPhotos] = useState<NormalizedPhoto[]>([]);
   const [aircraft, setAircraft] = useState<AircraftDetails | null>(null);
@@ -243,62 +179,122 @@ export function useAircraftPhotos(
 
   useEffect(() => {
     if (!icao24) {
-      const clear = () => {
-        setPhotos([]);
-        setAircraft(null);
-        setLoading(false);
-        setError(false);
-      };
-      clear();
+      setPhotos([]);
+      setAircraft(null);
+      setLoading(false);
+      setError(false);
       return;
     }
 
     const normalized = icao24.toLowerCase();
+    const reg = registration?.trim().toUpperCase() || null;
+    const cacheKey = reg ? `${normalized}:${reg}` : normalized;
 
-    const cached = getCached(normalized);
+    // Check cache — full key first (includes JetAPI results)
+    const cached = getCached(cacheKey);
     if (cached) {
-      const applyCached = () => {
-        setPhotos(cached.photos);
-        setAircraft(cached.aircraft);
-        setLoading(false);
-        setError(false);
-      };
-      applyCached();
+      setPhotos(cached.photos);
+      setAircraft(cached.aircraft);
+      setLoading(false);
+      setError(false);
       return;
     }
+
+    // If we have a reg key, also check hex-only cache for instant display
+    const hexCached = reg ? getCached(normalized) : null;
 
     let cancelled = false;
     const controller = new AbortController();
 
-    const startFetch = () => {
-      setLoading(true);
-      setError(false);
+    setLoading(true);
+    setError(false);
+
+    // Show hex-only cached results immediately while JetAPI loads
+    if (hexCached) {
+      setPhotos(hexCached.photos);
+      setAircraft(hexCached.aircraft);
+      setLoading(false);
+    } else {
       setPhotos([]);
       setAircraft(null);
-    };
-    startFetch();
+    }
 
-    fetchAll(normalized, controller.signal).then(
-      (result) => {
-        if (cancelled) return;
-        putCache(normalized, result.aircraft, result.photos);
-        setPhotos(result.photos);
-        setAircraft(result.aircraft);
-        setLoading(false);
-      },
-      () => {
-        if (cancelled) return;
-        putCache(normalized, null, []);
-        setLoading(false);
-        setError(true);
-      },
-    );
+    if (reg && !hexCached) {
+      // Phase 1: Fast sources (no JetAPI) → show immediately
+      // Phase 2: All sources including JetAPI → upgrade
+      fetchPhotos(normalized, null, controller.signal).then(
+        (fastResult) => {
+          if (cancelled) return;
+          putCache(normalized, fastResult.aircraft, fastResult.photos);
+          setPhotos(fastResult.photos);
+          setAircraft(fastResult.aircraft);
+          setLoading(false);
+
+          // Phase 2: fetch with registration to include JetAPI
+          fetchPhotos(normalized, reg, controller.signal).then(
+            (fullResult) => {
+              if (cancelled) return;
+              const mergedAircraft = fullResult.aircraft ?? fastResult.aircraft;
+              putCache(cacheKey, mergedAircraft, fullResult.photos);
+              setPhotos(fullResult.photos);
+              setAircraft(mergedAircraft);
+            },
+            () => {
+              // JetAPI failed — keep fast results
+              if (!cancelled) {
+                putCache(cacheKey, fastResult.aircraft, fastResult.photos);
+              }
+            },
+          );
+        },
+        () => {
+          if (cancelled) return;
+          putCache(normalized, null, []);
+          setLoading(false);
+          setError(true);
+        },
+      );
+    } else if (reg && hexCached) {
+      // Already showing hex-only cache — just fetch JetAPI enhancement
+      fetchPhotos(normalized, reg, controller.signal).then(
+        (fullResult) => {
+          if (cancelled) return;
+          const mergedAircraft = fullResult.aircraft ?? hexCached.aircraft;
+          putCache(cacheKey, mergedAircraft, fullResult.photos);
+          setPhotos(fullResult.photos);
+          setAircraft(mergedAircraft);
+        },
+        () => {
+          // JetAPI failed — keep cached results
+          if (!cancelled) {
+            putCache(cacheKey, hexCached.aircraft, hexCached.photos);
+          }
+        },
+      );
+    } else {
+      // No registration — fast sources only
+      fetchPhotos(normalized, null, controller.signal).then(
+        (result) => {
+          if (cancelled) return;
+          putCache(normalized, result.aircraft, result.photos);
+          setPhotos(result.photos);
+          setAircraft(result.aircraft);
+          setLoading(false);
+        },
+        () => {
+          if (cancelled) return;
+          putCache(normalized, null, []);
+          setLoading(false);
+          setError(true);
+        },
+      );
+    }
 
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [icao24]);
+  }, [icao24, registration]);
 
   return { photos, aircraft, loading, error };
 }

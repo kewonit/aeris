@@ -10,6 +10,7 @@ import {
   X,
   Plane,
   ImageOff,
+  Plus,
 } from "lucide-react";
 import type {
   NormalizedPhoto,
@@ -53,7 +54,7 @@ const Thumbnail = memo(function Thumbnail({
       ref={ref}
       type="button"
       onClick={() => onClick(index)}
-      className="group relative h-16 w-24 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/8 bg-white/5 transition-all hover:border-white/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+      className="group relative h-20 w-32 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/8 bg-white/5 transition-all hover:border-white/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
       aria-label={`View photo ${index + 1}${photo.photographer ? ` by ${photo.photographer}` : ""}`}
     >
       {!loaded && (
@@ -64,7 +65,7 @@ const Thumbnail = memo(function Thumbnail({
       )}
       {visible && (
         <img
-          src={photo.thumbnail}
+          src={photo.url}
           alt={`Aircraft photo ${index + 1}`}
           loading="lazy"
           decoding="async"
@@ -205,7 +206,10 @@ export function Lightbox({
         </>
       )}
 
-      {(photo.photographer || photo.location || photo.dateTaken) && (
+      {(photo.photographer ||
+        photo.location ||
+        photo.dateTaken ||
+        photo.link) && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -229,6 +233,22 @@ export function Lightbox({
             )}
             {photo.dateTaken && (
               <span className="text-white/45">{photo.dateTaken}</span>
+            )}
+            {photo.link && (
+              <>
+                {(photo.photographer || photo.location || photo.dateTaken) && (
+                  <span className="text-white/25">|</span>
+                )}
+                <a
+                  href={photo.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white/40 underline decoration-white/20 underline-offset-2 transition-colors hover:text-white/60"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Source
+                </a>
+              </>
             )}
           </span>
         </motion.div>
@@ -258,7 +278,17 @@ export function AircraftPhotos({
 }: AircraftPhotosProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const PREVIEW_COUNT = 3;
+
+  // Reset "show all" when photos change (new aircraft selected)
+  const photoKey = photos.map((p) => p.id).join(",");
+  useEffect(() => {
+    const reset = () => setShowAllPhotos(false);
+    reset();
+  }, [photoKey]);
 
   const handlePhotoClick = useCallback(
     (index: number) => {
@@ -280,6 +310,10 @@ export function AircraftPhotos({
   const showSection = hideEmptyState
     ? loading || hasPhotos
     : loading || hasPhotos || hasAircraft;
+
+  const visiblePhotos = showAllPhotos ? photos : photos.slice(0, PREVIEW_COUNT);
+  const hiddenCount = photos.length - PREVIEW_COUNT;
+  const hasMore = hiddenCount > 0;
 
   if (!showSection) return null;
 
@@ -337,7 +371,7 @@ export function AircraftPhotos({
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className="h-16 w-24 shrink-0 animate-pulse rounded-lg bg-white/5"
+                      className="h-20 w-32 shrink-0 animate-pulse rounded-lg bg-white/5"
                     />
                   ))}
                 </div>
@@ -349,7 +383,7 @@ export function AircraftPhotos({
                   className="mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-none"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  {photos.map((photo, i) => (
+                  {visiblePhotos.map((photo, i) => (
                     <Thumbnail
                       key={photo.id}
                       photo={photo}
@@ -357,6 +391,19 @@ export function AircraftPhotos({
                       onClick={handlePhotoClick}
                     />
                   ))}
+                  {hasMore && !showAllPhotos && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllPhotos(true)}
+                      className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/8 bg-white/5 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+                      aria-label={`Show ${hiddenCount} more photo${hiddenCount === 1 ? "" : "s"}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span className="text-[9px] font-medium tabular-nums">
+                        {hiddenCount} more
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
 

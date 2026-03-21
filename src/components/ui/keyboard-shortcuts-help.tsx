@@ -12,6 +12,7 @@ export const SHORTCUTS = [
   { key: "⌘K", description: "Open search (anywhere)" },
   { key: "F", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
+  { key: "A", description: "Toggle ATC panel" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 

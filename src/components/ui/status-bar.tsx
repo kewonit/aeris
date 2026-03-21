@@ -1,31 +1,68 @@
 "use client";
 
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Dices, Plane, Radio, ShieldAlert } from "lucide-react";
+import {
+  AtcTrigger,
+  AtcFeedDropdown,
+  useAvailableFeeds,
+} from "@/components/ui/atc-panel";
+import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 
 type StatusBarProps = {
   flightCount: number;
   cityName: string;
+  cityIata: string;
+  cityCoordinates: [number, number];
   loading: boolean;
   rateLimited?: boolean;
   retryIn?: number;
   onNorthUp?: () => void;
   onResetView?: () => void;
   onRandomAirport?: () => void;
+  atc: UseAtcStreamReturn;
+  /** Incremented externally to toggle the feed dropdown (e.g. from keyboard shortcut) */
+  atcToggle?: number;
 };
 
 export function StatusBar({
   flightCount,
   cityName,
+  cityIata,
+  cityCoordinates,
   loading,
   rateLimited = false,
   retryIn = 0,
   onNorthUp,
   onResetView,
   onRandomAirport,
+  atc,
+  atcToggle,
 }: StatusBarProps) {
+  const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
+  const availableFeeds = useAvailableFeeds(cityIata, cityCoordinates);
+  const prevToggleRef = useRef(atcToggle);
+
+  // React to external toggle (keyboard shortcut)
+  useEffect(() => {
+    if (atcToggle !== undefined && atcToggle !== prevToggleRef.current) {
+      prevToggleRef.current = atcToggle;
+      setFeedDropdownOpen((p) => !p);
+    }
+  }, [atcToggle]);
+
+  const toggleFeedDropdown = useCallback(() => {
+    setFeedDropdownOpen((p) => !p);
+  }, []);
+
+  const closeFeedDropdown = useCallback(() => {
+    setFeedDropdownOpen(false);
+  }, []);
+
+  const isAtcPlaying = atc.status === "playing";
   return (
-    <div className="flex flex-col items-start gap-2">
+    <div className="relative flex flex-col items-start gap-2">
       <AnimatePresence>
         {rateLimited && (
           <motion.div
@@ -80,7 +117,7 @@ export function StatusBar({
               className="text-[11px] font-medium tracking-wide"
               style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
             >
-              {rateLimited ? "Paused" : loading ? "Scanning..." : "Live"}
+              {rateLimited ? "Paused" : loading ? "Scanning" : "Live"}
             </span>
           </div>
 
@@ -113,6 +150,14 @@ export function StatusBar({
           >
             {cityName}
           </span>
+
+          {/* ATC trigger */}
+          <AtcTrigger
+            hasFeeds={availableFeeds.length > 0}
+            isPlaying={isAtcPlaying}
+            isError={atc.status === "error" || atc.status === "blocked"}
+            onClick={toggleFeedDropdown}
+          />
         </motion.div>
 
         <motion.div
@@ -176,6 +221,14 @@ export function StatusBar({
           </button>
         </motion.div>
       </div>
+
+      {/* ATC Feed Dropdown — positioned above entire status bar */}
+      <AtcFeedDropdown
+        feeds={availableFeeds}
+        atc={atc}
+        open={feedDropdownOpen}
+        onClose={closeFeedDropdown}
+      />
     </div>
   );
 }

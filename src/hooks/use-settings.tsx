@@ -29,6 +29,8 @@ export type Settings = {
   showAirspace: boolean;
   airspaceOpacity: number;
   showAirspaceHotspots: boolean;
+  showAtcPanel: boolean;
+  smoothAnimations: boolean;
 };
 
 const TRAIL_THICKNESS_MIN = 0.5;
@@ -79,6 +81,8 @@ const DEFAULT_SETTINGS: Settings = {
   showAirspace: false,
   airspaceOpacity: 0.78,
   showAirspaceHotspots: false,
+  showAtcPanel: false,
+  smoothAnimations: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -119,7 +123,9 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.airspaceOpacity) &&
     s.airspaceOpacity >= AIRSPACE_OPACITY_MIN &&
     s.airspaceOpacity <= AIRSPACE_OPACITY_MAX &&
-    typeof s.showAirspaceHotspots === "boolean"
+    typeof s.showAirspaceHotspots === "boolean" &&
+    typeof s.showAtcPanel === "boolean" &&
+    typeof s.smoothAnimations === "boolean"
   );
 }
 

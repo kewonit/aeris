@@ -94,7 +94,7 @@ export function FlightCard({
     aircraft: photoAircraft,
     loading: photosLoading,
     error: photosError,
-  } = useAircraftPhotos(flight?.icao24 ?? null);
+  } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
   const heroPhoto = photos[0] ?? null;
 
   return (

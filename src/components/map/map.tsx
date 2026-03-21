@@ -108,7 +108,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       maxPitch: GLOBE_MAX_PITCH,
       attributionControl: false,
       cancelPendingTileRequestsWhileZooming: true,
-      maxTileCacheZoomLevels: 3, // fewer cached zoom levels = less memory for DEM tiles
+      maxTileCacheZoomLevels: 2, // fewer cached zoom levels = less GPU memory for tile textures
       renderWorldCopies: false,
       pixelRatio: 1, // render at 1x regardless of display DPI — significant GPU savings on HiDPI
       fadeDuration: 0, // disable tile/symbol fade animations — fewer intermediate render frames

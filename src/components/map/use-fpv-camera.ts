@@ -130,9 +130,33 @@ export function useFpvCamera(
       map.on(t, onMapInteraction);
     }
 
+    // Reset FPV tracking on tab resume to prevent camera jumps from
+    // stale lerp values accumulated during the hidden period.
+    let wasHidden = false;
+    function onFpvVisibilityResume() {
+      if (document.visibilityState === "visible" && wasHidden) {
+        wasHidden = false;
+        if (map) prevBearing = map.getBearing();
+        fpvOffsetX = 0;
+        fpvOffsetY = 0;
+        lastInteractionTime = 0;
+        recenterStartTime = 0;
+      } else if (document.visibilityState === "hidden") {
+        wasHidden = true;
+      }
+    }
+    document.addEventListener("visibilitychange", onFpvVisibilityResume);
+
     function keepInFrame() {
       if (!isFpvActiveRef.current || !map) {
         frameId = null;
+        return;
+      }
+
+      // Skip camera updates when tab is hidden — saves CPU and
+      // prevents jarring camera jumps from stale alpha lerps on resume.
+      if (document.hidden) {
+        frameId = requestAnimationFrame(keepInFrame);
         return;
       }
 
@@ -263,6 +287,7 @@ export function useFpvCamera(
     return () => {
       if (startupTimer) clearTimeout(startupTimer);
       if (frameId != null) cancelAnimationFrame(frameId);
+      document.removeEventListener("visibilitychange", onFpvVisibilityResume);
       for (const t of interactionEventTypes) {
         map.off(t, onMapInteraction);
       }

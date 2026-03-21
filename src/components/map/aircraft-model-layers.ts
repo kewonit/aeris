@@ -42,7 +42,7 @@ const EMPTY_DATA: FlightState[] = [];
 // Models not seen for MODEL_DEACTIVATE_MS get deactivated (scenegraph URL
 // cleared), which allows deck.gl & luma.gl to release GPU resources.
 const modelLastUsed = new Map<string, number>();
-const MODEL_DEACTIVATE_MS = 15_000; // 15 second grace period
+const MODEL_DEACTIVATE_MS = 5_000; // 5 second grace period (covers 1 poll cycle)
 const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -132,16 +132,14 @@ export function buildAircraftModelLayers(
     return new ScenegraphLayer<FlightState>({
       id: `flight-aircraft-${modelKey}`,
       visible: hasData && layersVisible,
-      // Stable data reference between animation frames (only changes on new poll)
       data: flights,
       opacity: globeFade,
-      // Accessors read interpolated positions from the shared Map
       getPosition: (d) => {
         const interp = interpolatedMap.get(d.icao24);
         const src = interp ?? d;
         return [
-          src.longitude!,
-          src.latitude!,
+          src.longitude ?? 0,
+          src.latitude ?? 0,
           altitudeToElevation(src.baroAltitude) * elevScale,
         ];
       },
@@ -164,15 +162,13 @@ export function buildAircraftModelLayers(
         const s = catScale * normScale;
         return [s, s, s];
       },
-      // Selective attribute updates — the key performance optimization:
-      // Position and orientation change every frame; color and scale only on new data.
+      sizeScale: BASE_AIRCRAFT_SIZE,
       updateTriggers: {
         getPosition: [frameCounter, elevScale],
         getOrientation: frameCounter,
         getColor: [dataVersion, altColors],
         getScale: dataVersion,
       },
-      sizeScale: BASE_AIRCRAFT_SIZE,
       sizeMinPixels: AIRCRAFT_MIN_PIXELS,
       sizeMaxPixels: AIRCRAFT_MAX_PIXELS,
       _lighting: "pbr",

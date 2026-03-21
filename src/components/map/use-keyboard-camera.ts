@@ -64,6 +64,12 @@ export function useKeyboardCamera(
     }
 
     function tick(now: number) {
+      // Skip camera movement when tab is hidden
+      if (document.hidden) {
+        lastTime = 0; // reset so first visible frame uses default dt
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 0.016;
       lastTime = now;
 

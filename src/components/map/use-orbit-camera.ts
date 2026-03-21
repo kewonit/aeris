@@ -53,6 +53,12 @@ export function useOrbitCamera(
 
       function tick() {
         if (!map || isInteractingRef.current) return;
+        // Skip orbit rotation when tab is hidden — saves CPU and
+        // prevents large bearing jumps on resume.
+        if (document.hidden) {
+          orbitFrameRef.current = requestAnimationFrame(tick);
+          return;
+        }
         const resumeElapsed = performance.now() - resumeStart;
         const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
         const easeFactor = smoothstep(t);

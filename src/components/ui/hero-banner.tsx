@@ -52,7 +52,7 @@ export function HeroBanner({ photo, loading }: HeroBannerProps) {
             />
           )}
           <img
-            src={photo.thumbnail}
+            src={photo.url}
             alt="Aircraft"
             onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}

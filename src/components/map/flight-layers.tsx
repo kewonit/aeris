@@ -23,11 +23,14 @@ import {
   AIRCRAFT_PICK_RADIUS_PX,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
+  LOD_3D_ZOOM_IN,
+  LOD_3D_ZOOM_OUT,
   type FlightLayerProps,
 } from "./flight-layer-constants";
 
 import {
   categorySizeMultiplier,
+  tintAircraftColor,
   AIRCRAFT_ICON_MAPPING,
   getHaloUrl,
   getRingUrl,
@@ -47,6 +50,7 @@ import { buildTrailLayers } from "./flight-layer-builders";
 import { buildSelectionPulseLayers } from "./flight-layer-builders";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import { preloadAllModels } from "./aircraft-model-mapping";
+import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { useGlobeDots } from "./use-globe-dots";
 
 export function FlightLayers({
@@ -60,6 +64,7 @@ export function FlightLayers({
   showShadows,
   showAltitudeColors,
   globeMode = false,
+  smoothAnimations = false,
   fpvIcao24 = null,
   fpvPositionRef,
 }: FlightLayerProps) {
@@ -117,6 +122,7 @@ export function FlightLayers({
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const globeModeRef = useRef(globeMode);
+  const smoothAnimRef = useRef(smoothAnimations);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
   const fpvPosRef = useRef(fpvPositionRef);
@@ -151,6 +157,7 @@ export function FlightLayers({
     fpvPosRef.current = fpvPositionRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
+    smoothAnimRef.current = smoothAnimations;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
       prevSelectedRef.current = selectedIcao24Ref.current;
       selectionChangeTimeRef.current = performance.now();
@@ -167,6 +174,7 @@ export function FlightLayers({
     showShadows,
     showAltitudeColors,
     globeMode,
+    smoothAnimations,
     selectedIcao24,
     fpvIcao24,
     fpvPositionRef,
@@ -175,7 +183,35 @@ export function FlightLayers({
   // ── Snapshot interpolation on new data ─────────────────────────────
 
   useEffect(() => {
-    const elapsed = performance.now() - dataTimestampRef.current;
+    const now = performance.now();
+    const elapsed = now - dataTimestampRef.current;
+
+    // If data is stale (tab was hidden 15s+), snap directly to new
+    // positions instead of slowly interpolating from outdated ones.
+    const STALE_THRESHOLD_MS = 15_000;
+    const isStale =
+      dataTimestampRef.current > 0 && elapsed > STALE_THRESHOLD_MS;
+
+    if (isStale) {
+      const snap = new Map<string, Snapshot>();
+      for (const f of flights) {
+        if (f.longitude != null && f.latitude != null) {
+          snap.set(f.icao24, {
+            lng: f.longitude,
+            lat: f.latitude,
+            alt: Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0,
+            track: Number.isFinite(f.trueTrack) ? f.trueTrack! : 0,
+          });
+        }
+      }
+      prevSnapshotsRef.current = snap;
+      currSnapshotsRef.current = new Map(snap);
+      animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
+      dataTimestampRef.current = now;
+      lastFlightsForInterpRef.current = null;
+      dataVersionRef.current++;
+      return;
+    }
     const oldLinearT = Math.min(elapsed / animDurationRef.current, 1);
     const oldAngleT = smoothStep(oldLinearT);
 
@@ -223,7 +259,6 @@ export function FlightLayers({
       }
     }
     currSnapshotsRef.current = next;
-    const now = performance.now();
     if (dataTimestampRef.current > 0) {
       const observedInterval = now - dataTimestampRef.current;
       animDurationRef.current = Math.max(
@@ -313,6 +348,7 @@ export function FlightLayers({
         views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         useDevicePixels: 1,
+        _typedArrayManagerProps: { overAlloc: 1.5, poolSize: 0 },
         layers: [],
       });
       map.addControl(overlayRef.current as unknown as maplibregl.IControl);
@@ -334,38 +370,78 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
-  // Frame pacing: only push layer updates to deck.gl every TARGET_FRAME_MS
-  // to avoid overloading the GPU/attribute pipeline. Interpolation still
-  // happens every rAF for smooth FPV camera tracking.
+  // Frame pacing: throttle the entire render loop to ~30fps to save CPU.
+  // Interpolation uses wall-clock time, so positions stay correct at any rate.
   const lastSetPropsTimeRef = useRef(0);
-  // Visual frame counter — only increments when we actually push layers
-  // to deck.gl. Used in updateTriggers so deck.gl doesn't recompute
-  // attribute buffers on skipped frames.
+  // Visual frame counter — increments once per rendered frame.
+  // Used in updateTriggers so deck.gl recomputes attributes only when we push.
   const visualFrameRef = useRef(0);
+  // LOD state: true = render 3D ScenegraphLayers, false = render 2D IconLayer.
+  // Uses hysteresis to avoid flickering at the zoom boundary.
+  const use3DRef = useRef(true);
+  // Pitch/bank time-based throttle (~10fps regardless of animation frame rate)
+  const lastPitchBankTimeRef = useRef(0);
 
   // ── Main animation loop ────────────────────────────────────────────
 
   useEffect(() => {
     if (!atlasUrl) return;
 
-    // Target ~24fps for deck.gl layer updates. The rAF still fires at
-    // ~60fps for smooth interpolation / FPV camera, but layer construction
-    // + overlay.setProps are skipped on intermediate frames.
-    const TARGET_FRAME_MS = 42;
+    // Target ~30fps for all deck.gl work (interpolation + layer construction).
+    // Aircraft positions interpolate via wall-clock time, so skipping frames
+    // doesn't cause visual jumps — same position computed regardless of rate.
+    // When smoothAnimations is on, run at native refresh rate (no throttle).
+    const THROTTLED_FRAME_MS = 33;
 
     // Hoisted constant — avoids allocating a new array every frame
     const DEFAULT_COLOR: [number, number, number, number] = [
       180, 220, 255, 200,
     ];
 
+    // Snap aircraft to last-known positions on tab resume so they
+    // don't slowly slide from stale locations.
+    function onVisibilityResume() {
+      if (document.visibilityState === "visible") {
+        lastSetPropsTimeRef.current = 0;
+
+        const curr = currSnapshotsRef.current;
+        if (curr.size > 0) {
+          prevSnapshotsRef.current = new Map(curr);
+        }
+        dataTimestampRef.current = performance.now();
+        animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
+        lastFlightsForInterpRef.current = null;
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityResume);
+
     function buildAndPushLayers() {
       animFrameRef.current = requestAnimationFrame(buildAndPushLayers);
+
+      // Skip all rendering work when tab is hidden — saves CPU/GPU.
+      // RAF is already throttled to ~1fps in background but each tick
+      // would still construct layers & run interpolation for nothing.
+      if (document.hidden) return;
 
       const overlay = overlayRef.current;
       if (!overlay) return;
 
-      const currentZoom = map?.getZoom() ?? 10;
       const now = performance.now();
+
+      // ── Frame throttle (top-level) ────────────────────────────────
+      // Skip ALL work on intermediate frames. At 30fps, each render
+      // frame gets the full budget (~33ms) instead of splitting work
+      // across 60fps half-frames. This cuts CPU usage roughly in half.
+      // When smoothAnimations is enabled, skip the throttle entirely.
+      if (
+        !smoothAnimRef.current &&
+        now - lastSetPropsTimeRef.current < THROTTLED_FRAME_MS
+      )
+        return;
+      lastSetPropsTimeRef.current = now;
+      visualFrameRef.current++;
+
+      const currentZoom = map?.getZoom() ?? 10;
       const isGlobe = globeModeRef.current;
 
       let globeFade = 1;
@@ -463,26 +539,18 @@ export function FlightLayers({
           lastTrailsForMapRef.current = currentTrails;
         }
 
-        // ── Frame throttle ──────────────────────────────────────────
-        // Interpolation + FPV updates above still run every rAF for
-        // smooth position tracking. Everything below (layer construction,
-        // pitch/bank, globe dots, overlay.setProps) is throttled to
-        // ~24fps to halve deck.gl's internal attribute recomputation,
-        // WebGL draw calls, and MapLibre GeoJSON updates.
-        if (now - lastSetPropsTimeRef.current < TARGET_FRAME_MS) return;
-        lastSetPropsTimeRef.current = now;
-        visualFrameRef.current++;
-
-        // Globe dots — throttled along with deck.gl updates
+        // ── Globe dots ────────────────────────────────────────────────
         updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
         const altColors = showAltColorsRef.current;
         const visibleFlights = interpolated;
 
-        // Pitch/bank change slowly — recompute every 3rd visual frame (~8fps)
-        // to avoid iterating all flights at 24fps. Values are retained in
-        // pitchMapRef/bankMapRef between compute frames.
-        if (visualFrameRef.current % 3 === 0) {
+        // Pitch/bank change slowly — recompute at ~10fps regardless of
+        // animation frame rate. Values are retained in pitchMapRef/bankMapRef
+        // between compute frames.
+        const PITCH_BANK_INTERVAL_MS = 100;
+        if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
+          lastPitchBankTimeRef.current = now;
           computePitchByIcao(
             interpolated,
             trailMapRef.current,
@@ -590,25 +658,77 @@ export function FlightLayers({
           }
         }
 
-        // Aircraft 3D model layers — one ScenegraphLayer per model type,
-        // always included with `visible` to avoid re-fetching .glb files
-        layers.push(
-          ...buildAircraftModelLayers({
-            rawFlights: currentFlights,
-            interpolatedMap: interpolatedMapRef.current,
-            frameCounter: visualFrameRef.current,
-            dataVersion: dataVersionRef.current,
-            layersVisible,
-            globeFade,
-            elevScale,
-            altColors,
-            defaultColor: DEFAULT_COLOR,
-            pitchByIcao,
-            bankByIcao,
-            handleHover: stableHover,
-            handleClick: stableClick,
-          }),
-        );
+        // ── LOD: 3D models vs 2D icons ────────────────────────────────
+        // At low zoom, aircraft are too small to distinguish 3D silhouettes.
+        // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
+        // to ScenegraphLayers (3D) above LOD_3D_ZOOM_IN. The hysteresis
+        // band (6.5–7.5) prevents rapid flickering at the boundary.
+        if (use3DRef.current && currentZoom < LOD_3D_ZOOM_OUT) {
+          use3DRef.current = false;
+        } else if (!use3DRef.current && currentZoom >= LOD_3D_ZOOM_IN) {
+          use3DRef.current = true;
+        }
+
+        if (use3DRef.current) {
+          // 3D: one ScenegraphLayer per model type
+          layers.push(
+            ...buildAircraftModelLayers({
+              rawFlights: currentFlights,
+              interpolatedMap: interpolatedMapRef.current,
+              frameCounter: visualFrameRef.current,
+              dataVersion: dataVersionRef.current,
+              layersVisible,
+              globeFade,
+              elevScale,
+              altColors,
+              defaultColor: DEFAULT_COLOR,
+              pitchByIcao,
+              bankByIcao,
+              handleHover: stableHover,
+              handleClick: stableClick,
+            }),
+          );
+        } else {
+          // 2D: single IconLayer using the sprite atlas (much cheaper GPU-wise)
+          layers.push(
+            new IconLayer<FlightState>({
+              id: "flight-aircraft-2d",
+              pickable: true,
+              visible: layersVisible,
+              data: visibleFlights,
+              opacity: globeFade,
+              getPosition: (d) => [
+                d.longitude!,
+                d.latitude!,
+                altitudeToElevation(d.baroAltitude) * elevScale,
+              ],
+              getIcon: () => "aircraft",
+              getSize: (d) => 20 * categorySizeMultiplier(d.category),
+              getColor: (d) => {
+                const base = altColors
+                  ? altitudeToColor(d.baroAltitude)
+                  : DEFAULT_COLOR;
+                return tintAircraftColor(base, d.category);
+              },
+              getAngle: (d) =>
+                360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
+              iconAtlas: atlasUrl,
+              iconMapping: AIRCRAFT_ICON_MAPPING,
+              billboard: false,
+              sizeUnits: "pixels",
+              sizeScale: 1,
+              onHover: stableHover,
+              onClick: stableClick,
+              autoHighlight: true,
+              highlightColor: [255, 255, 255, 80],
+              updateTriggers: {
+                getPosition: [visualFrameRef.current, elevScale],
+                getAngle: visualFrameRef.current,
+                getColor: [dataVersionRef.current, altColors],
+              },
+            }),
+          );
+        }
 
         overlay.setProps({ layers });
       } catch (err) {
@@ -619,7 +739,10 @@ export function FlightLayers({
     }
 
     buildAndPushLayers();
-    return () => cancelAnimationFrame(animFrameRef.current);
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
+      document.removeEventListener("visibilitychange", onVisibilityResume);
+    };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
 
   return null;

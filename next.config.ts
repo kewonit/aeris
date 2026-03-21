@@ -5,16 +5,16 @@ const isDev = process.env.NODE_ENV === "development";
 // Content Security Policy — allows only the external resources Aeris actually uses.
 // https://nextjs.org/docs/app/guides/content-security-policy
 //
-// NOTE: jetapi.dev is intentionally absent from connect-src. It is only
-// accessed server-side via the /api/aircraft-photos proxy route, so CSP
-// does not apply. If client-side direct access is ever needed, add it here.
+// NOTE: planespotters.net, adsbdb.com, airport-data.com, and jetapi.dev are
+// server-side only (accessed via /api/aircraft-photos proxy route). CSP does
+// not apply to server-side fetches, so they are not listed in connect-src.
 const cspHeader = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
-  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://hexdb.io https://api.airplanes.live https://api.adsb.lol;
+  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol;
   worker-src 'self' blob:;
   child-src blob:;
   object-src 'none';

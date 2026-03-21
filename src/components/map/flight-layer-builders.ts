@@ -248,7 +248,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       // 60fps to ~10fps per trail.
       const headLng = animFlight?.longitude?.toFixed(4) ?? "";
       const headLat = animFlight?.latitude?.toFixed(4) ?? "";
-      const pathKey = `${d.path.length}_${headLng}_${headLat}_${elevScale.toFixed(3)}`;
+      const pathKey = `${d.path.length}_${headLng}_${headLat}_${elevScale.toFixed(3)}_${trailDistance}`;
 
       if (trailPathCache) {
         const cached = trailPathCache.get(d.icao24);
@@ -276,9 +276,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
       const visiblePoints = getVisibleTrailPoints(d, animFlight);
       const len = visiblePoints.length;
 
-      // Color depends on point count, altColors toggle, and fullHistory flag.
-      // These change rarely (only on poll or user toggle), so cache hit rate
-      // is very high (~99%).
       const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}`;
       if (trailColorCache) {
         const cached = trailColorCache.get(d.icao24);
@@ -347,7 +344,6 @@ export function buildSelectionPulseLayers(
     interpolatedMap,
     elapsed,
     globeFade,
-    elevScale,
     haloUrl,
     ringUrl,
     layersVisible = true,
@@ -377,13 +373,13 @@ export function buildSelectionPulseLayers(
       flight && flight.longitude != null && flight.latitude != null;
 
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
+    const elevation =
+      flight && flight.baroAltitude != null
+        ? altitudeToElevation(flight.baroAltitude)
+        : 0;
     const pos: [number, number, number] =
       flight && flight.longitude != null && flight.latitude != null
-        ? [
-            flight.longitude,
-            flight.latitude,
-            altitudeToElevation(flight.baroAltitude) * elevScale,
-          ]
+        ? [flight.longitude, flight.latitude, elevation]
         : [0, 0, 0];
     const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;
 
@@ -391,8 +387,8 @@ export function buildSelectionPulseLayers(
     const breath = Math.sin(breathT * Math.PI * 2);
     const softBreath = smoothStep(smoothStep((breath + 1) / 2)) * 2 - 1;
 
-    const haloSize = 75 + 8 * softBreath;
-    const haloAlpha = Math.round((18 + 8 * softBreath) * op);
+    const haloSize = 90 + 10 * softBreath;
+    const haloAlpha = Math.round((22 + 10 * softBreath) * op);
 
     layers.push(
       new IconLayer({
@@ -417,9 +413,9 @@ export function buildSelectionPulseLayers(
     ringOffsets.forEach((offset, i) => {
       const t = ((elapsed + offset) % RING_PERIOD_MS) / RING_PERIOD_MS;
       const eased = 1 - (1 - t) ** 5;
-      const ringSize = 30 + 60 * eased;
+      const ringSize = 35 + 70 * eased;
       const fade = 1 - t;
-      const ringAlpha = Math.round(70 * fade * fade * fade * fade * op);
+      const ringAlpha = Math.round(80 * fade * fade * fade * fade * op);
 
       layers.push(
         new IconLayer({

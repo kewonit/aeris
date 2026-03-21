@@ -18,26 +18,26 @@ export const CATEGORY_TINT: Record<number, [number, number, number]> = {
 export function categorySizeMultiplier(category: number | null): number {
   switch (category) {
     case 2:
-      return 0.88;
+      return 0.92;
     case 3:
       return 0.96;
     case 4:
-      return 1.08;
-    case 5:
-      return 1.18;
-    case 6:
-      return 1.28;
-    case 7:
       return 1.04;
+    case 5:
+      return 1.08;
+    case 6:
+      return 1.12;
+    case 7:
+      return 1.0;
     case 8:
-      return 0.86;
+      return 0.9;
     case 9:
     case 12:
-      return 0.8;
+      return 0.86;
     case 10:
-      return 1.15;
+      return 1.06;
     case 14:
-      return 0.72;
+      return 0.82;
     default:
       return 1;
   }

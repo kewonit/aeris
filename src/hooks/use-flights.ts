@@ -284,6 +284,5 @@ export function useFlights(
     error,
     rateLimited,
     retryIn,
-    creditsRemaining: null as number | null,
   };
 }

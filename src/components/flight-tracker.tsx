@@ -27,6 +27,8 @@ import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
+import { AtcPlayerBar } from "@/components/ui/atc-panel";
+import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
@@ -34,17 +36,19 @@ import { useTrailHistory } from "@/hooks/use-trail-history";
 import { useFlightTrack } from "@/hooks/use-flight-track";
 import { useMergedTrails } from "@/hooks/use-merged-trails";
 import { useFlightMonitors } from "@/hooks/use-flight-monitors";
+import { useAtcStream } from "@/hooks/use-atc-stream";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { MobileFlightToast } from "@/components/ui/mobile-flight-toast";
+import { toast } from "sonner";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
-import { Github, Star } from "lucide-react";
 import {
   DEFAULT_CITY,
   DEFAULT_STYLE,
-  GITHUB_REPO_URL,
   ICAO24_REGEX,
   subscribeNoop,
   resolveInitialCity,
@@ -53,7 +57,6 @@ import {
   resolveInitialFpv,
   loadMapStyle,
   saveMapStyle,
-  formatStarCount,
 } from "@/components/flight-tracker-utils";
 import {
   pickRandomAirportCity,
@@ -188,8 +191,15 @@ function FlightTrackerInner() {
     setFpvSeedCenter,
   });
 
+  const atc = useAtcStream();
+
   const fpvFlightOrCached = fpvFlight;
   const displayFlight = selectedFlight;
+
+  const [atcToggle, setAtcToggle] = useState(0);
+  const handleToggleAtc = useCallback(() => {
+    setAtcToggle((c) => c + 1);
+  }, []);
 
   const handleClick = useCallback(
     (info: PickingInfo<FlightState> | null) => {
@@ -294,21 +304,23 @@ function FlightTrackerInner() {
         ) ??
         null;
 
-      if (localMatch) {
-        setSelectedIcao24(localMatch.icao24);
+      // Helper: select flight and optionally enter FPV
+      const selectFlight = (f: FlightState) => {
+        setSelectedIcao24(f.icao24);
         setFollowIcao24(null);
         if (
           enterFpv &&
-          !localMatch.onGround &&
-          localMatch.longitude != null &&
-          localMatch.latitude != null
+          !f.onGround &&
+          f.longitude != null &&
+          f.latitude != null
         ) {
-          setFpvSeedCenter({
-            lng: localMatch.longitude,
-            lat: localMatch.latitude,
-          });
-          setFpvIcao24(localMatch.icao24);
+          setFpvSeedCenter({ lng: f.longitude, lat: f.latitude });
+          setFpvIcao24(f.icao24);
         }
+      };
+
+      if (localMatch) {
+        selectFlight(localMatch);
         return true;
       }
 
@@ -324,20 +336,7 @@ function FlightTrackerInner() {
         syncCityToUrl(focusCity);
       }
 
-      setSelectedIcao24(result.flight.icao24);
-      setFollowIcao24(null);
-      if (
-        enterFpv &&
-        !result.flight.onGround &&
-        result.flight.longitude != null &&
-        result.flight.latitude != null
-      ) {
-        setFpvSeedCenter({
-          lng: result.flight.longitude,
-          lat: result.flight.latitude,
-        });
-        setFpvIcao24(result.flight.icao24);
-      }
+      selectFlight(result.flight);
       return true;
     },
     [displayFlights, displayFlightMap],
@@ -351,8 +350,76 @@ function FlightTrackerInner() {
     onToggleHelp: handleToggleHelp,
     onDeselect: handleDeselectFlight,
     onToggleFpv: handleToggleFpvKey,
+    onToggleAtc: handleToggleAtc,
     isFpv: fpvIcao24 !== null,
   });
+
+  const isMobile = useIsMobile();
+  const mobileToastIdRef = useRef<string | number | null>(null);
+
+  // Stable close handler that both dismisses the toast and deselects the flight
+  const handleMobileToastClose = useCallback(() => {
+    if (mobileToastIdRef.current !== null) {
+      toast.dismiss(mobileToastIdRef.current);
+      mobileToastIdRef.current = null;
+    }
+    handleDeselectFlight();
+  }, [handleDeselectFlight]);
+
+  // Show/dismiss mobile flight toast
+  useEffect(() => {
+    // Dismiss when not applicable
+    if (!isMobile || fpvIcao24 || !displayFlight) {
+      if (mobileToastIdRef.current !== null) {
+        toast.dismiss(mobileToastIdRef.current);
+        mobileToastIdRef.current = null;
+      }
+      return;
+    }
+
+    // Use a stable ID based on the selected flight
+    const stableId = `mobile-flight-${displayFlight.icao24}`;
+
+    // If switching to a different flight, dismiss the old toast first
+    if (
+      mobileToastIdRef.current !== null &&
+      mobileToastIdRef.current !== stableId
+    ) {
+      toast.dismiss(mobileToastIdRef.current);
+    }
+
+    toast.custom(
+      () => (
+        <MobileFlightToast
+          flight={displayFlight}
+          onClose={handleMobileToastClose}
+          onToggleFpv={handleToggleFpv}
+          isFpvActive={fpvIcao24 === displayFlight.icao24}
+        />
+      ),
+      {
+        id: stableId,
+        duration: Infinity,
+        dismissible: false,
+      },
+    );
+    mobileToastIdRef.current = stableId;
+  }, [
+    isMobile,
+    displayFlight,
+    fpvIcao24,
+    handleMobileToastClose,
+    handleToggleFpv,
+  ]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mobileToastIdRef.current !== null) {
+        toast.dismiss(mobileToastIdRef.current);
+      }
+    };
+  }, []);
 
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-black">
@@ -389,6 +456,7 @@ function FlightTrackerInner() {
           showShadows={settings.showShadows}
           showAltitudeColors={settings.showAltitudeColors}
           globeMode={settings.globeMode}
+          smoothAnimations={settings.smoothAnimations}
           fpvIcao24={fpvIcao24}
           fpvPositionRef={fpvPositionRef}
         />
@@ -404,7 +472,7 @@ function FlightTrackerInner() {
           </div>
         )}
 
-        {!fpvIcao24 && (
+        {!fpvIcao24 && !isMobile && (
           <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
             <FlightCard
               flight={displayFlight}
@@ -419,41 +487,7 @@ function FlightTrackerInner() {
 
         {!fpvIcao24 && (
           <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open GitHub repository"
-              className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-              style={{
-                borderWidth: 1,
-                borderColor: "rgb(var(--ui-fg) / 0.06)",
-                backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-                color: "rgb(var(--ui-fg) / 0.5)",
-              }}
-              title={
-                repoStars != null
-                  ? `GitHub · ${formatStarCount(repoStars)} stars`
-                  : "Open GitHub repository"
-              }
-            >
-              <Github className="h-4 w-4" />
-              {repoStars != null && (
-                <span
-                  className="pointer-events-none absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
-                  style={{
-                    backgroundColor: "rgb(var(--ui-bg) / 0.95)",
-                    border: "1px solid rgb(var(--ui-fg) / 0.1)",
-                    color: "rgb(var(--ui-fg) / 0.55)",
-                  }}
-                >
-                  <span className="flex items-center gap-0.5">
-                    <Star className="h-2 w-2" />
-                    {formatStarCount(repoStars)}
-                  </span>
-                </span>
-              )}
-            </a>
+            <GitHubBadge stars={repoStars} />
             <ControlPanel
               activeCity={activeCity}
               onSelectCity={setActiveCity}
@@ -471,14 +505,29 @@ function FlightTrackerInner() {
             <StatusBar
               flightCount={flights.length}
               cityName={activeCity.name}
+              cityIata={activeCity.iata}
+              cityCoordinates={activeCity.coordinates}
               loading={loading}
               rateLimited={rateLimited}
               retryIn={retryIn}
               onNorthUp={handleNorthUp}
               onResetView={handleResetView}
               onRandomAirport={handleRandomAirport}
+              atc={atc}
+              atcToggle={atcToggle}
             />
           </div>
+        )}
+
+        {/* ATC Player Bar — top-center on mobile, bottom-center on desktop */}
+        {!fpvIcao24 && (
+          <AnimatePresence>
+            {atc.feed && (
+              <div className="pointer-events-auto absolute left-1/2 top-14 -translate-x-1/2 sm:top-auto sm:bottom-[72px]">
+                <AtcPlayerBar atc={atc} onOpenFeedSelector={handleToggleAtc} />
+              </div>
+            )}
+          </AnimatePresence>
         )}
 
         {!fpvIcao24 && (
@@ -515,17 +564,5 @@ export function FlightTracker() {
         <FlightTrackerInner />
       </SettingsProvider>
     </ErrorBoundary>
-  );
-}
-
-function Brand({ isDark }: { isDark: boolean }) {
-  return (
-    <span
-      className={`text-sm font-semibold tracking-wide ${
-        isDark ? "text-white/70" : "text-black/70"
-      }`}
-    >
-      aeris
-    </span>
   );
 }

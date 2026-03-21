@@ -50,8 +50,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Rate limit check
-  const elapsed = Date.now() - lastRequestTime;
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  lastRequestTime = now;
   if (elapsed < RATE_MS) {
     return NextResponse.json(
       { error: "Rate limited" },
@@ -61,7 +62,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
     );
   }
-  lastRequestTime = Date.now();
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), READSB_FETCH_TIMEOUT_MS);

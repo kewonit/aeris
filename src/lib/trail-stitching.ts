@@ -109,8 +109,14 @@ type SplinedTrack = {
 
 let splinedTrackCache: SplinedTrack | null = null;
 
+export function clearSplinedTrackCache(): void {
+  splinedTrackCache = null;
+}
+
 function makeTrackCacheKey(track: FlightTrack): string {
-  return `${track.icao24}|${track.startTime}|${track.endTime}|${track.path.length}`;
+  const first = track.path[0];
+  const last = track.path[track.path.length - 1];
+  return `${track.icao24}|${track.startTime}|${track.endTime}|${track.path.length}|${first?.latitude?.toFixed(4)}|${last?.longitude?.toFixed(4)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +223,11 @@ export function stitchHistoricalTrail(
   }
 
   // --- Step 3: Validate track proximity to live position ---
+  const lowAltitude =
+    flight && Number.isFinite(flight.baroAltitude)
+      ? flight.baroAltitude! < LOW_ALTITUDE_THRESHOLD
+      : false;
+
   const livePosAdjusted: [number, number] | null =
     livePosition && trackPositions.length > 0
       ? [
@@ -255,10 +266,6 @@ export function stitchHistoricalTrail(
       if (d2 < bestDistSq) bestDistSq = d2;
     }
 
-    const lowAltitude =
-      flight && Number.isFinite(flight.baroAltitude)
-        ? flight.baroAltitude! < LOW_ALTITUDE_THRESHOLD
-        : false;
     const maxRejectDeg = lowAltitude
       ? TRACK_REJECT_LOW_ALT_DEG
       : TRACK_REJECT_HIGH_ALT_DEG;
@@ -291,10 +298,6 @@ export function stitchHistoricalTrail(
       refLng = nextLng;
     }
 
-    const lowAltitude =
-      flight && Number.isFinite(flight.baroAltitude)
-        ? flight.baroAltitude! < LOW_ALTITUDE_THRESHOLD
-        : false;
     const maxConnectGapDeg = lowAltitude
       ? MAX_GAP_LOW_ALT_DEG
       : MAX_GAP_HIGH_ALT_DEG;
