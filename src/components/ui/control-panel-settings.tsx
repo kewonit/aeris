@@ -505,7 +505,13 @@ const CHANGELOG = [
     date: "Mar 22",
     title: "Multi-source flight data & circuit breaker",
     description:
-      "Switched from OpenSky-only to a 3-tier fallback: airplanes.live → adsb.lol → OpenSky. Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
+      "Switched from OpenSky-only to a 2-tier fallback: adsb.lol → OpenSky (airplanes.live available via override). Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
+  },
+  {
+    date: "Mar 22",
+    title: "Code review fixes",
+    description:
+      "Fixed GPU memory monitor (duplicate WebGL enum cases, wrong byte sizes). Selection pulse halos now match aircraft height at all zoom levels. ATC stream properly cancels upstream on timeout. Airspace tile rate-limiter enforces spacing for queued requests. Photo fetch errors now surface to the UI. Spline cache clearing moved from useMemo to useEffect for React strict mode safety.",
   },
   {
     date: "Mar 21",
