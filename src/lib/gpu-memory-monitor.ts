@@ -74,51 +74,47 @@ const resources = new Map<
 // ── Byte-size helpers ──────────────────────────────────────────────────
 
 function bytesPerPixel(internalFormat: number): number {
-  // Common WebGL2 internal formats
+  // WebGL2 sized internal formats → bytes per pixel
+  // Reference: OpenGL ES 3.0 spec, Table 3.2
   switch (internalFormat) {
     // 1 byte
-    case 0x1903: // GL_RED
+    case 0x1903: // RED (unsized)
     case 0x8229: // R8
     case 0x8d48: // STENCIL_INDEX8
       return 1;
     // 2 bytes
-    case 0x8227: // RG8
+    case 0x8227: // RG (unsized)
+    case 0x822b: // RG8
+    case 0x822d: // R16F
     case 0x8d62: // RGB565
-    case 0x8033: // RGBA4
-    case 0x8034: // RGB5_A1
-    case 0x822b: // R16F
-    case 0x8056: // LUMINANCE_ALPHA
-    case 0x8058: // RGBA4
+    case 0x8056: // RGBA4
+    case 0x8057: // RGB5_A1
+    case 0x81a5: // DEPTH_COMPONENT16
+    case 0x1902: // DEPTH_COMPONENT (unsized, assume 16-bit)
       return 2;
     // 3 bytes
-    case 0x1907: // RGB
+    case 0x1907: // RGB (unsized)
     case 0x8051: // RGB8
       return 3;
     // 4 bytes
-    case 0x1908: // RGBA
+    case 0x1908: // RGBA (unsized)
     case 0x8058: // RGBA8
-    case 0x822e: // RG16F
-    case 0x8814: // RGBA32F (wait, that's 16)
+    case 0x822e: // R32F
+    case 0x822f: // RG16F
     case 0x8d7c: // RGBA8UI
     case 0x81a6: // DEPTH_COMPONENT24
+    case 0x88f0: // DEPTH24_STENCIL8
       return 4;
+    // 5 bytes
+    case 0x8cad: // DEPTH32F_STENCIL8
+      return 5;
     // 8 bytes
-    case 0x822d: // R32F
-    case 0x8230: // RG16F
-      return 4; // actually R32F is 4
+    case 0x8230: // RG32F
+    case 0x881a: // RGBA16F
+      return 8;
     // 16 bytes
     case 0x8814: // RGBA32F
       return 16;
-    case 0x881a: // RGBA16F
-      return 8;
-    // Depth
-    case 0x1902: // DEPTH_COMPONENT
-    case 0x81a5: // DEPTH_COMPONENT16
-      return 2;
-    case 0x88f0: // DEPTH24_STENCIL8
-      return 4;
-    case 0x8cad: // DEPTH32F_STENCIL8
-      return 5;
     default:
       return 4; // reasonable default
   }

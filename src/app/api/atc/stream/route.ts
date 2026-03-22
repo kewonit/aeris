@@ -107,6 +107,8 @@ export async function GET(request: NextRequest) {
       async pull(ctrl) {
         try {
           if (durationController.signal.aborted) {
+            reader.cancel().catch(() => {});
+            clearTimeout(durationTimer);
             ctrl.close();
             return;
           }
@@ -117,6 +119,7 @@ export async function GET(request: NextRequest) {
             ctrl.enqueue(value);
           }
         } catch {
+          reader.cancel().catch(() => {});
           ctrl.close();
         }
       },

@@ -39,8 +39,11 @@ All models are optimized for web delivery using `@gltf-transform/cli`:
 
 1. **Texture stripping** — Materials set to neutral unlit gray
 2. **Mesh simplification** — Triangle count reduced to ~30% of original
-3. **Draco compression** — GPU-friendly mesh compression
-4. **B737 format conversion** — Converted from glTF 1.0 → 2.0 via `gltf-pipeline`
+3. **B737 format conversion** — Converted from glTF 1.0 → 2.0 via `gltf-pipeline`
+
+> Note: Draco compression is **not** used for these models, to avoid
+> introducing an external WASM decoder dependency.
+> See `public/models/aircraft/NOTICE.md` for details.
 
 ## Model Assignment
 

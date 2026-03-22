@@ -98,7 +98,7 @@ Aeris renders 14 distinct aircraft silhouettes based on ADS-B emitter category a
 | `drone`         | UAVs                            | Category 14 (UAV)                              |
 | `generic`       | Fallback for unknown categories | Category 0, 1, default                         |
 
-Models are Draco-compressed GLB files served from Cloudinary CDN (local backups in `public/models/aircraft/`). A second-tier mapping from ICAO type codes (A320, B738, etc.) refines the assignment when type data is available via the readsb feed.
+Models are optimised GLB files (no Draco compression — avoids external WASM decoder dependency) served from Cloudinary CDN (local backups in `public/models/aircraft/`). A second-tier mapping from ICAO type codes (A320, B738, etc.) refines the assignment when type data is available via the readsb feed.
 
 - **Smooth animation**: Catmull-Rom spline trails, per-frame interpolation between polls
 - **Glassmorphism**: `backdrop-blur-2xl`, `bg-black/60`, `border-white/[0.08]`

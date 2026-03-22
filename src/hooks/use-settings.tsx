@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { clamp } from "@/lib/opensky-types";
+import { clamp } from "@/lib/utils";
 
 export type OrbitDirection = "clockwise" | "counter-clockwise";
 

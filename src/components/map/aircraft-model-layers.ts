@@ -10,8 +10,9 @@
 //    between animation frames) so deck.gl skips full attribute rebuild.
 // 3. Use updateTriggers to selectively recompute only position & orientation
 //    each frame. Color and scale are recomputed only on new data.
-// 4. Layers for ALL model keys are always created (even empty) so deck.gl
-//    never destroys/recreates them, avoiding shader recompilation.
+// 4. Layers are created for model keys that have active flights or were
+//    recently active (within MODEL_DEACTIVATE_MS grace period). Truly
+//    inactive models are omitted entirely to reduce overhead.
 // ────────────────────────────────────────────────────────────────────────
 
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
@@ -39,8 +40,8 @@ import {
 const EMPTY_DATA: FlightState[] = [];
 
 // Track when each model type was last seen in flight data.
-// Models not seen for MODEL_DEACTIVATE_MS get deactivated (scenegraph URL
-// cleared), which allows deck.gl & luma.gl to release GPU resources.
+// Models not seen for MODEL_DEACTIVATE_MS are omitted from the layer array
+// entirely, avoiding ScenegraphLayer constructor and deck.gl diffing overhead.
 const modelLastUsed = new Map<string, number>();
 const MODEL_DEACTIVATE_MS = 5_000; // 5 second grace period (covers 1 poll cycle)
 const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth

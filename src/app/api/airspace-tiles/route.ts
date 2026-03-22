@@ -72,17 +72,21 @@ const queue: Array<{ resolve: () => void }> = [];
 async function acquireSlot(): Promise<void> {
   if (activeCount < MAX_CONCURRENT) {
     activeCount++;
-    // Enforce minimum spacing between upstream calls
-    const elapsed = Date.now() - lastFetchMs;
-    if (elapsed < MIN_SPACING_MS) {
-      await new Promise<void>((r) => setTimeout(r, MIN_SPACING_MS - elapsed));
-    }
-    return;
+  } else {
+    // Wait for a slot — releaseSlot will increment activeCount before resolving.
+    await new Promise<void>((resolve) => {
+      queue.push({ resolve });
+    });
   }
-  // Wait for a slot
-  await new Promise<void>((resolve) => {
-    queue.push({ resolve });
-  });
+
+  // Enforce minimum spacing between upstream calls for both fast-path
+  // and queued acquisitions.
+  const now = Date.now();
+  const elapsed = now - lastFetchMs;
+  if (elapsed < MIN_SPACING_MS) {
+    await new Promise<void>((r) => setTimeout(r, MIN_SPACING_MS - elapsed));
+  }
+  lastFetchMs = Date.now();
 }
 
 function releaseSlot() {

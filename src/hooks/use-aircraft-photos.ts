@@ -158,8 +158,13 @@ async function fetchPhotos(
     }
 
     return { aircraft, photos };
-  } catch {
-    return { aircraft: null, photos: [] };
+  } catch (err) {
+    // Don't throw on intentional aborts — return empty result
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return { aircraft: null, photos: [] };
+    }
+    // Re-throw network/parse failures so callers can set error state
+    throw err;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);

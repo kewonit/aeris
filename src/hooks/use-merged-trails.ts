@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import {
   stitchHistoricalTrail,
   clearSplinedTrackCache,
@@ -37,9 +37,17 @@ export function useMergedTrails(
     return { pos, flight };
   }, [selectedIcao24, displayFlights]);
 
-  return useMemo(() => {
+  // Clear the spline cache when the selected flight is deselected or the
+  // track is unloaded. This is a side effect (mutates module-level state)
+  // so it belongs in useEffect, not useMemo.
+  useEffect(() => {
     if (!selectedIcao24 || !selectedTrack) {
       clearSplinedTrackCache();
+    }
+  }, [selectedIcao24, selectedTrack]);
+
+  return useMemo(() => {
+    if (!selectedIcao24 || !selectedTrack) {
       return displayTrails;
     }
 

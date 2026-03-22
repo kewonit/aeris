@@ -343,6 +343,7 @@ export function buildSelectionPulseLayers(
     interpolatedMap,
     elapsed,
     globeFade,
+    elevScale,
     haloUrl,
     ringUrl,
     layersVisible = true,
@@ -374,7 +375,7 @@ export function buildSelectionPulseLayers(
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
     const elevation =
       flight && flight.baroAltitude != null
-        ? altitudeToElevation(flight.baroAltitude)
+        ? altitudeToElevation(flight.baroAltitude) * elevScale
         : 0;
     const pos: [number, number, number] =
       flight && flight.longitude != null && flight.latitude != null

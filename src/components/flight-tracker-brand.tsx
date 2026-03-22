@@ -23,7 +23,7 @@ export function GitHubBadge({ stars }: { stars: number | null }) {
     <a
       href={GITHUB_REPO_URL}
       target="_blank"
-      rel="noreferrer"
+      rel="noopener noreferrer"
       aria-label="Open GitHub repository"
       className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
       style={{
