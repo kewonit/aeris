@@ -152,7 +152,7 @@ function uniformSample(
 export function removeSpikePoints(
   path: [number, number][],
   altitudes: Array<number | null>,
-  cosThreshold: number = -0.5,
+  cosThreshold: number = -0.17,
 ): { path: [number, number][]; altitudes: Array<number | null> } {
   if (path.length < 3) return { path, altitudes };
 
@@ -189,6 +189,15 @@ export function removeSpikePoints(
       const cos = (dx1 * dx2 + dy1 * dy2) / (len1 * len2);
 
       if (cos < cosThreshold) {
+        keep[i] = false;
+        removed++;
+        changed = true;
+        continue;
+      }
+
+      // Distance-weighted spike: moderate angle + asymmetric legs = likely GPS spike
+      const distRatio = Math.max(len1, len2) / Math.min(len1, len2);
+      if (cos < 0.0 && distRatio > 3.0) {
         keep[i] = false;
         removed++;
         changed = true;

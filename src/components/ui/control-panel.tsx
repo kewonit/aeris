@@ -225,7 +225,7 @@ function PanelDialog({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-80 bg-black/70"
+        className="fixed inset-0 z-80 bg-background/70"
         onClick={onClose}
       />
 
@@ -245,10 +245,10 @@ function PanelDialog({
         aria-modal="true"
         aria-labelledby="panel-dialog-title"
       >
-        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-white/8 bg-[#0c0c0e] shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] h-[75vh] sm:h-auto sm:max-h-[85vh]">
+        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-border bg-popover shadow-[0_40px_100px_rgba(0,0,0,0.25)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}
-          <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-white/6 py-5 px-3">
-            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-white/20">
+          <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-border py-5 px-3">
+            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
@@ -260,14 +260,14 @@ function PanelDialog({
                     onClick={() => onTabChange(id)}
                     className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
                       active
-                        ? "text-white/90"
-                        : "text-white/35 hover:text-white/55 hover:bg-white/4"
+                        ? "text-foreground/90"
+                        : "text-foreground/35 hover:text-foreground/55 hover:bg-foreground/4"
                     }`}
                   >
                     {active && (
                       <motion.div
                         layoutId="panel-tab-bg"
-                        className="absolute inset-0 rounded-xl bg-white/8"
+                        className="absolute inset-0 rounded-xl bg-foreground/8"
                         transition={{
                           type: "spring",
                           stiffness: 400,
@@ -290,7 +290,7 @@ function PanelDialog({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub (opens in new tab)"
-                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-white/35 hover:text-white/55 hover:bg-white/4"
+                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-foreground/35 hover:text-foreground/55 hover:bg-foreground/4"
               >
                 <Github
                   className="relative h-4 w-4 shrink-0"
@@ -298,8 +298,8 @@ function PanelDialog({
                 />
                 <span className="relative text-[14px] font-medium">GitHub</span>
               </a>
-              <div className="border-t border-white/3 pt-2 px-2.5">
-                <p className="text-[10px] font-medium text-white/10 tracking-wide">
+              <div className="border-t border-foreground/5 pt-2 px-2.5">
+                <p className="text-[10px] font-medium text-foreground/15 tracking-wide">
                   Data from ADS-B Exchange, adsb.lol &amp; OpenSky
                 </p>
               </div>
@@ -311,7 +311,7 @@ function PanelDialog({
             <div className="flex sm:hidden items-center justify-between px-4 pt-4 pb-2">
               <h2
                 id="panel-dialog-title"
-                className="text-[14px] font-semibold tracking-tight text-white/90"
+                className="text-[14px] font-semibold tracking-tight text-foreground/90"
               >
                 {PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
@@ -320,18 +320,18 @@ function PanelDialog({
             <div className="hidden sm:flex items-center justify-between px-5 pt-5 pb-2">
               <h2
                 id="panel-dialog-title"
-                className="text-[15px] font-semibold tracking-tight text-white/90"
+                className="text-[15px] font-semibold tracking-tight text-foreground/90"
               >
                 {PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
               <motion.button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/6 transition-colors hover:bg-white/12"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/6 transition-colors hover:bg-foreground/12"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 aria-label="Close"
               >
-                <X className="h-3.5 w-3.5 text-white/40" />
+                <X className="h-3.5 w-3.5 text-foreground/40" />
               </motion.button>
             </div>
 
@@ -385,7 +385,7 @@ function PanelDialog({
           </div>
 
           {/* Mobile tab bar */}
-          <div className="flex sm:hidden items-center gap-0.5 border-t border-white/6 px-2 pt-2 pb-3">
+          <div className="flex sm:hidden items-center gap-0.5 border-t border-border px-2 pt-2 pb-3">
             <nav className="flex flex-1 gap-0.5">
               {PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
@@ -395,15 +395,15 @@ function PanelDialog({
                     onClick={() => onTabChange(id)}
                     className={`relative flex flex-1 items-center justify-center rounded-lg py-2.5 transition-colors ${
                       active
-                        ? "text-white/90"
-                        : "text-white/35 active:bg-white/6"
+                        ? "text-foreground/90"
+                        : "text-foreground/35 active:bg-foreground/6"
                     }`}
                     aria-label={label}
                   >
                     {active && (
                       <motion.div
                         layoutId="panel-tab-bg-mobile"
-                        className="absolute inset-0 rounded-lg bg-white/8"
+                        className="absolute inset-0 rounded-lg bg-foreground/8"
                         transition={{
                           type: "spring",
                           stiffness: 400,
@@ -418,11 +418,11 @@ function PanelDialog({
             </nav>
             <motion.button
               onClick={onClose}
-              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/6 transition-colors active:bg-white/12"
+              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/6 transition-colors active:bg-foreground/12"
               whileTap={{ scale: 0.9 }}
               aria-label="Close"
             >
-              <X className="h-3.5 w-3.5 text-white/40" />
+              <X className="h-3.5 w-3.5 text-foreground/40" />
             </motion.button>
           </div>
         </div>

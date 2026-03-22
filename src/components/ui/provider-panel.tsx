@@ -11,7 +11,7 @@ import {
 import type { ProviderName } from "@/lib/flight-api";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 
-// ── Provider definitions ───────────────────────────────────────────────
+// â”€â”€ Provider definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ProviderInfo {
   id: ProviderName;
@@ -20,16 +20,16 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Primary — server proxy" },
+  { id: "adsb", label: "adsb.lol", description: "Primary â€” server proxy" },
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Fallback — limited credits",
+    description: "Fallback â€” limited credits",
   },
   {
     id: "airplanes",
     label: "Airplanes.live",
-    description: "Direct — CORS restricted",
+    description: "Direct â€” CORS restricted",
   },
 ];
 
@@ -74,7 +74,7 @@ function setProviderOverride(provider: ProviderName | "auto"): void {
   window.history.replaceState({}, "", url.toString());
 }
 
-// ── Provider Dropdown ──────────────────────────────────────────────────
+// â”€â”€ Provider Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ProviderDropdownProps = {
   open: boolean;
@@ -115,7 +115,7 @@ export function ProviderDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl border shadow-2xl shadow-black/60 backdrop-blur-2xl sm:w-70 sm:max-w-none"
+          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl border shadow-2xl shadow-background/60 backdrop-blur-2xl sm:w-70 sm:max-w-none"
           style={{
             borderColor: "rgb(var(--ui-fg) / 0.08)",
             backgroundColor: "rgb(var(--ui-bg) / 0.75)",
@@ -138,7 +138,7 @@ export function ProviderDropdown({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-white/5 active:bg-white/10"
+              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-foreground/5 active:bg-foreground/10"
               aria-label="Close provider selector"
             >
               <X
@@ -155,7 +155,7 @@ export function ProviderDropdown({
               type="button"
               onClick={() => handleSelect("auto")}
               className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
-                isAutoMode ? "bg-white/6" : "hover:bg-white/3 active:bg-white/6"
+                isAutoMode ? "bg-foreground/6" : "hover:bg-foreground/3 active:bg-foreground/6"
               }`}
             >
               <div className="flex h-4 w-4 shrink-0 items-center justify-center">
@@ -217,9 +217,9 @@ export function ProviderDropdown({
                   disabled={!isAvailable}
                   className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
                     isSelected
-                      ? "bg-white/6"
+                      ? "bg-foreground/6"
                       : isAvailable
-                        ? "hover:bg-white/3 active:bg-white/6"
+                        ? "hover:bg-foreground/3 active:bg-foreground/6"
                         : "cursor-not-allowed opacity-40"
                   }`}
                 >
@@ -257,7 +257,7 @@ export function ProviderDropdown({
                       style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
                     >
                       {!isAvailable
-                        ? "CORS restricted — dev only"
+                        ? "CORS restricted â€” dev only"
                         : provider.description}
                     </span>
                   </div>
@@ -282,7 +282,7 @@ export function ProviderDropdown({
   );
 }
 
-// ── Provider Trigger (for status bar) ──────────────────────────────────
+// â”€â”€ Provider Trigger (for status bar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ProviderTriggerProps = {
   source: string | null;
@@ -300,10 +300,10 @@ export function ProviderTrigger({
   const label = rateLimited
     ? "Paused"
     : loading && !source
-      ? "Connecting…"
+      ? "Connectingâ€¦"
       : source
         ? (SOURCE_LABELS[source] ?? source)
-        : "Connecting…";
+        : "Connectingâ€¦";
 
   const dotColor = rateLimited
     ? "text-amber-400/80"

@@ -21,7 +21,7 @@ export type TrailEntry = {
 };
 
 const MAX_POINTS = 55;
-const JUMP_THRESHOLD_DEG = 0.3;
+const JUMP_THRESHOLD_DEG = 0.15;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
 const BOOTSTRAP_UPDATES = 3;
@@ -65,10 +65,13 @@ function median(values: number[]): number {
 
 function synthesizeHistoricalPolls(f: FlightState): Position[] {
   if (f.longitude == null || f.latitude == null) return [];
+  if (f.trueTrack == null || !Number.isFinite(f.trueTrack)) return [];
+  if (f.velocity == null || !Number.isFinite(f.velocity) || f.velocity <= 0)
+    return [];
   const lng = f.longitude;
   const lat = f.latitude;
-  const heading = ((f.trueTrack ?? 0) * Math.PI) / 180;
-  const speed = f.velocity ?? 200;
+  const heading = (f.trueTrack * Math.PI) / 180;
+  const speed = f.velocity;
   const degPerSecond = speed / 111_320;
 
   // Perpendicular direction for GPS-like lateral jitter.
@@ -235,6 +238,23 @@ class TrailStore {
       const dx = pos.position[0] - last[0];
       const dy = pos.position[1] - last[1];
       const distSq = dx * dx + dy * dy;
+
+      // ── Single-point outlier filter ───────────────────────────
+      // If this point is far from the previous point but the previous
+      // step was small, it's likely a GPS glitch — skip silently.
+      const OUTLIER_THRESHOLD_DEG = 0.05; // ~5.5 km
+      if (
+        t.length >= 2 &&
+        distSq > OUTLIER_THRESHOLD_DEG * OUTLIER_THRESHOLD_DEG
+      ) {
+        const secondLast = t[t.length - 2].position;
+        const dx2 = last[0] - secondLast[0];
+        const dy2 = last[1] - secondLast[1];
+        const prevDistSq = dx2 * dx2 + dy2 * dy2;
+        if (prevDistSq < OUTLIER_THRESHOLD_DEG * OUTLIER_THRESHOLD_DEG) {
+          continue;
+        }
+      }
 
       let effectiveThreshold = JUMP_THRESHOLD_DEG;
       if (isResuming) {

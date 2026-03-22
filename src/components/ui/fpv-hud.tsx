@@ -40,6 +40,9 @@ function CompassRibbon({ heading }: { heading: number | null }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const isDark = document.documentElement.classList.contains("dark");
+    const fg = isDark ? "255,255,255" : "0,0,0";
+
     const dpr = window.devicePixelRatio ?? 1;
     const w = 260;
     const h = 32;
@@ -66,7 +69,7 @@ function CompassRibbon({ heading }: { heading: number | null }) {
       const isTiny = normDeg % 5 === 0;
 
       if (isMajor) {
-        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+        ctx.strokeStyle = `rgba(${fg},0.45)`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(x, h - 1);
@@ -74,19 +77,19 @@ function CompassRibbon({ heading }: { heading: number | null }) {
         ctx.stroke();
 
         const label = COMPASS_LABELS[normDeg] ?? `${normDeg}`;
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.fillStyle = `rgba(${fg},0.55)`;
         ctx.font = "bold 9px Inter, system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.fillText(label, x, h - 14);
       } else if (isMinor) {
-        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.strokeStyle = `rgba(${fg},0.22)`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, h - 1);
         ctx.lineTo(x, h - 7);
         ctx.stroke();
       } else if (isTiny) {
-        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.strokeStyle = `rgba(${fg},0.10)`;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(x, h - 1);
@@ -198,12 +201,12 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
       className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
     >
       <div
-        className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-xl border border-white/8 bg-black/70 pb-1 shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-3xl md:w-max"
+        className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-xl border border-foreground/8 bg-background/70 pb-1 shadow-[0_8px_32px_rgba(0,0,0,0.3)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-3xl md:w-max"
         role="status"
         aria-live="polite"
         aria-label="First person view flight instruments"
       >
-        <div className="w-full border-b border-white/6 px-2 pt-1.5 pb-0.5 sm:px-2.5">
+        <div className="w-full border-b border-foreground/6 px-2 pt-1.5 pb-0.5 sm:px-2.5">
           <div
             className="mx-auto w-fit overflow-hidden rounded-md"
             style={{ width: 260 }}
@@ -216,9 +219,9 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
         </div>
 
         <div className="flex w-full items-stretch">
-          <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-white/6 px-2 py-1.5 sm:px-3 sm:py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-foreground/6 px-2 py-1.5 sm:px-3 sm:py-2">
             {logoUrl ? (
-              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 shadow-sm ring-1 ring-white/20">
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 shadow-sm ring-1 ring-foreground/20">
                 {!logoLoaded && (
                   <span
                     aria-hidden="true"
@@ -256,10 +259,10 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 />
               </span>
             ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 ring-1 ring-white/10">
-                <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white/95 ring-1 ring-white/15">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-foreground/10">
+                <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white/95 ring-1 ring-foreground/15">
                   {genericLogoFailed ? (
-                    <span className="text-[12px] font-semibold text-black/25">
+                    <span className="text-[12px] font-semibold text-background/25">
                       —
                     </span>
                   ) : (
@@ -282,43 +285,43 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             )}
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-bold tracking-wide text-white/90 sm:text-[13px]">
+              <p className="truncate text-[12px] font-bold tracking-wide text-foreground/90 sm:text-[13px]">
                 {formatCallsign(flight.callsign)}
               </p>
-              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-white/30">
+              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-foreground/30">
                 {airline ?? flight.originCountry}
               </p>
             </div>
           </div>
 
-          <div className="flex min-w-12 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-white/30">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-foreground/30">
               <ArrowUp className="h-2 w-2" />
               <span className="text-[8px] font-semibold uppercase tracking-wider">
                 ALT
               </span>
             </div>
-            <p className="text-[13px] font-bold tabular-nums text-white/90">
+            <p className="text-[13px] font-bold tabular-nums text-foreground/90">
               {altFeet !== null ? altFeet.toLocaleString() : "—"}
             </p>
-            <p className="text-[8px] font-medium text-white/25">ft</p>
+            <p className="text-[8px] font-medium text-foreground/25">ft</p>
           </div>
 
-          <div className="flex min-w-11 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-white/30">
+          <div className="flex min-w-11 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-foreground/30">
               <Gauge className="h-2 w-2" />
               <span className="text-[8px] font-semibold uppercase tracking-wider">
                 SPD
               </span>
             </div>
-            <p className="text-[13px] font-bold tabular-nums text-white/90">
+            <p className="text-[13px] font-bold tabular-nums text-foreground/90">
               {speedKts ?? "—"}
             </p>
-            <p className="text-[8px] font-medium text-white/25">kts</p>
+            <p className="text-[8px] font-medium text-foreground/25">kts</p>
           </div>
 
-          <div className="flex min-w-12 flex-col items-center justify-center border-r border-white/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-white/30">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-foreground/30">
               {vsIcon ?? <Minus className="h-2 w-2" />}
               <span className="text-[8px] font-semibold uppercase tracking-wider">
                 V/S
@@ -330,17 +333,17 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                   ? "text-emerald-400/80"
                   : vs !== null && vs < -0.5
                     ? "text-amber-400/80"
-                    : "text-white/90"
+                    : "text-foreground/90"
               }`}
             >
               {vsDisplay ?? "—"}
             </p>
-            <p className="text-[8px] font-medium text-white/25">fpm</p>
+            <p className="text-[8px] font-medium text-foreground/25">fpm</p>
           </div>
 
           <button
             onClick={onExit}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-white/40 transition-colors hover:bg-white/5 hover:text-white/60 sm:px-2.5"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-foreground/40 transition-colors hover:bg-foreground/5 hover:text-foreground/60 sm:px-2.5"
             aria-label="Exit first person view"
             title="Exit FPV (Esc)"
           >

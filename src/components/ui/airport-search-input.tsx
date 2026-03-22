@@ -108,16 +108,16 @@ export function AirportSearchInput({
             setIsOpen(true);
             requestAnimationFrame(() => inputRef.current?.focus());
           }}
-          className="flex w-full items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-left transition-colors hover:bg-white/6"
+          className="flex w-full items-center gap-2 rounded-xl border border-foreground/8 bg-foreground/4 px-3 py-2.5 text-left transition-colors hover:bg-foreground/6"
         >
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white/8">
-            <MapPin className="h-3 w-3 text-white/50" />
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground/8">
+            <MapPin className="h-3 w-3 text-foreground/50" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[13px] font-semibold text-white/80">
+            <span className="text-[13px] font-semibold text-foreground/80">
               {selected.iata}
             </span>
-            <span className="ml-1.5 text-[11px] text-white/30">
+            <span className="ml-1.5 text-[11px] text-foreground/30">
               {selected.city}
             </span>
           </div>
@@ -127,7 +127,7 @@ export function AirportSearchInput({
                 e.stopPropagation();
                 handleClear();
               }}
-              className="shrink-0 text-white/20 hover:text-white/40 transition-colors"
+              className="shrink-0 text-foreground/20 hover:text-foreground/40 transition-colors"
               aria-label="Clear selection"
             >
               <X className="h-3 w-3" />
@@ -135,8 +135,8 @@ export function AirportSearchInput({
           )}
         </button>
       ) : (
-        <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2">
-          <Search className="h-3.5 w-3.5 shrink-0 text-white/25" />
+        <div className="flex items-center gap-2 rounded-xl border border-foreground/8 bg-foreground/4 px-3 py-2">
+          <Search className="h-3.5 w-3.5 shrink-0 text-foreground/25" />
           <input
             ref={inputRef}
             value={query}
@@ -147,12 +147,12 @@ export function AirportSearchInput({
             onFocus={() => setIsOpen(true)}
             placeholder={placeholder}
             aria-label={label}
-            className="flex-1 bg-transparent text-[13px] font-medium text-white/90 placeholder:text-white/20 outline-none"
+            className="flex-1 bg-transparent text-[13px] font-medium text-foreground/90 placeholder:text-foreground/20 outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery("")}
-              className="shrink-0 text-white/20 hover:text-white/40 transition-colors"
+              className="shrink-0 text-foreground/20 hover:text-foreground/40 transition-colors"
               aria-label="Clear search"
             >
               <X className="h-3 w-3" />
@@ -168,12 +168,12 @@ export function AirportSearchInput({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-white/8 bg-[#0c0c0e]/95 shadow-[0_20px_60px_rgba(0,0,0,.7)] backdrop-blur-2xl"
+            className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-foreground/8 bg-popover/95 shadow-[0_20px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.7)] backdrop-blur-2xl"
           >
             <ScrollArea className="max-h-56">
               <div className="p-1.5">
                 {!hasResults && (
-                  <p className="py-6 text-center text-[11px] text-white/25">
+                  <p className="py-6 text-center text-[11px] text-foreground/25">
                     No airports found
                   </p>
                 )}
@@ -181,7 +181,7 @@ export function AirportSearchInput({
                 {featured.length > 0 && (
                   <>
                     {query && (
-                      <p className="px-2.5 pt-1.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-white/15">
+                      <p className="px-2.5 pt-1.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-foreground/15">
                         Featured
                       </p>
                     )}
@@ -200,7 +200,7 @@ export function AirportSearchInput({
                 {airports.length > 0 && (
                   <>
                     <p
-                      className={`px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-white/15 ${
+                      className={`px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-widest text-foreground/15 ${
                         featured.length > 0 ? "pt-2" : "pt-1.5"
                       }`}
                     >
@@ -240,18 +240,18 @@ const DropdownRow = memo(function DropdownRow({
   return (
     <button
       onClick={onClick}
-      className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/5 ${
-        isActive ? "bg-white/6" : ""
+      className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-foreground/5 ${
+        isActive ? "bg-foreground/6" : ""
       }`}
     >
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/4">
-        <MapPin className="h-3 w-3 text-white/35" />
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/4">
+        <MapPin className="h-3 w-3 text-foreground/35" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="truncate text-[12px] font-medium text-white/75">{name}</p>
-        <p className="text-[10px] text-white/25">{detail}</p>
+        <p className="truncate text-[12px] font-medium text-foreground/75">{name}</p>
+        <p className="text-[10px] text-foreground/25">{detail}</p>
       </div>
-      <ChevronRight className="h-3 w-3 shrink-0 text-white/10 group-hover:text-white/20" />
+      <ChevronRight className="h-3 w-3 shrink-0 text-foreground/10 group-hover:text-foreground/20" />
     </button>
   );
 });

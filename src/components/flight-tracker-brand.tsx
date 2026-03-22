@@ -6,13 +6,9 @@ import {
   formatStarCount,
 } from "@/components/flight-tracker-utils";
 
-export function Brand({ isDark }: { isDark: boolean }) {
+export function Brand({ isDark: _isDark }: { isDark: boolean }) {
   return (
-    <span
-      className={`text-sm font-semibold tracking-wide ${
-        isDark ? "text-white/70" : "text-black/70"
-      }`}
-    >
+    <span className="text-sm font-semibold tracking-wide text-foreground/70">
       aeris
     </span>
   );

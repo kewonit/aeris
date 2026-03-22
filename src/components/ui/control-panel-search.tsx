@@ -119,7 +119,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <span className="text-white/95 font-semibold">
+      <span className="text-foreground/95 font-semibold">
         {text.slice(idx, idx + q.length)}
       </span>
       {text.slice(idx + q.length)}
@@ -393,8 +393,8 @@ export function SearchContent({
       label="Search airports, flights, and cities"
     >
       {/* ── Search input ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-2.5 border-b border-white/6 mx-3 sm:mx-5 pb-3">
-        <Search className="h-3.5 w-3.5 shrink-0 text-white/25" />
+      <div className="flex items-center gap-2.5 border-b border-foreground/6 mx-3 sm:mx-5 pb-3">
+        <Search className="h-3.5 w-3.5 shrink-0 text-foreground/25" />
         <Command.Input
           ref={inputRef}
           value={query}
@@ -410,12 +410,12 @@ export function SearchContent({
           }}
           placeholder="Search airports, flights, ICAO24…"
           aria-label="Search airports, flights, and cities"
-          className="flex-1 bg-transparent text-[14px] font-medium text-white/90 placeholder:text-white/20 outline-none"
+          className="flex-1 bg-transparent text-[14px] font-medium text-foreground/90 placeholder:text-foreground/20 outline-none"
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="shrink-0 text-white/20 hover:text-white/40 transition-colors"
+            className="shrink-0 text-foreground/20 hover:text-foreground/40 transition-colors"
             aria-label="Clear search"
           >
             <X className="h-3.5 w-3.5" />
@@ -438,14 +438,14 @@ export function SearchContent({
         className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none p-2"
       >
         <Command.Empty className="flex flex-col items-center justify-center py-10 gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/4">
-            <Globe2 className="h-5 w-5 text-white/15" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-foreground/4">
+            <Globe2 className="h-5 w-5 text-foreground/15" />
           </div>
           <div className="text-center space-y-1">
-            <p className="text-[13px] font-medium text-white/30">
+            <p className="text-[13px] font-medium text-foreground/30">
               No results found
             </p>
-            <p className="text-[11px] text-white/15 max-w-55 leading-relaxed">
+            <p className="text-[11px] text-foreground/15 max-w-55 leading-relaxed">
               Try an airport code like &quot;JFK&quot;, a city name, or a flight
               callsign like &quot;UAL123&quot;
             </p>
@@ -460,7 +460,7 @@ export function SearchContent({
                 <span>Recent</span>
                 <button
                   onClick={handleClearRecents}
-                  className="text-[9px] font-medium text-white/20 hover:text-white/40 transition-colors normal-case tracking-normal"
+                  className="text-[9px] font-medium text-foreground/20 hover:text-foreground/40 transition-colors normal-case tracking-normal"
                 >
                   Clear all
                 </button>
@@ -478,10 +478,10 @@ export function SearchContent({
                 }}
                 className="search-item"
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/3">
-                  <Clock className="h-3 w-3 text-white/25" />
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/3">
+                  <Clock className="h-3 w-3 text-foreground/25" />
                 </div>
-                <span className="flex-1 truncate text-[13px] font-medium text-white/50">
+                <span className="flex-1 truncate text-[13px] font-medium text-foreground/50">
                   {r}
                 </span>
                 <button
@@ -489,7 +489,7 @@ export function SearchContent({
                     e.stopPropagation();
                     handleRemoveRecent(r);
                   }}
-                  className="shrink-0 opacity-0 group-data-[selected=true]/item:opacity-100 text-white/20 hover:text-white/40 transition-all"
+                  className="shrink-0 opacity-0 group-data-[selected=true]/item:opacity-100 text-foreground/20 hover:text-foreground/40 transition-all"
                   aria-label={`Remove ${r} from recent searches`}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -509,24 +509,24 @@ export function SearchContent({
               disabled={lookupBusy}
               className="search-item"
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/4">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/4">
                 {lookupBusy ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-white/40" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/40" />
                 ) : (
-                  <Search className="h-3.5 w-3.5 text-white/40" />
+                  <Search className="h-3.5 w-3.5 text-foreground/40" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="truncate text-[13px] font-medium text-white/70">
+                <p className="truncate text-[13px] font-medium text-foreground/70">
                   Search worldwide for &quot;{query.trim()}&quot;
                 </p>
-                <p className="text-[10px] text-white/25">
+                <p className="text-[10px] text-foreground/25">
                   {isIcao24Query
                     ? "ICAO24 hex lookup"
                     : "Callsign / flight number lookup"}
                 </p>
               </div>
-              <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-white/8 bg-white/4 px-1.5 text-[9px] font-semibold text-white/25">
+              <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-foreground/8 bg-foreground/4 px-1.5 text-[9px] font-semibold text-foreground/25">
                 ↵
               </kbd>
             </Command.Item>
@@ -552,7 +552,7 @@ export function SearchContent({
                   Follow camera view
                 </p>
               </div>
-              <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-white/8 bg-white/4 px-1.5 text-[9px] font-semibold text-white/25">
+              <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-foreground/8 bg-foreground/4 px-1.5 text-[9px] font-semibold text-foreground/25">
                 <span className="text-[8px]">⌘</span>↵
               </kbd>
             </Command.Item>
@@ -573,12 +573,12 @@ export function SearchContent({
                   onSelect={() => void openFlight(flight.icao24, false)}
                   className="search-item"
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/4">
-                    <Plane className="h-3.5 w-3.5 text-white/40" />
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/4">
+                    <Plane className="h-3.5 w-3.5 text-foreground/40" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="truncate text-[13px] font-semibold text-white/80">
+                      <p className="truncate text-[13px] font-semibold text-foreground/80">
                         <HighlightMatch text={cs} query={query} />
                       </p>
                       {activeFlightIcao24 === flight.icao24 && (
@@ -587,14 +587,14 @@ export function SearchContent({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-white/25">
+                    <div className="flex items-center gap-1.5 text-[10px] text-foreground/25">
                       <span className="font-mono">
                         <HighlightMatch
                           text={flight.icao24.toUpperCase()}
                           query={query}
                         />
                       </span>
-                      <span className="text-white/10">·</span>
+                      <span className="text-foreground/10">·</span>
                       {flag && <span className="text-[10px]">{flag}</span>}
                       <span>{flight.originCountry}</span>
                     </div>
@@ -603,21 +603,21 @@ export function SearchContent({
                   {/* Flight info chips */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     {flight.baroAltitude != null && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-white/3 px-1.5 py-0.5 text-[9px] font-medium text-white/30">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-foreground/3 px-1.5 py-0.5 text-[9px] font-medium text-foreground/30">
                         <AltitudeDot altitude={flight.baroAltitude} />
                         {metersToFeet(flight.baroAltitude)}
                       </span>
                     )}
                     {flight.velocity != null && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-white/3 px-1.5 py-0.5 text-[9px] font-medium text-white/30">
-                        <Gauge className="h-2.5 w-2.5 text-white/20" />
+                      <span className="inline-flex items-center gap-1 rounded-md bg-foreground/3 px-1.5 py-0.5 text-[9px] font-medium text-foreground/30">
+                        <Gauge className="h-2.5 w-2.5 text-foreground/20" />
                         {msToKnots(flight.velocity)}
                       </span>
                     )}
                     {flight.trueTrack != null && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-white/3 px-1.5 py-0.5 text-[9px] font-medium text-white/30">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-foreground/3 px-1.5 py-0.5 text-[9px] font-medium text-foreground/30">
                         <ArrowUpRight
-                          className="h-2.5 w-2.5 text-white/20"
+                          className="h-2.5 w-2.5 text-foreground/20"
                           style={{
                             transform: `rotate(${flight.trueTrack - 45}deg)`,
                           }}
@@ -663,29 +663,29 @@ export function SearchContent({
               >
                 <div
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                    activeCity?.id === city.id ? "bg-white/8" : "bg-white/4"
+                    activeCity?.id === city.id ? "bg-foreground/8" : "bg-foreground/4"
                   }`}
                 >
                   <MapPin
                     className={`h-3.5 w-3.5 ${
                       activeCity?.id === city.id
-                        ? "text-white/60"
-                        : "text-white/35"
+                        ? "text-foreground/60"
+                        : "text-foreground/35"
                     }`}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-[13px] font-medium text-white/80">
+                  <p className="truncate text-[13px] font-medium text-foreground/80">
                     <HighlightMatch text={city.name} query={query} />
                   </p>
-                  <p className="text-[10px] font-medium text-white/25">
+                  <p className="text-[10px] font-medium text-foreground/25">
                     <HighlightMatch text={city.iata} query={query} />
-                    <span className="text-white/10"> · </span>
+                    <span className="text-foreground/10"> · </span>
                     {city.country}
                   </p>
                 </div>
                 {activeCity?.id === city.id && (
-                  <span className="shrink-0 rounded-full bg-white/6 px-1.5 py-px text-[8px] font-bold uppercase tracking-wider text-white/30">
+                  <span className="shrink-0 rounded-full bg-foreground/6 px-1.5 py-px text-[8px] font-bold uppercase tracking-wider text-foreground/30">
                     Current
                   </span>
                 )}
@@ -713,31 +713,31 @@ export function SearchContent({
                 <div
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
                     activeCity?.iata === airport.iata
-                      ? "bg-white/8"
-                      : "bg-white/4"
+                      ? "bg-foreground/8"
+                      : "bg-foreground/4"
                   }`}
                 >
                   <MapPin
                     className={`h-3.5 w-3.5 ${
                       activeCity?.iata === airport.iata
-                        ? "text-white/60"
-                        : "text-white/35"
+                        ? "text-foreground/60"
+                        : "text-foreground/35"
                     }`}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-[13px] font-medium text-white/80">
+                  <p className="truncate text-[13px] font-medium text-foreground/80">
                     <HighlightMatch text={airport.name} query={query} />
                   </p>
-                  <p className="text-[10px] font-medium text-white/25">
+                  <p className="text-[10px] font-medium text-foreground/25">
                     <HighlightMatch text={airport.iata} query={query} />
-                    <span className="text-white/10"> · </span>
+                    <span className="text-foreground/10"> · </span>
                     <HighlightMatch text={airport.city} query={query} />,{" "}
                     {airport.country}
                   </p>
                 </div>
                 {activeCity?.iata === airport.iata && (
-                  <span className="shrink-0 rounded-full bg-white/6 px-1.5 py-px text-[8px] font-bold uppercase tracking-wider text-white/30">
+                  <span className="shrink-0 rounded-full bg-foreground/6 px-1.5 py-px text-[8px] font-bold uppercase tracking-wider text-foreground/30">
                     Current
                   </span>
                 )}
@@ -756,7 +756,7 @@ export function SearchContent({
         {/* ── Footer hint ───────────────────────────────────────── */}
         {!query && !showRecents && (
           <div className="flex items-center justify-center gap-2 py-4">
-            <p className="text-[10px] text-white/12 font-medium">
+            <p className="text-[10px] text-foreground/12 font-medium">
               Search 9,000+ airports worldwide
             </p>
           </div>

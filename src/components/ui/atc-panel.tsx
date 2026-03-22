@@ -145,7 +145,7 @@ export function AtcFeedDropdown({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-white/5 active:bg-white/10"
+              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-foreground/5 active:bg-foreground/10"
               aria-label="Close feed selector"
             >
               <X
@@ -186,8 +186,8 @@ export function AtcFeedDropdown({
                         onClick={() => handleSelectFeed(feed)}
                         className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
                           isSelected
-                            ? "bg-white/6"
-                            : "hover:bg-white/3 active:bg-white/6"
+                            ? "bg-foreground/6"
+                            : "hover:bg-foreground/3 active:bg-foreground/6"
                         }`}
                       >
                         {/* Inline icon */}
@@ -290,7 +290,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         <button
           type="button"
           onClick={() => atc.resume()}
-          className="flex h-7 w-13 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/5 active:bg-white/10"
+          className="flex h-7 w-13 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-foreground/5 active:bg-foreground/10"
           aria-label="Tap to start"
         >
           <Play className="h-4 w-4 text-emerald-400/80" />
@@ -356,7 +356,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
       <button
         type="button"
         onClick={() => atc.stop()}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/5 active:bg-white/10"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-foreground/5 active:bg-foreground/10"
         aria-label="Stop and close"
       >
         <X
@@ -389,7 +389,7 @@ export function AtcTrigger({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center rounded p-1 transition-colors hover:bg-white/5 active:bg-white/10 sm:p-0.5"
+      className="inline-flex items-center rounded p-1 transition-colors hover:bg-foreground/5 active:bg-foreground/10 sm:p-0.5"
       aria-label="Live ATC (A)"
       title="Live ATC (A)"
     >

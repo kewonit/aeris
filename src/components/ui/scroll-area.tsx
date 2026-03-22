@@ -81,7 +81,7 @@ export const ScrollArea = forwardRef<HTMLDivElement, ScrollAreaProps>(
         >
           <div
             ref={thumbRef}
-            className="absolute w-full rounded-full bg-white/15 transition-[background-color] duration-150 hover:bg-white/25"
+            className="absolute w-full rounded-full bg-foreground/15 transition-[background-color] duration-150 hover:bg-foreground/25"
             style={{
               height: thumbHeight,
               transform: `translateY(${thumbTop}px)`,

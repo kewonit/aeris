@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -60,7 +61,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta
           name="viewport"
@@ -79,18 +80,24 @@ export default function RootLayout({
         )}
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
-        <Toaster
-          position="bottom-center"
-          theme="dark"
-          offset={16}
-          mobileOffset={8}
-          gap={8}
-          toastOptions={{
-            unstyled: true,
-            className: "w-full",
-          }}
-        />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster
+            position="bottom-center"
+            offset={16}
+            mobileOffset={8}
+            gap={8}
+            toastOptions={{
+              unstyled: true,
+              className: "w-full",
+            }}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );

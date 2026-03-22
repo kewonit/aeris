@@ -19,10 +19,11 @@ import {
 export function buildStartupFallbackTrail(f: FlightState): [number, number][] {
   if (f.longitude == null || f.latitude == null) return [];
 
-  const heading =
-    ((Number.isFinite(f.trueTrack) ? f.trueTrack! : 0) * Math.PI) / 180;
-  const speed =
-    Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
+  if (f.trueTrack == null || !Number.isFinite(f.trueTrack)) return [];
+  if (f.velocity == null || !Number.isFinite(f.velocity) || f.velocity <= 0)
+    return [];
+  const heading = (f.trueTrack * Math.PI) / 180;
+  const speed = f.velocity;
   const degPerSecond = speed / 111_320;
 
   const path: [number, number][] = [];
@@ -204,7 +205,10 @@ export function trimPathAheadOfAircraft(
 
   let bestIndex = points.length - 2;
   let bestDistanceSq = Number.POSITIVE_INFINITY;
-  const searchStart = Math.max(0, Math.floor(points.length * 0.9));
+  const searchStart = Math.max(
+    0,
+    points.length - Math.max(20, Math.ceil(points.length * 0.4)),
+  );
 
   for (let i = searchStart; i < points.length - 1; i++) {
     const a = points[i];
@@ -249,7 +253,8 @@ export function trimPathAheadOfAircraft(
       const dot = hLen > 1e-10 ? (hdx * dx + hdy * dy) / (hLen * dist) : 0;
       // Scale lever by alignment: 0 when perpendicular/behind (no loop),
       // up to 0.4 when heading straight at the aircraft (smooth arc).
-      const lever = Math.max(0, dot) * 0.4;
+      const lever =
+        Math.max(0, dot) * Math.min(0.3, 0.4 * Math.min(1, dist / 0.01));
       const ux = hLen > 1e-10 ? hdx / hLen : 0;
       const uy = hLen > 1e-10 ? hdy / hLen : 0;
       const cx = lastPt[0] + ux * dist * lever;

@@ -181,7 +181,10 @@ export function AtcWaveform({
           const intensity = Math.min(val * 1.6, 1);
           draw2d!.fillStyle = `rgba(52, 211, 153, ${0.5 + intensity * 0.5})`;
         } else {
-          draw2d!.fillStyle = "rgba(255, 255, 255, 0.1)";
+          const isDark = document.documentElement.classList.contains("dark");
+          draw2d!.fillStyle = isDark
+            ? "rgba(255, 255, 255, 0.1)"
+            : "rgba(0, 0, 0, 0.1)";
         }
         draw2d!.beginPath();
         draw2d!.roundRect(x, y, BAR_WIDTH, barH, 1);

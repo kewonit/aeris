@@ -10,6 +10,7 @@ import {
 } from "react";
 import { AnimatePresence } from "motion/react";
 import dynamic from "next/dynamic";
+import { useTheme } from "next-themes";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
@@ -103,6 +104,12 @@ function FlightTrackerInner() {
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
   const { settings, update } = useSettings();
+  const { setTheme } = useTheme();
+
+  // Sync document theme with current map style (dark/light)
+  useEffect(() => {
+    setTheme(mapStyle.dark ? "dark" : "light");
+  }, [mapStyle.dark, setTheme]);
 
   const setActiveCity = useCallback((city: City) => {
     setCityOverride(city);
@@ -437,7 +444,7 @@ function FlightTrackerInner() {
   }, []);
 
   return (
-    <main className="relative h-dvh w-screen overflow-hidden bg-black">
+    <main className="relative h-dvh w-screen overflow-hidden bg-background">
       <MapView
         mapStyle={mapStyle.style}
         terrainProfile={mapStyle.terrainProfile}
@@ -476,10 +483,7 @@ function FlightTrackerInner() {
         />
       </MapView>
 
-      <div
-        data-map-theme={mapStyle.dark ? "dark" : "light"}
-        className="pointer-events-none absolute inset-0 z-10"
-      >
+      <div className="pointer-events-none absolute inset-0 z-10">
         {!fpvIcao24 && (
           <div className="pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4">
             <Brand isDark={mapStyle.dark} />

@@ -54,13 +54,13 @@ const Thumbnail = memo(function Thumbnail({
       ref={ref}
       type="button"
       onClick={() => onClick(index)}
-      className="group relative h-20 w-32 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/8 bg-white/5 transition-all hover:border-white/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+      className="group relative h-20 w-32 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-foreground/8 bg-foreground/5 transition-all hover:border-foreground/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
       aria-label={`View photo ${index + 1}${photo.photographer ? ` by ${photo.photographer}` : ""}`}
     >
       {!loaded && (
         <span
           aria-hidden
-          className="absolute inset-0 animate-pulse bg-linear-to-br from-white/5 via-white/8 to-white/5"
+          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
         />
       )}
       {visible && (
@@ -74,7 +74,7 @@ const Thumbnail = memo(function Thumbnail({
           className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
         />
       )}
-      <span className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-inset ring-white/5 group-hover:ring-white/15" />
+      <span className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-inset ring-foreground/5 group-hover:ring-foreground/15" />
     </button>
   );
 });
@@ -129,7 +129,7 @@ export function Lightbox({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/92 backdrop-blur-2xl"
+      className="fixed inset-0 z-9999 flex items-center justify-center bg-background/92 backdrop-blur-2xl"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -138,13 +138,13 @@ export function Lightbox({
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-sm transition-all duration-200 hover:bg-white/20 hover:text-white sm:right-6 sm:top-6 sm:h-12 sm:w-12"
+        className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-foreground/10 text-foreground/80 backdrop-blur-sm transition-all duration-200 hover:bg-foreground/20 hover:text-foreground sm:right-6 sm:top-6 sm:h-12 sm:w-12"
         aria-label="Close photo viewer"
       >
         <X className="h-5 w-5 sm:h-6 sm:w-6" />
       </button>
 
-      <span className="absolute left-3 top-3 z-10 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold tabular-nums text-white/80 backdrop-blur-sm sm:left-6 sm:top-6 sm:px-5 sm:text-base">
+      <span className="absolute left-3 top-3 z-10 rounded-full bg-foreground/10 px-4 py-2 text-sm font-semibold tabular-nums text-foreground/80 backdrop-blur-sm sm:left-6 sm:top-6 sm:px-5 sm:text-base">
         {index + 1} / {photos.length}
       </span>
 
@@ -158,14 +158,14 @@ export function Lightbox({
       >
         {!loaded && !imgError && (
           <div className="flex h-48 w-72 items-center justify-center sm:h-64 sm:w-96">
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/60" />
           </div>
         )}
 
         {imgError ? (
-          <div className="flex h-48 w-72 flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 sm:h-64 sm:w-96">
-            <Camera className="h-8 w-8 text-white/20" />
-            <p className="text-sm text-white/40">Failed to load image</p>
+          <div className="flex h-48 w-72 flex-col items-center justify-center gap-3 rounded-2xl border border-foreground/10 bg-foreground/5 sm:h-64 sm:w-96">
+            <Camera className="h-8 w-8 text-foreground/20" />
+            <p className="text-sm text-foreground/40">Failed to load image</p>
           </div>
         ) : (
           <img
@@ -187,7 +187,7 @@ export function Lightbox({
               e.stopPropagation();
               goPrev();
             }}
-            className="absolute left-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white sm:left-6 sm:h-14 sm:w-14"
+            className="absolute left-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-foreground/10 text-foreground/80 backdrop-blur-sm transition-all duration-200 hover:bg-foreground/25 hover:text-foreground sm:left-6 sm:h-14 sm:w-14"
             aria-label="Previous photo"
           >
             <ChevronLeft className="h-6 w-6 sm:h-7 sm:w-7" />
@@ -198,7 +198,7 @@ export function Lightbox({
               e.stopPropagation();
               goNext();
             }}
-            className="absolute right-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white sm:right-6 sm:h-14 sm:w-14"
+            className="absolute right-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-foreground/10 text-foreground/80 backdrop-blur-sm transition-all duration-200 hover:bg-foreground/25 hover:text-foreground sm:right-6 sm:h-14 sm:w-14"
             aria-label="Next photo"
           >
             <ChevronRight className="h-6 w-6 sm:h-7 sm:w-7" />
@@ -216,34 +216,34 @@ export function Lightbox({
           transition={{ duration: 0.3, delay: 0.15 }}
           className="absolute bottom-3 left-1/2 z-10 w-[92vw] max-w-lg -translate-x-1/2 sm:bottom-8"
         >
-          <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl bg-black/60 px-5 py-3 text-sm text-white/70 backdrop-blur-sm sm:text-base">
+          <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl bg-background/60 px-5 py-3 text-sm text-foreground/70 backdrop-blur-sm sm:text-base">
             {photo.photographer && (
-              <span className="font-medium text-white/85">
+              <span className="font-medium text-foreground/85">
                 {photo.photographer}
               </span>
             )}
             {photo.photographer && photo.location && (
-              <span className="text-white/25">|</span>
+              <span className="text-foreground/25">|</span>
             )}
             {photo.location && (
-              <span className="text-white/55">{photo.location}</span>
+              <span className="text-foreground/55">{photo.location}</span>
             )}
             {(photo.photographer || photo.location) && photo.dateTaken && (
-              <span className="text-white/25">|</span>
+              <span className="text-foreground/25">|</span>
             )}
             {photo.dateTaken && (
-              <span className="text-white/45">{photo.dateTaken}</span>
+              <span className="text-foreground/45">{photo.dateTaken}</span>
             )}
             {photo.link && (
               <>
                 {(photo.photographer || photo.location || photo.dateTaken) && (
-                  <span className="text-white/25">|</span>
+                  <span className="text-foreground/25">|</span>
                 )}
                 <a
                   href={photo.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-white/40 underline decoration-white/20 underline-offset-2 transition-colors hover:text-white/60"
+                  className="text-foreground/40 underline decoration-foreground/20 underline-offset-2 transition-colors hover:text-foreground/60"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Source
@@ -323,12 +323,12 @@ export function AircraftPhotos({
   if (aircraft?.airline && !detailParts.includes(aircraft.airline)) {
     detailParts.push(aircraft.airline);
   }
-  const detailLine = detailParts.join(" · ");
+  const detailLine = detailParts.join(" Â· ");
 
   return (
     <>
       <div className="mt-3">
-        <div className="h-px bg-linear-to-r from-transparent via-white/6 to-transparent" />
+        <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
 
         <button
           type="button"
@@ -337,22 +337,22 @@ export function AircraftPhotos({
           aria-expanded={expanded}
           aria-controls="aircraft-photo-strip"
         >
-          <Camera className="h-3 w-3 text-white/25" />
-          <span className="text-[10px] font-medium tracking-wider text-white/30 uppercase">
-            {loading ? "Loading…" : hasPhotos ? "Photos" : "Aircraft"}
+          <Camera className="h-3 w-3 text-foreground/25" />
+          <span className="text-[10px] font-medium tracking-wider text-foreground/30 uppercase">
+            {loading ? "Loadingâ€¦" : hasPhotos ? "Photos" : "Aircraft"}
           </span>
           {hasPhotos && (
-            <span className="text-[10px] tabular-nums text-white/20">
+            <span className="text-[10px] tabular-nums text-foreground/20">
               ({photos.length})
             </span>
           )}
           {aircraft?.registration && (
-            <span className="ml-auto text-[10px] font-mono tracking-wider text-white/20">
+            <span className="ml-auto text-[10px] font-mono tracking-wider text-foreground/20">
               {aircraft.registration}
             </span>
           )}
           <ChevronRight
-            className={`h-2.5 w-2.5 text-white/20 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+            className={`h-2.5 w-2.5 text-foreground/20 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
           />
         </button>
 
@@ -371,7 +371,7 @@ export function AircraftPhotos({
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className="h-20 w-32 shrink-0 animate-pulse rounded-lg bg-white/5"
+                      className="h-20 w-32 shrink-0 animate-pulse rounded-lg bg-foreground/5"
                     />
                   ))}
                 </div>
@@ -395,7 +395,7 @@ export function AircraftPhotos({
                     <button
                       type="button"
                       onClick={() => setShowAllPhotos(true)}
-                      className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/8 bg-white/5 text-white/40 transition-all hover:border-white/20 hover:bg-white/8 hover:text-white/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+                      className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-foreground/8 bg-foreground/5 text-foreground/40 transition-all hover:border-foreground/20 hover:bg-foreground/8 hover:text-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
                       aria-label={`Show ${hiddenCount} more photo${hiddenCount === 1 ? "" : "s"}`}
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -408,15 +408,15 @@ export function AircraftPhotos({
               )}
 
               {!loading && !hasPhotos && hasAircraft && (
-                <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/6 bg-white/2 px-3 py-2.5">
-                  <Plane className="h-3.5 w-3.5 shrink-0 text-white/20" />
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-foreground/6 bg-foreground/2 px-3 py-2.5">
+                  <Plane className="h-3.5 w-3.5 shrink-0 text-foreground/20" />
                   <div className="min-w-0 flex-1">
                     {detailLine && (
-                      <p className="truncate text-[11px] font-medium text-white/45">
+                      <p className="truncate text-[11px] font-medium text-foreground/45">
                         {detailLine}
                       </p>
                     )}
-                    <p className="mt-0.5 flex items-center gap-1 text-[10px] text-white/25">
+                    <p className="mt-0.5 flex items-center gap-1 text-[10px] text-foreground/25">
                       <ImageOff className="h-2.5 w-2.5" />
                       No photos available
                     </p>
@@ -426,8 +426,8 @@ export function AircraftPhotos({
 
               {!loading && !hasPhotos && !hasAircraft && error && (
                 <div className="mt-2 flex items-center gap-2 px-1 py-1.5">
-                  <ImageOff className="h-3 w-3 text-white/15" />
-                  <p className="text-[10px] text-white/25">
+                  <ImageOff className="h-3 w-3 text-foreground/15" />
+                  <p className="text-[10px] text-foreground/25">
                     Could not load aircraft data
                   </p>
                 </div>
