@@ -300,7 +300,7 @@ function PanelDialog({
               </a>
               <div className="border-t border-white/3 pt-2 px-2.5">
                 <p className="text-[10px] font-medium text-white/10 tracking-wide">
-                  Powered by OpenSky Network
+                  Data from ADS-B Exchange, adsb.lol &amp; OpenSky
                 </p>
               </div>
             </div>

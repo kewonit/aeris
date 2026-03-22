@@ -496,6 +496,36 @@ function Toggle({ checked }: { checked: boolean }) {
 
 const CHANGELOG = [
   {
+    date: "Mar 22",
+    title: "3D aircraft models & smoother trails",
+    description:
+      "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code — from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15°), denser Catmull–Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
+  },
+  {
+    date: "Mar 22",
+    title: "Multi-source flight data & circuit breaker",
+    description:
+      "Switched from OpenSky-only to a 3-tier fallback: airplanes.live → adsb.lol → OpenSky. Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
+  },
+  {
+    date: "Mar 21",
+    title: "ATC feed lookup & GPU memory monitor",
+    description:
+      "New ATC lookup module — converts IATA to ICAO codes, finds nearby feeds by geographic proximity, and looks up feeds by airport or centre code. GPU memory monitor tracks WebGL resource allocations (textures, buffers, framebuffers) for debugging resource leaks.",
+  },
+  {
+    date: "Mar 20",
+    title: "Reliability & polish",
+    description:
+      "Serialised rate limiting in the flight API client. Logo cache with size limits and eviction. Registration country lookup via pre-built O(1) maps. Keyboard shortcuts focus trapping fix. SessionStorage guard for incognito mode. Airspace display toggle in map attribution. Utility functions extended with clamp().",
+  },
+  {
+    date: "Mar 13",
+    title: "Flight API client & rebase fixes",
+    description:
+      "New flight-api-client, flight-api-parsing, and flight-api-types modules. useFlights refactored to use the multi-source client — removed legacy credit management. useFlightMonitors switched to hex-based lookups. Fixed 6 files that diverged during rebase (IATA codes, globe mode ref, terrain attribution, cache eviction, OpenSky parsing).",
+  },
+  {
     date: "Mar 11",
     title: "Globe mode & aircraft photos",
     description:
@@ -544,8 +574,9 @@ export function AboutContent() {
         <div className="space-y-3 text-[13px] leading-relaxed text-white/40">
           <p>
             Live flight tracking in 3D. The planes you see are real — position
-            data comes from the OpenSky Network, updated every few seconds via
-            ADS-B receivers people run on their roofs worldwide.
+            data comes from ADS-B Exchange, adsb.lol, and OpenSky Network,
+            updated every few seconds via ADS-B receivers people run on their
+            roofs worldwide.
           </p>
           <p>
             You can search through 9,000+ airports, jump into first-person view
