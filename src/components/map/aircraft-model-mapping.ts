@@ -168,27 +168,39 @@ export function categoryToModelKey(category: number | null): AircraftModelKey {
 
 // ── TypeCode → Model Key ───────────────────────────────────────────────
 
-/** Maps ICAO type designator to a model key. Returns null for unrecognized types. */
+/**
+ * Maps ICAO type designator to a model key. Returns null for unrecognized types.
+ *
+ * Patterns checked in priority order — first match wins. This ordering
+ * prevents false positives (e.g. C919 matching bizjet C[5-9]xx, or
+ * Fokker F28 matching the fighter F-series pattern).
+ *
+ * Sources: ICAO Doc 8643 Aircraft Type Designators.
+ */
 export function typeCodeToModelKey(
   typeCode: string | null | undefined,
 ): AircraftModelKey | null {
   if (!typeCode) return null;
   const tc = typeCode.toUpperCase();
 
-  // Airbus narrow-body (A318/A319/A320/A321/A320neo/A321neo)
-  if (/^A3[12]\d/.test(tc) || /^A20N$|^A21N$/.test(tc)) return "narrowbody";
+  // ── Narrowbody airliners ─────────────────────────────────────────
+  // Airbus A318/A319/A320/A321, neo variants (A19N/A20N/A21N),
+  // Airbus A220 (BCS1/BCS3), Boeing 717, COMAC C919
+  if (/^A31[89]$|^A32\d$|^A(?:19|20|21)N$|^BCS[13]$|^B712$|^C919$/.test(tc))
+    return "narrowbody";
 
-  // Airbus wide-body twin (A330/A350)
-  if (/^A33\d$|^A35\d$/.test(tc)) return "widebody-2eng";
+  // ── Widebody twins ───────────────────────────────────────────────
+  // A300/A310, A330, A350 (incl. A35K = A350-1000)
+  if (/^A30[0-9B]$|^A310$|^A33\d$|^A35[0-9K]$/.test(tc)) return "widebody-2eng";
 
-  // Airbus A380 — dedicated model
+  // Airbus A380
   if (/^A38\d$/.test(tc)) return "a380";
 
-  // Airbus A340
+  // Airbus A340 (four-engine widebody)
   if (/^A34\d$/.test(tc)) return "widebody-4eng";
 
-  // Boeing 737 family (incl. MAX) — dedicated model
-  if (/^B73\d$|^B3[789]M$/.test(tc)) return "b737";
+  // Boeing 737 family (incl. MAX 7/8/9/10: B37M/B38M/B39M/B3XM)
+  if (/^B73\d$|^B3[789X]M$/.test(tc)) return "b737";
 
   // Boeing 757
   if (/^B75\d$/.test(tc)) return "narrowbody";
@@ -199,41 +211,73 @@ export function typeCodeToModelKey(
   // Boeing 777/787
   if (/^B77\d$|^B77[LW]$|^B78\d$|^B78X$/.test(tc)) return "widebody-2eng";
 
-  // Boeing 747
-  if (/^B74\d$|^B74F$/.test(tc)) return "widebody-4eng";
+  // Boeing 747 (incl. SP/SR letter-suffix variants)
+  if (/^B74[0-9FRSP]$/.test(tc)) return "widebody-4eng";
 
-  // Regional jets (CRJ, Embraer E-Jets, Fokker)
-  if (/^CRJ\d?$|^E[1279]\d{2}$|^F[17]0\d?$/.test(tc)) return "regional-jet";
-
-  // Turboprops (ATR, Dash-8, Saab, etc.)
-  if (/^AT[47]\d$|^DH8[A-D]?$|^SF34$|^JS[34]\d$/.test(tc)) return "turboprop";
-
-  // Business jets
+  // ── Regional jets ────────────────────────────────────────────────
+  // CRJ (incl. CRJX = CRJ-1000), Embraer E-Jets (E170/E175/E190/E195,
+  // E2: E275/E290/E295, + E75L/E75S), Fokker F28/F70/F100,
+  // BAe 146 (B461-B463), Antonov An-148/158, Sukhoi Superjet, ARJ21
   if (
-    /^GLF\d$|^CL\d{2}$|^FA\d{2}$|^LJ\d{2}$|^C[5-9]\d{2}$|^GA\d{2}$|^H25\d?$|^E[35]5\d$/.test(
+    /^CRJ[0-9X]?$|^E1[79]\d$|^E[27][79]\d$|^E75[0-9LS]$|^F(?:28|70|10\d)$|^B46[1-3]$|^A148$|^A158$|^SU95$|^AJ27$/.test(
+      tc,
+    )
+  )
+    return "regional-jet";
+
+  // ── Turboprops ───────────────────────────────────────────────────
+  // ATR, Dash-8, Saab 340/2000, Jetstream, Fokker F27/F50,
+  // Beechcraft 1900, Embraer EMB 110/120
+  if (
+    /^AT[47]\d$|^DH8[A-D]?$|^SF34$|^SB20$|^JS[34]\d$|^F(?:27|50)$|^B190$|^E1[12]0$/.test(
+      tc,
+    )
+  )
+    return "turboprop";
+
+  // ── Business jets ────────────────────────────────────────────────
+  // Gulfstream (GLF/G-series), Bombardier Global (GLEX/GL5T/GL7T),
+  // Challenger, Dassault Falcon (FA-series, F2TH, F900),
+  // Learjet, Cessna Citation (C5xx-C9xx + C25A-C), Hawker (H25x),
+  // Embraer Phenom/Legacy (E55P/E550/E545), Pilatus PC-24,
+  // HondaJet, Beechjet (BE40)
+  if (
+    /^GLF\d$|^GL[5-7][T0-9]$|^GLEX$|^G[2-7]\d{2}$|^CL[3-6]\d$|^FA\d[0-9X]$|^F2TH$|^F900$|^LJ\d{2}$|^C[5-9]\d{2}$|^C25[A-C]$|^GA\d[0-9C]$|^H25[0-9A-Z]?$|^E[35]5[0-9P]$|^E545$|^PC24$|^HDJT$|^BE40$/.test(
       tc,
     )
   )
     return "bizjet";
 
-  // Light GA aircraft (Cessna, Piper, Cirrus, Diamond, etc.)
+  // ── Light GA ─────────────────────────────────────────────────────
+  // Cessna single/twin, Piper, Cirrus, Diamond, SOCATA, Mooney, Beechcraft
   if (
     /^C[12]\d{2}$|^PA\d{2}$|^SR2\d$|^DA[24]\d$|^TB\d{2}$|^M20\d?$|^BE[3-9]\d$/.test(
       tc,
     )
-  )
+  ) {
+    // Exclude military/utility types that happen to match the Cessna pattern
+    if (/^C130$|^C212$|^C295$/.test(tc)) return null;
     return "light-prop";
+  }
 
-  // Helicopters
-  if (
-    /^H[16]\d{2}$|^EC\d{2}$|^S[67]\d$|^R[24]\d$|^AS\d{2}$|^BK\d{2}$|^B[0-4]\d{2}$|^A[12]\d{2}$/.test(
-      tc,
-    )
-  )
+  // ── Helicopters ──────────────────────────────────────────────────
+  // Airbus/Eurocopter, Sikorsky, Robinson, Aérospatiale, MBB
+  if (/^H[16]\d{2}$|^EC\d{2}$|^S[67]\d$|^R[24]\d$|^AS\d{2}$|^BK\d{2}$/.test(tc))
+    return "helicopter";
+  // Bell: B0xx-B4xx (B190 and B46x already handled in turboprop/regional)
+  if (/^B[0-4]\d{2}$/.test(tc) && !/^B19\d$|^B46\d$/.test(tc))
+    return "helicopter";
+  // AgustaWestland: A10x-A19x (A148/A158 already handled in regional)
+  if (/^A1[0-9]\d$/.test(tc) && tc !== "A148" && tc !== "A158")
     return "helicopter";
 
-  // Military fighters
-  if (/^F\d{1,2}[A-Z]?$|^EF\d|^TOR$|^MIG\d|^SU\d/.test(tc)) return "fighter";
+  // ── Military fighters ────────────────────────────────────────────
+  // F-series (Fokker F27/F28/F50 already handled in turboprop/regional)
+  if (/^F\d{1,2}[A-Z]?$/.test(tc)) return "fighter";
+  // Eurofighter, Tornado, Mikoyan
+  if (/^EF\d/.test(tc) || tc === "TOR" || /^MIG\d/.test(tc)) return "fighter";
+  // Sukhoi fighters (SU95 Superjet already handled in regional)
+  if (/^SU\d/.test(tc) && tc !== "SU95") return "fighter";
 
   return null;
 }
@@ -254,7 +298,7 @@ export function resolveModelKey(
 
 // ── Per-Aircraft Model Key Cache ───────────────────────────────────────
 //
-// Avoids re-running up to 15 regex tests per flight per frame.
+// Avoids re-running up to 20 regex tests per flight per frame.
 // Key = icao24, value = resolved model key.
 // Cache is wiped when the flight data array changes (new poll).
 

@@ -31,7 +31,7 @@ import type { FlightState } from "@/lib/opensky";
 // ---------------------------------------------------------------------------
 
 /** Number of recent live-trail points to append after the historical track. */
-const LIVE_TAIL_POINT_COUNT = 18;
+const LIVE_TAIL_POINT_COUNT = 24;
 
 /** Maximum search depth (from end) when looking for overlap between the
  *  historical track and the live tail.  Increased to account for spline
@@ -197,7 +197,7 @@ export function stitchHistoricalTrail(
       (p, i) => [p[0], p[1], smoothedAlts[i] ?? defaultAlt],
     );
 
-    const roundedWaypoints = roundSharpCorners3D(elevatedWaypoints, 20);
+    const roundedWaypoints = roundSharpCorners3D(elevatedWaypoints, 15);
     let splinedPath = catmullRomSpline3D(roundedWaypoints, 6, 28);
     splinedPath = removePathLoops(splinedPath);
 
@@ -457,8 +457,8 @@ export function stitchHistoricalTrail(
   // produces C1-continuous curvature at the merge point, eliminating the
   // visible heading kink between the smooth historical spline and the raw
   // GPS tail.
-  const JUNCTION_WINDOW_BEFORE = 20;
-  const JUNCTION_WINDOW_AFTER = 16;
+  const JUNCTION_WINDOW_BEFORE = 30;
+  const JUNCTION_WINDOW_AFTER = 24;
   const MIN_JUNCTION_WINDOW = 6;
 
   let junctionIdx = -1;
@@ -527,8 +527,8 @@ export function stitchHistoricalTrail(
         anchorBefore,
         windowPoints,
         anchorAfter,
-        2,
-        4,
+        3,
+        6,
       );
 
       // Reconstruct the full path: prefix + re-splined junction + suffix.
@@ -564,7 +564,7 @@ export function stitchHistoricalTrail(
     p[1],
     (cleaned.altitudes[i] as number) ?? 0,
   ]);
-  const rounded = roundSharpCorners3D(merged3D, 25);
+  const rounded = roundSharpCorners3D(merged3D, 15);
   const finalPath = rounded.map<[number, number]>((p) => [p[0], p[1]]);
   const finalAlts = rounded.map<number | null>((p) => p[2]);
 

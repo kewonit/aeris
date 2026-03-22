@@ -122,7 +122,7 @@ export function AtcFeedDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-[280px] overflow-hidden rounded-xl border shadow-2xl shadow-black/60 backdrop-blur-2xl sm:w-[280px] sm:max-w-none"
+          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl border shadow-2xl shadow-black/60 backdrop-blur-2xl sm:w-70 sm:max-w-none"
           style={{
             borderColor: "rgb(var(--ui-fg) / 0.08)",
             backgroundColor: "rgb(var(--ui-bg) / 0.75)",
@@ -166,7 +166,7 @@ export function AtcFeedDropdown({
               </span>
             </div>
           ) : (
-            <div className="max-h-[260px] overflow-y-auto py-1">
+            <div className="max-h-65 overflow-y-auto py-1">
               {groupedFeeds.map((group) => (
                 <div key={group.type}>
                   {group.feeds.map((feed) => {
@@ -186,8 +186,8 @@ export function AtcFeedDropdown({
                         onClick={() => handleSelectFeed(feed)}
                         className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
                           isSelected
-                            ? "bg-white/[0.06]"
-                            : "hover:bg-white/[0.03] active:bg-white/[0.06]"
+                            ? "bg-white/6"
+                            : "hover:bg-white/3 active:bg-white/6"
                         }`}
                       >
                         {/* Inline icon */}
@@ -290,7 +290,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         <button
           type="button"
           onClick={() => atc.resume()}
-          className="flex h-7 w-[52px] shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/5 active:bg-white/10"
+          className="flex h-7 w-13 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/5 active:bg-white/10"
           aria-label="Tap to start"
         >
           <Play className="h-4 w-4 text-emerald-400/80" />

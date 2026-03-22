@@ -373,7 +373,7 @@ export function buildTrailBasePath(
           Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
         ] as ElevatedPoint,
     );
-    return elevated.length >= 3 ? roundSharpCorners3D(elevated, 25) : elevated;
+    return elevated.length >= 3 ? roundSharpCorners3D(elevated, 15) : elevated;
   }
 
   // Active trails: remove GPS glitches (V-spikes), smooth positions to
@@ -381,13 +381,13 @@ export function buildTrailBasePath(
   // spline for consistent visual smoothness with historical trails.
   const spikeResult = removeSpikePoints(pathSlice, altitudeSlice);
 
-  // Pre-smooth 2D positions: 3 passes of a 0.25/0.5/0.25 kernel removes
+  // Pre-smooth 2D positions: 5 passes of a 0.25/0.5/0.25 kernel removes
   // GPS measurement jitter (~10-20m noise) while preserving the overall
   // path shape.  Without this, the interpolating Catmull-Rom spline would
   // amplify noise into visible oscillations between control points.
   let smoothedPath = spikeResult.path;
   if (smoothedPath.length >= 3) {
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 5; pass++) {
       const next: [number, number][] = [smoothedPath[0]];
       for (let i = 1; i < smoothedPath.length - 1; i++) {
         next.push([
@@ -416,12 +416,12 @@ export function buildTrailBasePath(
   ]);
 
   if (elevated.length >= 2) {
-    // Round sharp corners (>25° heading change) before spline to prevent
-    // tight arcs at genuine turns (e.g. aircraft direction changes).
-    const rounded = roundSharpCorners3D(elevated, 25);
-    // Lower density than historical (4-8 pts/seg vs 6-28) since active
-    // trail source data is already dense from 10s polling intervals.
-    return catmullRomSpline3D(rounded, 4, 8);
+    // Round sharp corners (>15° heading change) before spline to remove
+    // GPS-noise kinks and tight arcs at genuine turns.
+    const rounded = roundSharpCorners3D(elevated, 15);
+    // Moderate density (5-14 pts/seg) produces smooth curves without
+    // the point bloat that higher density would cause across 200+ trails.
+    return catmullRomSpline3D(rounded, 5, 14);
   }
   return elevated;
 }

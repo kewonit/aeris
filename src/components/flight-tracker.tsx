@@ -538,7 +538,7 @@ function FlightTrackerInner() {
         {!fpvIcao24 && (
           <AnimatePresence>
             {atc.feed && (
-              <div className="pointer-events-auto absolute left-1/2 top-14 -translate-x-1/2 sm:top-auto sm:bottom-[72px]">
+              <div className="pointer-events-auto absolute left-1/2 top-14 -translate-x-1/2 sm:top-auto sm:bottom-18">
                 <AtcPlayerBar atc={atc} onOpenFeedSelector={handleToggleAtc} />
               </div>
             )}
