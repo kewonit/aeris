@@ -14,10 +14,14 @@ function parseTrackWaypoint(raw: unknown): TrackWaypoint | null {
 
   const time =
     typeof raw[0] === "number" && Number.isFinite(raw[0]) ? raw[0] : null;
-  const latitude =
+  const rawLat =
     typeof raw[1] === "number" && Number.isFinite(raw[1]) ? raw[1] : null;
-  const longitude =
+  const rawLng =
     typeof raw[2] === "number" && Number.isFinite(raw[2]) ? raw[2] : null;
+  const latitude =
+    rawLat !== null && rawLat >= -90 && rawLat <= 90 ? rawLat : null;
+  const longitude =
+    rawLng !== null && rawLng >= -180 && rawLng <= 180 ? rawLng : null;
   const baroAltitude =
     typeof raw[3] === "number" && Number.isFinite(raw[3]) ? raw[3] : null;
   const trueTrack =

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Radio,
@@ -17,6 +17,7 @@ import { FEED_TYPE_PRIORITY } from "@/lib/atc-types";
 import { lookupAtcFeeds, findNearbyAtcFeeds } from "@/lib/atc-lookup";
 import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
+import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 
 // ── Feed helpers ───────────────────────────────────────────────────────
 
@@ -77,37 +78,7 @@ export function AtcFeedDropdown({
   onClose,
 }: AtcFeedDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close on click outside
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    }
-    // Delay to avoid closing immediately on the same click that opened it
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", handleClick);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [open, onClose]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  useDropdownDismiss(dropdownRef, open, onClose);
 
   const handleSelectFeed = useCallback(
     (feed: AtcFeed) => {

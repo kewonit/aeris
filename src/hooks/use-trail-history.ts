@@ -8,12 +8,14 @@ type Position = [lng: number, lat: number];
 type TrailPoint = {
   position: Position;
   baroAltitude: number | null;
+  timestamp: number;
 };
 
 export type TrailEntry = {
   icao24: string;
   path: Position[];
   altitudes: Array<number | null>;
+  timestamps: number[];
   baroAltitude: number | null;
   fullHistory?: boolean;
 };
@@ -30,6 +32,21 @@ const ALTITUDE_OUTLIER_BASE_METERS = 1_200;
 const ALTITUDE_OUTLIER_SCALE = 3;
 const ALTITUDE_SMOOTHING_ALPHA_TRUSTED = 0.9;
 const ALTITUDE_SMOOTHING_ALPHA_GUARDED = 0.5;
+
+/**
+ * If the interval between consecutive update() calls exceeds this value,
+ * the tab was likely hidden. Jump detection switches to a dynamic threshold
+ * based on elapsed time and per-aircraft speed to avoid destroying trails
+ * for legitimate movement during the absence.
+ */
+const RESUME_GAP_MS = 20_000;
+
+/**
+ * Conservative ceiling speed (m/s) for dynamic jump threshold when the
+ * flight's actual velocity is unknown. ~350 m/s ≈ Mach 1 — covers all
+ * commercial traffic with generous headroom.
+ */
+const MAX_REASONABLE_SPEED_MPS = 350;
 
 type AltitudeState = {
   filtered: number | null;
@@ -54,14 +71,29 @@ function synthesizeHistoricalPolls(f: FlightState): Position[] {
   const speed = f.velocity ?? 200;
   const degPerSecond = speed / 111_320;
 
+  // Perpendicular direction for GPS-like lateral jitter.
+  // Without jitter, synthetic trails are ruler-straight which looks
+  // artificial until real GPS data arrives.
+  const perpHeading = heading + Math.PI / 2;
+  const GPS_JITTER_DEG = 0.00018; // ~20 m at mid-latitudes
+
   const polls: Position[] = [];
   for (let i = HISTORICAL_BOOTSTRAP_POLLS; i >= 1; i--) {
     const tSec = HISTORICAL_BOOTSTRAP_STEP_SEC * i;
     const decay = 1 - (HISTORICAL_BOOTSTRAP_POLLS - i) * 0.08;
     const distanceDeg = Math.min(degPerSecond * tSec * decay, 0.06);
+
+    // Alternating perpendicular offset — creates a subtle S-curve that
+    // mimics real GPS measurement noise.
+    const jitterSign = i % 2 === 0 ? 1 : -1;
+    const jitter =
+      GPS_JITTER_DEG *
+      jitterSign *
+      (0.4 + (i / HISTORICAL_BOOTSTRAP_POLLS) * 0.6);
+
     polls.push([
-      lng - Math.sin(heading) * distanceDeg,
-      lat - Math.cos(heading) * distanceDeg,
+      lng - Math.sin(heading) * distanceDeg + Math.sin(perpHeading) * jitter,
+      lat - Math.cos(heading) * distanceDeg + Math.cos(perpHeading) * jitter,
     ]);
   }
   return polls;
@@ -72,6 +104,10 @@ class TrailStore {
   private altitudeStates = new Map<string, AltitudeState>();
   private seen = new Set<string>();
   private bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+  private lastUpdateTime = 0;
+  /** Cached result from the last non-empty update — returned when empty
+   *  flights would otherwise wipe all trail data. */
+  private lastResult: TrailEntry[] = [];
 
   private filterAltitude(
     id: string,
@@ -122,6 +158,25 @@ class TrailStore {
   }
 
   update(flights: FlightState[]): TrailEntry[] {
+    const now = Date.now();
+
+    // ── Guard: empty flights with existing trail data ─────────────
+    // If the flights array is empty but we already have trail data, a
+    // transient API failure likely produced the empty set. Preserve
+    // last-known trails instead of purging everything.
+    if (flights.length === 0 && this.trails.size > 0) {
+      return this.lastResult;
+    }
+
+    // ── Tab-resume awareness ──────────────────────────────────────
+    // When the gap between updates exceeds 2× the normal poll interval,
+    // the tab was probably hidden. Compute a dynamic per-flight jump
+    // threshold so legitimate movement during absence is preserved.
+    const elapsed = this.lastUpdateTime > 0 ? now - this.lastUpdateTime : 0;
+    const isResuming = elapsed > RESUME_GAP_MS;
+    const elapsedSec = elapsed / 1000;
+    this.lastUpdateTime = now;
+
     const current = new Set<string>();
     let processedFlightCount = 0;
 
@@ -130,41 +185,76 @@ class TrailStore {
       processedFlightCount += 1;
       const id = f.icao24;
       current.add(id);
+
+      let trail = this.trails.get(id);
+      const isNewEntry = !trail;
+
+      // When an aircraft appears for the first time (or returns after
+      // being absent), clear any stale altitude state. Without this,
+      // a recycled icao24 would inherit the previous aircraft's
+      // median/outlier history, clamping the new aircraft's real
+      // altitude as an outlier for several polls.
+      if (isNewEntry) {
+        this.altitudeStates.delete(id);
+      }
+
       const filteredAltitude = this.filterAltitude(id, f.baroAltitude);
 
       const pos: TrailPoint = {
         position: [f.longitude, f.latitude],
         baroAltitude: filteredAltitude,
+        timestamp: now,
       };
-      let trail = this.trails.get(id);
 
-      if (!trail) {
+      if (isNewEntry) {
         trail =
           this.bootstrapUpdatesRemaining > 0
-            ? synthesizeHistoricalPolls(f).map((position) => ({
+            ? synthesizeHistoricalPolls(f).map((position, i) => ({
                 position,
                 baroAltitude: filteredAltitude,
+                timestamp:
+                  now -
+                  (HISTORICAL_BOOTSTRAP_POLLS - i) *
+                    HISTORICAL_BOOTSTRAP_STEP_SEC *
+                    1000,
               }))
             : [];
         this.trails.set(id, trail);
       }
 
-      if (trail.length === 0) {
-        trail.push(pos);
+      // After the branch above, trail is guaranteed to be defined.
+      const t = trail!;
+
+      if (t.length === 0) {
+        t.push(pos);
         continue;
       }
 
-      const last = trail[trail.length - 1].position;
+      // ── Jump detection with tab-resume dynamic threshold ──────
+      const last = t[t.length - 1].position;
       const dx = pos.position[0] - last[0];
       const dy = pos.position[1] - last[1];
-      if (dx * dx + dy * dy > JUMP_THRESHOLD_DEG * JUMP_THRESHOLD_DEG) {
-        trail.length = 0;
+      const distSq = dx * dx + dy * dy;
+
+      let effectiveThreshold = JUMP_THRESHOLD_DEG;
+      if (isResuming) {
+        // Use per-aircraft speed if available, else conservative ceiling.
+        const speed =
+          f.velocity != null && Number.isFinite(f.velocity) && f.velocity > 0
+            ? f.velocity
+            : MAX_REASONABLE_SPEED_MPS;
+        const maxLegitMoveDeg = (speed * elapsedSec * 1.5) / 111_320;
+        effectiveThreshold = Math.max(JUMP_THRESHOLD_DEG, maxLegitMoveDeg);
+      }
+
+      if (distSq > effectiveThreshold * effectiveThreshold) {
+        t.length = 0;
         this.altitudeStates.delete(id);
       }
 
-      trail.push(pos);
-      if (trail.length > MAX_POINTS) {
-        trail.splice(0, trail.length - MAX_POINTS);
+      t.push(pos);
+      if (t.length > MAX_POINTS) {
+        t.splice(0, t.length - MAX_POINTS);
       }
     }
 
@@ -186,15 +276,19 @@ class TrailStore {
       if (trail && trail.length >= 2) {
         const path = trail.map((p) => p.position);
         const altitudes = trail.map((p) => p.baroAltitude);
+        const timestamps = trail.map((p) => p.timestamp);
 
         result.push({
           icao24: f.icao24,
           path: [...path],
           altitudes,
+          timestamps,
           baroAltitude: altitudes[altitudes.length - 1] ?? null,
         });
       }
     }
+
+    this.lastResult = result;
     return result;
   }
 }

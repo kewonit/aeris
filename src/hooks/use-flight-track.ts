@@ -13,7 +13,9 @@ const NEGATIVE_CACHE_TTL_MS = 60_000;
 const TRACK_CACHE_MAX_ENTRIES = 100;
 const SELECTION_DEBOUNCE_MS = 350;
 const FETCH_TIMEOUT_MS = 15_000;
-const RATE_LIMIT_COOLDOWN_MS = 30_000;
+const MIN_RETRY_MS = 2_000;
+const MAX_RETRY_MS = 60_000;
+const DEFAULT_RETRY_MS = 5_000;
 
 const trackCache = new Map<string, TrackCacheEntry>();
 let rateLimitedUntil = 0;
@@ -22,10 +24,23 @@ function cacheTtlMs(track: FlightTrack | null): number {
   return track ? TRACK_CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
 }
 
+function parseRetryAfter(res: Response): number {
+  const header = res.headers.get("Retry-After");
+  if (!header) return DEFAULT_RETRY_MS;
+  const sec = Number.parseFloat(header);
+  if (!Number.isFinite(sec) || sec <= 0) return DEFAULT_RETRY_MS;
+  const ms = sec * 1000;
+  return Math.max(MIN_RETRY_MS, Math.min(MAX_RETRY_MS, ms));
+}
+
 async function fetchTrace(
   hex: string,
   signal: AbortSignal,
-): Promise<{ track: FlightTrack | null; rateLimited: boolean }> {
+): Promise<{
+  track: FlightTrack | null;
+  rateLimited: boolean;
+  retryAfterMs: number;
+}> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -42,15 +57,19 @@ async function fetchTrace(
     );
 
     if (res.status === 429) {
-      return { track: null, rateLimited: true };
+      return {
+        track: null,
+        rateLimited: true,
+        retryAfterMs: parseRetryAfter(res),
+      };
     }
 
     if (!res.ok) {
-      return { track: null, rateLimited: false };
+      return { track: null, rateLimited: false, retryAfterMs: 0 };
     }
 
     const data = (await res.json()) as { track: FlightTrack | null };
-    return { track: data.track ?? null, rateLimited: false };
+    return { track: data.track ?? null, rateLimited: false, retryAfterMs: 0 };
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", onAbort);
@@ -63,13 +82,19 @@ export function useFlightTrack(
     refreshMs?: number;
     enabled?: boolean;
   },
-): { track: FlightTrack | null; loading: boolean; fetchedAtMs: number } {
+): {
+  track: FlightTrack | null;
+  loading: boolean;
+  fetchedAtMs: number;
+  rateLimited: boolean;
+} {
   const refreshMs = options?.refreshMs ?? 0;
   const enabled = options?.enabled ?? true;
 
   const [track, setTrack] = useState<FlightTrack | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchedAtMs, setFetchedAtMs] = useState(0);
+  const [rateLimited, setRateLimited] = useState(false);
 
   const requestIdRef = useRef(0);
   const activeKeyRef = useRef<string | null>(null);
@@ -105,6 +130,7 @@ export function useFlightTrack(
 
     let alive = true;
     const controller = new AbortController();
+    let retryTimer: number | null = null;
 
     async function load() {
       const now = Date.now();
@@ -131,9 +157,19 @@ export function useFlightTrack(
         const fetchedAt = Date.now();
 
         if (result.rateLimited) {
-          rateLimitedUntil = fetchedAt + RATE_LIMIT_COOLDOWN_MS;
+          rateLimitedUntil = fetchedAt + result.retryAfterMs;
+          setRateLimited(true);
+          // Schedule a one-shot retry after the cooldown so we recover
+          // automatically even without a refreshMs interval.
+          retryTimer = window.setTimeout(() => {
+            if (!alive) return;
+            setRateLimited(false);
+            void load();
+          }, result.retryAfterMs);
           return;
         }
+
+        setRateLimited(false);
 
         const nextTrack = result.track;
 
@@ -179,10 +215,11 @@ export function useFlightTrack(
       alive = false;
       controller.abort();
       window.clearTimeout(loadTimer);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
       if (interval !== null) window.clearInterval(interval);
       setLoading(false);
     };
   }, [icao24, refreshMs, enabled]);
 
-  return { track, loading, fetchedAtMs };
+  return { track, loading, fetchedAtMs, rateLimited };
 }

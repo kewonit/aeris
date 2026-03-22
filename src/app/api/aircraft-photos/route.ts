@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 const FETCH_TIMEOUT_MS = 8_000;
 const AIRPORT_DATA_TIMEOUT_MS = 5_000;
 const JETAPI_TIMEOUT_MS = 10_000;
-const HEX_REGEX = /^[0-9a-f]{6}$/i;
-const REG_REGEX = /^[A-Z0-9][-A-Z0-9]{1,6}$/i;
+const HEX_REGEX = /^[0-9a-f]{6}$/;
+const REG_REGEX = /^[A-Z0-9][-A-Z0-9]{1,6}$/;
 
 // ── Upstream types ──────────────────────────────────────────────────────────
 
@@ -101,6 +101,28 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Reject URLs with dangerous schemes (javascript:, data:, vbscript:, etc.).
+ *  Only https:// and http:// are allowed. */
+function isSafeHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** Strip unsafe URLs from a normalized photo. Returns null if
+ *  the primary url is unsafe (photo is unusable without an image). */
+function sanitizePhoto(photo: NormalizedPhoto): NormalizedPhoto | null {
+  if (!isSafeHttpUrl(photo.url)) return null;
+  return {
+    ...photo,
+    thumbnail: isSafeHttpUrl(photo.thumbnail) ? photo.thumbnail : photo.url,
+    link: photo.link && isSafeHttpUrl(photo.link) ? photo.link : null,
+  };
 }
 
 // ── Planespotters.net ───────────────────────────────────────────────────────
@@ -383,31 +405,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Priority: JetAPI (full-res, multiple) → adsbdb (full-res) →
   // airport-data (full-res) → planespotters (low-res fallback).
+  // All photos are sanitized to strip dangerous URI schemes (XSS).
   const seenUrls = new Set<string>();
   const photos: NormalizedPhoto[] = [];
 
-  for (const p of jetApiPhotos) {
-    if (!seenUrls.has(p.url)) {
-      seenUrls.add(p.url);
-      photos.push(p);
-    }
+  function addPhoto(raw: NormalizedPhoto) {
+    if (seenUrls.has(raw.url)) return;
+    const safe = sanitizePhoto(raw);
+    if (!safe) return;
+    seenUrls.add(safe.url);
+    photos.push(safe);
   }
-  if (adsbdb.photo && !seenUrls.has(adsbdb.photo.url)) {
-    seenUrls.add(adsbdb.photo.url);
-    photos.push(adsbdb.photo);
-  }
-  for (const p of airportDataPhotos) {
-    if (!seenUrls.has(p.url)) {
-      seenUrls.add(p.url);
-      photos.push(p);
-    }
-  }
-  for (const p of planespottersPhotos) {
-    if (!seenUrls.has(p.url)) {
-      seenUrls.add(p.url);
-      photos.push(p);
-    }
-  }
+
+  for (const p of jetApiPhotos) addPhoto(p);
+  if (adsbdb.photo) addPhoto(adsbdb.photo);
+  for (const p of airportDataPhotos) addPhoto(p);
+  for (const p of planespottersPhotos) addPhoto(p);
 
   const response: AircraftPhotosResponse = {
     photos,

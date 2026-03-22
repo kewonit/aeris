@@ -12,7 +12,6 @@ import {
   Shield,
   Flame,
   Eye,
-  Zap,
 } from "lucide-react";
 import {
   useSettings,
@@ -150,14 +149,6 @@ export function SettingsContent() {
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
           badge="BETA"
-        />
-
-        <SettingRow
-          icon={<Zap className="h-4 w-4" />}
-          title="Smooth animations"
-          description="Full refresh rate rendering (uses more CPU)"
-          checked={settings.smoothAnimations}
-          onChange={(v) => update("smoothAnimations", v)}
         />
 
         <div className="mx-3 my-2 h-px bg-white/4" />

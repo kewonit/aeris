@@ -50,19 +50,25 @@ export function useOrbitCamera(
       if (!map || isInteractingRef.current) return;
 
       const resumeStart = performance.now();
+      let lastTime = 0;
 
-      function tick() {
+      function tick(now: number) {
         if (!map || isInteractingRef.current) return;
         // Skip orbit rotation when tab is hidden — saves CPU and
         // prevents large bearing jumps on resume.
         if (document.hidden) {
+          lastTime = 0;
           orbitFrameRef.current = requestAnimationFrame(tick);
           return;
         }
+        const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 1 / 60;
+        lastTime = now;
+
         const resumeElapsed = performance.now() - resumeStart;
         const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
         const easeFactor = smoothstep(t);
-        const bearing = map.getBearing() + speedRef.current * easeFactor;
+        const bearing =
+          map.getBearing() + speedRef.current * easeFactor * dt * 60;
         map.setBearing(bearing % 360);
         orbitFrameRef.current = requestAnimationFrame(tick);
       }

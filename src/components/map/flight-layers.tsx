@@ -20,6 +20,7 @@ import {
   MAX_ANIM_DURATION_MS,
   TELEPORT_THRESHOLD,
   TRACK_DAMPING,
+  MLAT_POSITION_ALPHA,
   AIRCRAFT_PICK_RADIUS_PX,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
@@ -64,7 +65,6 @@ export function FlightLayers({
   showShadows,
   showAltitudeColors,
   globeMode = false,
-  smoothAnimations = false,
   fpvIcao24 = null,
   fpvPositionRef,
 }: FlightLayerProps) {
@@ -79,6 +79,9 @@ export function FlightLayers({
   const dataTimestampRef = useRef(0);
   const animDurationRef = useRef(DEFAULT_ANIM_DURATION_MS);
   const animFrameRef = useRef(0);
+  // Recent poll intervals for median smoothing — prevents event loop
+  // stalls from inflating animDuration beyond the true poll cadence.
+  const recentIntervalsRef = useRef<number[]>([]);
 
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailBasePathCacheRef = useRef(
@@ -110,6 +113,12 @@ export function FlightLayers({
   const interpArrayRef = useRef<FlightState[]>([]);
   const lastFlightsForInterpRef = useRef<FlightState[] | null>(null);
 
+  // Set on tab resume, cleared when fresh flight data arrives.
+  // While true, the RAF loop clamps rawT to 1 (no dead reckoning)
+  // so aircraft freeze at last-known positions on stale data instead
+  // of extrapolating forward on minutes-old headings.
+  const resumeSnapRef = useRef(false);
+
   // Data version increments when raw flight data changes — drives color/scale updateTriggers
   const dataVersionRef = useRef(0);
 
@@ -122,7 +131,6 @@ export function FlightLayers({
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const globeModeRef = useRef(globeMode);
-  const smoothAnimRef = useRef(smoothAnimations);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
   const fpvPosRef = useRef(fpvPositionRef);
@@ -157,7 +165,6 @@ export function FlightLayers({
     fpvPosRef.current = fpvPositionRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
-    smoothAnimRef.current = smoothAnimations;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
       prevSelectedRef.current = selectedIcao24Ref.current;
       selectionChangeTimeRef.current = performance.now();
@@ -174,7 +181,6 @@ export function FlightLayers({
     showShadows,
     showAltitudeColors,
     globeMode,
-    smoothAnimations,
     selectedIcao24,
     fpvIcao24,
     fpvPositionRef,
@@ -247,9 +253,21 @@ export function FlightLayers({
         const prev = newPrev.get(f.icao24);
         const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
         const rawAlt = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
+
+        // MLAT positions (~100m accuracy) jitter visibly compared to
+        // ADS-B (~10m). Apply EMA blending against the previous position
+        // to suppress the noise while tracking real movement.
+        const isMLAT = f.positionSource === 1;
+        let lng = f.longitude;
+        let lat = f.latitude;
+        if (isMLAT && prev) {
+          lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
+          lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
+        }
+
         next.set(f.icao24, {
-          lng: f.longitude,
-          lat: f.latitude,
+          lng,
+          lat,
           alt: rawAlt,
           track:
             prev != null
@@ -261,12 +279,24 @@ export function FlightLayers({
     currSnapshotsRef.current = next;
     if (dataTimestampRef.current > 0) {
       const observedInterval = now - dataTimestampRef.current;
+      // Use median of recent intervals to filter event-loop stalls.
+      // A single blocked tick (e.g. heavy parse of 5K aircraft) would
+      // inflate observedInterval → animDuration, making aircraft move
+      // too slowly that cycle. Median is robust to such outliers.
+      const intervals = recentIntervalsRef.current;
+      intervals.push(observedInterval);
+      if (intervals.length > 5) intervals.shift();
+      const sorted = [...intervals].sort((a, b) => a - b);
+      const medianInterval = sorted[Math.floor(sorted.length / 2)];
       animDurationRef.current = Math.max(
         MIN_ANIM_DURATION_MS,
-        Math.min(MAX_ANIM_DURATION_MS, observedInterval * 0.94),
+        Math.min(MAX_ANIM_DURATION_MS, medianInterval * 0.94),
       );
     }
     dataTimestampRef.current = now;
+    // Fresh data arrived — allow dead reckoning again (was blocked during
+    // the brief window after tab resume to prevent stale-heading extrapolation).
+    resumeSnapRef.current = false;
     // Increment data version so model layers know color/scale need recomputation
     dataVersionRef.current++;
   }, [flights]);
@@ -298,8 +328,10 @@ export function FlightLayers({
   // Stable refs for event handlers — prevents RAF loop restart when handlers change
   const handleHoverRef = useRef(handleHover);
   const handleClickRef = useRef(handleClick);
-  handleHoverRef.current = handleHover;
-  handleClickRef.current = handleClick;
+  useEffect(() => {
+    handleHoverRef.current = handleHover;
+    handleClickRef.current = handleClick;
+  }, [handleHover, handleClick]);
 
   const stableHover = useCallback(
     (info: PickingInfo<FlightState>) => handleHoverRef.current(info),
@@ -342,7 +374,7 @@ export function FlightLayers({
   useEffect(() => {
     if (!map || !isLoaded) return;
 
-    if (!overlayRef.current) {
+    function createOverlay() {
       overlayRef.current = new MapboxOverlay({
         interleaved: false,
         views: new MapView({ id: "mapbox" }) as never,
@@ -351,11 +383,47 @@ export function FlightLayers({
         _typedArrayManagerProps: { overAlloc: 1.5, poolSize: 0 },
         layers: [],
       });
-      map.addControl(overlayRef.current as unknown as maplibregl.IControl);
+      map!.addControl(overlayRef.current as unknown as maplibregl.IControl);
+    }
+
+    if (!overlayRef.current) {
+      createOverlay();
       preloadAllModels();
     }
 
+    // ── WebGL context loss recovery ──────────────────────────────
+    // Mobile devices may reclaim GPU memory when the app is backgrounded.
+    // Without explicit handling, the deck.gl overlay becomes permanently
+    // blank. We listen for context events on MapLibre's canvas and
+    // rebuild the overlay when the browser restores the context.
+    const canvas = map.getCanvas();
+
+    function onContextLost(e: Event) {
+      e.preventDefault(); // allow browser to attempt restoration
+    }
+
+    function onContextRestored() {
+      // Tear down the dead overlay and recreate with a fresh context.
+      if (overlayRef.current) {
+        try {
+          map!.removeControl(
+            overlayRef.current as unknown as maplibregl.IControl,
+          );
+          overlayRef.current.finalize();
+        } catch {
+          /* already dead */
+        }
+        overlayRef.current = null;
+      }
+      createOverlay();
+    }
+
+    canvas.addEventListener("webglcontextlost", onContextLost);
+    canvas.addEventListener("webglcontextrestored", onContextRestored);
+
     return () => {
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
       if (overlayRef.current) {
         try {
           map.removeControl(
@@ -370,9 +438,6 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
-  // Frame pacing: throttle the entire render loop to ~30fps to save CPU.
-  // Interpolation uses wall-clock time, so positions stay correct at any rate.
-  const lastSetPropsTimeRef = useRef(0);
   // Visual frame counter — increments once per rendered frame.
   // Used in updateTriggers so deck.gl recomputes attributes only when we push.
   const visualFrameRef = useRef(0);
@@ -387,30 +452,27 @@ export function FlightLayers({
   useEffect(() => {
     if (!atlasUrl) return;
 
-    // Target ~30fps for all deck.gl work (interpolation + layer construction).
-    // Aircraft positions interpolate via wall-clock time, so skipping frames
-    // doesn't cause visual jumps — same position computed regardless of rate.
-    // When smoothAnimations is on, run at native refresh rate (no throttle).
-    const THROTTLED_FRAME_MS = 33;
-
     // Hoisted constant — avoids allocating a new array every frame
     const DEFAULT_COLOR: [number, number, number, number] = [
       180, 220, 255, 200,
     ];
 
     // Snap aircraft to last-known positions on tab resume so they
-    // don't slowly slide from stale locations.
+    // don't slowly slide from stale locations.  dataTimestampRef is
+    // intentionally NOT reset — keeping it stale ensures the next
+    // data arrival triggers the stale-data guard and snaps directly
+    // to fresh positions instead of interpolating from minutes-old ones.
+    // resumeSnapRef prevents dead reckoning on stale headings during
+    // the brief window before fresh data arrives.
     function onVisibilityResume() {
       if (document.visibilityState === "visible") {
-        lastSetPropsTimeRef.current = 0;
-
         const curr = currSnapshotsRef.current;
         if (curr.size > 0) {
           prevSnapshotsRef.current = new Map(curr);
         }
-        dataTimestampRef.current = performance.now();
         animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
         lastFlightsForInterpRef.current = null;
+        resumeSnapRef.current = true;
       }
     }
     document.addEventListener("visibilitychange", onVisibilityResume);
@@ -427,18 +489,6 @@ export function FlightLayers({
       if (!overlay) return;
 
       const now = performance.now();
-
-      // ── Frame throttle (top-level) ────────────────────────────────
-      // Skip ALL work on intermediate frames. At 30fps, each render
-      // frame gets the full budget (~33ms) instead of splitting work
-      // across 60fps half-frames. This cuts CPU usage roughly in half.
-      // When smoothAnimations is enabled, skip the throttle entirely.
-      if (
-        !smoothAnimRef.current &&
-        now - lastSetPropsTimeRef.current < THROTTLED_FRAME_MS
-      )
-        return;
-      lastSetPropsTimeRef.current = now;
       visualFrameRef.current++;
 
       const currentZoom = map?.getZoom() ?? 10;
@@ -460,7 +510,12 @@ export function FlightLayers({
 
       try {
         const elapsed = performance.now() - dataTimestampRef.current;
-        const rawT = elapsed / animDurationRef.current;
+        // After tab resume, clamp rawT so aircraft freeze at last-known
+        // positions instead of dead-reckoning forward on stale headings.
+        // Cleared when fresh flight data arrives in the flights useEffect.
+        const rawT = resumeSnapRef.current
+          ? Math.min(elapsed / animDurationRef.current, 1)
+          : elapsed / animDurationRef.current;
         const tPos = Math.min(rawT, 1);
         const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 

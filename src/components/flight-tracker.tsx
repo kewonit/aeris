@@ -98,6 +98,8 @@ function FlightTrackerInner() {
     lat: number;
   } | null>(null);
 
+  const lookupAbortRef = useRef<AbortController | null>(null);
+
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
   const { settings, update } = useSettings();
@@ -115,7 +117,7 @@ function FlightTrackerInner() {
     saveMapStyle(style);
   }, []);
 
-  const { flights, loading, rateLimited, retryIn } = useFlights(
+  const { flights, loading, rateLimited, retryIn, source } = useFlights(
     activeCity,
     fpvIcao24,
     fpvSeedCenter,
@@ -204,6 +206,8 @@ function FlightTrackerInner() {
   const handleClick = useCallback(
     (info: PickingInfo<FlightState> | null) => {
       if (fpvIcao24) return;
+      lookupAbortRef.current?.abort();
+      lookupAbortRef.current = null;
       if (info?.object) {
         const icao24 = info.object.icao24.toLowerCase();
         setSelectedIcao24((prev) => (prev === icao24 ? null : icao24));
@@ -324,20 +328,31 @@ function FlightTrackerInner() {
         return true;
       }
 
-      const result = ICAO24_REGEX.test(compactQuery)
-        ? await fetchFlightByHex(compactQuery)
-        : await fetchFlightByCallsign(compactQuery);
+      // Cancel any previous pending lookup
+      lookupAbortRef.current?.abort();
+      const controller = new AbortController();
+      lookupAbortRef.current = controller;
 
-      if (!result.flight) return false;
+      try {
+        const result = ICAO24_REGEX.test(compactQuery)
+          ? await fetchFlightByHex(compactQuery, controller.signal)
+          : await fetchFlightByCallsign(compactQuery, controller.signal);
 
-      const focusCity = cityFromFlight(result.flight);
-      if (focusCity) {
-        setCityOverride(focusCity);
-        syncCityToUrl(focusCity);
+        if (controller.signal.aborted) return false;
+        if (!result.flight) return false;
+
+        const focusCity = cityFromFlight(result.flight);
+        if (focusCity) {
+          setCityOverride(focusCity);
+          syncCityToUrl(focusCity);
+        }
+
+        selectFlight(result.flight);
+        return true;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return false;
+        return false;
       }
-
-      selectFlight(result.flight);
-      return true;
     },
     [displayFlights, displayFlightMap],
   );
@@ -456,7 +471,6 @@ function FlightTrackerInner() {
           showShadows={settings.showShadows}
           showAltitudeColors={settings.showAltitudeColors}
           globeMode={settings.globeMode}
-          smoothAnimations={settings.smoothAnimations}
           fpvIcao24={fpvIcao24}
           fpvPositionRef={fpvPositionRef}
         />
@@ -515,6 +529,7 @@ function FlightTrackerInner() {
               onRandomAirport={handleRandomAirport}
               atc={atc}
               atcToggle={atcToggle}
+              source={source}
             />
           </div>
         )}

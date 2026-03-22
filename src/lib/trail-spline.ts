@@ -281,3 +281,50 @@ function linearInterpolateSegment(
   }
   return out;
 }
+
+/**
+ * Re-spline a window of points with C1 continuity at the boundaries.
+ *
+ * Unlike `catmullRomSpline3D`, which uses reflected virtual endpoints,
+ * this function uses *actual* neighbouring points as tangent anchors.
+ * This produces correct heading at the window boundaries, ideal for
+ * smoothing a junction between two separately-generated paths.
+ *
+ * @param anchorBefore  Point immediately before the window (tangent ref only)
+ * @param windowPoints  Points to re-spline (≥2, will be interpolated)
+ * @param anchorAfter   Point immediately after the window (tangent ref only)
+ */
+export function catmullRomRespline3D(
+  anchorBefore: ElevatedPoint,
+  windowPoints: ElevatedPoint[],
+  anchorAfter: ElevatedPoint,
+  minPtsPerSeg: number = 2,
+  maxPtsPerSeg: number = 4,
+): ElevatedPoint[] {
+  if (windowPoints.length < 2) return windowPoints.slice();
+
+  if (windowPoints.length === 2) {
+    // With only 2 window points, build a 4-point extended array and
+    // spline the single segment between them.
+    const extended = [
+      anchorBefore,
+      windowPoints[0],
+      windowPoints[1],
+      anchorAfter,
+    ];
+    return catmullRomSplineCore(extended, 1, 2, minPtsPerSeg, maxPtsPerSeg);
+  }
+
+  // Build extended array: anchor + window + anchor.
+  // catmullRomSplineCore uses extended[idx-1] and extended[idx+2] as
+  // neighbouring control points, so anchors naturally provide the
+  // correct tangent at the first and last window point.
+  const extended = [anchorBefore, ...windowPoints, anchorAfter];
+  return catmullRomSplineCore(
+    extended,
+    1,
+    windowPoints.length,
+    minPtsPerSeg,
+    maxPtsPerSeg,
+  );
+}

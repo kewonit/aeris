@@ -14,6 +14,7 @@ import {
 } from "@/lib/geo";
 import {
   catmullRomSpline3D,
+  catmullRomRespline3D,
   filterGroundSegments,
   smoothAltitudeProfile,
   adaptiveDownsample,
@@ -279,6 +280,9 @@ export function stitchHistoricalTrail(
     }
   }
 
+  let junctionCoord: [number, number] | null = null;
+  let tailMerged = false;
+
   // --- Step 5: Merge live tail ---
   if (liveTail && liveTail.path.length >= 2) {
     const tailCount = LIVE_TAIL_POINT_COUNT;
@@ -393,6 +397,16 @@ export function stitchHistoricalTrail(
       }
     }
 
+    // Save the junction coordinate AFTER merge strategy selection but
+    // BEFORE appending tail points.  This captures the correct boundary
+    // regardless of which strategy ran (snap, bridge, small-gap snap).
+    if (tailPath.length > 0 && resultPath.length > 0) {
+      junctionCoord = [
+        resultPath[resultPath.length - 1][0],
+        resultPath[resultPath.length - 1][1],
+      ];
+    }
+
     // Append remaining tail points (skip consecutive duplicates + near-duplicates).
     for (let i = 0; i < tailPath.length; i++) {
       const pos = tailPath[i];
@@ -406,6 +420,7 @@ export function stitchHistoricalTrail(
       }
       resultPath.push(pos);
       resultAltitudes.push(alt);
+      tailMerged = true;
     }
   }
 
@@ -436,10 +451,114 @@ export function stitchHistoricalTrail(
     return { path: [], altitudes: [], valid: false };
   }
 
-  // --- Step 8: Round sharp corners at the historical↔live junction ---
-  // The splined historical path has gentle per-point heading changes (~3-10°)
-  // so roundSharpCorners3D will ONLY add arcs where there's a significant
-  // heading discontinuity — typically at the merge junction or in the tail.
+  // --- Step 8: Smooth the historical↔live junction with localized Catmull-Rom ---
+  // Instead of just rounding sharp corners (roundSharpCorners3D), apply a
+  // full Catmull-Rom re-spline over a window around the junction.  This
+  // produces C1-continuous curvature at the merge point, eliminating the
+  // visible heading kink between the smooth historical spline and the raw
+  // GPS tail.
+  const JUNCTION_WINDOW_BEFORE = 20;
+  const JUNCTION_WINDOW_AFTER = 16;
+  const MIN_JUNCTION_WINDOW = 6;
+
+  let junctionIdx = -1;
+  if (tailMerged && junctionCoord) {
+    // Find the junction coordinate in the post-spike-removal array.
+    // Spike removal may have shifted indices, so search the full array.
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < cleaned.path.length; i++) {
+      const dx = cleaned.path[i][0] - junctionCoord[0];
+      const dy = cleaned.path[i][1] - junctionCoord[1];
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        junctionIdx = i;
+      }
+    }
+    // Only accept if the match is within a reasonable distance.
+    // 4× MERGE_SNAP_DEG² accounts for minor shifts from spike removal.
+    if (bestDist > MERGE_SNAP_DEG * MERGE_SNAP_DEG * 4) {
+      junctionIdx = -1;
+    }
+  }
+
+  if (
+    junctionIdx >= 0 &&
+    junctionIdx < cleaned.path.length - 1 &&
+    cleaned.path.length >= MIN_JUNCTION_WINDOW
+  ) {
+    const winStart = Math.max(0, junctionIdx - JUNCTION_WINDOW_BEFORE);
+    const winEnd = Math.min(
+      cleaned.path.length,
+      junctionIdx + JUNCTION_WINDOW_AFTER + 1,
+    );
+
+    if (winEnd - winStart >= MIN_JUNCTION_WINDOW) {
+      // Extract window as 3D points.
+      const windowPoints: [number, number, number][] = [];
+      for (let i = winStart; i < winEnd; i++) {
+        windowPoints.push([
+          cleaned.path[i][0],
+          cleaned.path[i][1],
+          (cleaned.altitudes[i] as number) ?? 0,
+        ]);
+      }
+
+      // Use real neighbouring points as tangent anchors for correct
+      // heading at the window boundaries.
+      const anchorBefore: [number, number, number] =
+        winStart > 0
+          ? [
+              cleaned.path[winStart - 1][0],
+              cleaned.path[winStart - 1][1],
+              (cleaned.altitudes[winStart - 1] as number) ?? 0,
+            ]
+          : windowPoints[0]; // fallback: mirror first point
+      const anchorAfter: [number, number, number] =
+        winEnd < cleaned.path.length
+          ? [
+              cleaned.path[winEnd][0],
+              cleaned.path[winEnd][1],
+              (cleaned.altitudes[winEnd] as number) ?? 0,
+            ]
+          : windowPoints[windowPoints.length - 1]; // fallback: mirror last
+
+      const resplined = catmullRomRespline3D(
+        anchorBefore,
+        windowPoints,
+        anchorAfter,
+        2,
+        4,
+      );
+
+      // Reconstruct the full path: prefix + re-splined junction + suffix.
+      const prefix3D: [number, number, number][] = [];
+      for (let i = 0; i < winStart; i++) {
+        prefix3D.push([
+          cleaned.path[i][0],
+          cleaned.path[i][1],
+          (cleaned.altitudes[i] as number) ?? 0,
+        ]);
+      }
+      const suffix3D: [number, number, number][] = [];
+      for (let i = winEnd; i < cleaned.path.length; i++) {
+        suffix3D.push([
+          cleaned.path[i][0],
+          cleaned.path[i][1],
+          (cleaned.altitudes[i] as number) ?? 0,
+        ]);
+      }
+
+      const final3D = [...prefix3D, ...resplined, ...suffix3D];
+      const finalPath = final3D.map<[number, number]>((p) => [p[0], p[1]]);
+      const finalAlts = final3D.map<number | null>((p) => p[2]);
+
+      return { path: finalPath, altitudes: finalAlts, valid: true };
+    }
+  }
+
+  // Fallback when no junction was found (no live tail, disconnect, etc.):
+  // keep sharp-corner rounding for any remaining heading discontinuities.
   const merged3D: [number, number, number][] = cleaned.path.map((p, i) => [
     p[0],
     p[1],

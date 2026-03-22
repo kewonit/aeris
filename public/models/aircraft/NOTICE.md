@@ -14,9 +14,9 @@ Models: b737
 
 All models have been optimized for web delivery:
 
-- All textures stripped (materials set to neutral unlit gray)
-- Meshes simplified to ~30% of original triangle count
-- Draco mesh compression applied
+- All textures stripped (materials set to neutral unlit white)
+- Meshes deduplicated and pruned; most models simplified
+- No Draco compression (avoids external WASM decoder dependency)
 - B737 model converted from glTF 1.0 to glTF 2.0
 
 The GPL v2 license is compatible with this project's AGPL v3 license.

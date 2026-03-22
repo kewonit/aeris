@@ -64,6 +64,12 @@ export async function fetchFlightsByBbox(
       };
     }
 
+    // Reject non-JSON responses (CloudFlare challenge pages)
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("text/html") || ct.includes("text/xml")) {
+      throw new Error("OpenSky returned non-JSON response");
+    }
+
     const payload = (await res.json()) as unknown;
     const data =
       typeof payload === "object" && payload !== null
@@ -144,6 +150,12 @@ export async function fetchFlightByIcao24(
 
     if (res.status === 429 || !res.ok) {
       return { flight: null, creditsRemaining: rateLimitInfo.creditsRemaining };
+    }
+
+    // Reject non-JSON responses (CloudFlare challenge pages)
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("text/html") || ct.includes("text/xml")) {
+      throw new Error("OpenSky returned non-JSON response");
     }
 
     const payload = (await res.json()) as unknown;

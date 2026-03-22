@@ -1,12 +1,11 @@
 /**
  * Flight API client — barrel re-export.
  *
- * 3-tier fallback chain:
- *   Tier 1: airplanes.live (direct, CORS OK)
- *   Tier 2: adsb.lol       (via proxy, no CORS)
- *   Tier 3: OpenSky        (direct, CORS OK, limited credits)
+ * 2-tier fallback chain:
+ *   Tier 1: adsb.lol       (via proxy, no CORS)
+ *   Tier 2: OpenSky        (direct, CORS OK, limited credits)
  *
- * Dev override: add ?provider=airplanes|adsb|opensky to the URL.
+ * Override: add ?provider=airplanes|adsb|opensky to the URL.
  *
  * @see https://airplanes.live/api-guide/
  * @see https://api.adsb.lol/docs
@@ -27,7 +26,11 @@ export {
   fetchFlightByHex,
   fetchFlightByCallsign,
   getProviderOverride,
+  getCircuitState,
+  resetAllCircuits,
 } from "./flight-api-client";
+
+export type { CircuitState } from "./flight-api-client";
 
 // ── Parser ─────────────────────────────────────────────────────────────
 export { parseAircraftList } from "./flight-api-parsing";

@@ -24,6 +24,10 @@ export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 export const STARTUP_TRAIL_POLLS = 3;
 export const STARTUP_TRAIL_STEP_SEC = 12;
 export const TRACK_DAMPING = 0.18;
+/** EMA alpha for MLAT position smoothing. MLAT accuracy (~100m) is 10×
+ *  worse than ADS-B (~10m), so we blend toward the previous position to
+ *  suppress jitter. 0.65 retains responsiveness while cutting noise. */
+export const MLAT_POSITION_ALPHA = 0.65;
 export const TRAIL_SMOOTHING_ITERATIONS = 3;
 export const AIRCRAFT_PX_PER_UNIT = 0.3;
 export const BASE_AIRCRAFT_SIZE = 25;
@@ -41,8 +45,8 @@ export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM;
 // LOD: switch between 3D ScenegraphLayers and 2D IconLayer.
 // Uses hysteresis to avoid flickering when hovering near the boundary.
 // Zoom in past LOD_3D_ZOOM_IN → 3D models; zoom out past LOD_3D_ZOOM_OUT → 2D icons.
-export const LOD_3D_ZOOM_IN = 7.5;
-export const LOD_3D_ZOOM_OUT = 6.5;
+export const LOD_3D_ZOOM_IN = 6.0;
+export const LOD_3D_ZOOM_OUT = 5.0;
 
 // GeoJSON globe dot layer timing
 export const GEOJSON_THROTTLE_MS = 1500;
@@ -70,7 +74,6 @@ export type FlightLayerProps = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   globeMode?: boolean;
-  smoothAnimations?: boolean;
   fpvIcao24?: string | null;
   fpvPositionRef?: MutableRefObject<{
     lng: number;

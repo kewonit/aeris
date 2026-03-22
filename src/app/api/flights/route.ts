@@ -84,6 +84,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Reject non-JSON responses (CloudFlare challenges, maintenance pages)
+    const ct = upstream.headers.get("content-type") ?? "";
+    if (ct.includes("text/html") || ct.includes("text/xml")) {
+      return NextResponse.json(
+        { error: "adsb.lol returned a non-JSON response" },
+        { status: 502, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     const data: unknown = await upstream.json();
 
     return NextResponse.json(data, {

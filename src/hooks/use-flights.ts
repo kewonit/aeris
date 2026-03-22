@@ -18,6 +18,15 @@ const VISIBILITY_RESUME_STALE_MS = 15_000;
 const FPV_POINT_RADIUS = 2;
 
 /**
+ * Number of consecutive empty API responses before we accept that the area
+ * genuinely has zero flights. Protects against transient API failures that
+ * return valid JSON with an empty aircraft list — without this guard,
+ * a single empty response would wipe all flights and trigger mass-teleport
+ * artifacts when data returns on the next poll.
+ */
+const MAX_EMPTY_STREAK = 3;
+
+/**
  * Fetches flights via readsb (Airplanes.live → adsb.lol fallback).
  * In FPV mode the query center moves with the tracked aircraft.
  * City changes are ignored while in FPV.
@@ -32,12 +41,14 @@ export function useFlights(
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
+  const [source, setSource] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const lastFetchRef = useRef(0);
+  const emptyStreakRef = useRef(0);
   const fpvCenterRef = useRef<{ lng: number; lat: number } | null>(null);
   const fpvSeedCenterRef = useRef<{ lng: number; lat: number } | null>(
     fpvSeedCenter,
@@ -154,6 +165,8 @@ export function useFlights(
           controller.signal,
         );
 
+        setSource(result.source ?? null);
+
         if (result.rateLimited) {
           setRateLimited(true);
           startCountdown(RATE_LIMIT_BACKOFF_MS);
@@ -163,6 +176,31 @@ export function useFlights(
 
         setRateLimited(false);
         clearCountdown();
+
+        // All circuits open — preserve last-known flights
+        if (result.source === "none" && result.flights.length === 0) {
+          scheduleNext(target, POLL_INTERVAL_MS);
+          return;
+        }
+
+        // ── Guard against transient empty API responses ─────────────
+        // If we previously had flights but this response is empty, it's
+        // likely a transient API failure. Keep last-known state to avoid
+        // mass-teleport artifacts when real data returns next poll.
+        if (result.flights.length === 0) {
+          emptyStreakRef.current += 1;
+          // After MAX_EMPTY_STREAK consecutive empties, accept it as
+          // genuinely empty (e.g. user panned to an empty ocean area).
+          if (emptyStreakRef.current < MAX_EMPTY_STREAK) {
+            // Preserve existing flights — schedule next poll normally.
+            lastFetchRef.current = Date.now();
+            scheduleNext(target, POLL_INTERVAL_MS);
+            return;
+          }
+        } else {
+          emptyStreakRef.current = 0;
+        }
+
         setFlights(result.flights);
         lastFetchRef.current = Date.now();
 
@@ -229,7 +267,13 @@ export function useFlights(
   }, [city, fetchData, scheduleNext, clearSchedule]);
 
   useEffect(() => {
-    if (fpvIcao24Ref.current !== null) return;
+    if (fpvIcao24Ref.current !== null) {
+      // In FPV mode, the FPV effect handles fetching. Clear any stale
+      // old-city timer that might still be pending to prevent concurrent
+      // fetches from different regions.
+      clearSchedule();
+      return;
+    }
 
     clearSchedule();
 
@@ -270,6 +314,18 @@ export function useFlights(
     }
   }, [fpvIcao24, city, clearSchedule, fetchData]);
 
+  // Trigger immediate fetch on network reconnect
+  useEffect(() => {
+    if (typeof window === "undefined" || !city) return;
+    const activeCity = city;
+    const onOnline = () => {
+      clearSchedule();
+      fetchData(activeCity);
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [city, fetchData, clearSchedule]);
+
   useEffect(() => {
     return () => {
       clearSchedule();
@@ -284,5 +340,6 @@ export function useFlights(
     error,
     rateLimited,
     retryIn,
+    source,
   };
 }

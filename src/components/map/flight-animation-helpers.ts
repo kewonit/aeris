@@ -1,12 +1,11 @@
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import {
-  snapLngToReference,
-  unwrapLngPath,
-  greatCircleIntermediate,
-  gcDistanceDeg,
-} from "@/lib/geo";
-import { roundSharpCorners2D } from "@/lib/trail-smoothing";
+  removeSpikePoints,
+  roundSharpCorners3D,
+  catmullRomSpline3D,
+} from "@/lib/trail-smoothing";
 import type { ElevatedPoint, Snapshot } from "./flight-layer-constants";
 import {
   STARTUP_TRAIL_POLLS,
@@ -22,7 +21,8 @@ export function buildStartupFallbackTrail(f: FlightState): [number, number][] {
 
   const heading =
     ((Number.isFinite(f.trueTrack) ? f.trueTrack! : 0) * Math.PI) / 180;
-  const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
+  const speed =
+    Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
   const degPerSecond = speed / 111_320;
 
   const path: [number, number][] = [];
@@ -118,15 +118,17 @@ export function smoothElevatedPath(
   if (points.length < 3 || iterations <= 0) return points;
 
   const effectiveIters =
-    points.length > 2000
-      ? Math.min(iterations, 1)
-      : points.length > 500
-        ? Math.min(iterations, 2)
-        : iterations;
+    points.length > 4000
+      ? 0
+      : points.length > 2000
+        ? Math.min(iterations, 1)
+        : points.length > 500
+          ? Math.min(iterations, 2)
+          : iterations;
 
   let current = points;
   for (let iter = 0; iter < effectiveIters; iter++) {
-    if (current.length < 3 || current.length > 8000) break;
+    if (current.length < 3 || current.length > 6000) break;
 
     const next: ElevatedPoint[] = [current[0]];
     for (let i = 0; i < current.length - 1; i++) {
@@ -147,61 +149,23 @@ export function smoothElevatedPath(
     current = next;
   }
 
+  // Absolute output cap — prevents downstream per-point processing
+  // (color mapping, altitude effects) from becoming a bottleneck.
+  const MAX_SMOOTH_OUTPUT = 6000;
+  if (current.length > MAX_SMOOTH_OUTPUT) {
+    const stride = (current.length - 1) / (MAX_SMOOTH_OUTPUT - 1);
+    const capped: ElevatedPoint[] = [];
+    for (let i = 0; i < MAX_SMOOTH_OUTPUT - 1; i++) {
+      capped.push(current[Math.round(i * stride)]);
+    }
+    capped.push(current[current.length - 1]);
+    current = capped;
+  }
+
   return current;
 }
 
-export function densifyElevatedPath(
-  points: ElevatedPoint[],
-  subdivisions: number = 2,
-): ElevatedPoint[] {
-  if (points.length < 2 || subdivisions <= 1) return points;
-
-  // Threshold in degrees above which we use great-circle interpolation
-  // instead of linear.  ~0.5° ≈ 55 km at the equator.
-  const GC_THRESHOLD_DEG = 0.4;
-
-  const out: ElevatedPoint[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    out.push(a);
-
-    const dist = gcDistanceDeg(a[0], a[1], b[0], b[1]);
-    const useGC = dist > GC_THRESHOLD_DEG;
-
-    const effectiveSubs = useGC
-      ? Math.max(subdivisions, Math.min(16, Math.ceil(dist / 0.3)))
-      : subdivisions;
-
-    for (let j = 1; j < effectiveSubs; j++) {
-      const t = j / effectiveSubs;
-      if (useGC) {
-        const [lng, lat] = greatCircleIntermediate(a[0], a[1], b[0], b[1], t);
-        const alt = a[2] + (b[2] - a[2]) * t;
-        out.push([lng, lat, alt]);
-      } else {
-        out.push([
-          a[0] + (b[0] - a[0]) * t,
-          a[1] + (b[1] - a[1]) * t,
-          a[2] + (b[2] - a[2]) * t,
-        ]);
-      }
-    }
-  }
-  out.push(points[points.length - 1]);
-  return out;
-}
-
-// ── Numeric & Planar Smoothing ─────────────────────────────────────────
-
-export function smoothNumericSeries(values: number[]): number[] {
-  if (values.length < 3) return values;
-  const out = [...values];
-  for (let i = 1; i < values.length - 1; i++) {
-    out[i] = values[i - 1] * 0.2 + values[i] * 0.6 + values[i + 1] * 0.2;
-  }
-  return out;
-}
+// ── Altitude Smoothing ─────────────────────────────────────────────────
 
 /**
  * Multi-pass altitude smoothing with a wider kernel to prevent
@@ -225,69 +189,6 @@ export function smoothAnimationAltitudes(
     result = next;
   }
   return result;
-}
-
-/** Remove points that create sharp reversals (V-spikes) in a 2D path. */
-export function removePlanarSpikes(
-  points: [number, number][],
-): [number, number][] {
-  if (points.length < 3) return points;
-
-  const keep: boolean[] = new Array(points.length).fill(true);
-  const COS_THRESHOLD = -0.5; // reject turns sharper than 120°
-
-  for (let pass = 0; pass < 2; pass++) {
-    let changed = false;
-    for (let i = 1; i < points.length - 1; i++) {
-      if (!keep[i]) continue;
-      let prevIdx = i - 1;
-      while (prevIdx >= 0 && !keep[prevIdx]) prevIdx--;
-      if (prevIdx < 0) continue;
-      let nextIdx = i + 1;
-      while (nextIdx < points.length && !keep[nextIdx]) nextIdx++;
-      if (nextIdx >= points.length) continue;
-
-      const dx1 = points[i][0] - points[prevIdx][0];
-      const dy1 = points[i][1] - points[prevIdx][1];
-      const dx2 = points[nextIdx][0] - points[i][0];
-      const dy2 = points[nextIdx][1] - points[i][1];
-      const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-      const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-      if (len1 < 1e-10 || len2 < 1e-10) continue;
-
-      const cos = (dx1 * dx2 + dy1 * dy2) / (len1 * len2);
-      if (cos < COS_THRESHOLD) {
-        keep[i] = false;
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  if (keep.every(Boolean)) return points;
-  return points.filter((_, i) => keep[i]);
-}
-
-export function smoothPlanarPath(
-  points: [number, number][],
-): [number, number][] {
-  if (points.length < 3) return points;
-
-  let current: [number, number][] = removePlanarSpikes(points);
-  current = roundSharpCorners2D(current, 15);
-
-  for (let pass = 0; pass < 6; pass++) {
-    const next = [...current];
-    for (let i = 1; i < current.length - 1; i++) {
-      next[i] = [
-        current[i - 1][0] * 0.2 + current[i][0] * 0.6 + current[i + 1][0] * 0.2,
-        current[i - 1][1] * 0.2 + current[i][1] * 0.6 + current[i + 1][1] * 0.2,
-      ];
-    }
-    current = next;
-  }
-
-  return current;
 }
 
 // ── Trail Ahead Trimming ───────────────────────────────────────────────
@@ -329,6 +230,46 @@ export function trimPathAheadOfAircraft(
   }
 
   const trimmed = points.slice(0, bestIndex + 1);
+
+  // Smooth transition: insert a quadratic Bézier arc between the trail's
+  // clip point and the aircraft. The control-point lever is scaled by
+  // heading alignment (dot product) so turning aircraft never create loops.
+  const lastPt = trimmed[trimmed.length - 1];
+  if (lastPt && trimmed.length >= 2) {
+    const prevPt = trimmed[trimmed.length - 2];
+    const hdx = lastPt[0] - prevPt[0];
+    const hdy = lastPt[1] - prevPt[1];
+    const hLen = Math.sqrt(hdx * hdx + hdy * hdy);
+    const dx = px - lastPt[0];
+    const dy = py - lastPt[1];
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 1e-7) {
+      // How aligned is trail heading → aircraft direction? [-1, 1]
+      const dot = hLen > 1e-10 ? (hdx * dx + hdy * dy) / (hLen * dist) : 0;
+      // Scale lever by alignment: 0 when perpendicular/behind (no loop),
+      // up to 0.4 when heading straight at the aircraft (smooth arc).
+      const lever = Math.max(0, dot) * 0.4;
+      const ux = hLen > 1e-10 ? hdx / hLen : 0;
+      const uy = hLen > 1e-10 ? hdy / hLen : 0;
+      const cx = lastPt[0] + ux * dist * lever;
+      const cy = lastPt[1] + uy * dist * lever;
+
+      // Insert 3 Bézier arc points between trail end and aircraft
+      for (let j = 1; j <= 3; j++) {
+        const t = j / 4;
+        const b0 = (1 - t) * (1 - t);
+        const b1 = 2 * (1 - t) * t;
+        const b2 = t * t;
+        trimmed.push([
+          b0 * lastPt[0] + b1 * cx + b2 * px,
+          b0 * lastPt[1] + b1 * cy + b2 * py,
+          lastPt[2] + (aircraft[2] - lastPt[2]) * t,
+        ]);
+      }
+    }
+  }
+
   trimmed.push([px, py, aircraft[2]]);
 
   return trimmed;
@@ -363,7 +304,6 @@ export function trailBasePathCacheKey(
 export function buildTrailBasePath(
   trail: TrailEntry,
   trailDistance: number,
-  denseSubdivisions: number,
 ): ElevatedPoint[] {
   const isFullHistory = trail.fullHistory === true;
   const historyPoints = isFullHistory
@@ -417,19 +357,73 @@ export function buildTrailBasePath(
   pathSlice = trimmed.path;
   altitudeSlice = trimmed.altitudes;
 
-  const smoothPathSlice = smoothPlanarPath(pathSlice);
+  if (isFullHistory) {
+    // The historical portion is already smooth from the Catmull-Rom
+    // spline in trail-stitching.ts, but the stitched live-tail portion
+    // is raw GPS.  Apply roundSharpCorners3D to catch remaining tight
+    // turns (approach patterns, live-tail heading kinks) without
+    // re-running the full kernel pre-smoothing or re-spline.
+    const rawAltitudes = altitudeSlice.map((a) => a ?? trail.baroAltitude ?? 0);
+    const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
+    const elevated = pathSlice.map(
+      (p, i) =>
+        [
+          p[0],
+          p[1],
+          Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
+        ] as ElevatedPoint,
+    );
+    return elevated.length >= 3 ? roundSharpCorners3D(elevated, 25) : elevated;
+  }
 
-  // Use trail.baroAltitude as fallback (not animFlight) since base path is cached
-  const rawAltitudes = altitudeSlice.map((a) => a ?? trail.baroAltitude ?? 0);
+  // Active trails: remove GPS glitches (V-spikes), smooth positions to
+  // reduce measurement noise, smooth altitudes, then apply Catmull-Rom
+  // spline for consistent visual smoothness with historical trails.
+  const spikeResult = removeSpikePoints(pathSlice, altitudeSlice);
+
+  // Pre-smooth 2D positions: 3 passes of a 0.25/0.5/0.25 kernel removes
+  // GPS measurement jitter (~10-20m noise) while preserving the overall
+  // path shape.  Without this, the interpolating Catmull-Rom spline would
+  // amplify noise into visible oscillations between control points.
+  let smoothedPath = spikeResult.path;
+  if (smoothedPath.length >= 3) {
+    for (let pass = 0; pass < 3; pass++) {
+      const next: [number, number][] = [smoothedPath[0]];
+      for (let i = 1; i < smoothedPath.length - 1; i++) {
+        next.push([
+          smoothedPath[i - 1][0] * 0.25 +
+            smoothedPath[i][0] * 0.5 +
+            smoothedPath[i + 1][0] * 0.25,
+          smoothedPath[i - 1][1] * 0.25 +
+            smoothedPath[i][1] * 0.5 +
+            smoothedPath[i + 1][1] * 0.25,
+        ]);
+      }
+      next.push(smoothedPath[smoothedPath.length - 1]);
+      smoothedPath = next;
+    }
+  }
+
+  const rawAltitudes = spikeResult.altitudes.map(
+    (a) => a ?? trail.baroAltitude ?? 0,
+  );
   const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
-  const basePath = smoothPathSlice.map((p, i) => [
+  const elevated: ElevatedPoint[] = smoothedPath.map((p, i) => [
     p[0],
     p[1],
     Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
-  ]) as ElevatedPoint[];
+  ]);
 
-  return densifyElevatedPath(basePath, denseSubdivisions);
+  if (elevated.length >= 2) {
+    // Round sharp corners (>25° heading change) before spline to prevent
+    // tight arcs at genuine turns (e.g. aircraft direction changes).
+    const rounded = roundSharpCorners3D(elevated, 25);
+    // Lower density than historical (4-8 pts/seg vs 6-28) since active
+    // trail source data is already dense from 10s polling intervals.
+    return catmullRomSpline3D(rounded, 4, 8);
+  }
+  return elevated;
 }
 
 // ── Visible Trail Point Builder (extracted from component) ─────────────
@@ -444,12 +438,16 @@ export function buildVisibleTrailPoints(
   animFlight: FlightState | undefined,
   trailDistance: number,
   smoothingIterations: number,
-  denseSubdivisions: number,
   cachedBasePath?: ElevatedPoint[],
 ): ElevatedPoint[] {
   const denseBasePath =
-    cachedBasePath ??
-    buildTrailBasePath(trail, trailDistance, denseSubdivisions);
+    cachedBasePath ?? buildTrailBasePath(trail, trailDistance);
+
+  // Skip Chaikin subdivision — the Catmull-Rom spline, roundSharpCorners3D,
+  // and Bézier head-arc already produce smooth, dense output.  Running
+  // Chaikin on top would bloat ~200 pts → ~1600 per trail per frame,
+  // causing severe lag during orbit with 100+ aircraft.
+  const skipChaikin = true;
 
   if (
     animFlight &&
@@ -466,7 +464,7 @@ export function buildVisibleTrailPoints(
     ]);
 
     const smoothed =
-      clipped.length < 4
+      skipChaikin || clipped.length < 4
         ? clipped
         : smoothElevatedPath(clipped, smoothingIterations);
 
@@ -474,7 +472,7 @@ export function buildVisibleTrailPoints(
   }
 
   const smoothed =
-    denseBasePath.length < 4
+    skipChaikin || denseBasePath.length < 4
       ? denseBasePath
       : smoothElevatedPath(denseBasePath, smoothingIterations);
 
@@ -533,7 +531,8 @@ export function computePitchByIcao(
           })()
         : 0;
 
-    const speed = Number.isFinite(f.velocity) ? f.velocity! : 0;
+    const speed =
+      Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 0;
     const verticalRate = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
     const kinematicPitch =
       speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
@@ -634,16 +633,20 @@ export function computeInterpolatedFlights(
     }
 
     const heading = (curr.track * Math.PI) / 180;
-    const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
+    const speed =
+      Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
     const extraSec = ((rawT - 1) * animDuration) / 1000;
     const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
     const moveDx = Math.sin(heading) * extraDeg;
     const moveDy = Math.cos(heading) * extraDeg;
+    // Continue climb/descent using vertical rate, capped at ±500m
+    const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
+    const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
     return {
       ...f,
       longitude: curr.lng + moveDx,
       latitude: curr.lat + moveDy,
-      baroAltitude: curr.alt,
+      baroAltitude: curr.alt + extraAlt,
       trueTrack: trackFromDelta(moveDx, moveDy, curr.track),
     };
   });
@@ -709,14 +712,17 @@ export function updateInterpolatedInPlace(
       );
     } else {
       const heading = (curr.track * Math.PI) / 180;
-      const speed = Number.isFinite(f.velocity) ? f.velocity! : 200;
+      const speed =
+        Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
       const extraSec = ((rawT - 1) * animDuration) / 1000;
       const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
       const moveDx = Math.sin(heading) * extraDeg;
       const moveDy = Math.cos(heading) * extraDeg;
+      const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
+      const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
       o.longitude = curr.lng + moveDx;
       o.latitude = curr.lat + moveDy;
-      o.baroAltitude = curr.alt;
+      o.baroAltitude = curr.alt + extraAlt;
       o.trueTrack = trackFromDelta(moveDx, moveDy, curr.track);
     }
   }

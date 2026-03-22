@@ -3,7 +3,7 @@ import type { FlightTrack, TrackWaypoint } from "@/lib/opensky-types";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const HEX_REGEX = /^[0-9a-f]{6}$/i;
+const HEX_REGEX = /^[0-9a-f]{6}$/;
 const FT_TO_M = 0.3048;
 const TRACE_TIMEOUT_MS = 10_000;
 const OPENSKY_TIMEOUT_MS = 8_000;
@@ -77,6 +77,7 @@ function parseReadsbTrace(hex: string, data: unknown): FlightTrack | null {
     const lng = typeof entry[2] === "number" ? entry[2] : null;
     if (lat === null || lng === null) continue;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
 
     const rawAlt = entry[3];
     const onGround = rawAlt === "ground";
@@ -185,10 +186,14 @@ function parseOpenSkyTrack(hex: string, data: unknown): FlightTrack | null {
 
     const time =
       typeof raw[0] === "number" && Number.isFinite(raw[0]) ? raw[0] : null;
-    const latitude =
+    const rawLat =
       typeof raw[1] === "number" && Number.isFinite(raw[1]) ? raw[1] : null;
-    const longitude =
+    const rawLng =
       typeof raw[2] === "number" && Number.isFinite(raw[2]) ? raw[2] : null;
+    const latitude =
+      rawLat !== null && rawLat >= -90 && rawLat <= 90 ? rawLat : null;
+    const longitude =
+      rawLng !== null && rawLng >= -180 && rawLng <= 180 ? rawLng : null;
     const baroAltitude =
       typeof raw[3] === "number" && Number.isFinite(raw[3]) ? raw[3] : null;
     const trueTrack =
@@ -278,6 +283,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       clearTimeout(timer);
 
       if (res.ok) {
+        // Skip non-JSON responses (CloudFlare challenges, maintenance pages)
+        const ct = res.headers.get("content-type") ?? "";
+        if (ct.includes("text/html") || ct.includes("text/xml")) continue;
+
         const data = (await res.json()) as unknown;
         const track = parseReadsbTrace(hex, data);
         if (track && track.path.length >= 2) {
@@ -317,6 +326,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (res.ok) {
+      // Reject non-JSON responses (CloudFlare challenge pages)
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("text/html") || ct.includes("text/xml")) {
+        return NextResponse.json(
+          { track: null, source: null },
+          { status: 200, headers: { "Cache-Control": "private, max-age=30" } },
+        );
+      }
+
       const data = (await res.json()) as unknown;
       const track = parseOpenSkyTrack(hex, data);
       if (track && track.path.length >= 2) {

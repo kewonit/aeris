@@ -7,7 +7,7 @@
  * - trail-cleanup.ts: Downsampling, spike removal, corner rounding, loop removal
  */
 
-export { catmullRomSpline3D } from "./trail-spline";
+export { catmullRomSpline3D, catmullRomRespline3D } from "./trail-spline";
 export type { ElevatedPoint } from "./trail-spline";
 export { smoothAltitudeProfile, filterGroundSegments } from "./trail-altitude";
 export type { WaypointLike } from "./trail-altitude";

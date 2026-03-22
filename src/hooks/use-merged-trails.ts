@@ -80,6 +80,7 @@ export function useMergedTrails(
         icao24: selectedIcao24,
         path: trackPositions,
         altitudes: trackAltitudes,
+        timestamps: [],
         baroAltitude: trackAltitudes[trackAltitudes.length - 1] ?? null,
         fullHistory: true,
       });

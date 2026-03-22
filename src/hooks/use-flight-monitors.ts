@@ -138,10 +138,16 @@ export function useFlightMonitors(
   // ── FPV miss counting ────────────────────────────────────────────
 
   const fpvMissCountRef = useRef(0);
+  const fpvActivatedAtRef = useRef(0);
   useEffect(() => {
     if (!fpvIcao24) {
       fpvMissCountRef.current = 0;
+      fpvActivatedAtRef.current = 0;
       return;
+    }
+
+    if (fpvActivatedAtRef.current === 0) {
+      fpvActivatedAtRef.current = Date.now();
     }
 
     if (fpvFlight) {
@@ -155,7 +161,11 @@ export function useFlightMonitors(
         return () => clearTimeout(timer);
       }
     } else {
-      if (!rateLimited) {
+      // Grace period: don't count misses for the first 30s after FPV
+      // activation. This allows time for city changes and initial polls
+      // to complete when entering FPV from a deep-link.
+      const elapsed = Date.now() - fpvActivatedAtRef.current;
+      if (!rateLimited && elapsed > 30_000) {
         fpvMissCountRef.current += 1;
       }
       if (fpvMissCountRef.current >= 3) {
@@ -179,21 +189,40 @@ export function useFlightMonitors(
   // ── Follow miss counting ─────────────────────────────────────────
 
   const followMissCountRef = useRef(0);
+  const followActivatedAtRef = useRef(0);
   useEffect(() => {
     if (!followIcao24) {
       followMissCountRef.current = 0;
+      followActivatedAtRef.current = 0;
       return;
     }
+
+    if (followActivatedAtRef.current === 0) {
+      followActivatedAtRef.current = Date.now();
+    }
+
     if (followFlight) {
       followMissCountRef.current = 0;
     } else {
-      followMissCountRef.current += 1;
+      // Grace period: don't count misses for the first 15s after follow
+      // activation or during rate limiting. Prevents auto-deselection
+      // during city transitions or transient API failures.
+      const elapsed = Date.now() - followActivatedAtRef.current;
+      if (!rateLimited && elapsed > 15_000) {
+        followMissCountRef.current += 1;
+      }
       if (followMissCountRef.current >= 3) {
         const timer = setTimeout(() => setFollowIcao24(null), 0);
         return () => clearTimeout(timer);
       }
     }
-  }, [followIcao24, followFlight, displayFlights, setFollowIcao24]);
+  }, [
+    followIcao24,
+    followFlight,
+    rateLimited,
+    displayFlights,
+    setFollowIcao24,
+  ]);
 
   // ── Selected flight missing timeout ──────────────────────────────
 

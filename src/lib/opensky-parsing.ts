@@ -56,8 +56,12 @@ export function parseStateRow(
     typeof rawState[0] === "string" ? rawState[0].toLowerCase() : "";
   if (!ICAO24_REGEX.test(icao24)) return null;
 
-  const longitude = isFiniteNumber(rawState[5]) ? rawState[5] : null;
-  const latitude = isFiniteNumber(rawState[6]) ? rawState[6] : null;
+  const rawLng = isFiniteNumber(rawState[5]) ? rawState[5] : null;
+  const rawLat = isFiniteNumber(rawState[6]) ? rawState[6] : null;
+  const longitude =
+    rawLng !== null && rawLng >= -180 && rawLng <= 180 ? rawLng : null;
+  const latitude =
+    rawLat !== null && rawLat >= -90 && rawLat <= 90 ? rawLat : null;
   const baroAltitude = isFiniteNumber(rawState[7]) ? rawState[7] : null;
 
   return {

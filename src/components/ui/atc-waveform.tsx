@@ -10,6 +10,45 @@ const CANVAS_H = 28;
 const MIN_BAR_H = 2.5;
 const LERP = 0.22;
 
+// ── Module-level Web Audio singleton ────────────────────────────────
+// A single AudioContext and WeakMap of captured elements survive across
+// component mounts/unmounts. This prevents:
+//   1. InvalidStateError from double-capturing the same <audio> element
+//   2. AudioContext leak (Chrome limits ~6 concurrent contexts)
+let sharedCtx: AudioContext | null = null;
+
+const capturedElements = new WeakMap<
+  HTMLAudioElement,
+  { source: MediaElementAudioSourceNode; analyser: AnalyserNode }
+>();
+
+function getOrCreateConnection(
+  audioElement: HTMLAudioElement,
+): AnalyserNode | null {
+  if (!sharedCtx || sharedCtx.state === "closed") {
+    sharedCtx = new AudioContext();
+  }
+  if (sharedCtx.state === "suspended") {
+    sharedCtx.resume().catch(() => {});
+  }
+
+  const existing = capturedElements.get(audioElement);
+  if (existing) return existing.analyser;
+
+  try {
+    const source = sharedCtx.createMediaElementSource(audioElement);
+    const analyser = sharedCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+    source.connect(analyser);
+    analyser.connect(sharedCtx.destination);
+    capturedElements.set(audioElement, { source, analyser });
+    return analyser;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build bin ranges that spread bars across the voice-relevant spectrum.
  *
@@ -53,10 +92,8 @@ export function AtcWaveform({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number>(0);
   const barsRef = useRef<number[]>(new Array(BAR_COUNT).fill(0));
-  const connectedElementRef = useRef<HTMLAudioElement | null>(null);
 
   // ── Connect to Web Audio API ──────────────────────────────────────
   useEffect(() => {
@@ -66,44 +103,15 @@ export function AtcWaveform({
       return;
     }
 
-    if (connectedElementRef.current === audioElement && analyserRef.current) {
-      return;
-    }
-
-    try {
-      let ctx = ctxRef.current;
-      if (!ctx || ctx.state === "closed") {
-        ctx = new AudioContext();
-        ctxRef.current = ctx;
-      }
-      if (ctx.state === "suspended") {
-        ctx.resume().catch(() => {});
-      }
-
-      const source = ctx.createMediaElementSource(audioElement);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.75;
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
-
-      analyserRef.current = analyser;
-      connectedElementRef.current = audioElement;
-    } catch {
-      analyserRef.current = null;
-    }
+    analyserRef.current = getOrCreateConnection(audioElement);
 
     // Resume AudioContext when tab returns from background.
-    // Once createMediaElementSource captures the audio element, the
-    // AudioContext must be running for sound to reach the speakers.
-    // Some browsers suspend it in background tabs.
     function onVisibilityResume() {
-      const ctx = ctxRef.current;
       if (
         document.visibilityState === "visible" &&
-        ctx?.state === "suspended"
+        sharedCtx?.state === "suspended"
       ) {
-        ctx.resume().catch(() => {});
+        sharedCtx.resume().catch(() => {});
       }
     }
     document.addEventListener("visibilitychange", onVisibilityResume);
@@ -125,26 +133,34 @@ export function AtcWaveform({
     canvas.height = CANVAS_H * dpr;
     draw2d.scale(dpr, dpr);
 
+    // Hoist allocations out of draw loop — only reallocate when binCount changes
+    let dataArray: Uint8Array<ArrayBuffer> | null = null;
+    let binRanges: [number, number][] | null = null;
+    let lastBinCount = 0;
+
     function draw() {
       rafRef.current = requestAnimationFrame(draw);
 
       const now = performance.now();
       const analyser = analyserRef.current;
       const binCount = analyser?.frequencyBinCount ?? 128;
-      const dataArray = new Uint8Array(binCount);
-      if (analyser) analyser.getByteFrequencyData(dataArray);
 
-      const binRanges = buildBinRanges(binCount, BAR_COUNT);
+      if (binCount !== lastBinCount) {
+        dataArray = new Uint8Array(binCount) as Uint8Array<ArrayBuffer>;
+        binRanges = buildBinRanges(binCount, BAR_COUNT);
+        lastBinCount = binCount;
+      }
+      if (analyser && dataArray) analyser.getByteFrequencyData(dataArray);
 
       draw2d!.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
       for (let i = 0; i < BAR_COUNT; i++) {
         // Average frequency bins in this bar's range
-        const [startBin, endBin] = binRanges[i];
+        const [startBin, endBin] = binRanges![i];
         let sum = 0;
         const count = endBin - startBin;
         for (let b = startBin; b < endBin; b++) {
-          sum += dataArray[b];
+          sum += dataArray![b];
         }
         const raw = analyser && count > 0 ? sum / count / 255 : 0;
 

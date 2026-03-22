@@ -138,7 +138,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const handledIds = handledIdsSet ?? new Set<string>();
   handledIds.clear();
   const trailData: TrailEntry[] = [];
-  const denseSubdivisions = 2;
   const smoothingIters =
     interpolated.length > 220 ? 2 : TRAIL_SMOOTHING_ITERATIONS;
 
@@ -165,7 +164,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       if (entry && entry.key === key) {
         basePath = entry.basePath;
       } else {
-        basePath = buildTrailBasePath(trail, trailDistance, denseSubdivisions);
+        basePath = buildTrailBasePath(trail, trailDistance);
         trailBasePathCache.set(trail.icao24, { key, basePath });
       }
       activeIcaos?.add(trail.icao24);
@@ -176,7 +175,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
       animFlight,
       trailDistance,
       smoothingIters,
-      denseSubdivisions,
       basePath,
     );
     visibleTrailCache.set(trail.icao24, computed);
@@ -199,6 +197,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       altitudes: startupPath.map(
         () => existing?.baroAltitude ?? f.baroAltitude,
       ),
+      timestamps: startupPath.map(() => 0),
       baroAltitude: existing?.baroAltitude ?? f.baroAltitude,
     });
   }
@@ -276,7 +275,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       const visiblePoints = getVisibleTrailPoints(d, animFlight);
       const len = visiblePoints.length;
 
-      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}`;
+      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${d.baroAltitude != null ? Math.round(d.baroAltitude / 200) : "n"}`;
       if (trailColorCache) {
         const cached = trailColorCache.get(d.icao24);
         if (cached && cached.key === colorKey) return cached.result;

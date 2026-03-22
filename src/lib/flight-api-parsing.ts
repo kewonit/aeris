@@ -167,9 +167,11 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
   // Reject non-ICAO addresses (TIS-B, etc.)
   if (!isValidIcaoHex(raw.hex)) return null;
 
-  // Require a valid position
+  // Require a valid position within geographic bounds
   if (typeof raw.lat !== "number" || typeof raw.lon !== "number") return null;
   if (!Number.isFinite(raw.lat) || !Number.isFinite(raw.lon)) return null;
+  if (raw.lat < -90 || raw.lat > 90 || raw.lon < -180 || raw.lon > 180)
+    return null;
 
   // Filter stale positions (>60s old)
   if (typeof raw.seen_pos === "number" && raw.seen_pos > MAX_POSITION_AGE_S)
