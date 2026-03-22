@@ -1,7 +1,8 @@
 // ── Aircraft Model Mapping ─────────────────────────────────────────────
 //
 // Maps ADS-B category + ICAO typeCode → 3D model silhouette.
-// Each model key corresponds to a GLB file in public/models/aircraft/.
+// Models are Draco-compressed GLB files served from Cloudinary CDN.
+// Local backups remain in public/models/aircraft/.
 //
 // Category-based fallback assigns generic silhouettes (narrowbody, etc.).
 // TypeCode-based matching routes iconic types (A380, B737) to dedicated models.
@@ -46,21 +47,37 @@ export const ALL_MODEL_KEYS: readonly AircraftModelKey[] = [
 
 // ── URL Resolution ─────────────────────────────────────────────────────
 
-const MODEL_BASE_PATH = "/models/aircraft";
+const CLOUDINARY_CLOUD = "dfyrk32ua";
+const CLOUDINARY_FOLDER = "aeris/models/aircraft";
 
-const MODEL_VERSION = 5;
+// Per-model Cloudinary versions from upload response — ensures optimal
+// CDN cache (long-lived Cache-Control) and instant busting on re-upload.
+const MODEL_CDN_VERSIONS: Readonly<Record<string, number>> = {
+  b737: 1774203409,
+  bizjet: 1774203410,
+  fighter: 1774203411,
+  glider: 1774203411,
+  helicopter: 1774203412,
+  "light-prop": 1774203413,
+  narrowbody: 1774203413,
+  "regional-jet": 1774203414,
+  turboprop: 1774203415,
+  "widebody-2eng": 1774203416,
+  "widebody-4eng": 1774203418,
+};
 
 // A380 reuses the widebody-4eng mesh (it IS the A380 from FlightAirMap).
 // generic.glb and narrowbody.glb are identical files; drone.glb and light-prop.glb likewise.
-const MODEL_URL_OVERRIDES: Partial<Record<AircraftModelKey, string>> = {
+const MODEL_FILE_OVERRIDES: Partial<Record<AircraftModelKey, string>> = {
   a380: "widebody-4eng",
   generic: "narrowbody",
   drone: "light-prop",
 };
 
 export function modelUrl(key: AircraftModelKey): string {
-  const file = MODEL_URL_OVERRIDES[key] ?? key;
-  return `${MODEL_BASE_PATH}/${file}.glb?v=${MODEL_VERSION}`;
+  const file = MODEL_FILE_OVERRIDES[key] ?? key;
+  const version = MODEL_CDN_VERSIONS[file] ?? 1;
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/v${version}/${CLOUDINARY_FOLDER}/${file}.glb`;
 }
 
 // ── Per-Model Size Normalization ───────────────────────────────────────
