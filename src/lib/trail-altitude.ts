@@ -139,3 +139,76 @@ export function filterGroundSegments<T extends WaypointLike>(
 
   return waypoints.slice(firstAirborne, lastAirborne + 1);
 }
+
+// ---------------------------------------------------------------------------
+// Last-departure trimming
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimum consecutive ground points required to consider a sequence
+ * a genuine landing (filters out single-point GPS noise on ground).
+ */
+const MIN_GROUND_BEFORE_TAKEOFF = 2;
+
+/**
+ * Trim a historical track to the last flight leg — from the last
+ * departure airport to the current position.
+ *
+ * Scans for the last ground→airborne transition with at least
+ * `MIN_GROUND_BEFORE_TAKEOFF` consecutive ground waypoints before it
+ * (to filter GPS noise blips). Includes one ground waypoint before
+ * takeoff as a departure anchor so the trail visually starts at the
+ * airport.
+ *
+ * Falls back to `filterGroundSegments` when no multi-point ground
+ * segment is found (single-leg flight or entirely airborne trace).
+ *
+ * Edge cases handled:
+ * - All ground → returns null
+ * - Entirely airborne → returns strip of leading/trailing ground via filterGroundSegments
+ * - Single GPS ground blip → ignored (< MIN_GROUND_BEFORE_TAKEOFF)
+ * - Aircraft landed at destination → trailing ground stripped
+ * - Touch-and-go (brief ground contact) → ignored unless enough ground points
+ */
+export function trimToLastDeparture<T extends WaypointLike>(
+  waypoints: T[],
+): T[] | null {
+  if (waypoints.length < 2) {
+    return waypoints.length > 0 && !waypoints[0].onGround ? waypoints : null;
+  }
+
+  // Find the last ground→airborne transition preceded by enough ground points
+  let lastTakeoffIdx = -1;
+
+  for (let i = 1; i < waypoints.length; i++) {
+    if (!waypoints[i].onGround && waypoints[i - 1].onGround) {
+      // Count consecutive ground points before this transition
+      let groundCount = 0;
+      for (let j = i - 1; j >= 0; j--) {
+        if (waypoints[j].onGround) groundCount++;
+        else break;
+      }
+      if (groundCount >= MIN_GROUND_BEFORE_TAKEOFF) {
+        lastTakeoffIdx = i;
+      }
+    }
+  }
+
+  if (lastTakeoffIdx <= 0) {
+    // No significant takeoff found — fall back to simple ground stripping
+    return filterGroundSegments(waypoints);
+  }
+
+  // Include one ground point before takeoff as a departure airport anchor
+  const startIdx = Math.max(0, lastTakeoffIdx - 1);
+
+  // Strip trailing ground segments (destination taxi/parking)
+  let endIdx = waypoints.length - 1;
+  while (endIdx > startIdx && waypoints[endIdx].onGround) {
+    endIdx--;
+  }
+
+  if (endIdx <= startIdx) return null;
+
+  return waypoints.slice(startIdx, endIdx + 1);
+}

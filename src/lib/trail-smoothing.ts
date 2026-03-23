@@ -9,7 +9,11 @@
 
 export { catmullRomSpline3D, catmullRomRespline3D } from "./trail-spline";
 export type { ElevatedPoint } from "./trail-spline";
-export { smoothAltitudeProfile, filterGroundSegments } from "./trail-altitude";
+export {
+  smoothAltitudeProfile,
+  filterGroundSegments,
+  trimToLastDeparture,
+} from "./trail-altitude";
 export type { WaypointLike } from "./trail-altitude";
 export {
   adaptiveDownsample,

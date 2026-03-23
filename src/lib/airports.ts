@@ -6982,7 +6982,7 @@ export const AIRPORTS: Airport[] = [
   },
   {
     iata: "BOC",
-    name: "Bocas del Toro \"Isla Colón\" International Airport",
+    name: 'Bocas del Toro "Isla Colón" International Airport',
     city: "Isla Colón",
     country: "PA",
     lat: 9.34085,
@@ -30150,7 +30150,7 @@ export const AIRPORTS: Airport[] = [
   },
   {
     iata: "KGS",
-    name: "Kos International Airport \"Ippokratis\"",
+    name: 'Kos International Airport "Ippokratis"',
     city: "Kos Island",
     country: "GR",
     lat: 36.794523,
@@ -46798,7 +46798,7 @@ export const AIRPORTS: Airport[] = [
   },
   {
     iata: "PAQ",
-    name: "Warren \"Bud\" Woods Palmer Municipal Airport",
+    name: 'Warren "Bud" Woods Palmer Municipal Airport',
     city: "Palmer",
     country: "US",
     lat: 61.594898,
@@ -51862,7 +51862,7 @@ export const AIRPORTS: Airport[] = [
   },
   {
     iata: "RHO",
-    name: "Rhodes International Airport \"Diagoras\"",
+    name: 'Rhodes International Airport "Diagoras"',
     city: "Rhodes",
     country: "GR",
     lat: 36.405399,
@@ -72550,7 +72550,6 @@ function setCachedAirportSearch(query: string, airports: Airport[]) {
   }
 }
 
-
 export function searchAirports(query: string, limit = 20): Airport[] {
   const q = query.toLowerCase().trim();
   if (!q) return [];
@@ -72575,8 +72574,7 @@ export function searchAirports(query: string, limit = 20): Airport[] {
       if (cityStart.length < limit) cityStart.push(airport);
     } else if (name.startsWith(q)) {
       if (nameStart.length < limit) nameStart.push(airport);
-    }
-    else if (city.includes(q) || name.includes(q) || country.startsWith(q))
+    } else if (city.includes(q) || name.includes(q) || country.startsWith(q))
       if (contains.length < limit) contains.push(airport);
   }
 
@@ -72627,4 +72625,50 @@ export function getMajorAirports(): Airport[] {
     (a) => a.iata && alphaIata.test(a.iata.toUpperCase()),
   );
   return _majorAirportsCache;
+}
+
+/**
+ * Find the nearest airport to a given coordinate.
+ *
+ * Uses a fast bounding-box pre-check before computing approximate
+ * Euclidean distance (latitude-aware). Accurate enough for airport
+ * matching within the specified radius.
+ *
+ * @param lat  Latitude in degrees
+ * @param lng  Longitude in degrees
+ * @param maxDistanceKm  Maximum search radius in km (default 50)
+ * @returns The nearest airport within the radius, or null
+ */
+export function findNearestAirport(
+  lat: number,
+  lng: number,
+  maxDistanceKm: number = 50,
+): Airport | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  // Rough degrees-per-km at this latitude
+  const cosLat = Math.max(0.1, Math.cos((Math.abs(lat) * Math.PI) / 180));
+  const maxDistDegLat = maxDistanceKm / 111.32;
+  const maxDistDegLng = maxDistDegLat / cosLat;
+
+  let bestAirport: Airport | null = null;
+  let bestDistSq = maxDistDegLat * maxDistDegLat;
+
+  for (const airport of AIRPORTS) {
+    // Quick bounding box pre-check
+    const dlat = airport.lat - lat;
+    if (Math.abs(dlat) > maxDistDegLat) continue;
+    const dlng = airport.lng - lng;
+    if (Math.abs(dlng) > maxDistDegLng) continue;
+
+    // Latitude-aware approximate distance
+    const scaledDlng = dlng * cosLat;
+    const distSq = dlat * dlat + scaledDlng * scaledDlng;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestAirport = airport;
+    }
+  }
+
+  return bestAirport;
 }

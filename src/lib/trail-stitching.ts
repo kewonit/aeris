@@ -15,7 +15,7 @@ import {
 import {
   catmullRomSpline3D,
   catmullRomRespline3D,
-  filterGroundSegments,
+  trimToLastDeparture,
   smoothAltitudeProfile,
   adaptiveDownsample,
   removeSpikePoints,
@@ -170,9 +170,9 @@ export function stitchHistoricalTrail(
   } else {
     // Cache miss — run full Steps 1-2 & 4 pipeline.
 
-    // --- Step 1: Filter ground segments ---
-    const airborneWaypoints = filterGroundSegments(track.path);
-    const waypoints = airborneWaypoints ?? track.path;
+    // --- Step 1: Trim to last flight leg (from last departure airport) ---
+    const trimmedWaypoints = trimToLastDeparture(track.path);
+    const waypoints = trimmedWaypoints ?? track.path;
 
     // --- Step 2: Extract and unwrap positions ---
     const rawPositions: [number, number][] = [];
