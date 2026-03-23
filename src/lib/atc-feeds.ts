@@ -6374,7 +6374,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KYKM", "tower", "Tower", "", "kykm1_twr"),
     feed("KYKM", "ground", "Ground", "", "kykm1_gnd"),
     feed("KYKM", "center", "Seattle Center (Sector 09 Low)", "", "kykm1_zse_132600"),
-    feed("KYKM", "combined", "App?Dep", "", "kykm1_app"),
+    feed("KYKM", "combined", "App/Dep", "", "kykm1_app"),
   ],
 
   // Yuma MCAS/International Airport (Yuma, Arizona, United States) — CSV verified
