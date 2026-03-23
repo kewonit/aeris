@@ -95,34 +95,37 @@ function rdpSimplify(
   return result;
 }
 
-/** Perpendicular distance from a point to a line segment (2D, using lng/lat). */
+/** Perpendicular distance from a point to a line segment (2D, using lng/lat).
+ *  Latitude-aware: scales longitude by cos(avgLat) so the distance metric
+ *  is approximately equidistant at high latitudes. */
 function perpendicularDistance(
   point: ElevatedPoint,
   lineStart: ElevatedPoint,
   lineEnd: ElevatedPoint,
 ): number {
-  const dx = lineEnd[0] - lineStart[0];
+  // Scale longitude by cos(average latitude) for accurate distance at
+  // high latitudes where 1° lng is much shorter than 1° lat.
+  const avgLat = (((point[1] + lineStart[1] + lineEnd[1]) / 3) * Math.PI) / 180;
+  const cosLat = Math.max(0.1, Math.cos(avgLat));
+
+  const dx = (lineEnd[0] - lineStart[0]) * cosLat;
   const dy = lineEnd[1] - lineStart[1];
   const denom = dx * dx + dy * dy;
 
   if (denom < 1e-12) {
-    const ex = point[0] - lineStart[0];
+    const ex = (point[0] - lineStart[0]) * cosLat;
     const ey = point[1] - lineStart[1];
     return Math.sqrt(ex * ex + ey * ey);
   }
 
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / denom,
-    ),
-  );
+  const px = (point[0] - lineStart[0]) * cosLat;
+  const py = point[1] - lineStart[1];
+  const t = Math.max(0, Math.min(1, (px * dx + py * dy) / denom));
 
-  const projX = lineStart[0] + t * dx;
-  const projY = lineStart[1] + t * dy;
-  const ex = point[0] - projX;
-  const ey = point[1] - projY;
+  const projX = t * dx;
+  const projY = t * dy;
+  const ex = px - projX;
+  const ey = py - projY;
   return Math.sqrt(ex * ex + ey * ey);
 }
 
@@ -156,8 +159,15 @@ export function removeSpikePoints(
 ): { path: [number, number][]; altitudes: Array<number | null> } {
   if (path.length < 3) return { path, altitudes };
 
+  // Pre-filter: mark points with NaN/Infinity coordinates for removal.
   const keep: boolean[] = new Array(path.length).fill(true);
   let removed = 0;
+  for (let i = 0; i < path.length; i++) {
+    if (!Number.isFinite(path[i][0]) || !Number.isFinite(path[i][1])) {
+      keep[i] = false;
+      removed++;
+    }
+  }
 
   for (let pass = 0; pass < 3; pass++) {
     let changed = false;

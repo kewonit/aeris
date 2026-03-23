@@ -10,7 +10,6 @@ import {
 } from "./flight-layer-constants";
 import {
   PULSE_PERIOD_MS,
-  RING_PERIOD_MS,
   HALO_MAPPING,
   RING_MAPPING,
 } from "./aircraft-appearance";
@@ -71,7 +70,8 @@ function limitTrailSlope(
   return pts.map((p, i) => {
     // Preserve endpoints so trail connects to aircraft and origin
     if (i === 0 || i === n - 1) return p;
-    return [p[0], p[1], Math.max(0, (fwd[i] + bwd[i]) / 2)];
+    const avg = (fwd[i] + bwd[i]) / 2;
+    return [p[0], p[1], Math.max(0, Number.isFinite(avg) ? avg : p[2])];
   });
 }
 
@@ -266,7 +266,15 @@ export function buildTrailLayers(params: TrailLayerParams) {
             ),
           ] as [number, number, number],
       );
-      const result = limitTrailSlope(raw);
+      // Final NaN defense: filter out any invalid coordinates before
+      // passing to PathLayer to prevent WebGL rendering errors.
+      const clean = raw.filter(
+        (p) =>
+          Number.isFinite(p[0]) &&
+          Number.isFinite(p[1]) &&
+          Number.isFinite(p[2]),
+      );
+      const result = limitTrailSlope(clean);
       trailPathCache?.set(d.icao24, { key: pathKey, result });
       return result;
     },
@@ -275,7 +283,9 @@ export function buildTrailLayers(params: TrailLayerParams) {
       const visiblePoints = getVisibleTrailPoints(d, animFlight);
       const len = visiblePoints.length;
 
-      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${d.baroAltitude != null ? Math.round(d.baroAltitude / 200) : "n"}`;
+      // Use floor with a 500m bucket to avoid cache key flicker at
+      // round-number boundaries (Math.round toggles at exact midpoints).
+      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${d.baroAltitude != null ? Math.floor(d.baroAltitude / 500) : "n"}`;
       if (trailColorCache) {
         const cached = trailColorCache.get(d.icao24);
         if (cached && cached.key === colorKey) return cached.result;
@@ -361,7 +371,7 @@ export function buildSelectionPulseLayers(
   }
 
   // Build stable layers for both "sel" and "prev" prefixes.
-  // Always emit all 8 IDs; use `visible` to toggle rather than omitting layers.
+  // Always emit all 4 IDs; use `visible` to toggle rather than omitting layers.
   const prefixes = ["sel", "prev"] as const;
   for (const prefix of prefixes) {
     const isSelected = prefix === "sel";
@@ -387,8 +397,11 @@ export function buildSelectionPulseLayers(
     const breath = Math.sin(breathT * Math.PI * 2);
     const softBreath = smoothStep(smoothStep((breath + 1) / 2)) * 2 - 1;
 
-    const haloSize = 90 + 10 * softBreath;
-    const haloAlpha = Math.round((22 + 10 * softBreath) * op);
+    // Subtle background glow — barely visible, provides soft ambient light.
+    // At 86px with 40% clear center: clear zone = 17px radius, well outside
+    // the largest aircraft icon (~12px radius).
+    const haloSize = 86 + 3 * softBreath;
+    const haloAlpha = Math.round((10 + 4 * softBreath) * op);
 
     layers.push(
       new IconLayer({
@@ -409,34 +422,34 @@ export function buildSelectionPulseLayers(
       }),
     );
 
-    const ringOffsets = [0, RING_PERIOD_MS / 3, (RING_PERIOD_MS * 2) / 3];
-    ringOffsets.forEach((offset, i) => {
-      const t = ((elapsed + offset) % RING_PERIOD_MS) / RING_PERIOD_MS;
-      const eased = 1 - (1 - t) ** 5;
-      const ringSize = 35 + 70 * eased;
-      const fade = 1 - t;
-      const ringAlpha = Math.round(80 * fade * fade * fade * fade * op);
+    // Single clean ring that gently breathes in size and opacity.
+    // No expansion animation — just a calm, static indicator.
+    // At 68px, ring inner edge = 0.57 * 34 = 19px — clears the aircraft.
+    const ringBreathT =
+      ((elapsed + PULSE_PERIOD_MS * 0.25) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
+    const ringBreath = Math.sin(ringBreathT * Math.PI * 2);
+    const softRingBreath = smoothStep(smoothStep((ringBreath + 1) / 2)) * 2 - 1;
+    const ringSize = 68 + 3 * softRingBreath;
+    const ringAlpha = Math.round((30 + 10 * softRingBreath) * op);
 
-      layers.push(
-        new IconLayer({
-          id: `${prefix}-ring-${i}`,
-          pickable: false,
-          visible: active && ringAlpha >= 2,
-          data,
-          opacity: globeFade,
-          getPosition: (d: { position: [number, number, number] }) =>
-            d.position,
-          getIcon: () => "ring",
-          getSize: ringSize,
-          getColor: [70, 165, 235, ringAlpha],
-          iconAtlas: ringUrl,
-          iconMapping: RING_MAPPING,
-          billboard: true,
-          sizeUnits: "pixels",
-          sizeScale: 1,
-        }),
-      );
-    });
+    layers.push(
+      new IconLayer({
+        id: `${prefix}-ring-0`,
+        pickable: false,
+        visible: active && ringAlpha >= 2,
+        data,
+        opacity: globeFade,
+        getPosition: (d: { position: [number, number, number] }) => d.position,
+        getIcon: () => "ring",
+        getSize: ringSize,
+        getColor: [70, 165, 235, ringAlpha],
+        iconAtlas: ringUrl,
+        iconMapping: RING_MAPPING,
+        billboard: true,
+        sizeUnits: "pixels",
+        sizeScale: 1,
+      }),
+    );
   }
 
   return { layers, shouldClearPrev };

@@ -691,7 +691,7 @@ export function FlightLayers({
 
         // Selection pulse layers (halo + rings) — skip entirely when
         // nothing is selected and no fade-out is in progress. Saves
-        // constructing 8 IconLayer objects + deck.gl diffing per frame.
+        // constructing 4 IconLayer objects + deck.gl diffing per frame.
         if (selectedIcao24Ref.current || prevSelectedRef.current) {
           const pulseResult = buildSelectionPulseLayers({
             selectionChangeTime: selectionChangeTimeRef.current,

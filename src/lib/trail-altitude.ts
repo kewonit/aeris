@@ -24,7 +24,8 @@ export function smoothAltitudeProfile(
   altitudes: Array<number | null>,
   defaultAlt: number,
 ): number[] {
-  const filled = fillNullAltitudes(altitudes, defaultAlt);
+  const safeDefault = Number.isFinite(defaultAlt) ? defaultAlt : 0;
+  const filled = fillNullAltitudes(altitudes, safeDefault);
 
   if (filled.length < 4) return filled;
 
@@ -33,37 +34,51 @@ export function smoothAltitudeProfile(
   for (let pass = 0; pass < 5; pass++) {
     const next = [...current];
     for (let i = 1; i < current.length - 1; i++) {
-      next[i] =
+      const val =
         current[i - 1] * 0.25 + current[i] * 0.5 + current[i + 1] * 0.25;
+      // Guard: if any input was NaN/Infinity, preserve the center value.
+      next[i] = Number.isFinite(val) ? val : current[i];
     }
     current = next;
   }
 
+  // Preserve original endpoint altitudes before rate limiting.
+  const startAlt = current[0];
+  const endAlt = current[current.length - 1];
+
   // Pass 2: Rate-of-change limiter for realistic climb/descent profiles.
-  const smoothed = [...current];
+  // Forward-then-backward passes are averaged to eliminate directional bias
+  // (without averaging, monotonic climbs would accumulate systematic error).
+  const fwd = [...current];
   for (let pass = 0; pass < 3; pass++) {
-    for (let i = 1; i < smoothed.length; i++) {
-      const delta = smoothed[i] - smoothed[i - 1];
+    for (let i = 1; i < fwd.length; i++) {
+      const delta = fwd[i] - fwd[i - 1];
       const absDelta = Math.abs(delta);
       if (absDelta > 200) {
         const softMax = 200 + (absDelta - 200) * 0.6;
-        smoothed[i] = smoothed[i - 1] + Math.sign(delta) * softMax;
-      }
-    }
-    // Reverse pass to avoid directional bias.
-    for (let i = smoothed.length - 2; i >= 0; i--) {
-      const delta = smoothed[i] - smoothed[i + 1];
-      const absDelta = Math.abs(delta);
-      if (absDelta > 200) {
-        const softMax = 200 + (absDelta - 200) * 0.6;
-        smoothed[i] = smoothed[i + 1] + Math.sign(delta) * softMax;
+        fwd[i] = fwd[i - 1] + Math.sign(delta) * softMax;
       }
     }
   }
 
-  // Blend with original to preserve endpoint altitudes.
-  smoothed[0] = current[0];
-  smoothed[smoothed.length - 1] = current[current.length - 1];
+  const bwd = [...current];
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = bwd.length - 2; i >= 0; i--) {
+      const delta = bwd[i] - bwd[i + 1];
+      const absDelta = Math.abs(delta);
+      if (absDelta > 200) {
+        const softMax = 200 + (absDelta - 200) * 0.6;
+        bwd[i] = bwd[i + 1] + Math.sign(delta) * softMax;
+      }
+    }
+  }
+
+  // Average forward and backward passes to eliminate directional bias.
+  const smoothed = current.map((_, i) => (fwd[i] + bwd[i]) / 2);
+
+  // Restore endpoint altitudes exactly.
+  smoothed[0] = startAlt;
+  smoothed[smoothed.length - 1] = endAlt;
 
   return smoothed;
 }

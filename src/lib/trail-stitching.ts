@@ -117,7 +117,10 @@ export function clearSplinedTrackCache(): void {
 function makeTrackCacheKey(track: FlightTrack): string {
   const first = track.path[0];
   const last = track.path[track.path.length - 1];
-  return `${track.icao24}|${track.startTime}|${track.endTime}|${track.path.length}|${first?.latitude?.toFixed(4)}|${last?.longitude?.toFixed(4)}`;
+  // Include both lat+lng from both endpoints for collision resistance.
+  // Previous key only used first.latitude + last.longitude, which could
+  // collide if waypoints changed at the same indices.
+  return `${track.icao24}|${track.startTime}|${track.endTime}|${track.path.length}|${first?.latitude?.toFixed(4)}|${first?.longitude?.toFixed(4)}|${last?.latitude?.toFixed(4)}|${last?.longitude?.toFixed(4)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,9 +179,19 @@ export function stitchHistoricalTrail(
     const rawAltitudes: Array<number | null> = [];
 
     for (const p of waypoints) {
-      if (p.longitude == null || p.latitude == null) continue;
+      if (
+        p.longitude == null ||
+        p.latitude == null ||
+        !Number.isFinite(p.longitude) ||
+        !Number.isFinite(p.latitude)
+      )
+        continue;
       rawPositions.push([p.longitude, p.latitude]);
-      rawAltitudes.push(p.baroAltitude ?? null);
+      rawAltitudes.push(
+        p.baroAltitude != null && Number.isFinite(p.baroAltitude)
+          ? p.baroAltitude
+          : null,
+      );
     }
 
     if (rawPositions.length < 2) {
@@ -302,6 +315,20 @@ export function stitchHistoricalTrail(
       refLng = nextLng;
     }
 
+    // Guard: if the tail's accumulated longitude drift from the reference
+    // exceeds 180°, the antimeridian crossing logic has cascaded incorrectly.
+    // Re-anchor the entire tail to the track end to prevent ±360° artifacts.
+    if (tailPath.length > 0 && resultPath.length > 0) {
+      const trackEndLng = resultPath[resultPath.length - 1][0];
+      const tailEndLng = tailPath[tailPath.length - 1][0];
+      if (Math.abs(tailEndLng - trackEndLng) > 180) {
+        const correction = Math.round((trackEndLng - tailEndLng) / 360) * 360;
+        for (let i = 0; i < tailPath.length; i++) {
+          tailPath[i] = [tailPath[i][0] + correction, tailPath[i][1]];
+        }
+      }
+    }
+
     const maxConnectGapDeg = lowAltitude
       ? MAX_GAP_LOW_ALT_DEG
       : MAX_GAP_HIGH_ALT_DEG;
@@ -380,7 +407,11 @@ export function stitchHistoricalTrail(
               resultPath.push([lng, lat]);
 
               if (lastAlt == null && firstTailAlt == null) {
-                resultAltitudes.push(null);
+                // Both altitudes unknown — use the flight's reported altitude
+                // or a reasonable default to avoid a ground-level valley
+                // between two airborne segments.
+                const fallbackAlt = flight?.baroAltitude ?? 0;
+                resultAltitudes.push(fallbackAlt);
               } else {
                 const a0 = lastAlt ?? firstTailAlt ?? 0;
                 const a1 = firstTailAlt ?? lastAlt ?? a0;
@@ -505,7 +536,9 @@ export function stitchHistoricalTrail(
       }
 
       // Use real neighbouring points as tangent anchors for correct
-      // heading at the window boundaries.
+      // heading at the window boundaries. When no neighbour is available,
+      // reflect the first/last segment to create a virtual anchor point
+      // that preserves the entry/exit tangent direction.
       const anchorBefore: [number, number, number] =
         winStart > 0
           ? [
@@ -513,7 +546,13 @@ export function stitchHistoricalTrail(
               cleaned.path[winStart - 1][1],
               (cleaned.altitudes[winStart - 1] as number) ?? 0,
             ]
-          : windowPoints[0]; // fallback: mirror first point
+          : windowPoints.length >= 2
+            ? [
+                2 * windowPoints[0][0] - windowPoints[1][0],
+                2 * windowPoints[0][1] - windowPoints[1][1],
+                2 * windowPoints[0][2] - windowPoints[1][2],
+              ]
+            : windowPoints[0];
       const anchorAfter: [number, number, number] =
         winEnd < cleaned.path.length
           ? [
@@ -521,7 +560,16 @@ export function stitchHistoricalTrail(
               cleaned.path[winEnd][1],
               (cleaned.altitudes[winEnd] as number) ?? 0,
             ]
-          : windowPoints[windowPoints.length - 1]; // fallback: mirror last
+          : windowPoints.length >= 2
+            ? [
+                2 * windowPoints[windowPoints.length - 1][0] -
+                  windowPoints[windowPoints.length - 2][0],
+                2 * windowPoints[windowPoints.length - 1][1] -
+                  windowPoints[windowPoints.length - 2][1],
+                2 * windowPoints[windowPoints.length - 1][2] -
+                  windowPoints[windowPoints.length - 2][2],
+              ]
+            : windowPoints[windowPoints.length - 1];
 
       const resplined = catmullRomRespline3D(
         anchorBefore,

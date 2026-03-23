@@ -17,6 +17,8 @@ function crKnot(ti: number, pi: ElevatedPoint, pj: ElevatedPoint): number {
   const dy = pj[1] - pi[1];
   const dz = pj[2] - pi[2];
   const d2 = dx * dx + dy * dy + dz * dz;
+  // Guard: NaN inputs produce NaN distances — clamp to epsilon.
+  if (!Number.isFinite(d2)) return ti + 1e-6;
   // d^alpha where alpha = 0.5 → sqrt(d) → (d^2)^0.25
   return ti + Math.pow(Math.max(d2, 1e-12), CR_ALPHA * 0.5);
 }
@@ -51,7 +53,10 @@ function crSegmentPoint(
     const A3 = safeLerp(p2, p3, t2, t3, t);
     const B1 = safeLerp(A1, A2, t0, t2, t);
     const B2 = safeLerp(A2, A3, t1, t3, t);
-    out[dim] = safeLerp(B1, B2, t1, t2, t);
+    const val = safeLerp(B1, B2, t1, t2, t);
+    // Guard against NaN from degenerate knot intervals — fall back to
+    // linear interpolation between the two segment endpoints.
+    out[dim] = Number.isFinite(val) ? val : P1[dim] + t01 * (P2[dim] - P1[dim]);
   }
   return out;
 }
@@ -71,15 +76,27 @@ function safeLerp(
 
 /**
  * Generate a virtual control point by reflecting the first/last segment.
+ * The reflection distance is clamped to prevent overshoot artifacts when
+ * the segment is very long (e.g., sparse waypoints spanning hundreds of km).
  */
 function reflectEndpoint(
   anchor: ElevatedPoint,
   neighbour: ElevatedPoint,
 ): ElevatedPoint {
+  const dx = anchor[0] - neighbour[0];
+  const dy = anchor[1] - neighbour[1];
+  const dz = anchor[2] - neighbour[2];
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // Clamp reflection distance to 1° (~111km) to prevent the virtual
+  // control point from swinging the spline too far on sparse paths.
+  const MAX_REFLECT_DEG = 1.0;
+  const scale = dist > MAX_REFLECT_DEG ? MAX_REFLECT_DEG / dist : 1.0;
+
   return [
-    2 * anchor[0] - neighbour[0],
-    2 * anchor[1] - neighbour[1],
-    2 * anchor[2] - neighbour[2],
+    anchor[0] + dx * scale,
+    anchor[1] + dy * scale,
+    anchor[2] + dz * scale,
   ];
 }
 
@@ -96,8 +113,20 @@ function segmentDensity(
 ): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const heading = Math.atan2(dx, dy);
+
+  // Latitude-aware distance: at high latitudes, 1° longitude is much
+  // shorter than 1° latitude. Scale longitude by cos(avgLat) for
+  // accurate arc-length estimation that prevents asymmetric curves near
+  // the poles.
+  const avgLatRad = ((a[1] + b[1]) * 0.5 * Math.PI) / 180;
+  const cosLat = Math.max(0.1, Math.cos(avgLatRad));
+  const scaledDx = dx * cosLat;
+  const dist = Math.sqrt(scaledDx * scaledDx + dy * dy);
+
+  // Guard: duplicate or near-duplicate points → use minimum density.
+  if (dist < 1e-9) return minPts;
+
+  const heading = Math.atan2(scaledDx, dy);
 
   let curvatureFactor = 0;
   if (prevHeading !== null) {
@@ -111,6 +140,38 @@ function segmentDensity(
   const raw =
     minPts + (maxPts - minPts) * Math.max(distFactor, curvatureFactor);
   return Math.max(minPts, Math.min(maxPts, Math.round(raw)));
+}
+
+/**
+ * Remove consecutive duplicate or near-duplicate points that cause
+ * zero-length spline segments. Also filters out NaN/Infinity coordinates.
+ */
+function deduplicatePoints(points: ElevatedPoint[]): ElevatedPoint[] {
+  if (points.length === 0) return points;
+
+  const result: ElevatedPoint[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+
+    // Filter out invalid coordinates.
+    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+    // Clamp NaN altitudes to 0 rather than dropping the point.
+    const alt = Number.isFinite(p[2]) ? p[2] : 0;
+
+    if (result.length === 0) {
+      result.push([p[0], p[1], alt]);
+      continue;
+    }
+
+    const last = result[result.length - 1];
+    const dx = p[0] - last[0];
+    const dy = p[1] - last[1];
+    // Skip near-duplicates (< ~1m apart).
+    if (dx * dx + dy * dy < 1e-10) continue;
+
+    result.push([p[0], p[1], alt]);
+  }
+  return result;
 }
 
 /**
@@ -128,6 +189,15 @@ export function catmullRomSpline3D(
   maxPtsPerSeg: number = 28,
 ): ElevatedPoint[] {
   if (points.length < 2) return points.slice();
+
+  // Remove consecutive duplicate/near-duplicate points that cause
+  // zero-length spline segments and degenerate knot values.
+  const deduped = deduplicatePoints(points);
+  if (deduped.length < 2) return deduped.slice();
+  if (deduped.length !== points.length) {
+    // Recurse with cleaned array (only triggers once).
+    return catmullRomSpline3D(deduped, minPtsPerSeg, maxPtsPerSeg);
+  }
 
   if (points.length === 2) {
     return linearInterpolateSegment(points[0], points[1], 8);
@@ -185,7 +255,10 @@ function catmullRomSplineCore(
     const idx = startIdx + i;
     const P1 = extended[idx];
     const P2 = extended[idx + 1];
-    headings.push(Math.atan2(P2[0] - P1[0], P2[1] - P1[1]));
+    // Latitude-aware heading: scale longitude delta by cos(avgLat).
+    const avgLatRad = ((P1[1] + P2[1]) * 0.5 * Math.PI) / 180;
+    const cosLat = Math.max(0.1, Math.cos(avgLatRad));
+    headings.push(Math.atan2((P2[0] - P1[0]) * cosLat, P2[1] - P1[1]));
   }
 
   for (let i = 0; i < segCount - 1; i++) {

@@ -184,7 +184,13 @@ class TrailStore {
     let processedFlightCount = 0;
 
     for (const f of flights) {
-      if (f.longitude == null || f.latitude == null) continue;
+      if (
+        f.longitude == null ||
+        f.latitude == null ||
+        !Number.isFinite(f.longitude) ||
+        !Number.isFinite(f.latitude)
+      )
+        continue;
       processedFlightCount += 1;
       const id = f.icao24;
       current.add(id);

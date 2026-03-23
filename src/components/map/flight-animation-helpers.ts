@@ -179,7 +179,14 @@ export function smoothAnimationAltitudes(
   values: number[],
   passes: number = 3,
 ): number[] {
-  if (values.length < 3 || passes <= 0) return values;
+  if (values.length < 2 || passes <= 0) return values;
+
+  // For 2 points, apply a gentle blend toward the mean to reduce the
+  // visual snap when the 3rd point arrives and full smoothing kicks in.
+  if (values.length === 2) {
+    const mean = (values[0] + values[1]) * 0.5;
+    return [values[0] * 0.85 + mean * 0.15, values[1] * 0.85 + mean * 0.15];
+  }
 
   let result = values;
   for (let p = 0; p < passes; p++) {
