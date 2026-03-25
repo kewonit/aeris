@@ -161,6 +161,13 @@ function isValidIcaoHex(hex: string): boolean {
   return !hex.startsWith("~") && ICAO_HEX_RE.test(hex);
 }
 
+// ── Optional Finite Helper ─────────────────────────────────────────────
+
+/** Returns the value if it's a finite number, otherwise null. */
+function optionalFinite(v: number | undefined): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 // ── Single Aircraft Parser ─────────────────────────────────────────────
 
 function parseRawAircraft(raw: RawAircraft): FlightState | null {
@@ -209,6 +216,32 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     category: readsbCategoryToNumber(raw.category),
     typeCode: raw.t?.trim() || null,
     registration: raw.r?.trim() || null,
+
+    // ── Avionics (readsb-only, will be undefined for OpenSky) ──────
+    ias: optionalFinite(raw.ias),
+    tas: optionalFinite(raw.tas),
+    mach: optionalFinite(raw.mach),
+    roll: optionalFinite(raw.roll),
+    trackRate: optionalFinite(raw.track_rate),
+    magHeading: optionalFinite(raw.mag_heading),
+
+    // ── Navigation intent ──────────────────────────────────────────
+    navAltitudeMcp: optionalFinite(raw.nav_altitude_mcp),
+    navAltitudeFms: optionalFinite(raw.nav_altitude_fms),
+    navHeading: optionalFinite(raw.nav_heading),
+    navQnh: optionalFinite(raw.nav_qnh),
+    navModes: raw.nav_modes && raw.nav_modes.length > 0 ? raw.nav_modes : null,
+
+    // ── Atmospheric ────────────────────────────────────────────────
+    windDirection: optionalFinite(raw.wd),
+    windSpeed: optionalFinite(raw.ws),
+    oat: optionalFinite(raw.oat),
+
+    // ── Classification ─────────────────────────────────────────────
+    dbFlags: typeof raw.dbFlags === "number" ? raw.dbFlags : null,
+    emergencyStatus:
+      raw.emergency && raw.emergency !== "none" ? raw.emergency : null,
+    typeDescription: raw.desc?.trim() || null,
   };
 }
 

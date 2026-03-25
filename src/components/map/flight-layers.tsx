@@ -32,6 +32,7 @@ import {
 import {
   categorySizeMultiplier,
   tintAircraftColor,
+  applySpecialTint,
   AIRCRAFT_ICON_MAPPING,
   getHaloUrl,
   getRingUrl,
@@ -763,7 +764,8 @@ export function FlightLayers({
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
                   : DEFAULT_COLOR;
-                return tintAircraftColor(base, d.category);
+                const catColor = tintAircraftColor(base, d.category);
+                return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
               },
               getAngle: (d) =>
                 360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),

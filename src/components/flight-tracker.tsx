@@ -16,6 +16,7 @@ import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { AirspaceLayer } from "@/components/map/airspace-layer";
+import { WeatherRadarLayer } from "@/components/map/weather-radar-layer";
 import { FlightLayers } from "@/components/map/flight-layers";
 const FlightCard = dynamic(() =>
   import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
@@ -29,6 +30,7 @@ import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
 import { AtcPlayerBar } from "@/components/ui/atc-panel";
+import { AirportInfoCard } from "@/components/ui/airport-info-card";
 import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -44,6 +46,8 @@ import { toast } from "sonner";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
+import type { Airport } from "@/lib/airports";
+import { findByIata } from "@/lib/airports";
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
 import type { PickingInfo } from "@deck.gl/core";
@@ -84,6 +88,7 @@ function FlightTrackerInner() {
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
   const [fpvIcao24, setFpvIcao24] = useState<string | null>(null);
+  const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
 
@@ -116,6 +121,9 @@ function FlightTrackerInner() {
     setSelectedIcao24(null);
     setFpvIcao24(null);
     setFollowIcao24(null);
+    // Show airport info card when navigating to an airport
+    const airport = findByIata(city.iata);
+    setSelectedAirport(airport ?? null);
     syncCityToUrl(city);
   }, []);
 
@@ -168,6 +176,11 @@ function FlightTrackerInner() {
     return displayFlightMap.get(selectedIcao24) ?? null;
   }, [selectedIcao24, displayFlightMap]);
 
+  const selectedTrail = useMemo(() => {
+    if (!selectedIcao24) return null;
+    return mergedTrails.find((t) => t.icao24 === selectedIcao24) ?? null;
+  }, [selectedIcao24, mergedTrails]);
+
   const followFlight = useMemo(() => {
     if (!followIcao24) return null;
     return displayFlightMap.get(followIcao24) ?? null;
@@ -218,6 +231,7 @@ function FlightTrackerInner() {
       if (info?.object) {
         const icao24 = info.object.icao24.toLowerCase();
         setSelectedIcao24((prev) => (prev === icao24 ? null : icao24));
+        setSelectedAirport(null);
       } else {
         setSelectedIcao24(null);
       }
@@ -467,6 +481,10 @@ function FlightTrackerInner() {
           opacity={settings.airspaceOpacity}
           showHotspots={settings.showAirspaceHotspots}
         />
+        <WeatherRadarLayer
+          visible={settings.showWeatherRadar}
+          opacity={settings.weatherRadarOpacity}
+        />
         <FlightLayers
           flights={displayFlights}
           trails={mergedTrails}
@@ -494,12 +512,19 @@ function FlightTrackerInner() {
           <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
             <FlightCard
               flight={displayFlight}
+              trail={selectedTrail}
               onClose={handleDeselectFlight}
               onToggleFpv={handleToggleFpv}
               isFpvActive={
                 fpvIcao24 !== null && fpvIcao24 === displayFlight?.icao24
               }
             />
+            {!displayFlight && selectedAirport && (
+              <AirportInfoCard
+                airport={selectedAirport}
+                onClose={() => setSelectedAirport(null)}
+              />
+            )}
           </div>
         )}
 

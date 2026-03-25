@@ -82,23 +82,43 @@ export function modelUrl(key: AircraftModelKey): string {
 
 // ── Per-Model Size Normalization ───────────────────────────────────────
 //
-// Factors normalize all models to a consistent visual base (~40 units).
-// categorySizeMultiplier in aircraft-appearance.ts adds per-category scaling.
+// Each factor combines TWO concerns:
+//
+// 1. **Mesh equalisation** — raw GLBs have wildly different coordinate
+//    scales.  The base factor brings every silhouette to a common
+//    reference size (~40 internal units).
+//
+// 2. **Realistic wingspan proportion** — a √(wingspan / 36 m) multiplier
+//    derived from real ICAO Doc 8643 representative wingspans.  Square-
+//    root compression keeps the visual range manageable (~4×) while
+//    preserving clear differentiation between light GA, business jets,
+//    narrowbodies, widebodies, and the A380.
+//
+// Representative wingspans used (metres):
+//   light-prop  11   (C172)       fighter    11   (F-16 / Eurofighter)
+//   helicopter  11   (H145 rotor) glider     18   (ASG 29)
+//   bizjet      24   (avg G550/CX)regional   25   (CRJ-900 / E175)
+//   turboprop   27   (ATR 72)     drone       5   (small UAV)
+//   narrowbody  36   (A320)       B737       36   (B737-800)
+//   widebody-2  65   (B777-300ER) widebody-4 64   (B747-400)
+//   A380        80   (A380-800)
+//
+// Formula per key:  meshEqualise × √(wingspan / 36)
 
 const MODEL_NORMALIZE: Readonly<Record<AircraftModelKey, number>> = {
-  a380: 0.42,
+  a380: 0.46,
   b737: 0.55,
   narrowbody: 1.0,
-  "widebody-2eng": 0.85,
-  "widebody-4eng": 0.42,
-  "regional-jet": 1.0,
-  "light-prop": 2.8,
-  turboprop: 0.9,
-  helicopter: 2.2,
-  bizjet: 2.2,
-  glider: 2.0,
-  fighter: 2.8,
-  drone: 2.8,
+  "widebody-2eng": 0.89,
+  "widebody-4eng": 0.44,
+  "regional-jet": 0.85,
+  "light-prop": 1.86,
+  turboprop: 0.8,
+  helicopter: 1.44,
+  bizjet: 1.73,
+  glider: 1.56,
+  fighter: 1.86,
+  drone: 1.43,
   generic: 1.0,
 };
 

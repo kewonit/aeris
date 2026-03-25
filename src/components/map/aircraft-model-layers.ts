@@ -18,10 +18,7 @@
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
-import {
-  categorySizeMultiplier,
-  tintAircraftColor,
-} from "./aircraft-appearance";
+import { tintAircraftColor, applySpecialTint } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
 import {
   AIRCRAFT_MIN_PIXELS,
@@ -77,7 +74,7 @@ export interface AircraftLayerParams {
  * between animation frames). Accessors look up interpolated positions from
  * the `interpolatedMap`. `updateTriggers` selectively recompute:
  *   - getPosition / getOrientation: every frame (via frameCounter)
- *   - getColor / getScale: only on new data (via dataVersion)
+ *   - getColor: only on new data (via dataVersion)
  *
  * This eliminates per-frame color/scale attribute recomputation for all
  * 14 layers and massively reduces GC pressure from array allocations.
@@ -155,20 +152,18 @@ export function buildAircraftModelLayers(
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
-        return tintAircraftColor(base, d.category);
+        const catColor = tintAircraftColor(base, d.category);
+        return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
       },
       scenegraph: modelUrl(modelKey),
-      getScale: (d) => {
-        const catScale = categorySizeMultiplier(d.category);
-        const s = catScale * normScale;
-        return [s, s, s];
+      getScale: () => {
+        return [normScale, normScale, normScale];
       },
       sizeScale: BASE_AIRCRAFT_SIZE,
       updateTriggers: {
         getPosition: [frameCounter, elevScale],
         getOrientation: frameCounter,
         getColor: [dataVersion, altColors],
-        getScale: dataVersion,
       },
       sizeMinPixels: AIRCRAFT_MIN_PIXELS,
       sizeMaxPixels: AIRCRAFT_MAX_PIXELS,

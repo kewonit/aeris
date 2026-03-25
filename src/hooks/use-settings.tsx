@@ -30,6 +30,8 @@ export type Settings = {
   airspaceOpacity: number;
   showAirspaceHotspots: boolean;
   showAtcPanel: boolean;
+  showWeatherRadar: boolean;
+  weatherRadarOpacity: number;
 };
 
 const TRAIL_THICKNESS_MIN = 0.5;
@@ -40,6 +42,8 @@ const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
 export const AIRSPACE_OPACITY_MAX = 1.0;
+export const WEATHER_RADAR_OPACITY_MIN = 0.15;
+export const WEATHER_RADAR_OPACITY_MAX = 0.9;
 
 function normalizeSettings(input: Settings): Settings {
   return {
@@ -63,6 +67,11 @@ function normalizeSettings(input: Settings): Settings {
       AIRSPACE_OPACITY_MIN,
       AIRSPACE_OPACITY_MAX,
     ),
+    weatherRadarOpacity: clamp(
+      input.weatherRadarOpacity,
+      WEATHER_RADAR_OPACITY_MIN,
+      WEATHER_RADAR_OPACITY_MAX,
+    ),
   };
 }
 
@@ -81,6 +90,8 @@ const DEFAULT_SETTINGS: Settings = {
   airspaceOpacity: 0.78,
   showAirspaceHotspots: false,
   showAtcPanel: false,
+  showWeatherRadar: false,
+  weatherRadarOpacity: 0.5,
 };
 
 const STORAGE_KEY = "aeris:settings";
@@ -122,7 +133,12 @@ function isValidSettings(obj: unknown): obj is Settings {
     s.airspaceOpacity >= AIRSPACE_OPACITY_MIN &&
     s.airspaceOpacity <= AIRSPACE_OPACITY_MAX &&
     typeof s.showAirspaceHotspots === "boolean" &&
-    typeof s.showAtcPanel === "boolean"
+    typeof s.showAtcPanel === "boolean" &&
+    typeof s.showWeatherRadar === "boolean" &&
+    typeof s.weatherRadarOpacity === "number" &&
+    Number.isFinite(s.weatherRadarOpacity) &&
+    s.weatherRadarOpacity >= WEATHER_RADAR_OPACITY_MIN &&
+    s.weatherRadarOpacity <= WEATHER_RADAR_OPACITY_MAX
   );
 }
 

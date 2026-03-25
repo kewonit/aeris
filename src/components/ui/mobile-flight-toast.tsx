@@ -15,6 +15,8 @@ import {
   Camera,
   ImageOff,
   Plane,
+  Shield,
+  AlertTriangle,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import type { FlightState } from "@/lib/opensky";
@@ -61,6 +63,14 @@ function squawkLabel(squawk: string): string {
   }
 }
 
+function isMilitary(dbFlags?: number | null): boolean {
+  return ((dbFlags ?? 0) & 1) !== 0;
+}
+
+function isEmergencyStatus(status?: string | null): boolean {
+  return !!status && status !== "none";
+}
+
 export function MobileFlightToast({
   flight,
   onClose,
@@ -77,7 +87,7 @@ export function MobileFlightToast({
     flight.longitude != null && flight.latitude != null && !flight.onGround;
 
   // â”€â”€ Airline logo with fallback chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const logoCandidates = airlineLogoCandidates(airline);
+  const logoCandidates = airlineLogoCandidates(airline, flight.callsign);
   const [logoIndexByAirline, setLogoIndexByAirline] = useState<
     Record<string, number>
   >({});
@@ -354,7 +364,6 @@ export function MobileFlightToast({
             <X className="h-3.5 w-3.5 text-foreground/40" />
           </button>
         </div>
-
         {/* Airline / model */}
         {company && (
           <div className="mt-2 flex items-center gap-1.5">
@@ -367,7 +376,6 @@ export function MobileFlightToast({
             </p>
           </div>
         )}
-
         {/* Aircraft details (registration, type, owner) */}
         {aircraftDetails &&
           (aircraftDetails.registration ||
@@ -387,6 +395,24 @@ export function MobileFlightToast({
               </p>
             </div>
           )}
+        {/* Military / Emergency badges */}
+        {(isMilitary(flight.dbFlags) ||
+          isEmergencyStatus(flight.emergencyStatus)) && (
+          <div className="mt-2 flex items-center gap-1.5 px-0">
+            {isMilitary(flight.dbFlags) && (
+              <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-400 uppercase ring-1 ring-amber-400/20">
+                <Shield className="h-2.5 w-2.5" />
+                MIL
+              </span>
+            )}
+            {isEmergencyStatus(flight.emergencyStatus) && (
+              <span className="inline-flex animate-pulse items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-red-400 uppercase ring-1 ring-red-400/25">
+                <AlertTriangle className="h-2.5 w-2.5" />
+                {flight.emergencyStatus?.toUpperCase()}
+              </span>
+            )}
+          </div>
+        )}{" "}
       </div>
 
       {/* Metrics 4-column grid */}

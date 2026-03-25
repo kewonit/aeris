@@ -58,6 +58,32 @@ export function tintAircraftColor(
   ];
 }
 
+/** Apply military (amber) or emergency (red) tint on top of normal color. */
+export function applySpecialTint(
+  color: [number, number, number, number],
+  dbFlags?: number | null,
+  emergencyStatus?: string | null,
+): [number, number, number, number] {
+  // Emergency overrides military
+  if (emergencyStatus && emergencyStatus !== "none") {
+    return [
+      Math.round(color[0] * 0.3 + 255 * 0.7),
+      Math.round(color[1] * 0.3 + 60 * 0.7),
+      Math.round(color[2] * 0.3 + 60 * 0.7),
+      color[3],
+    ];
+  }
+  if (((dbFlags ?? 0) & 1) !== 0) {
+    return [
+      Math.round(color[0] * 0.4 + 255 * 0.6),
+      Math.round(color[1] * 0.4 + 190 * 0.6),
+      Math.round(color[2] * 0.4 + 80 * 0.6),
+      color[3],
+    ];
+  }
+  return color;
+}
+
 // ── Selection pulse timing ─────────────────────────────────────────────
 
 export const PULSE_PERIOD_MS = 9000;

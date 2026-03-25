@@ -18,6 +18,7 @@ import { lookupAtcFeeds, findNearbyAtcFeeds } from "@/lib/atc-lookup";
 import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Feed helpers ───────────────────────────────────────────────────────
 
@@ -166,90 +167,92 @@ export function AtcFeedDropdown({
               </span>
             </div>
           ) : (
-            <div className="max-h-65 overflow-y-auto py-1">
-              {groupedFeeds.map((group) => (
-                <div key={group.type}>
-                  {group.feeds.map((feed) => {
-                    const isPlaying =
-                      atc.feed?.id === feed.id && atc.status === "playing";
-                    const isLoading =
-                      atc.feed?.id === feed.id && atc.status === "loading";
-                    const isFeedError =
-                      atc.feed?.id === feed.id &&
-                      (atc.status === "error" || atc.status === "blocked");
-                    const isSelected = atc.feed?.id === feed.id;
+            <ScrollArea className="max-h-65">
+              <div className="py-1">
+                {groupedFeeds.map((group) => (
+                  <div key={group.type}>
+                    {group.feeds.map((feed) => {
+                      const isPlaying =
+                        atc.feed?.id === feed.id && atc.status === "playing";
+                      const isLoading =
+                        atc.feed?.id === feed.id && atc.status === "loading";
+                      const isFeedError =
+                        atc.feed?.id === feed.id &&
+                        (atc.status === "error" || atc.status === "blocked");
+                      const isSelected = atc.feed?.id === feed.id;
 
-                    return (
-                      <button
-                        key={feed.id}
-                        type="button"
-                        onClick={() => handleSelectFeed(feed)}
-                        className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
-                          isSelected
-                            ? "bg-foreground/6"
-                            : "hover:bg-foreground/3 active:bg-foreground/6"
-                        }`}
-                      >
-                        {/* Inline icon */}
-                        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                          {isLoading ? (
-                            <Loader2 className="h-3 w-3 animate-spin text-emerald-400/70" />
-                          ) : isFeedError ? (
-                            <AlertTriangle className="h-3 w-3 text-amber-400/70" />
-                          ) : isPlaying ? (
-                            <Square className="h-2.5 w-2.5 text-emerald-400" />
-                          ) : (
-                            <Play
-                              className="h-3 w-3 opacity-40 transition-opacity group-hover:opacity-80"
-                              style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-                            />
-                          )}
-                        </div>
+                      return (
+                        <button
+                          key={feed.id}
+                          type="button"
+                          onClick={() => handleSelectFeed(feed)}
+                          className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
+                            isSelected
+                              ? "bg-foreground/6"
+                              : "hover:bg-foreground/3 active:bg-foreground/6"
+                          }`}
+                        >
+                          {/* Inline icon */}
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                            {isLoading ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-emerald-400/70" />
+                            ) : isFeedError ? (
+                              <AlertTriangle className="h-3 w-3 text-amber-400/70" />
+                            ) : isPlaying ? (
+                              <Square className="h-2.5 w-2.5 text-emerald-400" />
+                            ) : (
+                              <Play
+                                className="h-3 w-3 opacity-40 transition-opacity group-hover:opacity-80"
+                                style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
+                              />
+                            )}
+                          </div>
 
-                        {/* Feed name + frequency */}
-                        <div className="flex min-w-0 flex-1 flex-col gap-0 text-left">
+                          {/* Feed name + frequency */}
+                          <div className="flex min-w-0 flex-1 flex-col gap-0 text-left">
+                            <span
+                              className="truncate text-[11px] font-medium leading-snug"
+                              style={{
+                                color: isPlaying
+                                  ? "rgb(var(--ui-fg) / 0.85)"
+                                  : isFeedError
+                                    ? "rgb(251 191 36 / 0.7)"
+                                    : "rgb(var(--ui-fg) / 0.55)",
+                              }}
+                            >
+                              {feed.name}
+                            </span>
+                            {isFeedError && atc.error ? (
+                              <span className="truncate text-[9px] text-amber-300/50">
+                                {atc.error}
+                              </span>
+                            ) : (
+                              <span
+                                className="font-mono text-[9px] tabular-nums leading-snug"
+                                style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
+                              >
+                                {feed.frequency}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Type badge */}
                           <span
-                            className="truncate text-[11px] font-medium leading-snug"
+                            className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
                             style={{
-                              color: isPlaying
-                                ? "rgb(var(--ui-fg) / 0.85)"
-                                : isFeedError
-                                  ? "rgb(251 191 36 / 0.7)"
-                                  : "rgb(var(--ui-fg) / 0.55)",
+                              backgroundColor: `${TYPE_COLORS[feed.type]}12`,
+                              color: `${TYPE_COLORS[feed.type]}`,
                             }}
                           >
-                            {feed.name}
+                            {TYPE_LABELS[feed.type]}
                           </span>
-                          {isFeedError && atc.error ? (
-                            <span className="truncate text-[9px] text-amber-300/50">
-                              {atc.error}
-                            </span>
-                          ) : (
-                            <span
-                              className="font-mono text-[9px] tabular-nums leading-snug"
-                              style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-                            >
-                              {feed.frequency}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Type badge */}
-                        <span
-                          className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
-                          style={{
-                            backgroundColor: `${TYPE_COLORS[feed.type]}12`,
-                            color: `${TYPE_COLORS[feed.type]}`,
-                          }}
-                        >
-                          {TYPE_LABELS[feed.type]}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
         </motion.div>
       )}

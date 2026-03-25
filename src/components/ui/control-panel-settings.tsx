@@ -12,11 +12,14 @@ import {
   Shield,
   Flame,
   Eye,
+  CloudRain,
 } from "lucide-react";
 import {
   useSettings,
   AIRSPACE_OPACITY_MIN,
   AIRSPACE_OPACITY_MAX,
+  WEATHER_RADAR_OPACITY_MIN,
+  WEATHER_RADAR_OPACITY_MAX,
   type OrbitDirection,
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -137,6 +140,24 @@ export function SettingsContent() {
               onChange={(v) => update("showAirspaceHotspots", v)}
             />
           </>
+        )}
+
+        {/* ── Weather ── */}
+        <SectionHeader title="Weather" />
+
+        <SettingRow
+          icon={<CloudRain className="h-4 w-4" />}
+          title="Weather radar"
+          description="Live precipitation radar overlay (RainViewer)"
+          checked={settings.showWeatherRadar}
+          onChange={(v) => update("showWeatherRadar", v)}
+        />
+
+        {settings.showWeatherRadar && (
+          <WeatherRadarOpacitySlider
+            value={settings.weatherRadarOpacity}
+            onChange={(v) => update("weatherRadarOpacity", v)}
+          />
         )}
 
         {/* ── Performance ── */}
@@ -360,6 +381,40 @@ function AirspaceOpacitySlider({
           value={[value]}
           onValueChange={(vals) => onChange(vals[0])}
           aria-label="Airspace opacity"
+        />
+      </div>
+    </div>
+  );
+}
+
+function WeatherRadarOpacitySlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+        <CloudRain className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-foreground/80">
+            Radar opacity
+          </p>
+          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+            {Math.round(value * 100)}%
+          </span>
+        </div>
+        <Slider
+          min={WEATHER_RADAR_OPACITY_MIN}
+          max={WEATHER_RADAR_OPACITY_MAX}
+          step={0.05}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Weather radar opacity"
         />
       </div>
     </div>

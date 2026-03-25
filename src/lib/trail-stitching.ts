@@ -598,8 +598,12 @@ export function stitchHistoricalTrail(
       }
 
       const final3D = [...prefix3D, ...resplined, ...suffix3D];
-      const finalPath = final3D.map<[number, number]>((p) => [p[0], p[1]]);
-      const finalAlts = final3D.map<number | null>((p) => p[2]);
+      const loopCleaned3D = removePathLoops(final3D);
+      const finalPath = loopCleaned3D.map<[number, number]>((p) => [
+        p[0],
+        p[1],
+      ]);
+      const finalAlts = loopCleaned3D.map<number | null>((p) => p[2]);
 
       return { path: finalPath, altitudes: finalAlts, valid: true };
     }
@@ -613,8 +617,12 @@ export function stitchHistoricalTrail(
     (cleaned.altitudes[i] as number) ?? 0,
   ]);
   const rounded = roundSharpCorners3D(merged3D, 15);
-  const finalPath = rounded.map<[number, number]>((p) => [p[0], p[1]]);
-  const finalAlts = rounded.map<number | null>((p) => p[2]);
+  const loopCleanedFallback = removePathLoops(rounded);
+  const finalPath = loopCleanedFallback.map<[number, number]>((p) => [
+    p[0],
+    p[1],
+  ]);
+  const finalAlts = loopCleanedFallback.map<number | null>((p) => p[2]);
 
   return { path: finalPath, altitudes: finalAlts, valid: true };
 }

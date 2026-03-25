@@ -14,11 +14,15 @@ import {
   Building2,
   Eye,
   ChevronRight,
+  Shield,
+  AlertTriangle,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import { HeroBanner } from "@/components/ui/hero-banner";
 import type { FlightState } from "@/lib/opensky";
+import { VerticalProfile } from "@/components/ui/vertical-profile";
+import type { TrailEntry } from "@/hooks/use-trail-history";
 import {
   metersToFeet,
   msToKnots,
@@ -37,6 +41,7 @@ import {
 
 type FlightCardProps = {
   flight: FlightState | null;
+  trail?: TrailEntry | null;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
@@ -44,6 +49,7 @@ type FlightCardProps = {
 
 export function FlightCard({
   flight,
+  trail,
   onClose,
   onToggleFpv,
   isFpvActive = false,
@@ -53,7 +59,7 @@ export function FlightCard({
   const company =
     airline ?? (flight ? `${flight.originCountry} operator` : null);
   const model = flight ? aircraftTypeHint(flight.category) : null;
-  const logoCandidates = airlineLogoCandidates(airline);
+  const logoCandidates = airlineLogoCandidates(airline, flight?.callsign);
   const heading = flight?.trueTrack ?? null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
@@ -202,6 +208,25 @@ export function FlightCard({
                       <span className="text-foreground/30"> · {model}</span>
                     ) : null}
                   </p>
+                </div>
+              )}
+
+              {/* Military / Emergency badges */}
+              {(isMilitary(flight.dbFlags) ||
+                isEmergencyStatus(flight.emergencyStatus)) && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  {isMilitary(flight.dbFlags) && (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-400 uppercase ring-1 ring-amber-400/20">
+                      <Shield className="h-2.5 w-2.5" />
+                      MIL
+                    </span>
+                  )}
+                  {isEmergencyStatus(flight.emergencyStatus) && (
+                    <span className="inline-flex animate-pulse items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-red-400 uppercase ring-1 ring-red-400/25">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      {flight.emergencyStatus?.toUpperCase()}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -362,6 +387,13 @@ export function FlightCard({
                 error={photosError}
               />
 
+              {trail && trail.path.length >= 3 && (
+                <VerticalProfile
+                  trail={trail}
+                  navAltitudeMcp={flight.navAltitudeMcp}
+                />
+              )}
+
               <div className="mt-3">
                 <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
                 <button
@@ -402,6 +434,14 @@ function squawkLabel(squawk: string): string {
     default:
       return "";
   }
+}
+
+function isMilitary(dbFlags?: number | null): boolean {
+  return ((dbFlags ?? 0) & 1) !== 0;
+}
+
+function isEmergencyStatus(status?: string | null): boolean {
+  return !!status && status !== "none";
 }
 
 function Metric({

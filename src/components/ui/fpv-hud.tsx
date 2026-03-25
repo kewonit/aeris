@@ -3,7 +3,18 @@
 import { useRef, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
-import { X, ArrowUp, ArrowDown, Minus, Gauge } from "lucide-react";
+import {
+  X,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+  Gauge,
+  Wind,
+  Thermometer,
+  Shield,
+  AlertTriangle,
+  Target,
+} from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
@@ -144,13 +155,34 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
   const vsFpm =
     vs !== null && Number.isFinite(vs) ? Math.round(vs * 196.85) : null;
   const vsDisplay = vsFpm !== null ? `${vsFpm > 0 ? "+" : ""}${vsFpm}` : null;
+
+  // ── Avionics data (readsb only) ────────────────────────────────────
+  const iasKts = flight.ias ?? null;
+  const machNum = flight.mach ?? null;
+  const windDir = flight.windDirection ?? null;
+  const windSpd = flight.windSpeed ?? null;
+  const oatC = flight.oat ?? null;
+  const selAlt = flight.navAltitudeMcp ?? null;
+  const navModes = flight.navModes ?? null;
+  const rollDeg = flight.roll ?? null;
+  const isMilitary = (flight.dbFlags ?? 0) & 1;
+  const emergencyStatus = flight.emergencyStatus ?? null;
+
+  const hasAvionicsRow =
+    iasKts !== null ||
+    machNum !== null ||
+    (windDir !== null && windSpd !== null) ||
+    oatC !== null;
+  const hasAutopilotRow =
+    (navModes !== null && navModes.length > 0) || selAlt !== null;
+
   const airline = useMemo(
     () => lookupAirline(flight.callsign),
     [flight.callsign],
   );
   const logoCandidates = useMemo(
-    () => airlineLogoCandidates(airline),
-    [airline],
+    () => airlineLogoCandidates(airline, flight.callsign),
+    [airline, flight.callsign],
   );
   const airlineKey = airline ?? "__none__";
   const [logoIndexByAirline, setLogoIndexByAirline] = useState<
@@ -285,9 +317,23 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             )}
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-bold tracking-wide text-foreground/90 sm:text-[13px]">
-                {formatCallsign(flight.callsign)}
-              </p>
+              <div className="flex items-center gap-1">
+                <p className="truncate text-[12px] font-bold tracking-wide text-foreground/90 sm:text-[13px]">
+                  {formatCallsign(flight.callsign)}
+                </p>
+                {isMilitary ? (
+                  <span className="flex shrink-0 items-center gap-0.5 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-px text-[7px] font-bold uppercase tracking-wider text-amber-400">
+                    <Shield className="h-2 w-2" />
+                    MIL
+                  </span>
+                ) : null}
+                {emergencyStatus ? (
+                  <span className="flex shrink-0 items-center gap-0.5 rounded border border-red-500/40 bg-red-500/15 px-1 py-px text-[7px] font-bold uppercase tracking-wider text-red-400 animate-pulse">
+                    <AlertTriangle className="h-2 w-2" />
+                    {emergencyStatus}
+                  </span>
+                ) : null}
+              </div>
               <p className="truncate text-[9px] font-medium uppercase tracking-widest text-foreground/30">
                 {airline ?? flight.originCountry}
               </p>
@@ -350,6 +396,100 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* ── Avionics strip (IAS, Mach, Wind, OAT) ──────────────── */}
+        {hasAvionicsRow && (
+          <div className="flex w-full items-center justify-center gap-3 border-t border-foreground/6 px-3 py-1 sm:gap-4">
+            {iasKts !== null && (
+              <span className="flex items-center gap-1 text-[10px] tabular-nums text-foreground/50">
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  IAS
+                </span>
+                <span className="font-bold text-foreground/70">
+                  {Math.round(iasKts)}
+                </span>
+                <span className="text-[8px] text-foreground/25">kts</span>
+              </span>
+            )}
+            {machNum !== null && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  M
+                </span>
+                <span className="font-bold text-foreground/70">
+                  {machNum.toFixed(2)}
+                </span>
+              </span>
+            )}
+            {windDir !== null && windSpd !== null && (
+              <span className="flex items-center gap-1 text-[10px] tabular-nums text-foreground/50">
+                <Wind className="h-2.5 w-2.5 text-foreground/30" />
+                <span className="font-bold text-foreground/70">
+                  {Math.round(windDir)}°
+                </span>
+                <span className="text-foreground/60">/</span>
+                <span className="font-bold text-foreground/70">
+                  {Math.round(windSpd)}
+                </span>
+                <span className="text-[8px] text-foreground/25">kts</span>
+              </span>
+            )}
+            {oatC !== null && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <Thermometer className="h-2.5 w-2.5 text-foreground/30" />
+                <span className="font-bold text-foreground/70">
+                  {Math.round(oatC)}°C
+                </span>
+              </span>
+            )}
+            {rollDeg !== null && Math.abs(rollDeg) > 1 && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  BANK
+                </span>
+                <span className="font-bold text-foreground/70">
+                  {rollDeg > 0 ? "R" : "L"}
+                  {Math.round(Math.abs(rollDeg))}°
+                </span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Autopilot / selected altitude strip ────────────────── */}
+        {hasAutopilotRow && (
+          <div className="flex w-full items-center justify-center gap-2 border-t border-foreground/6 px-3 py-1">
+            {navModes !== null &&
+              navModes.map((mode) => (
+                <span
+                  key={mode}
+                  className={`rounded px-1.5 py-px text-[8px] font-bold uppercase tracking-wider ${
+                    mode === "tcas"
+                      ? "border border-amber-500/30 bg-amber-500/10 text-amber-400"
+                      : "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400/90"
+                  }`}
+                >
+                  {mode === "autopilot"
+                    ? "AP"
+                    : mode === "althold"
+                      ? "ALT HLD"
+                      : mode}
+                </span>
+              ))}
+            {selAlt !== null && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <Target className="h-2.5 w-2.5 text-cyan-400/50" />
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  SEL
+                </span>
+                <span className="font-bold text-cyan-400/70">
+                  {selAlt.toLocaleString()}
+                </span>
+                <span className="text-[8px] text-foreground/25">ft</span>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );

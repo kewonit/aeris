@@ -155,7 +155,7 @@ function uniformSample(
 export function removeSpikePoints(
   path: [number, number][],
   altitudes: Array<number | null>,
-  cosThreshold: number = -0.17,
+  cosThreshold: number = -0.05,
 ): { path: [number, number][]; altitudes: Array<number | null> } {
   if (path.length < 3) return { path, altitudes };
 
@@ -421,7 +421,7 @@ export function removePathLoops(path: ElevatedPoint[]): ElevatedPoint[] {
   if (path.length < 8) return path;
 
   let result = path;
-  const MAX_WINDOW = 120;
+  const MAX_WINDOW = 300;
 
   for (let pass = 0; pass < 5; pass++) {
     let found = false;

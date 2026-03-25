@@ -15,7 +15,7 @@ const DEFAULT_PITCH = 49;
 const DEFAULT_BEARING = 27.4;
 const FOLLOW_ZOOM = 10.5;
 const FOLLOW_PITCH = 55;
-const FOLLOW_EASE_MS = 1200;
+const FOLLOW_EASE_MS = 2000;
 
 type FpvPosition = { lng: number; lat: number; alt: number; track: number };
 

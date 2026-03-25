@@ -20,11 +20,11 @@ const DEFAULT_PITCH = 49;
 const DEFAULT_BEARING = 27.4;
 const FPV_FLY_DURATION = 1600;
 const FPV_PITCH = 65;
-const FPV_CENTER_ALPHA = 0.16;
-const FPV_BEARING_ALPHA = 0.1;
-const FPV_ZOOM_ALPHA = 0.06;
+const FPV_CENTER_ALPHA = 0.09;
+const FPV_BEARING_ALPHA = 0.06;
+const FPV_ZOOM_ALPHA = 0.03;
 const FPV_IDLE_RECENTER_MS = 1200;
-const FPV_EASE_IN_MS = 600;
+const FPV_EASE_IN_MS = 1000;
 
 type FpvPosition = { lng: number; lat: number; alt: number; track: number };
 
@@ -201,8 +201,10 @@ export function useFpvCamera(
 
       const liveBearing =
         posTrack !== null && Number.isFinite(posTrack) ? posTrack : prevBearing;
+      // Update prevBearing to track live heading (used as fallback when
+      // tracking strength is zero and for tab-resume reset).
       const bearingDelta = ((liveBearing - prevBearing + 540) % 360) - 180;
-      prevBearing = prevBearing + bearingDelta * FPV_BEARING_ALPHA;
+      prevBearing = prevBearing + bearingDelta * 0.15;
 
       if (trackingStrength > 0.001) {
         const safeAlt = Number.isFinite(posAlt) ? posAlt : 5000;
@@ -232,26 +234,28 @@ export function useFpvCamera(
         if (deltaPx) {
           const desiredX = fpvOffsetX - deltaPx.dx;
           const desiredY = fpvOffsetY - deltaPx.dy;
-          const offsetAlpha = 0.08 * trackingStrength;
+          const offsetAlpha = 0.05 * trackingStrength;
           fpvOffsetX = lerp(fpvOffsetX, desiredX, offsetAlpha);
           fpvOffsetY = lerp(fpvOffsetY, desiredY, offsetAlpha);
         } else {
-          const decayAlpha = 0.1 * trackingStrength;
+          const decayAlpha = 0.06 * trackingStrength;
           fpvOffsetX = lerp(fpvOffsetX, 0, decayAlpha);
           fpvOffsetY = lerp(fpvOffsetY, 0, decayAlpha);
         }
 
         const maxScale = Math.min(1.5, Math.max(1, elevationMeters / 15_000));
-        const maxOffset = 0.45 * maxScale * Math.min(canvasW, canvasH);
+        const maxOffset = 0.25 * maxScale * Math.min(canvasW, canvasH);
         fpvOffsetX = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetX));
         fpvOffsetY = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetY));
 
+        // Single-level bearing interpolation — lerp map bearing directly
+        // toward the live heading.  Avoids the double-smoothing oscillation
+        // that occurred when prevBearing was intermediated separately.
         const currentBearing = map.getBearing();
-        const bearingToCurrent =
-          ((prevBearing - currentBearing + 540) % 360) - 180;
+        const bearingToLive =
+          ((liveBearing - currentBearing + 540) % 360) - 180;
         const newMapBearing =
-          currentBearing +
-          bearingToCurrent * FPV_BEARING_ALPHA * trackingStrength;
+          currentBearing + bearingToLive * FPV_BEARING_ALPHA * trackingStrength;
 
         const pitchAlpha = 0.05 * trackingStrength;
         const newPitch = lerp(currentPitch, FPV_PITCH, pitchAlpha);
