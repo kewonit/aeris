@@ -9,7 +9,7 @@ export const SHORTCUTS = [
   { key: "R", description: "Reset view" },
   { key: "O", description: "Toggle orbit" },
   { key: "/", description: "Open search" },
-  { key: "âŒ˜K", description: "Open search (anywhere)" },
+  { key: "⌘K", description: "Open search (anywhere)" },
   { key: "F", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
   { key: "A", description: "Toggle ATC panel" },

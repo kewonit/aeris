@@ -248,7 +248,7 @@ class TrailStore {
       // ── Single-point outlier filter ───────────────────────────
       // If this point is far from the previous point but the previous
       // step was small, it's likely a GPS glitch — skip silently.
-      const OUTLIER_THRESHOLD_DEG = 0.05; // ~5.5 km
+      const OUTLIER_THRESHOLD_DEG = 0.035; // ~3.9 km
       if (
         t.length >= 2 &&
         distSq > OUTLIER_THRESHOLD_DEG * OUTLIER_THRESHOLD_DEG
@@ -259,6 +259,56 @@ class TrailStore {
         const prevDistSq = dx2 * dx2 + dy2 * dy2;
         if (prevDistSq < OUTLIER_THRESHOLD_DEG * OUTLIER_THRESHOLD_DEG) {
           continue;
+        }
+      }
+
+      // ── Heading-consistency filter ────────────────────────────
+      // Reject points where implied GPS heading diverges too far
+      // from ADS-B trueTrack (likely GPS/MLAT artifact).
+      if (
+        t.length >= 1 &&
+        f.trueTrack != null &&
+        Number.isFinite(f.trueTrack) &&
+        distSq > 1e-10 // skip heading check for near-zero movement
+      ) {
+        const impliedHeading =
+          ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+        let headingDelta = Math.abs(impliedHeading - f.trueTrack);
+        if (headingDelta > 180) headingDelta = 360 - headingDelta;
+
+        // Speed-scaled threshold: slow aircraft can turn faster.
+        const speed =
+          f.velocity != null && Number.isFinite(f.velocity) && f.velocity > 0
+            ? f.velocity
+            : 100;
+        const headingThreshold = speed < 50 ? 110 : speed < 100 ? 90 : 70;
+        if (headingDelta > headingThreshold) {
+          continue;
+        }
+      }
+
+      // ── V-shape (backtrack) filter ────────────────────────────
+      // Reject points creating sharp V-turns (GPS bounce artifacts).
+      if (t.length >= 2) {
+        const prev = t[t.length - 2].position;
+        const sdx1 = last[0] - prev[0];
+        const sdy1 = last[1] - prev[1];
+        const slen1 = Math.sqrt(sdx1 * sdx1 + sdy1 * sdy1);
+        const slen2 = Math.sqrt(dx * dx + dy * dy);
+
+        if (slen1 > 1e-8 && slen2 > 1e-8) {
+          const cos = (sdx1 * dx + sdy1 * dy) / (slen1 * slen2);
+          // cos < -0.3 ≈ turn > ~107°. Also reject moderate turns
+          // with asymmetric segment lengths (GPS spike pattern).
+          if (cos < -0.3) {
+            continue;
+          }
+          if (cos < 0.1) {
+            const ratio = Math.max(slen1, slen2) / Math.min(slen1, slen2);
+            if (ratio > 3.5) {
+              continue;
+            }
+          }
         }
       }
 

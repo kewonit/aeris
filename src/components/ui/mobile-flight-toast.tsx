@@ -180,7 +180,7 @@ export function MobileFlightToast({
         {photosLoading && !hasPhotos && (
           <span
             aria-hidden
-            className="absolute inset-0 animate-pulse bg-linear-to-br from-white/5 via-white/8 to-white/5"
+            className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
           />
         )}
 
@@ -210,7 +210,7 @@ export function MobileFlightToast({
                   slideLoadState[i] !== "error" && (
                     <span
                       aria-hidden
-                      className="absolute inset-0 animate-pulse bg-linear-to-br from-white/5 via-white/8 to-white/5"
+                      className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
                     />
                   )}
                 {slideLoadState[i] === "error" ? (

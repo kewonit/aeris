@@ -11,7 +11,7 @@ import {
 import type { ProviderName } from "@/lib/flight-api";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 
-// â”€â”€ Provider definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Provider definitions ───────────────────────────────────────────────
 
 interface ProviderInfo {
   id: ProviderName;
@@ -20,16 +20,16 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Primary â€” server proxy" },
+  { id: "adsb", label: "adsb.lol", description: "Primary — server proxy" },
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Fallback â€” limited credits",
+    description: "Fallback — limited credits",
   },
   {
     id: "airplanes",
     label: "Airplanes.live",
-    description: "Direct â€” CORS restricted",
+    description: "Direct — CORS restricted",
   },
 ];
 
@@ -74,7 +74,7 @@ function setProviderOverride(provider: ProviderName | "auto"): void {
   window.history.replaceState({}, "", url.toString());
 }
 
-// â”€â”€ Provider Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Provider Dropdown ──────────────────────────────────────────────────
 
 export type ProviderDropdownProps = {
   open: boolean;
@@ -257,7 +257,7 @@ export function ProviderDropdown({
                       style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
                     >
                       {!isAvailable
-                        ? "CORS restricted â€” dev only"
+                        ? "CORS restricted — dev only"
                         : provider.description}
                     </span>
                   </div>
@@ -282,7 +282,7 @@ export function ProviderDropdown({
   );
 }
 
-// â”€â”€ Provider Trigger (for status bar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Provider Trigger (for status bar) ──────────────────────────────────
 
 export type ProviderTriggerProps = {
   source: string | null;
@@ -300,10 +300,10 @@ export function ProviderTrigger({
   const label = rateLimited
     ? "Paused"
     : loading && !source
-      ? "Connectingâ€¦"
+      ? "Connecting…"
       : source
         ? (SOURCE_LABELS[source] ?? source)
-        : "Connectingâ€¦";
+        : "Connecting…";
 
   const dotColor = rateLimited
     ? "text-amber-400/80"

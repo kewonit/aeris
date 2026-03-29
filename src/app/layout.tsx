@@ -92,6 +92,7 @@ export default function RootLayout({
             offset={16}
             mobileOffset={8}
             gap={8}
+            style={{ "--toaster-z-index": "70" } as React.CSSProperties}
             toastOptions={{
               unstyled: true,
               className: "w-full",

@@ -95,17 +95,31 @@ function cloudCoverLabel(cover: string): string {
   }
 }
 
+// ── Client-side METAR cache (10 min TTL) ───────────────────────────────
+const METAR_CACHE_TTL_MS = 10 * 60 * 1000;
+const metarCache = new Map<string, { data: MetarData; fetchedAt: number }>();
+
 export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
   const [metar, setMetar] = useState<MetarData | null>(null);
   const [metarLoading, setMetarLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchMetar = useCallback(async (icao: string) => {
+    // Check client-side cache first
+    const cached = metarCache.get(icao);
+    if (cached && Date.now() - cached.fetchedAt < METAR_CACHE_TTL_MS) {
+      setMetar(cached.data);
+      setMetarLoading(false);
+      return;
+    }
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setMetarLoading(true);
-    setMetar(null);
+    // Show stale cached data while re-fetching instead of blank
+    if (cached) setMetar(cached.data);
+    else setMetar(null);
 
     try {
       const res = await fetch(
@@ -120,6 +134,9 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
 
       // NOAA returns an array of METAR observations
       const obs = Array.isArray(data) ? data[0] : data;
+      if (obs) {
+        metarCache.set(icao, { data: obs, fetchedAt: Date.now() });
+      }
       setMetar(obs ?? null);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;

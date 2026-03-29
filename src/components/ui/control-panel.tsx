@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -69,6 +70,11 @@ export function ControlPanel({
   onLookupFlight,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
+  const [portalMounted, setPortalMounted] = useState(false);
+
+  useEffect(() => {
+    setPortalMounted(true);
+  }, []);
 
   useEffect(() => {
     function handleOpenSearch() {
@@ -125,25 +131,29 @@ export function ControlPanel({
         <Settings className="h-4 w-4" />
       </motion.button>
 
-      <AnimatePresence>
-        {openTab && (
-          <PanelDialog
-            activeTab={openTab}
-            onTabChange={setOpenTab}
-            onClose={close}
-            activeCity={activeCity}
-            onSelectCity={(c) => {
-              onSelectCity(c);
-              close();
-            }}
-            activeStyle={activeStyle}
-            onSelectStyle={onSelectStyle}
-            flights={flights}
-            activeFlightIcao24={activeFlightIcao24}
-            onLookupFlight={onLookupFlight}
-          />
+      {portalMounted &&
+        createPortal(
+          <AnimatePresence>
+            {openTab && (
+              <PanelDialog
+                activeTab={openTab}
+                onTabChange={setOpenTab}
+                onClose={close}
+                activeCity={activeCity}
+                onSelectCity={(c) => {
+                  onSelectCity(c);
+                  close();
+                }}
+                activeStyle={activeStyle}
+                onSelectStyle={onSelectStyle}
+                flights={flights}
+                activeFlightIcao24={activeFlightIcao24}
+                onLookupFlight={onLookupFlight}
+              />
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </>
   );
 }

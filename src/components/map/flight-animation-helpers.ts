@@ -3,8 +3,10 @@ import type { TrailEntry } from "@/hooks/use-trail-history";
 import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import {
   removeSpikePoints,
+  removeDistanceOutliers,
   roundSharpCorners3D,
   catmullRomSpline3D,
+  removePathLoops,
 } from "@/lib/trail-smoothing";
 import type { ElevatedPoint, Snapshot } from "./flight-layer-constants";
 import {
@@ -169,11 +171,8 @@ export function smoothElevatedPath(
 // ── Altitude Smoothing ─────────────────────────────────────────────────
 
 /**
- * Multi-pass altitude smoothing with a wider kernel to prevent
- * near-vertical "wall" artifacts on climb/descent trails.
- * The wider kernel (0.3/0.4/0.3) and multiple passes spread steep
- * altitude transitions over more trail points, producing a gradual
- * climb/descent gradient that looks natural with elevation exaggeration.
+ * Multi-pass altitude smoothing with outlier pre-filtering and a wider
+ * kernel to prevent near-vertical "wall" artifacts on climb/descent trails.
  */
 export function smoothAnimationAltitudes(
   values: number[],
@@ -188,7 +187,27 @@ export function smoothAnimationAltitudes(
     return [values[0] * 0.85 + mean * 0.15, values[1] * 0.85 + mean * 0.15];
   }
 
-  let result = values;
+  // Pre-pass: reject altitude spikes (>800m from local median).
+  const SPIKE_THRESHOLD = 800;
+  let result = [...values];
+  if (result.length >= 5) {
+    for (let i = 2; i < result.length - 2; i++) {
+      const window = [
+        result[i - 2],
+        result[i - 1],
+        result[i],
+        result[i + 1],
+        result[i + 2],
+      ];
+      const sorted = [...window].sort((a, b) => a - b);
+      const med = sorted[2];
+      if (Math.abs(result[i] - med) > SPIKE_THRESHOLD) {
+        result[i] = (result[i - 1] + result[i + 1]) / 2;
+      }
+    }
+  }
+
+  // Main smoothing passes
   for (let p = 0; p < passes; p++) {
     const next = [...result];
     for (let i = 1; i < result.length - 1; i++) {
@@ -212,9 +231,11 @@ export function trimPathAheadOfAircraft(
 
   let bestIndex = points.length - 2;
   let bestDistanceSq = Number.POSITIVE_INFINITY;
+
+  // Search only the last 15% (min 12) to prevent clip-point jump-backs.
   const searchStart = Math.max(
     0,
-    points.length - Math.max(20, Math.ceil(points.length * 0.4)),
+    points.length - Math.max(12, Math.ceil(points.length * 0.15)),
   );
 
   for (let i = searchStart; i < points.length - 1; i++) {
@@ -385,18 +406,28 @@ export function buildTrailBasePath(
           Math.max(0, altitudeMeters[i] ?? trail.baroAltitude ?? 0),
         ] as ElevatedPoint,
     );
-    return elevated.length >= 3 ? roundSharpCorners3D(elevated, 15) : elevated;
+    if (elevated.length >= 3) {
+      const rounded = roundSharpCorners3D(elevated, 15);
+      return removePathLoops(rounded);
+    }
+    return elevated;
   }
 
-  // Active trails: remove GPS glitches (V-spikes), smooth positions to
-  // reduce measurement noise, smooth altitudes, then apply Catmull-Rom
-  // spline for consistent visual smoothness with historical trails.
-  const spikeResult = removeSpikePoints(pathSlice, altitudeSlice);
+  // Active trails: remove GPS glitches (distance outliers + V-spikes),
+  // smooth positions to reduce measurement noise, smooth altitudes, then
+  // apply Catmull-Rom spline for consistent visual smoothness.
 
-  // Pre-smooth 2D positions: 5 passes of a 0.25/0.5/0.25 kernel removes
-  // GPS measurement jitter (~10-20m noise) while preserving the overall
-  // path shape.  Without this, the interpolating Catmull-Rom spline would
-  // amplify noise into visible oscillations between control points.
+  // Step 1: Remove distance outliers — catches random GPS/MLAT points
+  // that deviate far from the local path trend.
+  const outlierResult = removeDistanceOutliers(pathSlice, altitudeSlice, 3.0);
+
+  // Step 2: Remove V-shaped direction-reversal spikes.
+  const spikeResult = removeSpikePoints(
+    outlierResult.path,
+    outlierResult.altitudes,
+  );
+
+  // Pre-smooth 2D positions to reduce GPS jitter before spline interpolation.
   let smoothedPath = spikeResult.path;
   if (smoothedPath.length >= 3) {
     for (let pass = 0; pass < 5; pass++) {
@@ -428,12 +459,10 @@ export function buildTrailBasePath(
   ]);
 
   if (elevated.length >= 2) {
-    // Round sharp corners (>15° heading change) before spline to remove
-    // GPS-noise kinks and tight arcs at genuine turns.
     const rounded = roundSharpCorners3D(elevated, 15);
-    // Moderate density (5-14 pts/seg) produces smooth curves without
-    // the point bloat that higher density would cause across 200+ trails.
-    return catmullRomSpline3D(rounded, 5, 14);
+    const splined = catmullRomSpline3D(rounded, 5, 14);
+    // Remove self-intersecting loops from spline overshoot.
+    return removePathLoops(splined);
   }
   return elevated;
 }

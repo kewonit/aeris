@@ -9,13 +9,17 @@ type TrackCacheEntry = {
 };
 
 const TRACK_CACHE_TTL_MS = 10 * 60_000;
-const NEGATIVE_CACHE_TTL_MS = 60_000;
+const NEGATIVE_CACHE_TTL_MS = 15_000;
 const TRACK_CACHE_MAX_ENTRIES = 100;
 const SELECTION_DEBOUNCE_MS = 350;
 const FETCH_TIMEOUT_MS = 15_000;
 const MIN_RETRY_MS = 2_000;
 const MAX_RETRY_MS = 60_000;
 const DEFAULT_RETRY_MS = 5_000;
+/** Auto-retry delay when the initial fetch returned no track data. */
+const NULL_TRACK_RETRY_MS = 8_000;
+/** Maximum number of auto-retries for null track results. */
+const MAX_NULL_RETRIES = 3;
 
 const trackCache = new Map<string, TrackCacheEntry>();
 let rateLimitedUntil = 0;
@@ -98,6 +102,7 @@ export function useFlightTrack(
 
   const requestIdRef = useRef(0);
   const activeKeyRef = useRef<string | null>(null);
+  const nullRetryCountRef = useRef(0);
 
   useEffect(() => {
     if (!icao24) {
@@ -111,6 +116,7 @@ export function useFlightTrack(
     const key = icao24.trim().toLowerCase();
     const isKeyChange = activeKeyRef.current !== key;
     activeKeyRef.current = key;
+    if (isKeyChange) nullRetryCountRef.current = 0;
 
     const cached = trackCache.get(key);
     const hasCachedTrack = cached?.track != null;
@@ -130,7 +136,14 @@ export function useFlightTrack(
 
     let alive = true;
     const controller = new AbortController();
-    let retryTimer: number | null = null;
+    /** Track all scheduled timers so cleanup can cancel them all. */
+    const scheduledTimers: number[] = [];
+
+    function scheduleTimer(callback: () => void, delayMs: number): number {
+      const id = window.setTimeout(callback, delayMs);
+      scheduledTimers.push(id);
+      return id;
+    }
 
     async function load() {
       const now = Date.now();
@@ -161,7 +174,7 @@ export function useFlightTrack(
           setRateLimited(true);
           // Schedule a one-shot retry after the cooldown so we recover
           // automatically even without a refreshMs interval.
-          retryTimer = window.setTimeout(() => {
+          scheduleTimer(() => {
             if (!alive) return;
             setRateLimited(false);
             void load();
@@ -186,6 +199,20 @@ export function useFlightTrack(
 
         setFetchedAtMs(fetchedAt);
         setTrack(nextTrack);
+
+        // Auto-retry when trace returned no data (new flights, transponder switch).
+        if (
+          nextTrack === null &&
+          nullRetryCountRef.current < MAX_NULL_RETRIES
+        ) {
+          nullRetryCountRef.current += 1;
+          scheduleTimer(() => {
+            if (!alive) return;
+            // Invalidate the negative cache entry so the retry actually fetches.
+            trackCache.delete(key);
+            void load();
+          }, NULL_TRACK_RETRY_MS * nullRetryCountRef.current);
+        }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         if (process.env.NODE_ENV !== "production") {
@@ -215,7 +242,8 @@ export function useFlightTrack(
       alive = false;
       controller.abort();
       window.clearTimeout(loadTimer);
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      // Clear ALL scheduled retry timers to prevent leaked callbacks.
+      for (const tid of scheduledTimers) window.clearTimeout(tid);
       if (interval !== null) window.clearInterval(interval);
       setLoading(false);
     };

@@ -18,6 +18,7 @@ export type { WaypointLike } from "./trail-altitude";
 export {
   adaptiveDownsample,
   removeSpikePoints,
+  removeDistanceOutliers,
   roundSharpCorners3D,
   roundSharpCorners2D,
   removePathLoops,

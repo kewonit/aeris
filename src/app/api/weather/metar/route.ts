@@ -11,10 +11,6 @@ const FETCH_TIMEOUT_MS = 8_000;
 /** Only allow 4-letter ICAO codes (uppercase alpha). */
 const VALID_ICAO = /^[A-Z]{4}$/;
 
-// Simple rate limiter
-let lastRequestTime = 0;
-const RATE_MS = 2_000; // Max 1 request per 2 seconds
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const icao = request.nextUrl.searchParams.get("icao")?.trim().toUpperCase();
 
@@ -24,16 +20,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
-
-  // Rate limiting
-  const now = Date.now();
-  if (now - lastRequestTime < RATE_MS) {
-    return NextResponse.json(
-      { error: "Rate limited" },
-      { status: 429, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-  lastRequestTime = now;
 
   try {
     const controller = new AbortController();
@@ -58,7 +44,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=300",
+        // METAR updates every 30-60 min; 10-min cache + stale-while-revalidate.
+        "Cache-Control":
+          "public, max-age=600, s-maxage=600, stale-while-revalidate=300",
       },
     });
   } catch (err) {

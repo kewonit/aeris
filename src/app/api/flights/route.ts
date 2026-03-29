@@ -19,16 +19,6 @@ const ADSB_LOL_BASE = "https://api.adsb.lol/v2";
 const VALID_PATH =
   /^\/(?:point\/-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?\/\d{1,3}|hex\/[0-9a-f]{6}|callsign\/[A-Z0-9-]{1,8})$/i;
 
-// ── Rate limiter (in-memory) ───────────────────────────────────────────
-// NOTE: This is per-instance, per-cold-start. In serverless/edge
-// deployments each instance has its own counter, so the effective global
-// rate can exceed RATE_MS when multiple instances serve concurrent
-// traffic. For strict rate limiting, use a shared store (e.g., Upstash
-// Redis or Vercel KV).
-
-let lastRequestTime = 0;
-const RATE_MS = 500; // self-imposed: 2 req/s for adsb.lol
-
 // ── Handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -47,19 +37,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { error: `Radius exceeds maximum of ${MAX_RADIUS_NM} NM` },
       { status: 400, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  lastRequestTime = now;
-  if (elapsed < RATE_MS) {
-    return NextResponse.json(
-      { error: "Rate limited" },
-      {
-        status: 429,
-        headers: { "Cache-Control": "no-store", "Retry-After": "1" },
-      },
     );
   }
 

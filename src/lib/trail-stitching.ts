@@ -19,6 +19,7 @@ import {
   smoothAltitudeProfile,
   adaptiveDownsample,
   removeSpikePoints,
+  removeDistanceOutliers,
   roundSharpCorners3D,
   removePathLoops,
 } from "@/lib/trail-smoothing";
@@ -40,44 +41,51 @@ const OVERLAP_SEARCH_WINDOW = 150;
 
 /** If the closest point on the historical track is within this distance
  *  (degrees) of the first live-tail point, snap them together. */
-const MERGE_SNAP_DEG = 0.06;
+const MERGE_SNAP_DEG = 0.15;
+
+/** If the closest overlap point is farther than MERGE_SNAP but within this
+ *  distance, trim the track at that point and bridge to the live tail.
+ *  This prevents throwing away the entire track when the gap is moderate. */
+const TRIM_AND_BRIDGE_DEG = 1.5;
 
 /** If the gap is larger than MERGE_SNAP but smaller than this, insert a
  *  smooth bridge between the track end and the live tail start. */
-const CONNECT_BRIDGE_DEG = 0.07;
+const CONNECT_BRIDGE_DEG = 0.15;
 
 /** Maximum gap (degrees) before we give up trying to connect stale history
  *  to the live tail.  Scaled by altitude: low flights are more constrained
  *  because their waypoints are denser. */
-const MAX_GAP_HIGH_ALT_DEG = 3.5;
-const MAX_GAP_LOW_ALT_DEG = 1.25;
+const MAX_GAP_HIGH_ALT_DEG = 5.0;
+const MAX_GAP_LOW_ALT_DEG = 2.5;
 const LOW_ALTITUDE_THRESHOLD = 6_000; // meters
 
 /** If the track's last waypoint is this old AND the gap is moderate, treat
  *  the historical data as disconnected (stale). */
-const STALE_DISCONNECT_GAP_DEG = 0.06;
-const STALE_DISCONNECT_AGE_SEC = 900;
-const MODERATE_DISCONNECT_GAP_DEG = 0.1;
-const MODERATE_DISCONNECT_AGE_SEC = 300;
-const HARD_DISCONNECT_GAP_DEG = 0.25;
+const STALE_DISCONNECT_GAP_DEG = 0.5;
+const STALE_DISCONNECT_AGE_SEC = 1800;
+const MODERATE_DISCONNECT_GAP_DEG = 0.8;
+const MODERATE_DISCONNECT_AGE_SEC = 600;
+
+/** Base hard disconnect — overridden by speed-aware dynamic threshold. */
+const HARD_DISCONNECT_BASE_DEG = 1.0;
 
 /** Default speed assumption when the flight state doesn't report one. */
-const DEFAULT_SPEED_MPS = 140;
+const DEFAULT_SPEED_MPS = 220;
 const MIN_SPEED_MPS = 30;
 
 /** Maximum distance (degrees) from the live position to the nearest track
  *  waypoint before we reject the track as belonging to a different flight
  *  or being hopelessly stale. */
-const TRACK_REJECT_HIGH_ALT_DEG = 6;
-const TRACK_REJECT_LOW_ALT_DEG = 2.8;
+const TRACK_REJECT_HIGH_ALT_DEG = 8;
+const TRACK_REJECT_LOW_ALT_DEG = 4.0;
 
 /** Maximum number of interpolated steps when bridging a gap. */
-const BRIDGE_MAX_STEPS = 24;
+const BRIDGE_MAX_STEPS = 36;
 const BRIDGE_MIN_STEPS = 6;
-const BRIDGE_STEP_SIZE_DEG = 0.15;
+const BRIDGE_STEP_SIZE_DEG = 0.12;
 
 /** Maximum points after spline interpolation before downsampling. */
-const MAX_SPLINED_POINTS = 1800;
+const MAX_SPLINED_POINTS = 2400;
 
 // ---------------------------------------------------------------------------
 // Slerp-based great-circle bridge (for smooth gap interpolation)
@@ -218,7 +226,9 @@ export function stitchHistoricalTrail(
       splinedPath = adaptiveDownsample(splinedPath, MAX_SPLINED_POINTS);
     }
 
-    lastWaypointTime = waypoints[waypoints.length - 1]?.time;
+    lastWaypointTime =
+      waypoints[waypoints.length - 1]?.time ??
+      (track.endTime > 0 ? track.endTime : undefined);
 
     // Store in cache for next poll cycle.
     const cachedPath = splinedPath.map<[number, number]>((p) => [p[0], p[1]]);
@@ -264,15 +274,21 @@ export function stitchHistoricalTrail(
     flight.velocity! > MIN_SPEED_MPS
       ? Math.max(0, flight.velocity!)
       : DEFAULT_SPEED_MPS;
-  const expectedDeg = (speedMps * lastWaypointAgeSec) / 111_320;
+
+  // Estimate waypoint age from track time range as fallback.
+  const effectiveAgeSec =
+    lastWaypointAgeSec > 0
+      ? lastWaypointAgeSec
+      : track.endTime > 0 && nowSec > 0
+        ? Math.max(0, nowSec - track.endTime)
+        : 600; // default 10 min if totally unknown
+  const effectiveExpectedDeg = (speedMps * effectiveAgeSec) / 111_320;
 
   if (livePosAdjusted && trackPositions.length >= 2) {
-    const searchStart = Math.max(
-      0,
-      trackPositions.length - OVERLAP_SEARCH_WINDOW,
-    );
+    // Search the entire track — the aircraft may be near any point
+    // if it has done a loop or holding pattern.
     let bestDistSq = Number.POSITIVE_INFINITY;
-    for (let i = searchStart; i < trackPositions.length; i++) {
+    for (let i = 0; i < trackPositions.length; i++) {
       const p = trackPositions[i];
       const dx = p[0] - livePosAdjusted[0];
       const dy = p[1] - livePosAdjusted[1];
@@ -283,9 +299,11 @@ export function stitchHistoricalTrail(
     const maxRejectDeg = lowAltitude
       ? TRACK_REJECT_LOW_ALT_DEG
       : TRACK_REJECT_HIGH_ALT_DEG;
+    // Speed-based rejection threshold with headroom for trace lag.
+    const minBaseDeg = lowAltitude ? 1.0 : 1.5;
     const maxAllowedDeg = Math.min(
       maxRejectDeg,
-      Math.max(lowAltitude ? 0.75 : 0.9, expectedDeg * 1.35 + 0.22),
+      Math.max(minBaseDeg, effectiveExpectedDeg * 1.5 + 0.5),
     );
 
     if (bestDistSq > maxAllowedDeg * maxAllowedDeg) {
@@ -349,7 +367,9 @@ export function stitchHistoricalTrail(
       }
     }
 
-    if (bestIndex >= 0 && bestDistSq <= MERGE_SNAP_DEG * MERGE_SNAP_DEG) {
+    const bestDist = Math.sqrt(bestDistSq);
+
+    if (bestIndex >= 0 && bestDist <= MERGE_SNAP_DEG) {
       // Snap overlap: trim historical track and connect.
       resultPath.splice(bestIndex + 1);
       resultAltitudes.splice(bestIndex + 1);
@@ -360,8 +380,47 @@ export function stitchHistoricalTrail(
         const joinAlt = resultAltitudes[resultAltitudes.length - 1] ?? null;
         tailAlt[0] = joinAlt ?? tailAlt[0] ?? null;
       }
+    } else if (bestIndex >= 0 && bestDist <= TRIM_AND_BRIDGE_DEG) {
+      // Trim at closest point and bridge to tail (preserves track history).
+      resultPath.splice(bestIndex + 1);
+      resultAltitudes.splice(bestIndex + 1);
+
+      const trimEnd = resultPath[resultPath.length - 1];
+      const trimEndAlt = resultAltitudes[resultAltitudes.length - 1] ?? null;
+
+      if (trimEnd) {
+        const bridgeGap = bestDist;
+        const steps = Math.max(
+          BRIDGE_MIN_STEPS,
+          Math.min(
+            BRIDGE_MAX_STEPS,
+            Math.ceil(bridgeGap / BRIDGE_STEP_SIZE_DEG),
+          ),
+        );
+        const firstTailAlt = tailAlt[0] ?? null;
+
+        for (let s = 1; s < steps; s++) {
+          const t = s / steps;
+          const [lng, lat] = greatCircleIntermediate(
+            trimEnd[0],
+            trimEnd[1],
+            firstTail[0],
+            firstTail[1],
+            t,
+          );
+          resultPath.push([lng, lat]);
+
+          if (trimEndAlt == null && firstTailAlt == null) {
+            resultAltitudes.push(null);
+          } else {
+            const a0 = trimEndAlt ?? firstTailAlt ?? 0;
+            const a1 = firstTailAlt ?? trimEndAlt ?? a0;
+            resultAltitudes.push(a0 + (a1 - a0) * cubicEaseInOut(t));
+          }
+        }
+      }
     } else {
-      // No overlap: evaluate whether to disconnect or bridge.
+      // No overlap: evaluate whether to disconnect or bridge from track end.
       const last = resultPath[resultPath.length - 1];
       const lastAlt = resultAltitudes[resultAltitudes.length - 1] ?? null;
 
@@ -370,11 +429,17 @@ export function stitchHistoricalTrail(
         const dy = last[1] - firstTail[1];
         const gap = Math.sqrt(dx * dx + dy * dy);
 
+        // Speed-aware hard disconnect threshold.
+        const hardDisconnectDeg = Math.max(
+          HARD_DISCONNECT_BASE_DEG,
+          effectiveExpectedDeg * 2.0 + 0.5,
+        );
+
         const shouldDisconnect =
-          gap > HARD_DISCONNECT_GAP_DEG ||
-          (lastWaypointAgeSec > STALE_DISCONNECT_AGE_SEC &&
+          gap > hardDisconnectDeg ||
+          (effectiveAgeSec > STALE_DISCONNECT_AGE_SEC &&
             gap > STALE_DISCONNECT_GAP_DEG) ||
-          (lastWaypointAgeSec > MODERATE_DISCONNECT_AGE_SEC &&
+          (effectiveAgeSec > MODERATE_DISCONNECT_AGE_SEC &&
             gap > MODERATE_DISCONNECT_GAP_DEG);
 
         if (shouldDisconnect) {
@@ -461,7 +526,41 @@ export function stitchHistoricalTrail(
     if (last) {
       const dx = livePosAdjusted[0] - last[0];
       const dy = livePosAdjusted[1] - last[1];
-      if (dx * dx + dy * dy > 0.0001 * 0.0001) {
+      const gapToAircraft = Math.sqrt(dx * dx + dy * dy);
+
+      if (gapToAircraft > 0.0001) {
+        // Bridge gap to aircraft with great-circle interpolation.
+        if (!tailMerged && gapToAircraft > CONNECT_BRIDGE_DEG) {
+          const steps = Math.max(
+            BRIDGE_MIN_STEPS,
+            Math.min(
+              BRIDGE_MAX_STEPS,
+              Math.ceil(gapToAircraft / BRIDGE_STEP_SIZE_DEG),
+            ),
+          );
+          const lastAlt = resultAltitudes[resultAltitudes.length - 1] ?? null;
+          const aircraftAlt = flight?.baroAltitude ?? null;
+
+          for (let s = 1; s < steps; s++) {
+            const t = s / steps;
+            const [lng, lat] = greatCircleIntermediate(
+              last[0],
+              last[1],
+              livePosAdjusted[0],
+              livePosAdjusted[1],
+              t,
+            );
+            resultPath.push([lng, lat]);
+
+            if (lastAlt == null && aircraftAlt == null) {
+              resultAltitudes.push(null);
+            } else {
+              const a0 = lastAlt ?? aircraftAlt ?? 0;
+              const a1 = aircraftAlt ?? lastAlt ?? a0;
+              resultAltitudes.push(a0 + (a1 - a0) * cubicEaseInOut(t));
+            }
+          }
+        }
         resultPath.push(livePosAdjusted);
         resultAltitudes.push(flight?.baroAltitude ?? null);
       }
@@ -475,8 +574,52 @@ export function stitchHistoricalTrail(
     return { path: [], altitudes: [], valid: false };
   }
 
+  // --- Safety: filter NaN/Infinity coordinates ---
+  {
+    let filtered = false;
+    for (let i = resultPath.length - 1; i >= 0; i--) {
+      const p = resultPath[i];
+      if (
+        !Number.isFinite(p[0]) ||
+        !Number.isFinite(p[1]) ||
+        p[0] < -540 ||
+        p[0] > 540 ||
+        p[1] < -90 ||
+        p[1] > 90
+      ) {
+        resultPath.splice(i, 1);
+        resultAltitudes.splice(i, 1);
+        filtered = true;
+      }
+    }
+    if (filtered && resultPath.length < 2) {
+      return { path: [], altitudes: [], valid: false };
+    }
+  }
+
+  // --- Safety: cap total path length to prevent memory/perf issues ---
+  const MAX_TOTAL_PATH_POINTS = 3000;
+  if (resultPath.length > MAX_TOTAL_PATH_POINTS) {
+    // Uniform downsample — keep first, last, and evenly-spaced interior.
+    const stride = (resultPath.length - 1) / (MAX_TOTAL_PATH_POINTS - 1);
+    const sampledPath: [number, number][] = [];
+    const sampledAlt: Array<number | null> = [];
+    for (let i = 0; i < MAX_TOTAL_PATH_POINTS - 1; i++) {
+      const idx = Math.round(i * stride);
+      sampledPath.push(resultPath[idx]);
+      sampledAlt.push(resultAltitudes[idx] ?? null);
+    }
+    sampledPath.push(resultPath[resultPath.length - 1]);
+    sampledAlt.push(resultAltitudes[resultAltitudes.length - 1] ?? null);
+    resultPath.splice(0, resultPath.length, ...sampledPath);
+    resultAltitudes.splice(0, resultAltitudes.length, ...sampledAlt);
+  }
+
   // --- Step 7: Remove V-shaped spikes (backtrack artifacts) ---
-  const cleaned = removeSpikePoints(resultPath, resultAltitudes);
+  const spiked = removeSpikePoints(resultPath, resultAltitudes);
+
+  // --- Step 7b: Remove distance outliers (MLAT artifacts, stale waypoints) ---
+  const cleaned = removeDistanceOutliers(spiked.path, spiked.altitudes, 3.0);
 
   if (cleaned.path.length < 2) {
     return { path: [], altitudes: [], valid: false };
@@ -609,8 +752,7 @@ export function stitchHistoricalTrail(
     }
   }
 
-  // Fallback when no junction was found (no live tail, disconnect, etc.):
-  // keep sharp-corner rounding for any remaining heading discontinuities.
+  // Fallback: round sharp corners and remove self-intersecting loops.
   const merged3D: [number, number, number][] = cleaned.path.map((p, i) => [
     p[0],
     p[1],

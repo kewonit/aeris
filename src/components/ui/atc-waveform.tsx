@@ -2,11 +2,9 @@
 
 import { useRef, useEffect } from "react";
 
-const BAR_COUNT = 12;
+const DEFAULT_BAR_COUNT = 12;
 const BAR_WIDTH = 2.5;
 const BAR_GAP = 2;
-const CANVAS_W = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP;
-const CANVAS_H = 28;
 const MIN_BAR_H = 2.5;
 const LERP = 0.22;
 
@@ -22,7 +20,7 @@ const capturedElements = new WeakMap<
   { source: MediaElementAudioSourceNode; analyser: AnalyserNode }
 >();
 
-function getOrCreateConnection(
+export function getOrCreateConnection(
   audioElement: HTMLAudioElement,
 ): AnalyserNode | null {
   if (!sharedCtx || sharedCtx.state === "closed") {
@@ -93,12 +91,18 @@ export function AtcWaveform({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
-  const barsRef = useRef<number[]>(new Array(BAR_COUNT).fill(0));
+  const barsRef = useRef<number[]>(new Array(DEFAULT_BAR_COUNT).fill(0));
+  /** Tracks canvas CSS size → derive bar count dynamically */
+  const layoutRef = useRef({
+    w: DEFAULT_BAR_COUNT * BAR_WIDTH + (DEFAULT_BAR_COUNT - 1) * BAR_GAP,
+    h: 28,
+    barCount: DEFAULT_BAR_COUNT,
+  });
 
   // ── Connect to Web Audio API ──────────────────────────────────────
   useEffect(() => {
     if (!active || !audioElement) {
-      barsRef.current = new Array(BAR_COUNT).fill(0);
+      barsRef.current = new Array(layoutRef.current.barCount).fill(0);
       analyserRef.current = null;
       return;
     }
@@ -128,15 +132,41 @@ export function AtcWaveform({
     const draw2d = canvas.getContext("2d");
     if (!draw2d) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = CANVAS_W * dpr;
-    canvas.height = CANVAS_H * dpr;
-    draw2d.scale(dpr, dpr);
+    /** Recompute canvas backing-store size from CSS dimensions. */
+    function syncCanvasSize() {
+      if (!canvas || !draw2d) return;
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      if (w < 1 || h < 1) return;
+
+      const barCount = Math.max(
+        4,
+        Math.floor((w + BAR_GAP) / (BAR_WIDTH + BAR_GAP)),
+      );
+      layoutRef.current = { w, h, barCount };
+
+      // Resize bars array when count changes
+      if (barsRef.current.length !== barCount) {
+        barsRef.current = new Array(barCount).fill(0);
+      }
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      draw2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    syncCanvasSize();
+
+    const ro = new ResizeObserver(() => syncCanvasSize());
+    ro.observe(canvas);
 
     // Hoist allocations out of draw loop — only reallocate when binCount changes
     let dataArray: Uint8Array<ArrayBuffer> | null = null;
     let binRanges: [number, number][] | null = null;
     let lastBinCount = 0;
+    let lastBarCount = 0;
 
     function draw() {
       rafRef.current = requestAnimationFrame(draw);
@@ -144,17 +174,25 @@ export function AtcWaveform({
       const now = performance.now();
       const analyser = analyserRef.current;
       const binCount = analyser?.frequencyBinCount ?? 128;
+      const { w: cW, h: cH, barCount } = layoutRef.current;
 
-      if (binCount !== lastBinCount) {
+      if (binCount !== lastBinCount || barCount !== lastBarCount) {
         dataArray = new Uint8Array(binCount) as Uint8Array<ArrayBuffer>;
-        binRanges = buildBinRanges(binCount, BAR_COUNT);
+        binRanges = buildBinRanges(binCount, barCount);
         lastBinCount = binCount;
+        lastBarCount = barCount;
       }
       if (analyser && dataArray) analyser.getByteFrequencyData(dataArray);
 
-      draw2d!.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      draw2d!.clearRect(0, 0, cW, cH);
 
-      for (let i = 0; i < BAR_COUNT; i++) {
+      // Compute theme once per frame (not per bar)
+      const isDark = document.documentElement.classList.contains("dark");
+      const idleFill = isDark
+        ? "rgba(255, 255, 255, 0.1)"
+        : "rgba(0, 0, 0, 0.1)";
+
+      for (let i = 0; i < barCount; i++) {
         // Average frequency bins in this bar's range
         const [startBin, endBin] = binRanges![i];
         let sum = 0;
@@ -172,19 +210,16 @@ export function AtcWaveform({
         barsRef.current[i] += (target - barsRef.current[i]) * LERP;
         const val = barsRef.current[i];
 
-        const barH = Math.max(MIN_BAR_H, val * (CANVAS_H - 2));
+        const barH = Math.max(MIN_BAR_H, val * (cH - 2));
         const x = i * (BAR_WIDTH + BAR_GAP);
-        const y = CANVAS_H - barH;
+        const y = cH - barH;
 
-        // Emerald when signal, dim white breathing when idle
+        // Emerald when signal, dim fill when idle
         if (raw > 0.04) {
           const intensity = Math.min(val * 1.6, 1);
           draw2d!.fillStyle = `rgba(52, 211, 153, ${0.5 + intensity * 0.5})`;
         } else {
-          const isDark = document.documentElement.classList.contains("dark");
-          draw2d!.fillStyle = isDark
-            ? "rgba(255, 255, 255, 0.1)"
-            : "rgba(0, 0, 0, 0.1)";
+          draw2d!.fillStyle = idleFill;
         }
         draw2d!.beginPath();
         draw2d!.roundRect(x, y, BAR_WIDTH, barH, 1);
@@ -193,14 +228,16 @@ export function AtcWaveform({
     }
 
     draw();
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+    };
   }, []);
 
   return (
     <canvas
       ref={canvasRef}
-      className="h-7 shrink-0"
-      style={{ width: `${CANVAS_W}px`, imageRendering: "auto" }}
+      className="h-6 w-10 shrink-0 sm:h-7 sm:w-13"
       aria-hidden="true"
     />
   );

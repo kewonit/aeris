@@ -8,8 +8,8 @@ const FT_TO_M = 0.3048;
 const TRACE_TIMEOUT_MS = 10_000;
 const OPENSKY_TIMEOUT_MS = 8_000;
 
-const TARGET_WAYPOINTS = 60;
-const MAX_AGE_SECONDS = 90 * 60;
+const TARGET_WAYPOINTS = 120;
+const MAX_AGE_SECONDS = 120 * 60;
 
 const GLOBE_TRACE_SOURCES = [
   {
@@ -35,9 +35,6 @@ const GLOBE_TRACE_SOURCES = [
 const OPENSKY_API = "https://opensky-network.org/api";
 
 const APP_UA = "Aeris/1.0 (flight-tracker; +https://github.com/kewonit/aeris)";
-
-let lastRequestTime = 0;
-const RATE_MS = 800;
 
 // trace[i] = [offset_sec, lat, lng, alt_ft|"ground"|null, gs, track, flags, vrate, ...]
 // flags bit 0 = stale
@@ -195,7 +192,14 @@ function parseReadsbTrace(hex: string, data: unknown): FlightTrack | null {
   for (let i = 1; i < legTrimmed.length; i++) {
     const prev = deduped[deduped.length - 1];
     const curr = legTrimmed[i];
-    if (prev.latitude === curr.latitude && prev.longitude === curr.longitude) {
+    // Skip exact duplicates and near-duplicates (< ~30m apart) from GPS jitter.
+    const dlat = (curr.latitude ?? 0) - (prev.latitude ?? 0);
+    const dlng = (curr.longitude ?? 0) - (prev.longitude ?? 0);
+    if (dlat * dlat + dlng * dlng < 0.0003 * 0.0003) {
+      // Keep the later point if it has better altitude data.
+      if (curr.baroAltitude != null && prev.baroAltitude == null) {
+        deduped[deduped.length - 1] = curr;
+      }
       continue;
     }
     deduped.push(curr);
@@ -295,7 +299,10 @@ function parseOpenSkyTrack(hex: string, data: unknown): FlightTrack | null {
   let lastLat: number | null = null;
   for (const p of legTrimmed) {
     if (lastLng !== null && lastLat !== null) {
-      if (p.longitude === lastLng && p.latitude === lastLat) continue;
+      // Skip exact duplicates and near-duplicates (< ~30m).
+      const dlat = (p.latitude ?? 0) - lastLat;
+      const dlng = (p.longitude ?? 0) - lastLng;
+      if (dlat * dlat + dlng * dlng < 0.0003 * 0.0003) continue;
     }
     deduped.push(p);
     lastLng = p.longitude;
@@ -325,19 +332,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  lastRequestTime = now;
-  if (elapsed < RATE_MS) {
-    return NextResponse.json(
-      { error: "Rate limited" },
-      {
-        status: 429,
-        headers: { "Cache-Control": "no-store", "Retry-After": "1" },
-      },
-    );
-  }
-
   const lastTwo = hex.slice(-2);
 
   const traceHeaders = (source: (typeof GLOBE_TRACE_SOURCES)[number]) => ({
@@ -348,33 +342,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   for (const source of GLOBE_TRACE_SOURCES) {
-    try {
-      const fullUrl = `${source.baseUrl}/${lastTwo}/trace_full_${hex}.json`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TRACE_TIMEOUT_MS);
+    // Try trace_full first (complete flight history), then trace_recent
+    // as fallback (last ~few minutes, still useful for active flights).
+    const urlsToTry = [
+      `${source.baseUrl}/${lastTwo}/trace_full_${hex}.json`,
+      `${source.baseUrl}/${lastTwo}/trace_recent_${hex}.json`,
+    ];
 
-      const res = await fetch(fullUrl, {
-        signal: controller.signal,
-        headers: traceHeaders(source),
-      });
-      clearTimeout(timer);
+    for (const traceUrl of urlsToTry) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TRACE_TIMEOUT_MS);
 
-      if (res.ok) {
-        // Skip non-JSON responses (CloudFlare challenges, maintenance pages)
-        const ct = res.headers.get("content-type") ?? "";
-        if (ct.includes("text/html") || ct.includes("text/xml")) continue;
+        const res = await fetch(traceUrl, {
+          signal: controller.signal,
+          headers: traceHeaders(source),
+        });
+        clearTimeout(timer);
 
-        const data = (await res.json()) as unknown;
-        const track = parseReadsbTrace(hex, data);
-        if (track && track.path.length >= 2) {
-          return NextResponse.json(
-            { track, source: source.name },
-            { headers: { "Cache-Control": "private, max-age=30" } },
-          );
+        if (res.ok) {
+          // Skip non-JSON responses (CloudFlare challenges, maintenance pages)
+          const ct = res.headers.get("content-type") ?? "";
+          if (ct.includes("text/html") || ct.includes("text/xml")) continue;
+
+          const data = (await res.json()) as unknown;
+          const track = parseReadsbTrace(hex, data);
+          if (track && track.path.length >= 2) {
+            return NextResponse.json(
+              { track, source: source.name },
+              { headers: { "Cache-Control": "private, max-age=30" } },
+            );
+          }
         }
+      } catch {
+        // Next URL / source
       }
-    } catch {
-      // Next source
     }
   }
 
