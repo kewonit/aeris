@@ -283,9 +283,17 @@ export function buildTrailLayers(params: TrailLayerParams) {
       const visiblePoints = getVisibleTrailPoints(d, animFlight);
       const len = visiblePoints.length;
 
-      // Use floor with a 500m bucket to avoid cache key flicker at
-      // round-number boundaries (Math.round toggles at exact midpoints).
-      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${d.baroAltitude != null ? Math.floor(d.baroAltitude / 500) : "n"}`;
+      // Include head position + altitude so the cache invalidates as the
+      // altitude profile shifts (e.g. during descent — old high-alt points
+      // scroll off, new low-alt points enter the visible window).
+      const headLng = animFlight?.longitude?.toFixed(4) ?? "";
+      const headLat = animFlight?.latitude?.toFixed(4) ?? "";
+      const headAlt =
+        animFlight?.baroAltitude != null &&
+        Number.isFinite(animFlight.baroAltitude)
+          ? Math.floor(animFlight.baroAltitude / 100)
+          : "";
+      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${headLng}_${headLat}_${headAlt}`;
       if (trailColorCache) {
         const cached = trailColorCache.get(d.icao24);
         if (cached && cached.key === colorKey) return cached.result;
