@@ -5,18 +5,23 @@ import type { FlightTrack, TrackWaypoint } from "@/lib/opensky-types";
 
 const HEX_REGEX = /^[0-9a-f]{6}$/;
 const FT_TO_M = 0.3048;
-const TRACE_TIMEOUT_MS = 10_000;
-const OPENSKY_TIMEOUT_MS = 8_000;
+const TRACE_TIMEOUT_MS = 5_000;
+const OPENSKY_TIMEOUT_MS = 5_000;
+
+// ── Smart Source Selection ─────────────────────────────────────────────
+// Tracks which source succeeded last to avoid wasteful parallel calls.
+// Try preferred source first; only race remaining sources on failure.
+let preferredSourceIdx = 0;
 
 const TARGET_WAYPOINTS = 120;
 const MAX_AGE_SECONDS = 120 * 60;
 
 const GLOBE_TRACE_SOURCES = [
   {
-    name: "airplanes.live",
-    baseUrl: "https://globe.airplanes.live/data/traces",
-    referer: "https://globe.airplanes.live/",
-    origin: "https://globe.airplanes.live",
+    name: "adsb.fi",
+    baseUrl: "https://globe.adsb.fi/data/traces",
+    referer: "https://globe.adsb.fi/",
+    origin: "https://globe.adsb.fi",
   },
   {
     name: "adsb.lol",
@@ -25,10 +30,10 @@ const GLOBE_TRACE_SOURCES = [
     origin: "https://globe.adsb.lol",
   },
   {
-    name: "adsb.fi",
-    baseUrl: "https://globe.adsb.fi/data/traces",
-    referer: "https://globe.adsb.fi/",
-    origin: "https://globe.adsb.fi",
+    name: "airplanes.live",
+    baseUrl: "https://globe.airplanes.live/data/traces",
+    referer: "https://globe.airplanes.live/",
+    origin: "https://globe.airplanes.live",
   },
 ] as const;
 
@@ -332,7 +337,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const lastTwo = hex.slice(-2);
+  // Narrow to string for nested closures
+  const validHex: string = hex;
+
+  const lastTwo = validHex.slice(-2);
 
   const traceHeaders = (source: (typeof GLOBE_TRACE_SOURCES)[number]) => ({
     Accept: "application/json",
@@ -341,15 +349,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     Origin: source.origin,
   });
 
-  for (const source of GLOBE_TRACE_SOURCES) {
-    // Try trace_full first (complete flight history), then trace_recent
-    // as fallback (last ~few minutes, still useful for active flights).
-    const urlsToTry = [
-      `${source.baseUrl}/${lastTwo}/trace_full_${hex}.json`,
-      `${source.baseUrl}/${lastTwo}/trace_recent_${hex}.json`,
+  // ── Helper: try both URLs for a single source ─────────────────────
+  async function trySource(
+    sourceIdx: number,
+  ): Promise<{ track: FlightTrack; sourceName: string } | null> {
+    const source = GLOBE_TRACE_SOURCES[sourceIdx];
+    const urls = [
+      `${source.baseUrl}/${lastTwo}/trace_full_${validHex}.json`,
+      `${source.baseUrl}/${lastTwo}/trace_recent_${validHex}.json`,
     ];
 
-    for (const traceUrl of urlsToTry) {
+    for (const traceUrl of urls) {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TRACE_TIMEOUT_MS);
@@ -361,31 +371,63 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         clearTimeout(timer);
 
         if (res.ok) {
-          // Skip non-JSON responses (CloudFlare challenges, maintenance pages)
           const ct = res.headers.get("content-type") ?? "";
           if (ct.includes("text/html") || ct.includes("text/xml")) continue;
 
           const data = (await res.json()) as unknown;
-          const track = parseReadsbTrace(hex, data);
+          const track = parseReadsbTrace(validHex, data);
           if (track && track.path.length >= 2) {
-            return NextResponse.json(
-              { track, source: source.name },
-              { headers: { "Cache-Control": "private, max-age=30" } },
-            );
+            return { track, sourceName: source.name };
           }
         }
       } catch {
-        // Next URL / source
+        // Next URL
       }
     }
+    return null;
   }
 
+  // ── Step 1: Try preferred source first (resource-efficient) ───────
+  const preferred = await trySource(preferredSourceIdx);
+  if (preferred) {
+    return NextResponse.json(
+      { track: preferred.track, source: preferred.sourceName },
+      { headers: { "Cache-Control": "public, s-maxage=15, max-age=30" } },
+    );
+  }
+
+  // ── Step 2: Race remaining sources (only on preferred failure) ────
+  const remainingIndices = GLOBE_TRACE_SOURCES.map((_, i) => i).filter(
+    (i) => i !== preferredSourceIdx,
+  );
+
+  try {
+    const result = await Promise.any(
+      remainingIndices.map((idx) =>
+        trySource(idx).then((r) => {
+          if (!r) throw new Error("no data");
+          // Update preferred source for future requests
+          preferredSourceIdx = idx;
+          return r;
+        }),
+      ),
+    );
+
+    return NextResponse.json(
+      { track: result.track, source: result.sourceName },
+      { headers: { "Cache-Control": "public, s-maxage=15, max-age=30" } },
+    );
+  } catch {
+    // All globe sources failed — fall through to OpenSky
+  }
+
+  // ── Step 3: OpenSky fallback ──────────────────────────────────────
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OPENSKY_TIMEOUT_MS);
 
     const res = await fetch(
-      `${OPENSKY_API}/tracks/all?icao24=${encodeURIComponent(hex)}&time=0`,
+      `${OPENSKY_API}/tracks/all?icao24=${encodeURIComponent(validHex)}&time=0`,
       {
         signal: controller.signal,
         cache: "no-store",
@@ -405,7 +447,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (res.ok) {
-      // Reject non-JSON responses (CloudFlare challenge pages)
       const ct = res.headers.get("content-type") ?? "";
       if (ct.includes("text/html") || ct.includes("text/xml")) {
         return NextResponse.json(
@@ -415,7 +456,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       const data = (await res.json()) as unknown;
-      const track = parseOpenSkyTrack(hex, data);
+      const track = parseOpenSkyTrack(validHex, data);
       if (track && track.path.length >= 2) {
         return NextResponse.json(
           { track, source: "opensky" },

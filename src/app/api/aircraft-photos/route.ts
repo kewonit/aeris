@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const FETCH_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS = 5_000;
 const AIRPORT_DATA_TIMEOUT_MS = 5_000;
-const JETAPI_TIMEOUT_MS = 10_000;
+const JETAPI_TIMEOUT_MS = 5_000;
 const HEX_REGEX = /^[0-9a-f]{6}$/;
 const REG_REGEX = /^[A-Z0-9][-A-Z0-9]{1,6}$/;
 

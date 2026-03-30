@@ -19,7 +19,11 @@
 
 # production
 /build
+
+# local-only copilot config (skills, agents, instructions)
 .github/agents
+.github/skills
+.github/copilot-instructions.md
 
 # misc
 .DS_Store

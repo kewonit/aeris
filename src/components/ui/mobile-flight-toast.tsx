@@ -15,11 +15,10 @@ import {
   Camera,
   ImageOff,
   Plane,
-  Shield,
-  AlertTriangle,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import type { FlightState } from "@/lib/opensky";
+import { useRouteInfo } from "@/hooks/use-route-info";
+import type { FlightState, FlightTrack } from "@/lib/opensky";
 import {
   metersToFeet,
   msToKnots,
@@ -29,6 +28,7 @@ import {
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
 import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
+import { formatAirportCode } from "@/lib/route-lookup";
 import {
   loadedAirlineLogoUrls,
   trackAirlineLogoLoaded,
@@ -38,6 +38,7 @@ import {
 
 type MobileFlightToastProps = {
   flight: FlightState;
+  track?: FlightTrack | null;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
@@ -73,6 +74,7 @@ function isEmergencyStatus(status?: string | null): boolean {
 
 export function MobileFlightToast({
   flight,
+  track,
   onClose,
   onToggleFpv,
   isFpvActive = false,
@@ -85,6 +87,8 @@ export function MobileFlightToast({
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
     flight.longitude != null && flight.latitude != null && !flight.onGround;
+
+  const routeInfo = useRouteInfo(flight, track);
 
   // â”€â”€ Airline logo with fallback chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const logoCandidates = airlineLogoCandidates(airline, flight.callsign);
@@ -326,7 +330,7 @@ export function MobileFlightToast({
               <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2 shadow-sm">
                 {genericLogoFailed ? (
                   <span className="text-[16px] font-semibold text-background/25">
-                    â€”
+                    —
                   </span>
                 ) : (
                   <Image
@@ -350,7 +354,7 @@ export function MobileFlightToast({
             </p>
             <p className="mt-0.5 truncate text-[10px] font-medium tracking-widest text-foreground/30 uppercase">
               {flight.icao24}
-              {flightNum ? ` Â· #${flightNum}` : ""}
+              {flightNum ? ` · #${flightNum}` : ""}
             </p>
           </div>
 
@@ -371,7 +375,7 @@ export function MobileFlightToast({
             <p className="truncate text-[11px] font-medium text-foreground/45">
               {company}
               {model ? (
-                <span className="text-foreground/25"> Â· {model}</span>
+                <span className="text-foreground/25"> · {model}</span>
               ) : null}
             </p>
           </div>
@@ -391,24 +395,37 @@ export function MobileFlightToast({
                   aircraftDetails.owner,
                 ]
                   .filter(Boolean)
-                  .join(" Â· ")}
+                  .join(" · ")}
               </p>
             </div>
           )}
-        {/* Military / Emergency badges */}
+        {/* Route info */}
+        {(routeInfo.origin || routeInfo.destination) && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <Navigation className="h-3 w-3 shrink-0 text-foreground/20" />
+            <p className="truncate text-[11px] font-semibold text-foreground/50">
+              {routeInfo.origin ? formatAirportCode(routeInfo.origin) : "—"}
+              <span className="mx-1 text-foreground/20">→</span>
+              {routeInfo.destination
+                ? formatAirportCode(routeInfo.destination)
+                : "—"}
+            </p>
+          </div>
+        )}
+        {/* Military / Emergency indicators */}
         {(isMilitary(flight.dbFlags) ||
           isEmergencyStatus(flight.emergencyStatus)) && (
-          <div className="mt-2 flex items-center gap-1.5 px-0">
+          <div className="mt-2 flex items-center gap-3">
             {isMilitary(flight.dbFlags) && (
-              <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-400 uppercase ring-1 ring-amber-400/20">
-                <Shield className="h-2.5 w-2.5" />
-                MIL
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-amber-400/70">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
+                Military
               </span>
             )}
             {isEmergencyStatus(flight.emergencyStatus) && (
-              <span className="inline-flex animate-pulse items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-red-400 uppercase ring-1 ring-red-400/25">
-                <AlertTriangle className="h-2.5 w-2.5" />
-                {flight.emergencyStatus?.toUpperCase()}
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-red-400/80">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                {flight.emergencyStatus}
               </span>
             )}
           </div>
@@ -432,8 +449,8 @@ export function MobileFlightToast({
           label="HDG"
           value={
             heading !== null && Number.isFinite(heading)
-              ? `${Math.round(heading)}Â° ${cardinal}`
-              : "â€”"
+              ? `${Math.round(heading)}° ${cardinal}`
+              : "—"
           }
         />
         <MiniMetric
@@ -442,7 +459,7 @@ export function MobileFlightToast({
           value={
             flight.verticalRate !== null && Number.isFinite(flight.verticalRate)
               ? `${flight.verticalRate > 0 ? "+" : ""}${Math.round(flight.verticalRate)}`
-              : "â€”"
+              : "—"
           }
         />
       </div>
@@ -477,9 +494,9 @@ export function MobileFlightToast({
                 Number.isFinite(flight.longitude) && (
                   <span className="text-foreground/20">
                     {" "}
-                    Â· {Math.abs(flight.latitude).toFixed(2)}Â°
+                    · {Math.abs(flight.latitude).toFixed(2)}°
                     {flight.latitude >= 0 ? "N" : "S"},{" "}
-                    {Math.abs(flight.longitude).toFixed(2)}Â°
+                    {Math.abs(flight.longitude).toFixed(2)}°
                     {flight.longitude >= 0 ? "E" : "W"}
                   </span>
                 )}
@@ -508,7 +525,7 @@ export function MobileFlightToast({
             >
               {flight.squawk}
               {isEmergencySquawk(flight.squawk) && (
-                <span className="ml-1.5 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-red-400 uppercase">
+                <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
                   {squawkLabel(flight.squawk)}
                 </span>
               )}

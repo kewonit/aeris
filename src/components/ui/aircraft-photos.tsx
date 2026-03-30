@@ -323,7 +323,7 @@ export function AircraftPhotos({
   if (aircraft?.airline && !detailParts.includes(aircraft.airline)) {
     detailParts.push(aircraft.airline);
   }
-  const detailLine = detailParts.join(" Â· ");
+  const detailLine = detailParts.join(" · ");
 
   return (
     <>
@@ -339,7 +339,7 @@ export function AircraftPhotos({
         >
           <Camera className="h-3 w-3 text-foreground/25" />
           <span className="text-[10px] font-medium tracking-wider text-foreground/30 uppercase">
-            {loading ? "Loadingâ€¦" : hasPhotos ? "Photos" : "Aircraft"}
+            {loading ? "Loading\u2026" : hasPhotos ? "Photos" : "Aircraft"}
           </span>
           {hasPhotos && (
             <span className="text-[10px] tabular-nums text-foreground/20">

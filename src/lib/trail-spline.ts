@@ -90,14 +90,11 @@ function reflectEndpoint(
 
   // Clamp reflection distance to 1° (~111km) to prevent the virtual
   // control point from swinging the spline too far on sparse paths.
+  // Only scale lat/lng — altitude (meters) is independent of geographic clamping.
   const MAX_REFLECT_DEG = 1.0;
   const scale = dist > MAX_REFLECT_DEG ? MAX_REFLECT_DEG / dist : 1.0;
 
-  return [
-    anchor[0] + dx * scale,
-    anchor[1] + dy * scale,
-    anchor[2] + dz * scale,
-  ];
+  return [anchor[0] + dx * scale, anchor[1] + dy * scale, anchor[2] + dz];
 }
 
 /**

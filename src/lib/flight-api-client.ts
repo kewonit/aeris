@@ -1,6 +1,6 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
-// 2-tier fallback: adsb.lol proxy → OpenSky.
+// 3-tier fallback: airplanes.live proxy → adsb.lol proxy → OpenSky.
 // Dev/override: ?provider=airplanes|adsb|opensky in the URL.
 // ────────────────────────────────────────────────────────────────────────
 
@@ -144,27 +144,7 @@ export function getProviderOverride(): ProviderName {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const AIRPLANES_LIVE_BASE = "https://api.airplanes.live/v2";
-const DIRECT_TIMEOUT_MS = 10_000;
-const PROXY_TIMEOUT_MS = 15_000;
-
-// Client-side rate limiter for direct airplanes.live (1 req/s + margin).
-// Uses a Promise chain to serialize slot acquisition — concurrent callers
-// queue up instead of both reading the same timestamp and firing together.
-const DIRECT_RATE_MS = 1_100;
-let lastDirectTime = 0;
-let rateQueue: Promise<void> = Promise.resolve();
-
-async function acquireDirectSlot(): Promise<void> {
-  const slot = rateQueue.then(async () => {
-    const elapsed = Date.now() - lastDirectTime;
-    const wait = Math.max(0, DIRECT_RATE_MS - elapsed);
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastDirectTime = Date.now();
-  });
-  rateQueue = slot;
-  await slot;
-}
+const PROXY_TIMEOUT_MS = 8_000;
 
 // ── Internal Helpers ───────────────────────────────────────────────────
 
@@ -213,56 +193,27 @@ function validateReadsb(payload: unknown): ReadsbApiResponse {
   return payload as ReadsbApiResponse;
 }
 
-// ── Tier 1: Direct to airplanes.live ───────────────────────────────────
+// ── Tier 1 / Tier 2: readsb via server proxy ──────────────────────────
 //
-// Avoid headers that trigger CORS preflight (Cache-Control, Pragma, etc.)
-// since airplanes.live returns 405 for OPTIONS. Use cache-busting query
-// param instead of cache: "no-store".
-
-async function fetchDirectAirplanesLive(
-  path: string,
-  signal?: AbortSignal,
-): Promise<ReadsbApiResponse> {
-  // Serialized rate limiting — concurrent callers queue up
-  await acquireDirectSlot();
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-
-  return withTimeout(
-    async (innerSignal) => {
-      const sep = path.includes("?") ? "&" : "?";
-      const url = `${AIRPLANES_LIVE_BASE}${path}${sep}_t=${Date.now()}`;
-
-      const res = await fetch(url, { signal: innerSignal });
-      if (!res.ok) throw new Error(`airplanes.live ${res.status}`);
-
-      const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("text/html") || ct.includes("text/xml")) {
-        throw new Error("airplanes.live returned non-JSON response");
-      }
-
-      return validateReadsb(await res.json());
-    },
-    DIRECT_TIMEOUT_MS,
-    signal,
-  );
-}
-
-// ── Tier 2: adsb.lol via server proxy ──────────────────────────────────
+// Server proxy supports ?provider=adsb|airplanes.
+// Airplanes.live is Tier 1 (richest data: registration, type, description).
+// adsb.lol is Tier 2 (community-run, generous limits).
 
 async function fetchViaProxy(
   path: string,
+  provider: "adsb" | "airplanes" = "adsb",
   signal?: AbortSignal,
 ): Promise<ReadsbApiResponse> {
   return withTimeout(
     async (innerSignal) => {
-      const url = `/api/flights?path=${encodeURIComponent(path)}`;
+      const url = `/api/flights?path=${encodeURIComponent(path)}&provider=${provider}`;
       const res = await fetch(url, { cache: "no-store", signal: innerSignal });
 
-      if (!res.ok) throw new Error(`adsb.lol proxy ${res.status}`);
+      if (!res.ok) throw new Error(`${provider} proxy ${res.status}`);
 
       const ct = res.headers.get("content-type") ?? "";
       if (ct.includes("text/html") || ct.includes("text/xml")) {
-        throw new Error("adsb.lol proxy returned non-JSON response");
+        throw new Error(`${provider} proxy returned non-JSON response`);
       }
 
       return validateReadsb(await res.json());
@@ -336,7 +287,7 @@ async function runFallbackChain(
 
 /**
  * Fetch flights within a radius of a geographic point.
- * Uses the fallback chain: adsb.lol → OpenSky.
+ * Uses the fallback chain: airplanes.live proxy → adsb.lol proxy → OpenSky.
  */
 export async function fetchFlightsByPoint(
   lat: number,
@@ -357,29 +308,43 @@ export async function fetchFlightsByPoint(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
-  // Skip direct airplanes.live in the browser — CORS blocks it.
-  // Only attempt when explicitly overridden via ?provider=airplanes.
-  if (override === "airplanes") {
+  if (override === "airplanes" || override === "auto") {
+    // airplanes.live via proxy (direct fails due to CORS)
     tiers.push({
       id: "airplanes",
       fn: async () => {
-        const resp = await fetchDirectAirplanesLive(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseAircraftList(resp.ac, options);
       },
     });
   }
 
-  if (override === "auto" || override === "adsb") {
+  if (override === "auto") {
+    // Default chain continues: adsb.lol (proxy) → OpenSky
     tiers.push({
       id: "adsb",
       fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, options);
+      },
+    });
+    tiers.push({
+      id: "opensky",
+      fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
+    });
+  }
+
+  if (override === "adsb") {
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseAircraftList(resp.ac, options);
       },
     });
   }
 
-  if (override === "auto" || override === "opensky") {
+  if (override === "opensky") {
     tiers.push({
       id: "opensky",
       fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
@@ -391,7 +356,7 @@ export async function fetchFlightsByPoint(
 
 /**
  * Fetch a single aircraft by ICAO24 hex address.
- * Uses the fallback chain: adsb.lol → OpenSky.
+ * Uses the fallback chain: airplanes.live proxy → adsb.lol proxy → OpenSky.
  */
 export async function fetchFlightByHex(
   icao24: string,
@@ -410,27 +375,46 @@ export async function fetchFlightByHex(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
-  if (override === "airplanes") {
+  if (override === "airplanes" || override === "auto") {
+    // airplanes.live via proxy (direct fails due to CORS)
     tiers.push({
       id: "airplanes",
       fn: async () => {
-        const resp = await fetchDirectAirplanesLive(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });
   }
 
-  if (override === "auto" || override === "adsb") {
+  if (override === "auto") {
+    // Default chain continues: adsb.lol proxy → OpenSky
     tiers.push({
       id: "adsb",
       fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+    tiers.push({
+      id: "opensky",
+      fn: async () => {
+        const result = await openskyFetchByIcao24(normalized, signal);
+        return result.flight ? [result.flight] : [];
+      },
+    });
+  }
+
+  if (override === "adsb") {
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });
   }
 
-  if (override === "auto" || override === "opensky") {
+  if (override === "opensky") {
     tiers.push({
       id: "opensky",
       fn: async () => {
@@ -450,7 +434,7 @@ export async function fetchFlightByHex(
 
 /**
  * Fetch flights matching a callsign.
- * Uses: adsb.lol only (OpenSky callsign search costs 4 credits).
+ * No OpenSky tier: callsign search queries all aircraft (4-credit global fetch).
  */
 export async function fetchFlightByCallsign(
   callsign: string,
@@ -467,21 +451,33 @@ export async function fetchFlightByCallsign(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
-  if (override === "airplanes") {
+  if (override === "airplanes" || override === "auto") {
+    // airplanes.live via proxy (direct fails due to CORS)
     tiers.push({
       id: "airplanes",
       fn: async () => {
-        const resp = await fetchDirectAirplanesLive(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });
   }
 
-  if (override === "auto" || override === "adsb") {
+  if (override === "auto") {
+    // Default chain continues: adsb.lol proxy
     tiers.push({
       id: "adsb",
       fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, signal);
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+  }
+
+  if (override === "adsb") {
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });

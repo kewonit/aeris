@@ -146,7 +146,8 @@ export function filterGroundSegments<T extends WaypointLike>(
 
 /**
  * Minimum consecutive ground points required to consider a sequence
- * a genuine landing (filters out single-point GPS noise on ground).
+ * a genuine landing (filters out isolated GPS noise on ground).
+ * A value of 2 means any sequence shorter than 2 ground points is ignored.
  */
 const MIN_GROUND_BEFORE_TAKEOFF = 2;
 

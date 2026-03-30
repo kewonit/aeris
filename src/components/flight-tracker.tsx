@@ -55,6 +55,7 @@ import type { FlightState } from "@/lib/opensky";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
+import { processDepartures } from "@/lib/route-detection";
 import type { PickingInfo } from "@deck.gl/core";
 import {
   DEFAULT_CITY,
@@ -151,6 +152,11 @@ function FlightTrackerInner() {
 
   const displayFlights = flights;
   const displayTrails = useTrailHistory(displayFlights);
+
+  // Feed flights into departure detection for route estimation
+  useEffect(() => {
+    if (displayFlights.length > 0) processDepartures(displayFlights);
+  }, [displayFlights]);
 
   // Single Map for O(1) flight lookups — replaces 4× O(n) find() calls per poll
   const displayFlightMap = useMemo(() => {
@@ -490,6 +496,7 @@ function FlightTrackerInner() {
             <FlightCard
               flight={displayFlight}
               trail={selectedTrail}
+              track={selectedTrack}
               onClose={handleDeselectFlight}
               onToggleFpv={handleToggleFpv}
               isFpvActive={
@@ -604,6 +611,7 @@ function FlightTrackerInner() {
             >
               <MobileFlightToast
                 flight={displayFlight}
+                track={selectedTrack}
                 onClose={handleDeselectFlight}
                 onToggleFpv={handleToggleFpv}
                 isFpvActive={fpvIcao24 === displayFlight.icao24}

@@ -11,7 +11,7 @@ export type MapViewState = {
 type MapStateTrackerProps = {
   /** Mutable ref updated on every moveend — avoids re-renders. */
   stateRef: React.MutableRefObject<MapViewState>;
-  /** Optional callback on state change (throttled internally). */
+  /** Optional callback fired on every moveend/zoomend event. */
   onChange?: (state: MapViewState) => void;
 };
 
