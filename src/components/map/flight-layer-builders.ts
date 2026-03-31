@@ -302,13 +302,14 @@ export function buildTrailLayers(params: TrailLayerParams) {
       const isFullHist = d.fullHistory === true;
       const result = visiblePoints.map((point, i) => {
         const tVal = len > 1 ? i / (len - 1) : 1;
+        // Unified fade: fullHistory uses a slightly gentler curve so the
+        // full flight path remains visible, but both start at the same
+        // base opacity for visual consistency.
         const fade = isFullHist
-          ? 0.35 + 0.65 * Math.pow(tVal, 1.1)
+          ? 0.2 + 0.8 * Math.pow(tVal, 1.2)
           : 0.15 + 0.85 * Math.pow(tVal, 1.4);
         const base = altColors ? altitudeToColor(point[2]) : defaultColor;
-        const alpha = isFullHist
-          ? Math.round(55 + fade * 165)
-          : Math.round(60 + fade * 160);
+        const alpha = Math.round(55 + fade * 165);
         return [base[0], base[1], base[2], alpha];
       }) as [number, number, number, number][];
       trailColorCache?.set(d.icao24, { key: colorKey, result });

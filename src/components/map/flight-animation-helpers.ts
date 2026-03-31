@@ -4,7 +4,6 @@ import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
 import {
   removeSpikePoints,
   removeDistanceOutliers,
-  roundSharpCorners3D,
   catmullRomSpline3D,
 } from "@/lib/trail-smoothing";
 import type { ElevatedPoint, Snapshot } from "./flight-layer-constants";
@@ -452,7 +451,9 @@ export function buildTrailBasePath(
       a != null && Number.isFinite(a) ? a : fallbackAlt,
     );
     const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
-    return pathSlice.map(
+
+    // Build the elevated points with smoothed altitudes.
+    let elevated: ElevatedPoint[] = pathSlice.map(
       (p, i) =>
         [
           p[0],
@@ -462,6 +463,32 @@ export function buildTrailBasePath(
             : fallbackAlt,
         ] as ElevatedPoint,
     );
+
+    // Light 2D position smoothing — the historical portion is already
+    // splined and smooth, so this barely affects it.  But the live tail
+    // (~24 raw GPS points appended by trail-stitching) gets the same
+    // box-filter smoothing as active trails, eliminating the visual
+    // mismatch between selected and unselected trail curves.
+    if (elevated.length >= 3) {
+      for (let pass = 0; pass < 2; pass++) {
+        const next: ElevatedPoint[] = [elevated[0]];
+        for (let i = 1; i < elevated.length - 1; i++) {
+          next.push([
+            elevated[i - 1][0] * 0.25 +
+              elevated[i][0] * 0.5 +
+              elevated[i + 1][0] * 0.25,
+            elevated[i - 1][1] * 0.25 +
+              elevated[i][1] * 0.5 +
+              elevated[i + 1][1] * 0.25,
+            elevated[i][2], // preserve already-smoothed altitude
+          ]);
+        }
+        next.push(elevated[elevated.length - 1]);
+        elevated = next;
+      }
+    }
+
+    return elevated;
   }
 
   // Active trails: remove GPS glitches (distance outliers + V-spikes),
@@ -520,11 +547,12 @@ export function buildTrailBasePath(
   ]);
 
   if (elevated.length >= 2) {
-    const rounded = roundSharpCorners3D(elevated, 15);
-    const splined = catmullRomSpline3D(rounded, 5, 14);
-    // Centripetal Catmull-Rom (alpha=0.5) inherently avoids self-
-    // intersections.  Removing loops here would cut through legitimate
-    // aircraft orbits/holding patterns, creating Z-shaped artifacts.
+    // Skip roundSharpCorners3D — with only ~40 GPS points, the 15°
+    // threshold replaces almost every waypoint with Bézier arcs,
+    // creating artificial curves that don't match the actual flight
+    // path.  The Catmull-Rom spline alone produces smooth, accurate
+    // curves through the real GPS positions.
+    const splined = catmullRomSpline3D(elevated, 5, 14);
     return splined;
   }
   return elevated;
@@ -547,10 +575,10 @@ export function buildVisibleTrailPoints(
   const denseBasePath =
     cachedBasePath ?? buildTrailBasePath(trail, trailDistance);
 
-  // Skip Chaikin subdivision — the Catmull-Rom spline, roundSharpCorners3D,
-  // and Bézier head-arc already produce smooth, dense output.  Running
-  // Chaikin on top would bloat ~200 pts → ~1600 per trail per frame,
-  // causing severe lag during orbit with 100+ aircraft.
+  // Skip Chaikin subdivision — the Catmull-Rom spline and Bézier
+  // head-arc already produce smooth, dense output.  Running Chaikin on
+  // top would bloat ~200 pts → ~1600 per trail per frame, causing
+  // severe lag during orbit with 100+ aircraft.
   const skipChaikin = true;
 
   if (
