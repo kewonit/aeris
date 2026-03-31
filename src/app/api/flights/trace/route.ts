@@ -13,7 +13,7 @@ const OPENSKY_TIMEOUT_MS = 5_000;
 // Try preferred source first; only race remaining sources on failure.
 let preferredSourceIdx = 0;
 
-const TARGET_WAYPOINTS = 120;
+const TARGET_WAYPOINTS = 240;
 const MAX_AGE_SECONDS = 120 * 60;
 
 const GLOBE_TRACE_SOURCES = [
@@ -212,7 +212,7 @@ function parseReadsbTrace(hex: string, data: unknown): FlightTrack | null {
 
   if (deduped.length < 2) return null;
 
-  const sampled = downsampleUniform(deduped, TARGET_WAYPOINTS);
+  const sampled = downsamplePreservingCurves(deduped, TARGET_WAYPOINTS);
 
   return {
     icao24: hex.toLowerCase(),
@@ -223,21 +223,138 @@ function parseReadsbTrace(hex: string, data: unknown): FlightTrack | null {
   };
 }
 
-function downsampleUniform(
+/**
+ * Curvature-aware downsampling using Ramer-Douglas-Peucker (RDP).
+ *
+ * Preserves waypoints at curves and turns while aggressively simplifying
+ * straight segments. Binary-searches for the RDP epsilon that produces
+ * approximately `target` points. Falls back to uniform sampling if RDP
+ * over-simplifies (< 50% of target).
+ */
+function downsamplePreservingCurves(
   points: TrackWaypoint[],
   target: number,
 ): TrackWaypoint[] {
   if (points.length <= target) return points;
 
-  const result: TrackWaypoint[] = [points[0]];
-  const step = (points.length - 1) / (target - 1);
+  let lo = 0;
+  let hi = 5; // degrees — generous upper bound for epsilon
+  let bestResult = points;
 
-  for (let i = 1; i < target - 1; i++) {
-    result.push(points[Math.round(i * step)]);
+  for (let iter = 0; iter < 20; iter++) {
+    const mid = (lo + hi) / 2;
+    const result = rdpSimplifyWaypoints(points, mid);
+    if (result.length <= target) {
+      bestResult = result;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+    if (Math.abs(result.length - target) < target * 0.05) break;
   }
 
-  result.push(points[points.length - 1]);
+  // If RDP over-simplified (< 50% of target), fall back to uniform.
+  if (bestResult.length < target * 0.5 && points.length > target) {
+    const result: TrackWaypoint[] = [points[0]];
+    const step = (points.length - 1) / (target - 1);
+    for (let i = 1; i < target - 1; i++) {
+      result.push(points[Math.round(i * step)]);
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  }
+
+  return bestResult;
+}
+
+/**
+ * Iterative RDP simplification for TrackWaypoints using lat/lng.
+ * Keeps points that deviate significantly from the straight line
+ * between their neighbors — i.e., curve-defining points.
+ */
+function rdpSimplifyWaypoints(
+  points: TrackWaypoint[],
+  epsilon: number,
+): TrackWaypoint[] {
+  const n = points.length;
+  if (n <= 2) return points.slice();
+
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[n - 1] = 1;
+
+  const stack: [number, number][] = [[0, n - 1]];
+
+  while (stack.length > 0) {
+    const [start, end] = stack.pop()!;
+    let maxDist = 0;
+    let maxIdx = start;
+
+    const first = points[start];
+    const last = points[end];
+
+    for (let i = start + 1; i < end; i++) {
+      const d = waypointPerpendicularDist(points[i], first, last);
+      if (d > maxDist) {
+        maxDist = d;
+        maxIdx = i;
+      }
+    }
+
+    if (maxDist > epsilon) {
+      keep[maxIdx] = 1;
+      if (maxIdx - start > 1) stack.push([start, maxIdx]);
+      if (end - maxIdx > 1) stack.push([maxIdx, end]);
+    }
+  }
+
+  const result: TrackWaypoint[] = [];
+  for (let i = 0; i < n; i++) {
+    if (keep[i]) result.push(points[i]);
+  }
   return result;
+}
+
+/** Perpendicular distance from point P to line segment A→B using lat/lng.
+ *  Called only with pre-validated waypoints (null lat/lng already filtered). */
+function waypointPerpendicularDist(
+  p: TrackWaypoint,
+  a: TrackWaypoint,
+  b: TrackWaypoint,
+): number {
+  const aLat = a.latitude!;
+  const aLng = a.longitude!;
+  const bLat = b.latitude!;
+  const bLng = b.longitude!;
+  const pLat = p.latitude!;
+  const pLng = p.longitude!;
+
+  const avgLat = ((aLat + bLat + pLat) / 3) * (Math.PI / 180);
+  const cosLat = Math.cos(avgLat);
+
+  const ax = aLng * cosLat;
+  const ay = aLat;
+  const bx = bLng * cosLat;
+  const by = bLat;
+  const px = pLng * cosLat;
+  const py = pLat;
+
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+
+  const abLenSq = abx * abx + aby * aby;
+  if (abLenSq < 1e-12) {
+    return Math.sqrt(apx * apx + apy * apy);
+  }
+
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / abLenSq));
+  const projX = ax + t * abx;
+  const projY = ay + t * aby;
+  const dx = px - projX;
+  const dy = py - projY;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function parseOpenSkyTrack(hex: string, data: unknown): FlightTrack | null {
@@ -316,7 +433,7 @@ function parseOpenSkyTrack(hex: string, data: unknown): FlightTrack | null {
 
   if (deduped.length < 2) return null;
 
-  const sampled = downsampleUniform(deduped, TARGET_WAYPOINTS);
+  const sampled = downsamplePreservingCurves(deduped, TARGET_WAYPOINTS);
 
   return {
     icao24: hex,
@@ -360,15 +477,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ];
 
     for (const traceUrl of urls) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TRACE_TIMEOUT_MS);
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), TRACE_TIMEOUT_MS);
-
         const res = await fetch(traceUrl, {
           signal: controller.signal,
           headers: traceHeaders(source),
         });
-        clearTimeout(timer);
 
         if (res.ok) {
           const ct = res.headers.get("content-type") ?? "";
@@ -382,6 +497,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
       } catch {
         // Next URL
+      } finally {
+        clearTimeout(timer);
       }
     }
     return null;

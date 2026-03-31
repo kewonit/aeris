@@ -37,7 +37,7 @@ export type Settings = {
 const TRAIL_THICKNESS_MIN = 0.5;
 const TRAIL_THICKNESS_MAX = 8;
 const TRAIL_DISTANCE_MIN = 12;
-const TRAIL_DISTANCE_MAX = 100;
+const TRAIL_DISTANCE_MAX = 120;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
@@ -81,7 +81,7 @@ const DEFAULT_SETTINGS: Settings = {
   orbitDirection: "clockwise",
   showTrails: true,
   trailThickness: 1.3,
-  trailDistance: 40,
+  trailDistance: 80,
   showShadows: true,
   showAltitudeColors: true,
   fpvChaseDistance: 0.0048,

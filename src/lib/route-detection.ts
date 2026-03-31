@@ -48,9 +48,6 @@ const DEPARTURE_DEBOUNCE_MS = 5 * 60_000;
 /** Maximum entries in departure tracking map */
 const MAX_DEPARTURE_ENTRIES = 500;
 
-/** Metres to feet conversion */
-const M_TO_FT = 3.28084;
-
 // ── Destination estimation constants ───────────────────────────────────
 
 /** Half-angle of the forward search cone (degrees) */
@@ -190,8 +187,8 @@ export function getDeparture(icao24: string): DepartureInfo | null {
 // ── Trace-Based Departure Detection ────────────────────────────────────
 
 /** Max altitude (meters) at the first waypoint to consider it a departure point.
- *  After trimToLastFlight, the first waypoint is typically at or near the runway.
- *  3000m (~10,000ft) is generous enough to handle traces that start shortly after
+ *  After trace pre-processing, the first waypoint is typically at or near the runway.
+ *  1500m (~5,000ft) is generous enough to handle traces that start shortly after
  *  takeoff while still excluding mid-cruise trace fragments. */
 const TRACE_DEPARTURE_MAX_ALT_M = 1500;
 

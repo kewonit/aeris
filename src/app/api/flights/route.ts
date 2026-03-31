@@ -39,19 +39,29 @@ const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
   },
 };
 
-// ── Server-Side Rate Limiter (per provider) ────────────────────────────
+// ── Server-Side Rate Limiter (per provider, concurrency-safe) ──────────
 
 const lastRequestTime: Record<string, number> = {};
+const rateLimitQueues: Record<string, Promise<void>> = {};
 
 async function enforceRateLimit(provider: ProviderKey): Promise<void> {
-  const now = Date.now();
-  const last = lastRequestTime[provider] ?? 0;
-  const config = PROVIDERS[provider];
-  const wait = Math.max(0, config.rateMs - (now - last));
-  if (wait > 0) {
-    await new Promise((resolve) => setTimeout(resolve, wait));
-  }
-  lastRequestTime[provider] = Date.now();
+  const previous = rateLimitQueues[provider] ?? Promise.resolve();
+
+  const next = previous.then(async () => {
+    const now = Date.now();
+    const last = lastRequestTime[provider] ?? 0;
+    const config = PROVIDERS[provider];
+    const wait = Math.max(0, config.rateMs - (now - last));
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    lastRequestTime[provider] = Date.now();
+  });
+
+  // Ensure the chain continues even if a previous step rejects.
+  rateLimitQueues[provider] = next.catch(() => {});
+
+  return next;
 }
 
 // ── Path validation (SSRF prevention) ──────────────────────────────────

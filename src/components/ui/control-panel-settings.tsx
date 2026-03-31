@@ -38,7 +38,7 @@ const ORBIT_SNAP_THRESHOLD = 0.025;
 const TRAIL_THICKNESS_MIN = 0.5;
 const TRAIL_THICKNESS_MAX = 8;
 const TRAIL_DISTANCE_MIN = 12;
-const TRAIL_DISTANCE_MAX = 100;
+const TRAIL_DISTANCE_MAX = 120;
 
 const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
   { label: "Clockwise", value: "clockwise" },

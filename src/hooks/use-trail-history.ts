@@ -20,7 +20,7 @@ export type TrailEntry = {
   fullHistory?: boolean;
 };
 
-const MAX_POINTS = 55;
+const MAX_POINTS = 120;
 const JUMP_THRESHOLD_DEG = 0.15;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;

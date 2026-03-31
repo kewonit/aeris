@@ -39,14 +39,14 @@ import {
   getAircraftAtlasUrl,
 } from "./aircraft-appearance";
 
+import { lerpAngle, smoothStep } from "./flight-math";
+
 import {
-  lerpAngle,
-  smoothStep,
   computePitchByIcao,
   computeBankByIcao,
   computeInterpolatedFlights,
   updateInterpolatedInPlace,
-} from "./flight-animation-helpers";
+} from "./flight-interpolation";
 
 import { buildTrailLayers } from "./flight-layer-builders";
 import { buildSelectionPulseLayers } from "./flight-layer-builders";

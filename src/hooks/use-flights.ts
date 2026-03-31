@@ -5,8 +5,8 @@ import type { FlightState } from "@/lib/opensky";
 import { fetchFlightsByPoint } from "@/lib/flight-api";
 import type { City } from "@/lib/cities";
 
-/** Normal polling interval — readsb allows 1 req/s; 10s balances freshness vs compute. */
-const POLL_INTERVAL_MS = 10_000;
+/** Normal polling interval — readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
+const POLL_INTERVAL_MS = 5_000;
 
 /** Backoff on rate limit (429) or repeated errors. */
 const RATE_LIMIT_BACKOFF_MS = 15_000;

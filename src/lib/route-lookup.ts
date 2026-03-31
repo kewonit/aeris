@@ -3,7 +3,7 @@
 // Resolves callsign → origin/destination using free external APIs.
 //
 // Data flow (waterfall):
-//   1. Check in-memory LRU cache
+//   1. Check in-memory FIFO cache
 //   2. Deduplicate in-flight requests
 //   3. adsbdb.com (rich data: full airport objects + airline info)
 //   4. hexdb.io fallback (lightweight: "EGLL-OTHH" string)
@@ -108,41 +108,61 @@ function cacheSet(callsign: string, route: RouteInfo | null): void {
 
 const inflight = new Map<string, Promise<RouteInfo | null>>();
 
-// ── Rate limiting ──────────────────────────────────────────────────────
+// ── Rate limiting (concurrency-safe with per-source promise queues) ────
 
 let lastAdsbdbRequest = 0;
 let lastHexdbRequest = 0;
+let adsbdbQueue: Promise<void> = Promise.resolve();
+let hexdbQueue: Promise<void> = Promise.resolve();
 
 async function rateLimitedFetch(
   url: string,
   source: "adsbdb" | "hexdb",
   signal?: AbortSignal,
 ): Promise<Response> {
-  const now = Date.now();
-  const lastRef = source === "adsbdb" ? lastAdsbdbRequest : lastHexdbRequest;
-  const wait = Math.max(0, MIN_REQUEST_INTERVAL_MS - (now - lastRef));
+  const previousQueue = source === "adsbdb" ? adsbdbQueue : hexdbQueue;
+  let releaseQueue: () => void;
+  const currentQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
 
-  if (wait > 0) {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, wait);
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          reject(new DOMException("Aborted", "AbortError"));
-        },
-        { once: true },
-      );
-    });
+  if (source === "adsbdb") {
+    adsbdbQueue = previousQueue.then(() => currentQueue);
+  } else {
+    hexdbQueue = previousQueue.then(() => currentQueue);
   }
 
-  if (source === "adsbdb") lastAdsbdbRequest = Date.now();
-  else lastHexdbRequest = Date.now();
+  await previousQueue;
 
-  return fetch(url, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
+  try {
+    const now = Date.now();
+    const lastRef = source === "adsbdb" ? lastAdsbdbRequest : lastHexdbRequest;
+    const wait = Math.max(0, MIN_REQUEST_INTERVAL_MS - (now - lastRef));
+
+    if (wait > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, wait);
+        signal?.addEventListener("abort", onAbort);
+      });
+    }
+
+    if (source === "adsbdb") lastAdsbdbRequest = Date.now();
+    else lastHexdbRequest = Date.now();
+
+    return fetch(url, {
+      signal,
+      headers: { Accept: "application/json" },
+    });
+  } finally {
+    releaseQueue!();
+  }
 }
 
 // ── adsbdb.com Parser ──────────────────────────────────────────────────
@@ -351,7 +371,7 @@ async function fetchHexdbAirport(
  *
  * Uses a waterfall strategy:
  *   1. In-memory LRU cache
- *   2. adsbdb.com (rich airport + airline data; uses combined endpoint when icao24 is available)
+ *   2. adsbdb.com (rich airport + airline data; callsign-based lookup)
  *   3. hexdb.io (lightweight fallback)
  *
  * Returns null if the callsign is invalid, unrecognized, or both APIs fail.

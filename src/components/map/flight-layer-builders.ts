@@ -5,7 +5,6 @@ import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { ElevatedPoint } from "./flight-layer-constants";
 import {
   TRAIL_BELOW_AIRCRAFT_METERS,
-  TRAIL_SMOOTHING_ITERATIONS,
   SELECTION_FADE_MS,
 } from "./flight-layer-constants";
 import {
@@ -17,9 +16,10 @@ import {
   buildStartupFallbackTrail,
   buildVisibleTrailPoints,
   buildTrailBasePath,
+  pinIncrementalBasePath,
   trailBasePathCacheKey,
-  smoothStep,
-} from "./flight-animation-helpers";
+} from "./trail-base-path";
+import { smoothStep } from "./flight-math";
 
 // ── Slope limiter (post-elevation-exaggeration) ────────────────────────
 
@@ -138,8 +138,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const handledIds = handledIdsSet ?? new Set<string>();
   handledIds.clear();
   const trailData: TrailEntry[] = [];
-  const smoothingIters =
-    interpolated.length > 220 ? 2 : TRAIL_SMOOTHING_ITERATIONS;
 
   const visibleTrailCache =
     visibleTrailCacheMap ?? new Map<string, ElevatedPoint[]>();
@@ -164,7 +162,17 @@ export function buildTrailLayers(params: TrailLayerParams) {
       if (entry && entry.key === key) {
         basePath = entry.basePath;
       } else {
-        basePath = buildTrailBasePath(trail, trailDistance);
+        const freshBasePath = buildTrailBasePath(trail, trailDistance);
+
+        // Pin stable points from the previous cache so that already-
+        // plotted trail positions never visually shift when new GPS
+        // data extends the trail.  fullHistory trails skip pinning
+        // because they are loaded once and don't grow incrementally.
+        basePath =
+          entry && !trail.fullHistory
+            ? pinIncrementalBasePath(entry.basePath, freshBasePath)
+            : freshBasePath;
+
         trailBasePathCache.set(trail.icao24, { key, basePath });
       }
       activeIcaos?.add(trail.icao24);
@@ -174,7 +182,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
       trail,
       animFlight,
       trailDistance,
-      smoothingIters,
       basePath,
     );
     visibleTrailCache.set(trail.icao24, computed);
@@ -299,15 +306,11 @@ export function buildTrailLayers(params: TrailLayerParams) {
         if (cached && cached.key === colorKey) return cached.result;
       }
 
-      const isFullHist = d.fullHistory === true;
       const result = visiblePoints.map((point, i) => {
         const tVal = len > 1 ? i / (len - 1) : 1;
-        // Unified fade: fullHistory uses a slightly gentler curve so the
-        // full flight path remains visible, but both start at the same
-        // base opacity for visual consistency.
-        const fade = isFullHist
-          ? 0.2 + 0.8 * Math.pow(tVal, 1.2)
-          : 0.15 + 0.85 * Math.pow(tVal, 1.4);
+        // Unified fade curve for both trail types — ensures visual
+        // consistency between active GPS trails and historical tracks.
+        const fade = 0.15 + 0.85 * Math.pow(tVal, 1.35);
         const base = altColors ? altitudeToColor(point[2]) : defaultColor;
         const alpha = Math.round(55 + fade * 165);
         return [base[0], base[1], base[2], alpha];

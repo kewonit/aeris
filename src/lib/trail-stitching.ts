@@ -14,17 +14,13 @@ import {
 } from "@/lib/geo";
 import {
   catmullRomSpline3D,
-  catmullRomRespline3D,
   trimToLastDeparture,
   smoothAltitudeProfile,
   adaptiveDownsample,
-  removeSpikePoints,
-  removeDistanceOutliers,
-  roundSharpCorners3D,
-  removePathLoops,
 } from "@/lib/trail-smoothing";
 import type { FlightTrack } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import { postprocessStitchedTrail } from "./trail-stitch-postprocess";
 import type { FlightState } from "@/lib/opensky";
 
 // ---------------------------------------------------------------------------
@@ -218,9 +214,7 @@ export function stitchHistoricalTrail(
       (p, i) => [p[0], p[1], smoothedAlts[i] ?? defaultAlt],
     );
 
-    const roundedWaypoints = roundSharpCorners3D(elevatedWaypoints, 15);
-    let splinedPath = catmullRomSpline3D(roundedWaypoints, 6, 28);
-    splinedPath = removePathLoops(splinedPath);
+    let splinedPath = catmullRomSpline3D(elevatedWaypoints, 6, 28);
 
     if (splinedPath.length > MAX_SPLINED_POINTS) {
       splinedPath = adaptiveDownsample(splinedPath, MAX_SPLINED_POINTS);
@@ -520,251 +514,13 @@ export function stitchHistoricalTrail(
     }
   }
 
-  // --- Step 6: Ensure the trail reaches the aircraft ---
-  if (livePosAdjusted) {
-    const last = resultPath[resultPath.length - 1];
-    if (last) {
-      const dx = livePosAdjusted[0] - last[0];
-      const dy = livePosAdjusted[1] - last[1];
-      const gapToAircraft = Math.sqrt(dx * dx + dy * dy);
-
-      if (gapToAircraft > 0.0001) {
-        // Bridge gap to aircraft with great-circle interpolation.
-        if (!tailMerged && gapToAircraft > CONNECT_BRIDGE_DEG) {
-          const steps = Math.max(
-            BRIDGE_MIN_STEPS,
-            Math.min(
-              BRIDGE_MAX_STEPS,
-              Math.ceil(gapToAircraft / BRIDGE_STEP_SIZE_DEG),
-            ),
-          );
-          const lastAlt = resultAltitudes[resultAltitudes.length - 1] ?? null;
-          const aircraftAlt = flight?.baroAltitude ?? null;
-
-          for (let s = 1; s < steps; s++) {
-            const t = s / steps;
-            const [lng, lat] = greatCircleIntermediate(
-              last[0],
-              last[1],
-              livePosAdjusted[0],
-              livePosAdjusted[1],
-              t,
-            );
-            resultPath.push([lng, lat]);
-
-            if (lastAlt == null && aircraftAlt == null) {
-              resultAltitudes.push(null);
-            } else {
-              const a0 = lastAlt ?? aircraftAlt ?? 0;
-              const a1 = aircraftAlt ?? lastAlt ?? a0;
-              resultAltitudes.push(a0 + (a1 - a0) * cubicEaseInOut(t));
-            }
-          }
-        }
-        resultPath.push(livePosAdjusted);
-        resultAltitudes.push(flight?.baroAltitude ?? null);
-      }
-    } else {
-      resultPath.push(livePosAdjusted);
-      resultAltitudes.push(flight?.baroAltitude ?? null);
-    }
-  }
-
-  if (resultPath.length < 2) {
-    return { path: [], altitudes: [], valid: false };
-  }
-
-  // --- Safety: filter NaN/Infinity coordinates ---
-  {
-    let filtered = false;
-    for (let i = resultPath.length - 1; i >= 0; i--) {
-      const p = resultPath[i];
-      if (
-        !Number.isFinite(p[0]) ||
-        !Number.isFinite(p[1]) ||
-        p[0] < -540 ||
-        p[0] > 540 ||
-        p[1] < -90 ||
-        p[1] > 90
-      ) {
-        resultPath.splice(i, 1);
-        resultAltitudes.splice(i, 1);
-        filtered = true;
-      }
-    }
-    if (filtered && resultPath.length < 2) {
-      return { path: [], altitudes: [], valid: false };
-    }
-  }
-
-  // --- Safety: cap total path length to prevent memory/perf issues ---
-  const MAX_TOTAL_PATH_POINTS = 3000;
-  if (resultPath.length > MAX_TOTAL_PATH_POINTS) {
-    // Uniform downsample — keep first, last, and evenly-spaced interior.
-    const stride = (resultPath.length - 1) / (MAX_TOTAL_PATH_POINTS - 1);
-    const sampledPath: [number, number][] = [];
-    const sampledAlt: Array<number | null> = [];
-    for (let i = 0; i < MAX_TOTAL_PATH_POINTS - 1; i++) {
-      const idx = Math.round(i * stride);
-      sampledPath.push(resultPath[idx]);
-      sampledAlt.push(resultAltitudes[idx] ?? null);
-    }
-    sampledPath.push(resultPath[resultPath.length - 1]);
-    sampledAlt.push(resultAltitudes[resultAltitudes.length - 1] ?? null);
-    resultPath.splice(0, resultPath.length, ...sampledPath);
-    resultAltitudes.splice(0, resultAltitudes.length, ...sampledAlt);
-  }
-
-  // --- Step 7: Remove V-shaped spikes (backtrack artifacts) ---
-  const spiked = removeSpikePoints(resultPath, resultAltitudes);
-
-  // --- Step 7b: Remove distance outliers (MLAT artifacts, stale waypoints) ---
-  const cleaned = removeDistanceOutliers(spiked.path, spiked.altitudes, 3.0);
-
-  if (cleaned.path.length < 2) {
-    return { path: [], altitudes: [], valid: false };
-  }
-
-  // --- Step 8: Smooth the historical↔live junction with localized Catmull-Rom ---
-  // Instead of just rounding sharp corners (roundSharpCorners3D), apply a
-  // full Catmull-Rom re-spline over a window around the junction.  This
-  // produces C1-continuous curvature at the merge point, eliminating the
-  // visible heading kink between the smooth historical spline and the raw
-  // GPS tail.
-  const JUNCTION_WINDOW_BEFORE = 30;
-  const JUNCTION_WINDOW_AFTER = 24;
-  const MIN_JUNCTION_WINDOW = 6;
-
-  let junctionIdx = -1;
-  if (tailMerged && junctionCoord) {
-    // Find the junction coordinate in the post-spike-removal array.
-    // Spike removal may have shifted indices, so search the full array.
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < cleaned.path.length; i++) {
-      const dx = cleaned.path[i][0] - junctionCoord[0];
-      const dy = cleaned.path[i][1] - junctionCoord[1];
-      const d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        junctionIdx = i;
-      }
-    }
-    // Only accept if the match is within a reasonable distance.
-    // 4× MERGE_SNAP_DEG² accounts for minor shifts from spike removal.
-    if (bestDist > MERGE_SNAP_DEG * MERGE_SNAP_DEG * 4) {
-      junctionIdx = -1;
-    }
-  }
-
-  if (
-    junctionIdx >= 0 &&
-    junctionIdx < cleaned.path.length - 1 &&
-    cleaned.path.length >= MIN_JUNCTION_WINDOW
-  ) {
-    const winStart = Math.max(0, junctionIdx - JUNCTION_WINDOW_BEFORE);
-    const winEnd = Math.min(
-      cleaned.path.length,
-      junctionIdx + JUNCTION_WINDOW_AFTER + 1,
-    );
-
-    if (winEnd - winStart >= MIN_JUNCTION_WINDOW) {
-      // Extract window as 3D points.
-      const windowPoints: [number, number, number][] = [];
-      for (let i = winStart; i < winEnd; i++) {
-        windowPoints.push([
-          cleaned.path[i][0],
-          cleaned.path[i][1],
-          (cleaned.altitudes[i] as number) ?? 0,
-        ]);
-      }
-
-      // Use real neighbouring points as tangent anchors for correct
-      // heading at the window boundaries. When no neighbour is available,
-      // reflect the first/last segment to create a virtual anchor point
-      // that preserves the entry/exit tangent direction.
-      const anchorBefore: [number, number, number] =
-        winStart > 0
-          ? [
-              cleaned.path[winStart - 1][0],
-              cleaned.path[winStart - 1][1],
-              (cleaned.altitudes[winStart - 1] as number) ?? 0,
-            ]
-          : windowPoints.length >= 2
-            ? [
-                2 * windowPoints[0][0] - windowPoints[1][0],
-                2 * windowPoints[0][1] - windowPoints[1][1],
-                2 * windowPoints[0][2] - windowPoints[1][2],
-              ]
-            : windowPoints[0];
-      const anchorAfter: [number, number, number] =
-        winEnd < cleaned.path.length
-          ? [
-              cleaned.path[winEnd][0],
-              cleaned.path[winEnd][1],
-              (cleaned.altitudes[winEnd] as number) ?? 0,
-            ]
-          : windowPoints.length >= 2
-            ? [
-                2 * windowPoints[windowPoints.length - 1][0] -
-                  windowPoints[windowPoints.length - 2][0],
-                2 * windowPoints[windowPoints.length - 1][1] -
-                  windowPoints[windowPoints.length - 2][1],
-                2 * windowPoints[windowPoints.length - 1][2] -
-                  windowPoints[windowPoints.length - 2][2],
-              ]
-            : windowPoints[windowPoints.length - 1];
-
-      const resplined = catmullRomRespline3D(
-        anchorBefore,
-        windowPoints,
-        anchorAfter,
-        3,
-        6,
-      );
-
-      // Reconstruct the full path: prefix + re-splined junction + suffix.
-      const prefix3D: [number, number, number][] = [];
-      for (let i = 0; i < winStart; i++) {
-        prefix3D.push([
-          cleaned.path[i][0],
-          cleaned.path[i][1],
-          (cleaned.altitudes[i] as number) ?? 0,
-        ]);
-      }
-      const suffix3D: [number, number, number][] = [];
-      for (let i = winEnd; i < cleaned.path.length; i++) {
-        suffix3D.push([
-          cleaned.path[i][0],
-          cleaned.path[i][1],
-          (cleaned.altitudes[i] as number) ?? 0,
-        ]);
-      }
-
-      const final3D = [...prefix3D, ...resplined, ...suffix3D];
-      const loopCleaned3D = removePathLoops(final3D);
-      const finalPath = loopCleaned3D.map<[number, number]>((p) => [
-        p[0],
-        p[1],
-      ]);
-      const finalAlts = loopCleaned3D.map<number | null>((p) => p[2]);
-
-      return { path: finalPath, altitudes: finalAlts, valid: true };
-    }
-  }
-
-  // Fallback: round sharp corners and remove self-intersecting loops.
-  const merged3D: [number, number, number][] = cleaned.path.map((p, i) => [
-    p[0],
-    p[1],
-    (cleaned.altitudes[i] as number) ?? 0,
-  ]);
-  const rounded = roundSharpCorners3D(merged3D, 15);
-  const loopCleanedFallback = removePathLoops(rounded);
-  const finalPath = loopCleanedFallback.map<[number, number]>((p) => [
-    p[0],
-    p[1],
-  ]);
-  const finalAlts = loopCleanedFallback.map<number | null>((p) => p[2]);
-
-  return { path: finalPath, altitudes: finalAlts, valid: true };
+  // --- Steps 6-8: Post-processing (reach aircraft, spike removal, junction smoothing) ---
+  return postprocessStitchedTrail(
+    resultPath,
+    resultAltitudes,
+    tailMerged,
+    junctionCoord,
+    livePosAdjusted,
+    flight,
+  );
 }
