@@ -121,11 +121,13 @@ export function useRouteInfo(
 // route info. Each field (origin, destination) is filled independently
 // using a priority cascade:
 //
-//   origin:      API  →  trace departure  →  live departure detection
+//   origin:      trace departure  →  API  →  live departure detection
 //   destination: API  →  heading/altitude estimation
 //
-// This ensures partial API results are supplemented rather than
-// causing the entire route display to be empty.
+// Trace-based departure is prioritised over API because the API returns
+// schedule/historical route data for the callsign (e.g. "SG106 usually
+// flies BOM→DEL") while the trace shows where THIS flight actually
+// departed from (e.g. PNQ today).
 
 function buildRouteInfo(
   flight: FlightState | null,
@@ -141,13 +143,15 @@ function buildRouteInfo(
   const liveDeparture = getDeparture(flight.icao24);
   const liveOrigin = liveDeparture?.airport ?? null;
 
-  // Priority: API > trace > live detection
-  const origin = apiOrigin ?? traceDeparture ?? liveOrigin;
+  // Priority: trace > API > live detection
+  // Trace departure uses actual ADS-B waypoints near an airport, so it
+  // reflects the real departure for THIS flight, not historical schedules.
+  const origin = traceDeparture ?? apiOrigin ?? liveOrigin;
 
   // ── Gather destination candidates ──────────────────────────────────
   const apiDestination = apiRoute?.destination ?? null;
   const departureIata =
-    (apiOrigin?.iata ?? traceDeparture?.iata ?? liveOrigin?.iata) || undefined;
+    (traceDeparture?.iata ?? apiOrigin?.iata ?? liveOrigin?.iata) || undefined;
   const estimate = estimateDestination(flight, departureIata);
 
   // Priority: API > heading estimation
@@ -164,7 +168,8 @@ function buildRouteInfo(
   // ── Determine source label ─────────────────────────────────────────
   let source: FlightRouteInfo["source"] = null;
   if (origin || destination) {
-    const originIsApi = !!apiOrigin;
+    const originIsTrace = !!traceDeparture;
+    const originIsApi = !originIsTrace && !!apiOrigin;
     const destIsApi = !!apiDestination;
 
     if (originIsApi && destIsApi) {
@@ -174,7 +179,6 @@ function buildRouteInfo(
       else if (estimate) source = "estimated";
       else source = "detected";
     } else {
-      // One field from API, the other from detection/estimation
       source = "mixed";
     }
   }

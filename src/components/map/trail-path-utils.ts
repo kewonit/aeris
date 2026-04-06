@@ -317,7 +317,22 @@ export function trimPathAheadOfAircraft(
     }
   }
 
-  trimmed.push([px, py, aircraft[2]]);
+  // Stop the trail slightly short of the aircraft center so it visually
+  // connects at the tail rather than passing through the icon body.
+  // Use 75% of the remaining distance from the last Bézier point to the
+  // aircraft — this is proportional to the arc length, so it works at
+  // any zoom level without needing pixel-to-degree conversion.
+  if (trimmed.length >= 2) {
+    const lastPt = trimmed[trimmed.length - 1];
+    const tailFrac = 0.75;
+    trimmed.push([
+      lastPt[0] + (px - lastPt[0]) * tailFrac,
+      lastPt[1] + (py - lastPt[1]) * tailFrac,
+      lastPt[2] + (aircraft[2] - lastPt[2]) * tailFrac,
+    ]);
+  } else {
+    trimmed.push([px, py, aircraft[2]]);
+  }
 
   return trimmed;
 }

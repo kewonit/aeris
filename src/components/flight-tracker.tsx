@@ -41,9 +41,7 @@ import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
-import { useTrailHistory } from "@/hooks/use-trail-history";
-import { useFlightTrack } from "@/hooks/use-flight-track";
-import { useMergedTrails } from "@/hooks/use-merged-trails";
+import { useTrailSystem } from "@/hooks/use-trail-system";
 import { useFlightMonitors } from "@/hooks/use-flight-monitors";
 import { useAtcStream } from "@/hooks/use-atc-stream";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -110,6 +108,9 @@ function FlightTrackerInner() {
   } | null>(null);
 
   const lookupAbortRef = useRef<AbortController | null>(null);
+  const [selectedAirportIata, setSelectedAirportIata] = useState<string | null>(
+    null,
+  );
 
   const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
@@ -151,7 +152,13 @@ function FlightTrackerInner() {
   );
 
   const displayFlights = flights;
-  const displayTrails = useTrailHistory(displayFlights);
+  const trailState = useTrailSystem({
+    flights: displayFlights,
+    selectedIcao24,
+    historyEnabled: !!selectedIcao24 && !fpvIcao24,
+  });
+  const mergedTrails = trailState.trails;
+  const selectedTrack = trailState.selectedTrack;
 
   // Feed flights into departure detection for route estimation
   useEffect(() => {
@@ -164,21 +171,6 @@ function FlightTrackerInner() {
     for (const f of displayFlights) m.set(f.icao24, f);
     return m;
   }, [displayFlights]);
-
-  const shouldFetchSelectedTrack = !!selectedIcao24 && !fpvIcao24;
-
-  const { track: selectedTrack, fetchedAtMs: selectedTrackFetchedAtMs } =
-    useFlightTrack(selectedIcao24, {
-      enabled: shouldFetchSelectedTrack,
-    });
-
-  const mergedTrails = useMergedTrails(
-    selectedIcao24,
-    selectedTrack,
-    selectedTrackFetchedAtMs,
-    displayTrails,
-    displayFlights,
-  );
 
   const selectedFlight = useMemo(() => {
     if (!selectedIcao24) return null;
@@ -236,9 +228,6 @@ function FlightTrackerInner() {
     zoom: 9.2,
     center: { lat: 0, lng: 0 },
   });
-  const [selectedAirportIata, setSelectedAirportIata] = useState<string | null>(
-    null,
-  );
 
   const handleMapStateChange = useCallback((state: MapViewState) => {
     setMapViewState(state);
@@ -478,6 +467,7 @@ function FlightTrackerInner() {
           trailDistance={settings.trailDistance}
           showShadows={settings.showShadows}
           showAltitudeColors={settings.showAltitudeColors}
+          altitudeDisplayMode={settings.altitudeDisplayMode}
           globeMode={settings.globeMode}
           fpvIcao24={fpvIcao24}
           fpvPositionRef={fpvPositionRef}

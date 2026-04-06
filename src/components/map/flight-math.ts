@@ -29,3 +29,22 @@ export function horizontalDistanceFromLngLat(
 export function horizontalDistanceMeters(a: Snapshot, b: Snapshot): number {
   return horizontalDistanceFromLngLat(a.lng, a.lat, b.lng, b.lat);
 }
+
+export function metersPerDegreeLongitude(latitude: number): number {
+  return Math.max(111_320 * Math.cos((latitude * Math.PI) / 180), 1);
+}
+
+export function offsetPositionByTrack(
+  position: { lng: number; lat: number },
+  trackDeg: number,
+  forwardMeters: number,
+): { lng: number; lat: number } {
+  const radians = (trackDeg * Math.PI) / 180;
+  return {
+    lng:
+      position.lng +
+      (Math.sin(radians) * forwardMeters) /
+        metersPerDegreeLongitude(position.lat),
+    lat: position.lat + (Math.cos(radians) * forwardMeters) / 111_320,
+  };
+}

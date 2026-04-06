@@ -30,7 +30,7 @@ import {
 } from "./flight-layer-constants";
 
 import {
-  categorySizeMultiplier,
+  aircraftSizeMultiplier,
   tintAircraftColor,
   applySpecialTint,
   AIRCRAFT_ICON_MAPPING,
@@ -65,6 +65,7 @@ export function FlightLayers({
   trailDistance,
   showShadows,
   showAltitudeColors,
+  altitudeDisplayMode,
   globeMode = false,
   fpvIcao24 = null,
   fpvPositionRef,
@@ -131,6 +132,7 @@ export function FlightLayers({
   const trailDistanceRef = useRef(trailDistance);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
+  const altitudeDisplayModeRef = useRef(altitudeDisplayMode);
   const globeModeRef = useRef(globeMode);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
@@ -162,6 +164,7 @@ export function FlightLayers({
     trailDistanceRef.current = trailDistance;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
+    altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
     fpvPosRef.current = fpvPositionRef;
     onClickRef.current = onClick;
@@ -181,6 +184,7 @@ export function FlightLayers({
     trailDistance,
     showShadows,
     showAltitudeColors,
+    altitudeDisplayMode,
     globeMode,
     selectedIcao24,
     fpvIcao24,
@@ -648,7 +652,7 @@ export function FlightLayers({
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
             getIcon: () => "aircraft",
-            getSize: (d) => 20 * categorySizeMultiplier(d.category),
+            getSize: (d) => 20 * aircraftSizeMultiplier(d.typeCode, d.category),
             getColor: () => [0, 0, 0, 60],
             getAngle: (d) =>
               360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -666,7 +670,7 @@ export function FlightLayers({
 
         // Trail layer — always included, toggled via `visible` to retain WebGL state
         layers.push(
-          buildTrailLayers({
+          ...buildTrailLayers({
             interpolated,
             interpolatedMap: interpolatedMapRef.current,
             currentTrails,
@@ -674,6 +678,7 @@ export function FlightLayers({
             trailDistance: trailDistanceRef.current,
             trailThickness: trailThicknessRef.current,
             altColors,
+            altitudeDisplayMode: altitudeDisplayModeRef.current,
             defaultColor: DEFAULT_COLOR,
             elapsed,
             visualFrame: visualFrameRef.current,
@@ -704,6 +709,7 @@ export function FlightLayers({
             globeFade,
             currentZoom,
             elevScale,
+            altitudeDisplayMode: altitudeDisplayModeRef.current,
             haloUrl,
             ringUrl,
             layersVisible,
@@ -736,6 +742,7 @@ export function FlightLayers({
               layersVisible,
               globeFade,
               elevScale,
+              altitudeDisplayMode: altitudeDisplayModeRef.current,
               altColors,
               defaultColor: DEFAULT_COLOR,
               pitchByIcao,
@@ -756,10 +763,14 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                altitudeToElevation(d.baroAltitude) * elevScale,
+                altitudeToElevation(
+                  d.baroAltitude,
+                  altitudeDisplayModeRef.current,
+                ) * elevScale,
               ],
               getIcon: () => "aircraft",
-              getSize: (d) => 20 * categorySizeMultiplier(d.category),
+              getSize: (d) =>
+                20 * aircraftSizeMultiplier(d.typeCode, d.category),
               getColor: (d) => {
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
@@ -779,7 +790,11 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [visualFrameRef.current, elevScale],
+                getPosition: [
+                  visualFrameRef.current,
+                  elevScale,
+                  altitudeDisplayModeRef.current,
+                ],
                 getAngle: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],
               },

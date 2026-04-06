@@ -1,6 +1,7 @@
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { MutableRefObject } from "react";
 
@@ -73,6 +74,7 @@ export type FlightLayerProps = {
   trailDistance: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
+  altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
   fpvPositionRef?: MutableRefObject<{

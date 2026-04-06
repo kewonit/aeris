@@ -1,5 +1,11 @@
 // ── Category Styling ───────────────────────────────────────────────────
 
+import {
+  MODEL_KEY_WINGSPAN,
+  resolveModelKey,
+  wingspanToDisplayScale,
+} from "./aircraft-model-mapping";
+
 export const CATEGORY_TINT: Record<number, [number, number, number]> = {
   2: [100, 235, 180],
   3: [120, 225, 235],
@@ -15,32 +21,137 @@ export const CATEGORY_TINT: Record<number, [number, number, number]> = {
   14: [195, 165, 255],
 };
 
-export function categorySizeMultiplier(category: number | null): number {
-  switch (category) {
-    case 2:
-      return 0.92;
-    case 3:
-      return 0.96;
-    case 4:
-      return 1.04;
-    case 5:
-      return 1.08;
-    case 6:
-      return 1.12;
-    case 7:
-      return 1.0;
-    case 8:
-      return 0.9;
-    case 9:
-    case 12:
-      return 0.86;
-    case 10:
-      return 1.06;
-    case 14:
-      return 0.82;
-    default:
-      return 1;
+// ── Wingspan-Based Aircraft Size Multiplier ────────────────────────────
+//
+// Maps aircraft to a 2D icon size multiplier based on real wingspan data
+// (ICAO Doc 8643 / manufacturer specs). Uses typeCode for precision,
+// then model-key class wingspan as fallback, then emitter category.
+//
+// Range: 0.65 (small UAV, ~5m) → 1.30 (A380, ~80m).
+// Linear: mult = 0.65 + clamp((wingspan - 5) / 75, 0, 1) * 0.65
+//
+// At base icon size 20px:
+//   Cessna 172: 14px  |  CRJ-200: 16px  |  A320: 18px
+//   B767: 20px        |  B787: 21px      |  B777: 23px
+//   A380: 26px
+//
+// This gives ~86% more range than the old category-only system (0.82–1.12).
+
+// Fine-grained wingspan overrides for types where intra-class
+// differentiation matters. Values from manufacturer specs (metres).
+const TYPE_WINGSPAN_OVERRIDE: Readonly<Record<string, number>> = {
+  // ── Boeing 757 (narrowbody model, wider than B737/A320) ──────────
+  B752: 38,
+  B753: 38,
+  // ── Boeing 767 (widebody-2eng but smaller than B777) ─────────────
+  B762: 48,
+  B763: 48,
+  B764: 52,
+  // ── Boeing 787 ───────────────────────────────────────────────────
+  B788: 60,
+  B789: 60,
+  B78X: 60,
+  // ── Boeing 777 ───────────────────────────────────────────────────
+  B772: 61,
+  B773: 61,
+  B77L: 65,
+  B77W: 65,
+  B778: 72,
+  B779: 72,
+  // ── Boeing 747 ───────────────────────────────────────────────────
+  B741: 60,
+  B742: 60,
+  B743: 60,
+  B744: 64,
+  B748: 68,
+  B74S: 60,
+  // ── Airbus widebodies ────────────────────────────────────────────
+  A30B: 45,
+  A306: 45,
+  A310: 44,
+  A332: 60,
+  A333: 60,
+  A338: 64,
+  A339: 64,
+  A342: 60,
+  A343: 60,
+  A345: 64,
+  A346: 64,
+  A359: 65,
+  A35K: 65,
+  // ── Regional jets — CRJ vs Embraer ───────────────────────────────
+  CRJ1: 21,
+  CRJ2: 21,
+  CRJ7: 23,
+  CRJ9: 25,
+  CRJX: 26,
+  E170: 26,
+  E75S: 26,
+  E75L: 26,
+  E190: 29,
+  E195: 29,
+  E290: 34,
+  E295: 35,
+  E135: 20,
+  E145: 20,
+  E35L: 20,
+  E45X: 20,
+  // ── Turboprops ───────────────────────────────────────────────────
+  DH8D: 28,
+  AT76: 27,
+  AT72: 27,
+  DH8A: 26,
+  DH8B: 26,
+  DH8C: 27,
+  AT43: 25,
+  AT45: 25,
+  SF34: 21,
+  JS41: 18,
+  // ── Larger business jets ─────────────────────────────────────────
+  GLEX: 29,
+  GL5T: 29,
+  GL7T: 30,
+  GLF5: 29,
+  GLF6: 30,
+  // ── Smaller business jets ────────────────────────────────────────
+  LJ35: 12,
+  LJ45: 15,
+  LJ60: 13,
+  C56X: 16,
+  C560: 16,
+  C680: 19,
+  C68A: 22,
+  C700: 20,
+  E55P: 16,
+  E50P: 12,
+  // ── Russian / military widebodies ────────────────────────────────
+  IL76: 51,
+  IL96: 60,
+  A124: 73,
+  AN22: 64,
+  C17: 52,
+  C5M: 68,
+  KC10: 50,
+  K35R: 40,
+};
+
+/**
+ * Returns a 2D icon size multiplier for an aircraft based on its real
+ * wingspan. Uses typeCode for precision, model-key class wingspan as
+ * fallback, then emitter category as last resort.
+ */
+export function aircraftSizeMultiplier(
+  typeCode: string | null | undefined,
+  category: number | null,
+): number {
+  if (typeCode) {
+    const upper = typeCode.toUpperCase();
+    const override = TYPE_WINGSPAN_OVERRIDE[upper];
+    if (override !== undefined) return wingspanToDisplayScale(override);
   }
+
+  const modelKey = resolveModelKey(category, typeCode);
+  return wingspanToDisplayScale(MODEL_KEY_WINGSPAN[modelKey]);
 }
 
 export function tintAircraftColor(
@@ -86,7 +197,7 @@ export function applySpecialTint(
 
 // ── Selection pulse timing ─────────────────────────────────────────────
 
-export const PULSE_PERIOD_MS = 9000;
+export const PULSE_PERIOD_MS = 14_000;
 
 // ── Canvas Atlas Generators ────────────────────────────────────────────
 

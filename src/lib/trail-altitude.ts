@@ -1,8 +1,8 @@
 /**
  * Altitude profile smoothing and ground-segment filtering.
  *
- * Used by trail-stitching to produce smooth altitude curves for
- * historical flight tracks that have sparse waypoints.
+ * Used by the selected-history geometry pipeline to produce smooth
+ * altitude curves for sparse historical flight tracks.
  */
 
 export type WaypointLike = {

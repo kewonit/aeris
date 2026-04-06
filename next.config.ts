@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
+import { getDirectTraceProviderPolicies } from "./src/lib/trails/providers";
+
 const isDev = process.env.NODE_ENV === "development";
+const directTraceConnectSrc = Array.from(
+  new Set(
+    getDirectTraceProviderPolicies().map(
+      (provider) => new URL(provider.baseUrl).origin,
+    ),
+  ),
+).join(" ");
 
 // Content Security Policy — allows only the external resources Aeris actually uses.
 // https://nextjs.org/docs/app/guides/content-security-policy
@@ -16,7 +25,7 @@ const cspHeader = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
-  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com https://api.adsbdb.com;
+  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com https://api.adsbdb.com ${directTraceConnectSrc};
   worker-src 'self' blob:;
   child-src blob:;
   object-src 'none';

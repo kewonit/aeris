@@ -1,7 +1,8 @@
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
-import { snapLngToReference, unwrapLngPath } from "@/lib/geo";
+import { unwrapLngPath } from "@/lib/geo";
 import {
+  adaptiveDownsample,
   removeSpikePoints,
   removeDistanceOutliers,
   catmullRomSpline3D,
@@ -11,8 +12,11 @@ import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {
   trimAfterLargeJump,
   smoothAnimationAltitudes,
-  trimPathAheadOfAircraft,
 } from "./trail-path-utils";
+
+const DISPLAY_SPLINE_MIN_POINTS = 6;
+const DISPLAY_SPLINE_MAX_POINTS = 20;
+const MAX_HISTORY_CONTROL_POINTS = 220;
 
 // Re-export utility functions for backward compatibility.
 export {
@@ -184,11 +188,43 @@ export function buildTrailBasePath(
   pathSlice = trimmed.path;
   altitudeSlice = trimmed.altitudes;
 
+  const toElevatedPoints = (
+    path: [number, number][],
+    altitudes: Array<number | null>,
+    fallbackAlt: number,
+  ): ElevatedPoint[] =>
+    path.map((point, index) => [
+      point[0],
+      point[1],
+      Number.isFinite(altitudes[index])
+        ? Math.max(0, altitudes[index]!)
+        : fallbackAlt,
+    ]);
+
+  const buildDisplaySpline = (
+    elevated: ElevatedPoint[],
+    maxControlPoints?: number,
+  ): ElevatedPoint[] => {
+    if (elevated.length < 2) {
+      return elevated;
+    }
+
+    const controlPoints =
+      maxControlPoints && elevated.length > maxControlPoints
+        ? adaptiveDownsample(elevated, maxControlPoints)
+        : elevated;
+
+    return catmullRomSpline3D(
+      controlPoints,
+      DISPLAY_SPLINE_MIN_POINTS,
+      DISPLAY_SPLINE_MAX_POINTS,
+    );
+  };
+
   if (isFullHistory) {
-    // The historical trail from trail-stitching.ts is already splined
-    // via catmullRomSpline3D.  Re-splining would create V-shaped
-    // overshoot artifacts at direction changes.  Only apply altitude
-    // smoothing and light 2D filtering.
+    // History already arrives denser than live GPS, so reduce it to
+    // curvature-preserving control points first and then pass it through
+    // the same display spline used for active trails.
     const fallbackAlt =
       trail.baroAltitude != null && Number.isFinite(trail.baroAltitude)
         ? trail.baroAltitude
@@ -198,40 +234,10 @@ export function buildTrailBasePath(
     );
     const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
-    // Build the elevated points with smoothed altitudes.
-    let elevated: ElevatedPoint[] = pathSlice.map(
-      (p, i) =>
-        [
-          p[0],
-          p[1],
-          Number.isFinite(altitudeMeters[i])
-            ? Math.max(0, altitudeMeters[i])
-            : fallbackAlt,
-        ] as ElevatedPoint,
+    return buildDisplaySpline(
+      toElevatedPoints(pathSlice, altitudeMeters, fallbackAlt),
+      MAX_HISTORY_CONTROL_POINTS,
     );
-
-    // Light 2D box-filter to smooth the raw GPS live tail appended
-    // by trail-stitching.  Barely affects the already-splined portion.
-    if (elevated.length >= 3) {
-      for (let pass = 0; pass < 2; pass++) {
-        const next: ElevatedPoint[] = [elevated[0]];
-        for (let i = 1; i < elevated.length - 1; i++) {
-          next.push([
-            elevated[i - 1][0] * 0.25 +
-              elevated[i][0] * 0.5 +
-              elevated[i + 1][0] * 0.25,
-            elevated[i - 1][1] * 0.25 +
-              elevated[i][1] * 0.5 +
-              elevated[i + 1][1] * 0.25,
-            elevated[i][2], // preserve already-smoothed altitude
-          ]);
-        }
-        next.push(elevated[elevated.length - 1]);
-        elevated = next;
-      }
-    }
-
-    return elevated;
   }
 
   // Active trails: filter GPS glitches then spline for visual smoothness.
@@ -252,18 +258,9 @@ export function buildTrailBasePath(
   );
   const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
-  const elevated: ElevatedPoint[] = smoothedPath.map((p, i) => [
-    p[0],
-    p[1],
-    Number.isFinite(altitudeMeters[i])
-      ? Math.max(0, altitudeMeters[i])
-      : activeFallbackAlt,
-  ]);
-
-  if (elevated.length >= 2) {
-    return catmullRomSpline3D(elevated, 6, 20);
-  }
-  return elevated;
+  return buildDisplaySpline(
+    toElevatedPoints(smoothedPath, altitudeMeters, activeFallbackAlt),
+  );
 }
 
 // ── Visible Trail Point Builder ────────────────────────────────────────
@@ -271,41 +268,16 @@ export function buildTrailBasePath(
 /**
  * Builds the final visible trail points for rendering.
  * When cachedBasePath is provided, skips the expensive smoothing/densification
- * and only performs the cheap per-frame head attachment.
+ * and only normalizes the final points for rendering.
  */
 export function buildVisibleTrailPoints(
   trail: TrailEntry,
-  animFlight: FlightState | undefined,
+  _animFlight: FlightState | undefined,
   trailDistance: number,
   cachedBasePath?: ElevatedPoint[],
 ): ElevatedPoint[] {
   const denseBasePath =
     cachedBasePath ?? buildTrailBasePath(trail, trailDistance);
-
-  if (
-    animFlight &&
-    animFlight.longitude != null &&
-    animFlight.latitude != null &&
-    denseBasePath.length > 1
-  ) {
-    const refLng = denseBasePath[denseBasePath.length - 1][0];
-    const snappedLng = snapLngToReference(animFlight.longitude, refLng);
-    const clipped = trimPathAheadOfAircraft(
-      denseBasePath,
-      [
-        snappedLng,
-        animFlight.latitude,
-        Math.max(0, animFlight.baroAltitude ?? 0),
-      ],
-      animFlight.trueTrack ?? undefined,
-    );
-
-    return clipped.map((p) => [
-      p[0],
-      p[1],
-      Number.isFinite(p[2]) ? Math.max(0, p[2]) : 0,
-    ]);
-  }
 
   return denseBasePath.map((p) => [
     p[0],

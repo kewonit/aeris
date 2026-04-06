@@ -21,6 +21,7 @@ import {
   WEATHER_RADAR_OPACITY_MIN,
   WEATHER_RADAR_OPACITY_MAX,
   type OrbitDirection,
+  type Settings,
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
@@ -43,6 +44,14 @@ const TRAIL_DISTANCE_MAX = 120;
 const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
   { label: "Clockwise", value: "clockwise" },
   { label: "Counter", value: "counter-clockwise" },
+];
+
+const ALTITUDE_DISPLAY_MODES: {
+  label: string;
+  value: Settings["altitudeDisplayMode"];
+}[] = [
+  { label: "Presentation", value: "presentation" },
+  { label: "Realistic", value: "realistic" },
 ];
 
 export function SettingsContent() {
@@ -113,6 +122,13 @@ export function SettingsContent() {
           description="Color aircraft and trails by altitude"
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
+        />
+        <SegmentRow
+          icon={<Eye className="h-4 w-4" />}
+          title="Altitude mode"
+          options={ALTITUDE_DISPLAY_MODES}
+          value={settings.altitudeDisplayMode}
+          onChange={(v) => update("altitudeDisplayMode", v)}
         />
 
         {/* ── Airspace ── */}

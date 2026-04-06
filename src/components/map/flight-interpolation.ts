@@ -1,12 +1,63 @@
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
-import type { ElevatedPoint, Snapshot } from "./flight-layer-constants";
+import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {
   lerpAngle,
   horizontalDistanceFromLngLat,
   horizontalDistanceMeters,
 } from "./flight-math";
+
+const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
+
+function normalizeBearing(bearing: number): number {
+  return ((bearing % 360) + 360) % 360;
+}
+
+function bearingFromLngLat(
+  previousPosition: { lng: number; lat: number },
+  currentPosition: { lng: number; lat: number },
+): number | null {
+  const dx = currentPosition.lng - previousPosition.lng;
+  const dy = currentPosition.lat - previousPosition.lat;
+  const distanceMeters = horizontalDistanceFromLngLat(
+    previousPosition.lng,
+    previousPosition.lat,
+    currentPosition.lng,
+    currentPosition.lat,
+  );
+
+  if (distanceMeters < MIN_DISPLAY_TRACK_DISTANCE_METERS) {
+    return null;
+  }
+
+  return normalizeBearing((Math.atan2(dx, dy) * 180) / Math.PI);
+}
+
+export function resolveDisplayTrack(input: {
+  reportedTrack?: number | null;
+  previousPosition?: { lng: number; lat: number } | null;
+  currentPosition?: { lng: number; lat: number } | null;
+}): number {
+  const reportedTrack = Number.isFinite(input.reportedTrack)
+    ? normalizeBearing(input.reportedTrack!)
+    : null;
+
+  const motionTrack =
+    input.previousPosition && input.currentPosition
+      ? bearingFromLngLat(input.previousPosition, input.currentPosition)
+      : null;
+
+  if (motionTrack == null) {
+    return reportedTrack ?? 0;
+  }
+
+  if (reportedTrack == null) {
+    return motionTrack;
+  }
+
+  return normalizeBearing(lerpAngle(reportedTrack, motionTrack, 0.75));
+}
 
 // ── Pitch Calculation ──────────────────────────────────────────────────
 
@@ -140,7 +191,9 @@ export function computeInterpolatedFlights(
         longitude: curr.lng,
         latitude: curr.lat,
         baroAltitude: curr.alt,
-        trueTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+        trueTrack: resolveDisplayTrack({
+          reportedTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+        }),
       };
     }
 
@@ -157,7 +210,11 @@ export function computeInterpolatedFlights(
         longitude: prev.lng + dx * tPos,
         latitude: prev.lat + dy * tPos,
         baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
-        trueTrack: blendedTrack,
+        trueTrack: resolveDisplayTrack({
+          reportedTrack: blendedTrack,
+          previousPosition: { lng: prev.lng, lat: prev.lat },
+          currentPosition: { lng: curr.lng, lat: curr.lat },
+        }),
       };
     }
 
@@ -176,7 +233,11 @@ export function computeInterpolatedFlights(
       longitude: curr.lng + moveDx,
       latitude: curr.lat + moveDy,
       baroAltitude: curr.alt + extraAlt,
-      trueTrack: curr.track,
+      trueTrack: resolveDisplayTrack({
+        reportedTrack: curr.track,
+        previousPosition: { lng: prev.lng, lat: prev.lat },
+        currentPosition: { lng: curr.lng, lat: curr.lat },
+      }),
     };
   });
 }
@@ -222,7 +283,9 @@ export function updateInterpolatedInPlace(
       o.longitude = curr.lng;
       o.latitude = curr.lat;
       o.baroAltitude = curr.alt;
-      o.trueTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track;
+      o.trueTrack = resolveDisplayTrack({
+        reportedTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+      });
       continue;
     }
 
@@ -234,7 +297,11 @@ export function updateInterpolatedInPlace(
       o.longitude = prev.lng + dx * tPos;
       o.latitude = prev.lat + dy * tPos;
       o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
-      o.trueTrack = lerpAngle(prev.track, curr.track, tAngle);
+      o.trueTrack = resolveDisplayTrack({
+        reportedTrack: lerpAngle(prev.track, curr.track, tAngle),
+        previousPosition: { lng: prev.lng, lat: prev.lat },
+        currentPosition: { lng: curr.lng, lat: curr.lat },
+      });
     } else {
       const heading = (curr.track * Math.PI) / 180;
       const speed =
@@ -248,7 +315,11 @@ export function updateInterpolatedInPlace(
       o.longitude = curr.lng + moveDx;
       o.latitude = curr.lat + moveDy;
       o.baroAltitude = curr.alt + extraAlt;
-      o.trueTrack = curr.track;
+      o.trueTrack = resolveDisplayTrack({
+        reportedTrack: curr.track,
+        previousPosition: { lng: prev.lng, lat: prev.lat },
+        currentPosition: { lng: curr.lng, lat: curr.lat },
+      });
     }
   }
 }

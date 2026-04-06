@@ -281,8 +281,8 @@ function catmullRomSplineCore(
 
     const maxDelta = Math.max(Math.abs(deltaIn), Math.abs(deltaOut));
 
-    const STRAIGHT_THRESHOLD = (5 * Math.PI) / 180;
-    const CURVE_THRESHOLD = (20 * Math.PI) / 180;
+    const STRAIGHT_THRESHOLD = (3 * Math.PI) / 180;
+    const CURVE_THRESHOLD = (15 * Math.PI) / 180;
     const tension =
       maxDelta <= STRAIGHT_THRESHOLD
         ? 0.92

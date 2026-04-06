@@ -1,12 +1,10 @@
 import { IconLayer, PathLayer } from "@deck.gl/layers";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import { altitudeToElevation } from "@/lib/flight-utils";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { ElevatedPoint } from "./flight-layer-constants";
-import {
-  TRAIL_BELOW_AIRCRAFT_METERS,
-  SELECTION_FADE_MS,
-} from "./flight-layer-constants";
+import { SELECTION_FADE_MS } from "./flight-layer-constants";
 import {
   PULSE_PERIOD_MS,
   HALO_MAPPING,
@@ -19,7 +17,19 @@ import {
   pinIncrementalBasePath,
   trailBasePathCacheKey,
 } from "./trail-base-path";
+import { buildTrailConnector } from "./trail-connector";
+import { projectTrailElevationMeters } from "./altitude-projection";
 import { smoothStep } from "./flight-math";
+import { getAircraftModelCalibration } from "./aircraft-model-calibration";
+import { resolveModelKey } from "./aircraft-model-mapping";
+import {
+  buildConnectorGradientColors,
+  buildTrailRenderSegments,
+  trailAltitudeToColor,
+  trimTrailBodyForConnector,
+  type TrailRenderSegment,
+} from "./trail-render-segments";
+import { toPathLayerPoints } from "./trail-render-adapter";
 
 // ── Slope limiter (post-elevation-exaggeration) ────────────────────────
 
@@ -29,6 +39,7 @@ import { smoothStep } from "./flight-math";
  * max visual slope ≈ 80 km rise per 111 km horizontal ≈ ~36°.
  */
 const MAX_ELEV_GRADIENT = 80_000;
+export { buildConnectorGradientColors, trailAltitudeToColor };
 
 /**
  * Caps the vertical gradient of an already-elevation-exaggerated trail
@@ -86,6 +97,7 @@ export interface TrailLayerParams {
   trailDistance: number;
   trailThickness: number;
   altColors: boolean;
+  altitudeDisplayMode: AltitudeDisplayMode;
   defaultColor: [number, number, number, number];
   elapsed: number;
   /** Visual frame counter — throttled counter that only increments on rendered frames */
@@ -113,6 +125,11 @@ export interface TrailLayerParams {
   activeIcaosSet?: Set<string>;
 }
 
+interface TrailConnectorSegment {
+  icao24: string;
+  path: ElevatedPoint[];
+}
+
 export function buildTrailLayers(params: TrailLayerParams) {
   const {
     interpolated,
@@ -122,14 +139,13 @@ export function buildTrailLayers(params: TrailLayerParams) {
     trailDistance,
     trailThickness,
     altColors,
+    altitudeDisplayMode,
     defaultColor,
-    visualFrame,
     globeFade,
     elevScale,
     visible = true,
     trailBasePathCache,
     trailPathCache,
-    trailColorCache,
     handledIdsSet,
     visibleTrailCacheMap,
     activeIcaosSet,
@@ -142,6 +158,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const visibleTrailCache =
     visibleTrailCacheMap ?? new Map<string, ElevatedPoint[]>();
   visibleTrailCache.clear();
+  const renderBodyPointCache = new Map<string, ElevatedPoint[]>();
   const activeIcaos = trailBasePathCache
     ? (activeIcaosSet ?? new Set<string>())
     : null;
@@ -188,6 +205,30 @@ export function buildTrailLayers(params: TrailLayerParams) {
     return computed;
   };
 
+  const getRenderableBodyPoints = (
+    trail: TrailEntry,
+    aircraft: FlightState | undefined,
+  ): ElevatedPoint[] => {
+    const cached = renderBodyPointCache.get(trail.icao24);
+    if (cached) return cached;
+
+    const visiblePoints = getVisibleTrailPoints(trail, aircraft);
+    if (!aircraft) {
+      renderBodyPointCache.set(trail.icao24, visiblePoints);
+      return visiblePoints;
+    }
+
+    const calibration = getAircraftModelCalibration(
+      resolveModelKey(aircraft.category, aircraft.typeCode),
+    );
+    const trimmed = trimTrailBodyForConnector(
+      visiblePoints,
+      calibration.tailAnchorMeters,
+    );
+    renderBodyPointCache.set(trail.icao24, trimmed);
+    return trimmed;
+  };
+
   for (const f of interpolated) {
     if (f.longitude == null || f.latitude == null) continue;
     const existing = trailMap.get(f.icao24);
@@ -229,95 +270,133 @@ export function buildTrailLayers(params: TrailLayerParams) {
       if (!activeIcaos.has(icao)) trailPathCache.delete(icao);
     }
   }
-  if (trailColorCache && activeIcaos) {
-    for (const icao of trailColorCache.keys()) {
-      if (!activeIcaos.has(icao)) trailColorCache.delete(icao);
-    }
-  }
 
-  return new PathLayer<TrailEntry>({
+  const connectorData = trailData.flatMap((trail) => {
+    const aircraft = interpolatedMap.get(trail.icao24);
+    const visiblePoints = getRenderableBodyPoints(trail, aircraft);
+    const connector = buildTrailConnector(
+      visiblePoints,
+      aircraft,
+      aircraft
+        ? {
+            tailGapMeters: getAircraftModelCalibration(
+              resolveModelKey(aircraft.category, aircraft.typeCode),
+            ).tailAnchorMeters,
+          }
+        : undefined,
+    );
+    return connector
+      ? [
+          {
+            icao24: trail.icao24,
+            path: connector,
+          } satisfies TrailConnectorSegment,
+        ]
+      : [];
+  });
+
+  const trailBodySegments = trailData.flatMap((trail) => {
+    const animFlight = interpolatedMap.get(trail.icao24);
+    const pathKey = `${trailBasePathCacheKey(trail, trailDistance)}_${altitudeDisplayMode}_${elevScale.toFixed(3)}`;
+
+    if (trailPathCache) {
+      const cached = trailPathCache.get(trail.icao24);
+      if (cached && cached.key === pathKey) {
+        return buildTrailRenderSegments({
+          icao24: trail.icao24,
+          points: cached.result,
+          kind: "body",
+          altColors,
+          defaultColor,
+        });
+      }
+    }
+
+    const raw = toPathLayerPoints(
+      getRenderableBodyPoints(trail, animFlight),
+    ).map(
+      (p) =>
+        [
+          p[0],
+          p[1],
+          Math.max(
+            0,
+            projectTrailElevationMeters(p[2], altitudeDisplayMode) * elevScale,
+          ),
+        ] as [number, number, number],
+    );
+    const clean = raw.filter(
+      (p) =>
+        Number.isFinite(p[0]) &&
+        Number.isFinite(p[1]) &&
+        Number.isFinite(p[2]),
+    );
+    const result = limitTrailSlope(clean);
+    trailPathCache?.set(trail.icao24, { key: pathKey, result });
+
+    return buildTrailRenderSegments({
+      icao24: trail.icao24,
+      points: result,
+      kind: "body",
+      altColors,
+      defaultColor,
+    });
+  });
+
+  const trailBodyLayer = new PathLayer<TrailRenderSegment>({
     id: "flight-trails",
     pickable: false,
     visible,
-    data: trailData,
+    data: trailBodySegments,
     opacity: globeFade,
-    updateTriggers: {
-      getPath: [visualFrame, trailDistance, elevScale],
-      getColor: [visualFrame, altColors, trailDistance],
-    },
-    getPath: (d) => {
-      const animFlight = interpolatedMap.get(d.icao24);
+    getPath: (d) => d.path,
+    getColor: (d) => d.color,
+    getWidth: trailThickness * 1.15,
+    widthUnits: "pixels",
+    widthMinPixels: Math.max(1.5, trailThickness * 0.9),
+    widthMaxPixels: Math.max(3, trailThickness * 2.4),
+    wrapLongitude: true,
+    billboard: true,
+    capRounded: true,
+    jointRounded: true,
+  });
 
-      // Cache key: trail point count + rounded head position (~11m grid)
-      // + elevScale. Gives ~6 frame cache hits between invalidations at
-      // typical aircraft speed, reducing slope-limit computation from
-      // 60fps to ~10fps per trail.
-      const headLng = animFlight?.longitude?.toFixed(4) ?? "";
-      const headLat = animFlight?.latitude?.toFixed(4) ?? "";
-      const pathKey = `${d.path.length}_${headLng}_${headLat}_${elevScale.toFixed(3)}_${trailDistance}`;
+  const connectorSegments = connectorData.flatMap((segment) => {
+    const raw = toPathLayerPoints(segment.path).map(
+      (p) =>
+        [
+          p[0],
+          p[1],
+          Math.max(
+            0,
+            projectTrailElevationMeters(p[2], altitudeDisplayMode) * elevScale,
+          ),
+        ] as [number, number, number],
+    );
+    const clean = raw.filter(
+      (p) =>
+        Number.isFinite(p[0]) &&
+        Number.isFinite(p[1]) &&
+        Number.isFinite(p[2]),
+    );
 
-      if (trailPathCache) {
-        const cached = trailPathCache.get(d.icao24);
-        if (cached && cached.key === pathKey) return cached.result;
-      }
+    return buildTrailRenderSegments({
+      icao24: segment.icao24,
+      points: limitTrailSlope(clean),
+      kind: "connector",
+      altColors,
+      defaultColor,
+    });
+  });
 
-      const raw = getVisibleTrailPoints(d, animFlight).map(
-        (p) =>
-          [
-            p[0],
-            p[1],
-            Math.max(
-              0,
-              (altitudeToElevation(p[2]) - TRAIL_BELOW_AIRCRAFT_METERS) *
-                elevScale,
-            ),
-          ] as [number, number, number],
-      );
-      // Final NaN defense: filter out any invalid coordinates before
-      // passing to PathLayer to prevent WebGL rendering errors.
-      const clean = raw.filter(
-        (p) =>
-          Number.isFinite(p[0]) &&
-          Number.isFinite(p[1]) &&
-          Number.isFinite(p[2]),
-      );
-      const result = limitTrailSlope(clean);
-      trailPathCache?.set(d.icao24, { key: pathKey, result });
-      return result;
-    },
-    getColor: (d) => {
-      const animFlight = interpolatedMap.get(d.icao24);
-      const visiblePoints = getVisibleTrailPoints(d, animFlight);
-      const len = visiblePoints.length;
-
-      // Include head position + altitude so the cache invalidates as the
-      // altitude profile shifts (e.g. during descent — old high-alt points
-      // scroll off, new low-alt points enter the visible window).
-      const headLng = animFlight?.longitude?.toFixed(4) ?? "";
-      const headLat = animFlight?.latitude?.toFixed(4) ?? "";
-      const headAlt =
-        animFlight?.baroAltitude != null &&
-        Number.isFinite(animFlight.baroAltitude)
-          ? Math.floor(animFlight.baroAltitude / 100)
-          : "";
-      const colorKey = `${len}_${altColors}_${d.fullHistory ?? false}_${headLng}_${headLat}_${headAlt}`;
-      if (trailColorCache) {
-        const cached = trailColorCache.get(d.icao24);
-        if (cached && cached.key === colorKey) return cached.result;
-      }
-
-      const result = visiblePoints.map((point, i) => {
-        const tVal = len > 1 ? i / (len - 1) : 1;
-        // Unified fade curve for both trail types — ensures visual
-        // consistency between active GPS trails and historical tracks.
-        const fade = 0.15 + 0.85 * Math.pow(tVal, 1.35);
-        const base = altColors ? altitudeToColor(point[2]) : defaultColor;
-        const alpha = Math.round(55 + fade * 165);
-        return [base[0], base[1], base[2], alpha];
-      }) as [number, number, number, number][];
-      trailColorCache?.set(d.icao24, { key: colorKey, result });
-      return result;
-    },
+  const connectorLayer = new PathLayer<TrailRenderSegment>({
+    id: "flight-trail-connectors",
+    pickable: false,
+    visible,
+    data: connectorSegments,
+    opacity: globeFade,
+    getPath: (d) => d.path,
+    getColor: (d) => d.color,
     getWidth: trailThickness,
     widthUnits: "pixels",
     widthMinPixels: Math.max(1, trailThickness * 0.6),
@@ -327,6 +406,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
     capRounded: true,
     jointRounded: true,
   });
+
+  return [trailBodyLayer, connectorLayer];
 }
 
 // ── Selection pulse layer builder ──────────────────────────────────────
@@ -342,6 +423,7 @@ export interface SelectionPulseParams {
   currentZoom: number;
   /** Pre-computed zoom-dependent elevation scale */
   elevScale: number;
+  altitudeDisplayMode: AltitudeDisplayMode;
   haloUrl: string;
   ringUrl: string;
   layersVisible?: boolean;
@@ -366,6 +448,7 @@ export function buildSelectionPulseLayers(
     elapsed,
     globeFade,
     elevScale,
+    altitudeDisplayMode,
     haloUrl,
     ringUrl,
     layersVisible = true,
@@ -397,7 +480,8 @@ export function buildSelectionPulseLayers(
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
     const elevation =
       flight && flight.baroAltitude != null
-        ? altitudeToElevation(flight.baroAltitude) * elevScale
+        ? altitudeToElevation(flight.baroAltitude, altitudeDisplayMode) *
+          elevScale
         : 0;
     const pos: [number, number, number] =
       flight && flight.longitude != null && flight.latitude != null
@@ -406,14 +490,15 @@ export function buildSelectionPulseLayers(
     const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;
 
     const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
+    // Pure sine wave for a gentle, smooth breathing effect.
+    // Previous double-smoothStep created sharp snap transitions.
     const breath = Math.sin(breathT * Math.PI * 2);
-    const softBreath = smoothStep(smoothStep((breath + 1) / 2)) * 2 - 1;
 
     // Subtle background glow — barely visible, provides soft ambient light.
     // At 86px with 40% clear center: clear zone = 17px radius, well outside
     // the largest aircraft icon (~12px radius).
-    const haloSize = 86 + 3 * softBreath;
-    const haloAlpha = Math.round((10 + 4 * softBreath) * op);
+    const haloSize = 86 + 1.5 * breath;
+    const haloAlpha = Math.round((10 + 3 * breath) * op);
 
     layers.push(
       new IconLayer({
@@ -436,13 +521,10 @@ export function buildSelectionPulseLayers(
 
     // Single clean ring that gently breathes in size and opacity.
     // No expansion animation — just a calm, static indicator.
+    // In sync with halo (no phase offset) for a unified pulse.
     // At 68px, ring inner edge = 0.57 * 34 = 19px — clears the aircraft.
-    const ringBreathT =
-      ((elapsed + PULSE_PERIOD_MS * 0.25) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
-    const ringBreath = Math.sin(ringBreathT * Math.PI * 2);
-    const softRingBreath = smoothStep(smoothStep((ringBreath + 1) / 2)) * 2 - 1;
-    const ringSize = 68 + 3 * softRingBreath;
-    const ringAlpha = Math.round((30 + 10 * softRingBreath) * op);
+    const ringSize = 68 + 1.5 * breath;
+    const ringAlpha = Math.round((28 + 6 * breath) * op);
 
     layers.push(
       new IconLayer({

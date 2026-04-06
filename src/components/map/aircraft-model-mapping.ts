@@ -10,6 +10,8 @@
 
 import type { FlightState } from "@/lib/opensky";
 
+import { MODEL_MESH_METRICS } from "./model-mesh-metrics";
+
 // ── Model Keys ─────────────────────────────────────────────────────────
 
 export type AircraftModelKey =
@@ -66,65 +68,91 @@ const MODEL_CDN_VERSIONS: Readonly<Record<string, number>> = {
   "widebody-4eng": 1774203418,
 };
 
+type AircraftModelFileKey = keyof typeof MODEL_MESH_METRICS;
+
 // A380 reuses the widebody-4eng mesh (it IS the A380 from FlightAirMap).
 // generic.glb and narrowbody.glb are identical files; drone.glb and light-prop.glb likewise.
-const MODEL_FILE_OVERRIDES: Partial<Record<AircraftModelKey, string>> = {
+const MODEL_FILE_OVERRIDES: Partial<
+  Record<AircraftModelKey, AircraftModelFileKey>
+> = {
   a380: "widebody-4eng",
   generic: "narrowbody",
   drone: "light-prop",
 };
 
+export function resolveModelFileKey(
+  key: AircraftModelKey,
+): AircraftModelFileKey {
+  return MODEL_FILE_OVERRIDES[key] ?? (key as AircraftModelFileKey);
+}
+
 export function modelUrl(key: AircraftModelKey): string {
-  const file = MODEL_FILE_OVERRIDES[key] ?? key;
+  const file = resolveModelFileKey(key);
   const version = MODEL_CDN_VERSIONS[file] ?? 1;
   return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/v${version}/${CLOUDINARY_FOLDER}/${file}.glb`;
 }
 
-// ── Per-Model Size Normalization ───────────────────────────────────────
-//
-// Each factor combines TWO concerns:
-//
-// 1. **Mesh equalisation** — raw GLBs have wildly different coordinate
-//    scales.  The base factor brings every silhouette to a common
-//    reference size (~40 internal units).
-//
-// 2. **Realistic wingspan proportion** — a √(wingspan / 36 m) multiplier
-//    derived from real ICAO Doc 8643 representative wingspans.  Square-
-//    root compression keeps the visual range manageable (~4×) while
-//    preserving clear differentiation between light GA, business jets,
-//    narrowbodies, widebodies, and the A380.
-//
-// Representative wingspans used (metres):
-//   light-prop  11   (C172)       fighter    11   (F-16 / Eurofighter)
-//   helicopter  11   (H145 rotor) glider     18   (ASG 29)
-//   bizjet      24   (avg G550/CX)regional   25   (CRJ-900 / E175)
-//   turboprop   27   (ATR 72)     drone       5   (small UAV)
-//   narrowbody  36   (A320)       B737       36   (B737-800)
-//   widebody-2  65   (B777-300ER) widebody-4 64   (B747-400)
-//   A380        80   (A380-800)
-//
-// Formula per key:  meshEqualise × √(wingspan / 36)
+// ── Mesh Normalization + Compact Physical Scale ───────────────────────
 
-const MODEL_NORMALIZE: Readonly<Record<AircraftModelKey, number>> = {
-  a380: 0.46,
-  b737: 0.55,
-  narrowbody: 1.0,
-  "widebody-2eng": 0.89,
-  "widebody-4eng": 0.44,
-  "regional-jet": 0.85,
-  "light-prop": 1.86,
-  turboprop: 0.8,
-  helicopter: 1.44,
-  bizjet: 1.73,
-  glider: 1.56,
-  fighter: 1.86,
-  drone: 1.43,
-  generic: 1.0,
+const TARGET_MODEL_EXTENT_UNITS = 42;
+
+export const MODEL_KEY_WINGSPAN: Readonly<Record<AircraftModelKey, number>> = {
+  a380: 80,
+  "widebody-4eng": 64,
+  "widebody-2eng": 62,
+  b737: 35.9,
+  narrowbody: 36,
+  "regional-jet": 24,
+  turboprop: 27,
+  bizjet: 20,
+  helicopter: 14,
+  "light-prop": 11,
+  fighter: 11,
+  glider: 18,
+  drone: 5,
+  generic: 30,
 };
 
-/** Returns the size normalization factor for a model type */
+const REFERENCE_MODEL_KEY: AircraftModelKey = "narrowbody";
+const REFERENCE_WINGSPAN_METERS = MODEL_KEY_WINGSPAN[REFERENCE_MODEL_KEY];
+const REFERENCE_MESH_EXTENT_UNITS =
+  MODEL_MESH_METRICS[resolveModelFileKey(REFERENCE_MODEL_KEY)].maxExtent;
+
+export function wingspanToDisplayScale(
+  wingspan: number,
+): number {
+  return 0.65 + Math.max(0, Math.min((wingspan - 5) / 75, 1)) * 0.65;
+}
+
+function wingspanToModelDisplayScale(
+  wingspan: number,
+  meshMaxExtent: number = REFERENCE_MESH_EXTENT_UNITS,
+): number {
+  return (
+    wingspan / REFERENCE_WINGSPAN_METERS
+  ) * Math.sqrt(meshMaxExtent / REFERENCE_MESH_EXTENT_UNITS);
+}
+
+export function modelMeshNormalize(key: AircraftModelKey): number {
+  const fileKey = resolveModelFileKey(key);
+  return TARGET_MODEL_EXTENT_UNITS / MODEL_MESH_METRICS[fileKey].maxExtent;
+}
+
+export function modelPhysicalScale(key: AircraftModelKey): number {
+  const fileKey = resolveModelFileKey(key);
+  return wingspanToModelDisplayScale(
+    MODEL_KEY_WINGSPAN[key],
+    MODEL_MESH_METRICS[fileKey].maxExtent,
+  );
+}
+
+export function modelDisplayScale(key: AircraftModelKey): number {
+  return modelPhysicalScale(key);
+}
+
+/** Returns the mesh normalization factor for a model type */
 export function modelNormScale(key: AircraftModelKey): number {
-  return MODEL_NORMALIZE[key];
+  return modelMeshNormalize(key);
 }
 
 // ── Per-Model Yaw Offset ───────────────────────────────────────────────
