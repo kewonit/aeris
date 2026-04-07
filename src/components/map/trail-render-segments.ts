@@ -54,7 +54,7 @@ export function trimTrailBodyForConnector(
 }
 
 const TRAIL_TAIL_ALPHA = 220;
-const CONNECTOR_HEAD_ALPHA = 236;
+const CONNECTOR_HEAD_ALPHA = 168;
 function scaleTrailColor(
   color: [number, number, number, number],
   factor: number,
@@ -114,7 +114,7 @@ export function buildConnectorGradientColors(
     const tVal = len > 1 ? index / (len - 1) : 1;
     const eased = Math.pow(tVal, 1.1);
     const base = altColors ? trailAltitudeToColor(point[2]) : defaultColor;
-    const brightness = altColors ? 0.86 + 0.14 * eased : 1;
+    const brightness = altColors ? 0.94 - 0.12 * eased : 1;
     const [r, g, b] = scaleTrailColor(base, brightness);
     const alpha = Math.round(
       TRAIL_TAIL_ALPHA + (CONNECTOR_HEAD_ALPHA - TRAIL_TAIL_ALPHA) * eased,
@@ -149,14 +149,9 @@ export function buildTrailRenderSegments(input: {
     const start = input.points[index];
     const end = input.points[index + 1];
     if (
-      ![
-        start[0],
-        start[1],
-        start[2],
-        end[0],
-        end[1],
-        end[2],
-      ].every(Number.isFinite)
+      ![start[0], start[1], start[2], end[0], end[1], end[2]].every(
+        Number.isFinite,
+      )
     ) {
       continue;
     }
@@ -167,8 +162,10 @@ export function buildTrailRenderSegments(input: {
       kind: input.kind,
       path: [start, end],
       color: blendRgba(
-        gradientColors[index] ?? gradientColors[index + 1] ?? [255, 255, 255, 255],
-        gradientColors[index + 1] ?? gradientColors[index] ?? [255, 255, 255, 255],
+        gradientColors[index] ??
+          gradientColors[index + 1] ?? [255, 255, 255, 255],
+        gradientColors[index + 1] ??
+          gradientColors[index] ?? [255, 255, 255, 255],
       ),
     });
   }

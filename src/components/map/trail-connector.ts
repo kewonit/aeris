@@ -5,10 +5,11 @@ import type { ElevatedPoint } from "./flight-layer-constants";
 
 const CONNECTOR_MIN_HORIZONTAL_DELTA = 1e-6;
 const CONNECTOR_MIN_ALTITUDE_DELTA_METERS = 1;
-const CONNECTOR_CONTROL_SCALE = 0.25;
+const CONNECTOR_CONTROL_SCALE = 0.38;
 const CONNECTOR_MAX_CONTROL_DEGREES = 0.06;
-const CONNECTOR_SEGMENTS = 8;
+const CONNECTOR_SEGMENTS = 10;
 const DEFAULT_CONNECTOR_TAIL_GAP_METERS = 24;
+const CONNECTOR_MIN_GAP_RETENTION = 0.82;
 
 export type TrailConnectorCalibration = {
   tailGapMeters?: number;
@@ -27,10 +28,7 @@ function headingDirection(track: number): [number, number] {
   return [Math.sin(radians), Math.cos(radians)];
 }
 
-function dotDirection(
-  left: [number, number],
-  right: [number, number],
-): number {
+function dotDirection(left: [number, number], right: [number, number]): number {
   return left[0] * right[0] + left[1] * right[1];
 }
 
@@ -44,6 +42,47 @@ function blendDirections(
     primary[0] * primaryWeight + secondary[0] * secondaryWeight,
     primary[1] * primaryWeight + secondary[1] * secondaryWeight,
   );
+}
+
+function averageTailDirection(
+  trailPoints: ElevatedPoint[],
+): [number, number] | null {
+  if (trailPoints.length < 2) {
+    return null;
+  }
+
+  let sumX = 0;
+  let sumY = 0;
+  let totalWeight = 0;
+  let weight = 1;
+
+  for (
+    let index = Math.max(1, trailPoints.length - 4);
+    index < trailPoints.length;
+    index += 1
+  ) {
+    const prev = trailPoints[index - 1];
+    const current = trailPoints[index];
+    const [dirX, dirY] = normalizeDirection(
+      current[0] - prev[0],
+      current[1] - prev[1],
+    );
+
+    if (dirX === 0 && dirY === 0) {
+      continue;
+    }
+
+    sumX += dirX * weight;
+    sumY += dirY * weight;
+    totalWeight += weight;
+    weight += 1;
+  }
+
+  if (totalWeight <= 0) {
+    return null;
+  }
+
+  return normalizeDirection(sumX, sumY);
 }
 
 function metersPerDegreeLongitude(latitude: number): number {
@@ -135,11 +174,16 @@ export function buildTrailConnector(
     return null;
   }
 
+  const averagedStartDirection = averageTailDirection(trailPoints);
   const [startDirX, startDirY] = prevPoint
-    ? normalizeDirection(tail[0] - prevPoint[0], tail[1] - prevPoint[1])
+    ? (averagedStartDirection ??
+      normalizeDirection(tail[0] - prevPoint[0], tail[1] - prevPoint[1]))
     : normalizeDirection(dx, dy);
   const gapDirection = normalizeDirection(dx, dy);
-  const fallbackDirection: [number, number] = [gapDirection[0], gapDirection[1]];
+  const fallbackDirection: [number, number] = [
+    gapDirection[0],
+    gapDirection[1],
+  ];
   const headingDirectionVector: [number, number] | null =
     aircraft.trueTrack != null && Number.isFinite(aircraft.trueTrack)
       ? headingDirection(aircraft.trueTrack)
@@ -150,7 +194,9 @@ export function buildTrailConnector(
   const endDirection: [number, number] =
     headingDirectionVector && headingAlignment > 0.55
       ? blendDirections(gapDirection, headingDirectionVector, 0.3)
-      : fallbackDirection;
+      : headingDirectionVector && headingAlignment < -0.2
+        ? headingDirectionVector
+        : fallbackDirection;
   const [fallbackDirX, fallbackDirY] = fallbackDirection;
   const [endDirX, endDirY] = endDirection;
 
@@ -161,7 +207,8 @@ export function buildTrailConnector(
 
   const tailAnchorMeters = Math.min(
     tailGapMeters,
-    horizontalDistanceMeters(dx, dy, aircraftCenterLat) * 0.6,
+    horizontalDistanceMeters(dx, dy, aircraftCenterLat) *
+      CONNECTOR_MIN_GAP_RETENTION,
   );
   const [headLng, headLat] = offsetPointAlongDirection(
     aircraftCenterLng,
@@ -183,13 +230,13 @@ export function buildTrailConnector(
   const control1: ElevatedPoint = [
     tail[0] + (startDirX || fallbackDirX) * controlDistance,
     tail[1] + (startDirY || fallbackDirY) * controlDistance,
-    tail[2] + dz * 0.35,
+    tail[2] + dz * 0.42,
   ];
 
   const control2: ElevatedPoint = [
     head[0] - (endDirX || fallbackDirX) * controlDistance,
     head[1] - (endDirY || fallbackDirY) * controlDistance,
-    head[2] - dz * 0.2,
+    head[2] - dz * 0.12,
   ];
 
   const connector: ElevatedPoint[] = [];
