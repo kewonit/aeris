@@ -4,8 +4,29 @@ const FT_TO_M = 0.3048;
 const TARGET_WAYPOINTS = 240;
 const MAX_AGE_SECONDS = 120 * 60;
 const MIN_GROUND_FOR_SPLIT = 2;
+const MODERATE_CONTINUITY_GAP_SECONDS = 5 * 60;
+const HARD_CONTINUITY_GAP_SECONDS = 15 * 60;
+const LOW_ALTITUDE_CONTINUITY_M = 2_000;
+const BASE_CONTINUITY_DISTANCE_M = 12_000;
+const MAX_CONTINUITY_SPEED_MPS = 450;
 
 function trimToLastFlight(waypoints: TrackWaypoint[]): TrackWaypoint[] {
+  if (waypoints.length < 3) {
+    return waypoints;
+  }
+
+  const legs = splitIntoCandidateLegs(waypoints);
+
+  for (let index = legs.length - 1; index >= 0; index -= 1) {
+    if (legs[index].length >= 2) {
+      return retainShortRunwayRoll(legs[index]);
+    }
+  }
+
+  return retainShortRunwayRoll(legs[legs.length - 1] ?? waypoints);
+}
+
+function retainShortRunwayRoll(waypoints: TrackWaypoint[]): TrackWaypoint[] {
   if (waypoints.length < 3) {
     return waypoints;
   }
@@ -34,6 +55,80 @@ function trimToLastFlight(waypoints: TrackWaypoint[]): TrackWaypoint[] {
   }
 
   return waypoints.slice(Math.max(0, lastTakeoffIdx - 1));
+}
+
+function approximateDistanceMeters(
+  left: TrackWaypoint,
+  right: TrackWaypoint,
+): number {
+  const leftLat = left.latitude ?? 0;
+  const rightLat = right.latitude ?? 0;
+  const leftLng = left.longitude ?? 0;
+  const rightLng = right.longitude ?? 0;
+  const avgLatRad = ((leftLat + rightLat) / 2) * (Math.PI / 180);
+  const metersPerLngDegree = 111_320 * Math.cos(avgLatRad);
+  const dx = (rightLng - leftLng) * metersPerLngDegree;
+  const dy = (rightLat - leftLat) * 111_320;
+  return Math.hypot(dx, dy);
+}
+
+function isLowAltitudeContinuityPoint(waypoint: TrackWaypoint): boolean {
+  return (
+    waypoint.onGround ||
+    (waypoint.baroAltitude != null &&
+      waypoint.baroAltitude <= LOW_ALTITUDE_CONTINUITY_M)
+  );
+}
+
+function isContinuityBreak(
+  previous: TrackWaypoint,
+  current: TrackWaypoint,
+): boolean {
+  const gapSeconds = current.time - previous.time;
+  if (!Number.isFinite(gapSeconds) || gapSeconds <= 0) {
+    return true;
+  }
+
+  if (gapSeconds >= HARD_CONTINUITY_GAP_SECONDS) {
+    return true;
+  }
+
+  if (
+    gapSeconds >= MODERATE_CONTINUITY_GAP_SECONDS &&
+    (isLowAltitudeContinuityPoint(previous) ||
+      isLowAltitudeContinuityPoint(current))
+  ) {
+    return true;
+  }
+
+  const maxDistanceMeters =
+    BASE_CONTINUITY_DISTANCE_M + MAX_CONTINUITY_SPEED_MPS * gapSeconds;
+  return approximateDistanceMeters(previous, current) > maxDistanceMeters;
+}
+
+function splitIntoCandidateLegs(waypoints: TrackWaypoint[]): TrackWaypoint[][] {
+  if (waypoints.length === 0) {
+    return [];
+  }
+
+  const legs: TrackWaypoint[][] = [];
+  let currentLeg: TrackWaypoint[] = [waypoints[0]];
+
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const previous = waypoints[index - 1];
+    const current = waypoints[index];
+
+    if (isContinuityBreak(previous, current)) {
+      legs.push(currentLeg);
+      currentLeg = [current];
+      continue;
+    }
+
+    currentLeg.push(current);
+  }
+
+  legs.push(currentLeg);
+  return legs;
 }
 
 function waypointPerpendicularDist(
@@ -297,7 +392,7 @@ export function parseReadsbTrace(
   }
 
   waypoints.sort((left, right) => left.time - right.time);
-  const legTrimmed = hasNewLegFlag ? waypoints : trimToLastFlight(waypoints);
+  const legTrimmed = trimToLastFlight(waypoints);
   const deduped: TrackWaypoint[] = [legTrimmed[0]];
 
   for (let index = 1; index < legTrimmed.length; index += 1) {

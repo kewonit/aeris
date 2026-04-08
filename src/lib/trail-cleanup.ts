@@ -207,12 +207,87 @@ export function removeSpikePoints(
       }
 
       // Moderate turn (>90°) with asymmetric segment lengths (GPS spike).
+      const lengthRatio = Math.max(len1, len2) / Math.min(len1, len2);
       if (cos < 0) {
-        const lengthRatio = Math.max(len1, len2) / Math.min(len1, len2);
         if (lengthRatio > 4) {
           keep[i] = false;
           removed++;
           changed = true;
+          continue;
+        }
+      }
+
+      const lineDx = next[0] - prev[0];
+      const lineDy = next[1] - prev[1];
+      const lineLenSq = lineDx * lineDx + lineDy * lineDy;
+      if (lineLenSq >= 1e-12) {
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((curr[0] - prev[0]) * lineDx + (curr[1] - prev[1]) * lineDy) /
+              lineLenSq,
+          ),
+        );
+        const projX = prev[0] + t * lineDx;
+        const projY = prev[1] + t * lineDy;
+        const perpDist = Math.sqrt(
+          (curr[0] - projX) ** 2 + (curr[1] - projY) ** 2,
+        );
+        const lineLength = Math.sqrt(lineLenSq);
+
+        if (lengthRatio > 4 && perpDist / Math.max(lineLength, 1e-10) > 0.08) {
+          keep[i] = false;
+          removed++;
+          changed = true;
+          continue;
+        }
+      }
+
+      let nextNextIdx = nextIdx + 1;
+      while (nextNextIdx < path.length && !keep[nextNextIdx]) nextNextIdx++;
+
+      if (nextNextIdx < path.length) {
+        const following = path[nextNextIdx];
+        const baseDx = following[0] - prev[0];
+        const baseDy = following[1] - prev[1];
+        const baseLenSq = baseDx * baseDx + baseDy * baseDy;
+
+        if (baseLenSq >= 1e-10) {
+          const currProjection =
+            ((curr[0] - prev[0]) * baseDx + (curr[1] - prev[1]) * baseDy) /
+            baseLenSq;
+          const nextProjection =
+            ((next[0] - prev[0]) * baseDx + (next[1] - prev[1]) * baseDy) /
+            baseLenSq;
+          const currCross =
+            baseDx * (curr[1] - prev[1]) - baseDy * (curr[0] - prev[0]);
+          const nextCross =
+            baseDx * (next[1] - prev[1]) - baseDy * (next[0] - prev[0]);
+
+          const len3 = Math.sqrt(
+            (following[0] - next[0]) ** 2 + (following[1] - next[1]) ** 2,
+          );
+          const direct = Math.sqrt(baseLenSq);
+          const detourRatio = (len1 + len2 + len3) / Math.max(direct, 1e-10);
+          const alternatingSides = currCross * nextCross < 0;
+          const backtracks = nextProjection < currProjection - 0.05;
+          const crossTrackRatio =
+            Math.max(Math.abs(currCross), Math.abs(nextCross)) /
+            Math.max(direct, 1e-10);
+
+          if (
+            alternatingSides &&
+            backtracks &&
+            detourRatio > 1.35 &&
+            crossTrackRatio > 0.003
+          ) {
+            keep[i] = false;
+            keep[nextIdx] = false;
+            removed += 2;
+            changed = true;
+            continue;
+          }
         }
       }
     }

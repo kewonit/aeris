@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import type { TrailSegment, TrailSnapshot } from "../types";
+
+import { mergeSegments } from "./merge-segments";
+
+function historySample(overrides: Partial<TrailSnapshot>): TrailSnapshot {
+  return {
+    source: "adsb-fi",
+    timestamp: 0,
+    lng: 0,
+    lat: 0,
+    altitude: 8_000,
+    track: 90,
+    groundSpeed: 220,
+    quality: "authoritative-trace",
+    onGround: false,
+    ...overrides,
+  };
+}
+
+function liveSample(overrides: Partial<TrailSnapshot>): TrailSnapshot {
+  return {
+    source: "live",
+    timestamp: 0,
+    lng: 0,
+    lat: 0,
+    altitude: 8_000,
+    track: 250,
+    groundSpeed: 220,
+    quality: "authoritative-live",
+    onGround: false,
+    ...overrides,
+  };
+}
+
+function historySegment(samples: TrailSnapshot[]): TrailSegment {
+  return {
+    kind: "historical",
+    provider: "adsb-fi",
+    samples,
+  };
+}
+
+test("mergeSegments prefers the trailing history tail when history passes near the live head more than once", () => {
+  const result = mergeSegments({
+    referenceAltitude: 8_000,
+    historySegments: [
+      historySegment([
+        historySample({ timestamp: 100, lng: 72.9, lat: 19.22 }),
+        historySample({ timestamp: 200, lng: 72.95, lat: 19.18 }),
+        historySample({ timestamp: 260, lng: 73.1, lat: 19.3 }),
+        historySample({ timestamp: 320, lng: 72.96, lat: 19.18 }),
+      ]),
+    ],
+    liveTail: [
+      liveSample({ timestamp: 330, lng: 72.95, lat: 19.18 }),
+      liveSample({ timestamp: 340, lng: 72.93, lat: 19.17 }),
+    ],
+  });
+
+  assert.equal(result.outcome, "full-history");
+  assert.deepEqual(
+    result.samples[result.samples.length - 2],
+    historySample({ timestamp: 320, lng: 72.96, lat: 19.18 }),
+  );
+});
+
+test("mergeSegments degrades instead of snapping to an older interior branch when the real tail is stale and far away", () => {
+  const liveTail = [
+    liveSample({
+      timestamp: 2_200_000,
+      lng: 72.95,
+      lat: 19.18,
+      altitude: 4_200,
+    }),
+    liveSample({
+      timestamp: 2_200_010,
+      lng: 72.93,
+      lat: 19.17,
+      altitude: 4_200,
+    }),
+  ];
+
+  const result = mergeSegments({
+    referenceAltitude: 4_200,
+    historySegments: [
+      historySegment([
+        historySample({
+          timestamp: 100,
+          lng: 72.95,
+          lat: 19.18,
+          altitude: 4_000,
+        }),
+        historySample({
+          timestamp: 200,
+          lng: 73.3,
+          lat: 19.23,
+          altitude: 4_100,
+        }),
+        historySample({
+          timestamp: 300,
+          lng: 73.58,
+          lat: 19.44,
+          altitude: 4_200,
+        }),
+      ]),
+    ],
+    liveTail,
+  });
+
+  assert.equal(result.outcome, "live-tail-only");
+  assert.deepEqual(result.samples, liveTail);
+});

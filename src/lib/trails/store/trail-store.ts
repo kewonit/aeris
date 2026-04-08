@@ -41,6 +41,7 @@ export type TrailStoreSnapshot = {
   trails: TrailEntry[];
   history: TrailHistoryState;
   selectedTrack: FlightTrack | null;
+  selectedEnvelope: TrailEnvelope | null;
 };
 
 const MAX_POINTS = 120;
@@ -203,7 +204,7 @@ function createEnvelope(icao24: string): TrailEnvelope {
 }
 
 export function createTrailStore() {
-  let listeners = new Set<Listener>();
+  const listeners = new Set<Listener>();
   const trails = new Map<string, TrailPoint[]>();
   const altitudeStates = new Map<string, AltitudeState>();
   const envelopes = new Map<string, TrailEnvelope>();
@@ -211,12 +212,13 @@ export function createTrailStore() {
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
   let lastUpdateTime = 0;
   let liveOrder: string[] = [];
-  let history = createHistoryState();
+  const history = createHistoryState();
   let selectedTrack: FlightTrack | null = null;
   let snapshot: TrailStoreSnapshot = {
     trails: [],
     history: toPublicHistoryState(history),
     selectedTrack,
+    selectedEnvelope: null,
   };
 
   function emit(): void {
@@ -328,6 +330,9 @@ export function createTrailStore() {
       trails: nextTrails,
       history: toPublicHistoryState(history),
       selectedTrack,
+      selectedEnvelope: history.selectedIcao24
+        ? (envelopes.get(history.selectedIcao24) ?? null)
+        : null,
     };
   }
 

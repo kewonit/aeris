@@ -16,6 +16,9 @@ import {
 import type { TrailOutcome, TrailSegment, TrailSnapshot } from "../types";
 
 const OVERLAP_SEARCH_WINDOW = 150;
+const TAIL_JOIN_MAX_POINTS = 24;
+const TAIL_SNAP_MAX_PATH_DEG = 0.35;
+const TAIL_BRIDGE_MAX_PATH_DEG = CONNECT_BRIDGE_DEG;
 const BRIDGE_MAX_STEPS = 36;
 const BRIDGE_MIN_STEPS = 6;
 const BRIDGE_STEP_SIZE_DEG = 0.12;
@@ -136,6 +139,47 @@ function getSpeedMps(sample: TrailSnapshot): number {
     : DEFAULT_SPEED_MPS;
 }
 
+function suffixPathLength(
+  history: TrailSnapshot[],
+  startIndex: number,
+): number {
+  let total = 0;
+
+  for (let index = startIndex; index < history.length - 1; index += 1) {
+    total += Math.sqrt(distanceSq(history[index], history[index + 1]));
+  }
+
+  return total;
+}
+
+function findTailJoinIndex(
+  history: TrailSnapshot[],
+  liveStart: TrailSnapshot,
+  maxJoinGap: number,
+  maxSuffixPathDeg: number,
+): number {
+  const searchStart = Math.max(0, history.length - OVERLAP_SEARCH_WINDOW);
+  const suffixStart = Math.max(
+    searchStart,
+    history.length - TAIL_JOIN_MAX_POINTS,
+  );
+
+  for (let index = history.length - 1; index >= suffixStart; index -= 1) {
+    const distance = Math.sqrt(distanceSq(history[index], liveStart));
+    if (distance > maxJoinGap) {
+      continue;
+    }
+
+    if (suffixPathLength(history, index) > maxSuffixPathDeg) {
+      continue;
+    }
+
+    return index;
+  }
+
+  return -1;
+}
+
 export function mergeSegments(params: {
   liveTail: TrailSnapshot[];
   historySegments: TrailSegment[];
@@ -166,43 +210,22 @@ export function mergeSegments(params: {
     HARD_DISCONNECT_BASE_DEG,
     (getSpeedMps(liveStart) * effectiveAgeSec * 2) / 111_320 + 0.5,
   );
+  const trimBridgeGap = Math.min(TRIM_AND_BRIDGE_DEG, maxConnectGap);
 
-  const searchStart = Math.max(0, history.length - OVERLAP_SEARCH_WINDOW);
-  let bestIndex = -1;
-  let bestDistSq = Number.POSITIVE_INFINITY;
-
-  for (let index = searchStart; index < history.length; index += 1) {
-    const d2 = distanceSq(history[index], liveStart);
-    if (d2 < bestDistSq) {
-      bestDistSq = d2;
-      bestIndex = index;
-    }
-  }
-
-  const bestDist = Math.sqrt(bestDistSq);
-  if (bestIndex >= 0 && bestDist <= SNAP_JOIN_DEG) {
-    const trimmedHistory = history.slice(0, bestIndex + 1);
+  const snapJoinIndex = findTailJoinIndex(
+    history,
+    liveStart,
+    SNAP_JOIN_DEG,
+    TAIL_SNAP_MAX_PATH_DEG,
+  );
+  if (snapJoinIndex >= 0) {
+    const trimmedHistory = history.slice(0, snapJoinIndex + 1);
     const snappedLive = trimAndSnapLiveTail(
       liveTail,
       trimmedHistory[trimmedHistory.length - 1],
     );
     return {
       samples: [...trimmedHistory, ...snappedLive.slice(1)],
-      outcome: "full-history",
-    };
-  }
-
-  if (
-    bestIndex >= 0 &&
-    bestDist <= Math.min(TRIM_AND_BRIDGE_DEG, maxConnectGap)
-  ) {
-    const trimmedHistory = history.slice(0, bestIndex + 1);
-    const bridge = buildBridge(
-      trimmedHistory[trimmedHistory.length - 1],
-      liveStart,
-    );
-    return {
-      samples: [...trimmedHistory, ...bridge, ...liveTail],
       outcome: "full-history",
     };
   }
@@ -219,6 +242,24 @@ export function mergeSegments(params: {
     return {
       samples: liveTail,
       outcome: "live-tail-only",
+    };
+  }
+
+  const bridgeJoinIndex = findTailJoinIndex(
+    history,
+    liveStart,
+    trimBridgeGap,
+    TAIL_BRIDGE_MAX_PATH_DEG,
+  );
+  if (bridgeJoinIndex >= 0) {
+    const trimmedHistory = history.slice(0, bridgeJoinIndex + 1);
+    const bridge = buildBridge(
+      trimmedHistory[trimmedHistory.length - 1],
+      liveStart,
+    );
+    return {
+      samples: [...trimmedHistory, ...bridge, ...liveTail],
+      outcome: "full-history",
     };
   }
 

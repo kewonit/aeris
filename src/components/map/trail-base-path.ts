@@ -221,6 +221,107 @@ export function buildTrailBasePath(
     );
   };
 
+  const removeSuspiciousDisplayCuts = (
+    elevated: ElevatedPoint[],
+  ): ElevatedPoint[] => {
+    if (elevated.length < 5) {
+      return elevated;
+    }
+
+    const result = elevated.map(
+      (point) => [point[0], point[1], point[2]] as ElevatedPoint,
+    );
+
+    for (let pass = 0; pass < 6; pass += 1) {
+      let bestIndex = -1;
+      let bestScore = Number.NEGATIVE_INFINITY;
+
+      for (let index = 1; index < result.length - 2; index += 1) {
+        const prev = result[index - 1];
+        const current = result[index];
+        const next = result[index + 1];
+        const following = result[index + 2];
+        const dx = following[0] - prev[0];
+        const dy = following[1] - prev[1];
+        const lenSq = dx * dx + dy * dy;
+
+        if (lenSq < 1e-12) {
+          continue;
+        }
+
+        const currentProjection =
+          ((current[0] - prev[0]) * dx + (current[1] - prev[1]) * dy) / lenSq;
+        const nextProjection =
+          ((next[0] - prev[0]) * dx + (next[1] - prev[1]) * dy) / lenSq;
+        const currentCross =
+          dx * (current[1] - prev[1]) - dy * (current[0] - prev[0]);
+        const nextCross = dx * (next[1] - prev[1]) - dy * (next[0] - prev[0]);
+        const direct = Math.sqrt(lenSq);
+        const len1 = Math.hypot(current[0] - prev[0], current[1] - prev[1]);
+        const len2 = Math.hypot(next[0] - current[0], next[1] - current[1]);
+        const len3 = Math.hypot(following[0] - next[0], following[1] - next[1]);
+        const detourRatio = (len1 + len2 + len3) / Math.max(direct, 1e-10);
+        const backtracks = nextProjection < currentProjection - 0.03;
+        const alternatingSides = currentCross * nextCross < 0;
+        const crossTrackRatio =
+          Math.max(Math.abs(currentCross), Math.abs(nextCross)) /
+          Math.max(direct, 1e-10);
+
+        const turn1 =
+          Math.atan2(next[1] - current[1], next[0] - current[0]) -
+          Math.atan2(current[1] - prev[1], current[0] - prev[0]);
+        const turn2 =
+          Math.atan2(following[1] - next[1], following[0] - next[0]) -
+          Math.atan2(next[1] - current[1], next[0] - current[0]);
+        const normalizeTurn = (value: number) => {
+          let nextValue = value;
+          if (nextValue > Math.PI) nextValue -= Math.PI * 2;
+          if (nextValue < -Math.PI) nextValue += Math.PI * 2;
+          return nextValue;
+        };
+        const normalizedTurn1 = normalizeTurn(turn1);
+        const normalizedTurn2 = normalizeTurn(turn2);
+        const alternatingSharpTurns =
+          normalizedTurn1 * normalizedTurn2 < 0 &&
+          Math.abs(normalizedTurn1) > (75 * Math.PI) / 180 &&
+          Math.abs(normalizedTurn2) > (75 * Math.PI) / 180;
+
+        if (alternatingSharpTurns && detourRatio > 1.22) {
+          const score =
+            detourRatio + Math.abs(normalizedTurn1) + Math.abs(normalizedTurn2);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+          }
+
+          continue;
+        }
+
+        if (
+          backtracks &&
+          detourRatio > 1.12 &&
+          (alternatingSides || crossTrackRatio > 0.002)
+        ) {
+          const score = detourRatio + crossTrackRatio;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+          }
+        }
+      }
+
+      if (bestIndex === -1) {
+        break;
+      }
+
+      result.splice(bestIndex, 2);
+    }
+
+    return result;
+  };
+
   if (isFullHistory) {
     // History already arrives denser than live GPS, so reduce it to
     // curvature-preserving control points first and then pass it through
@@ -233,9 +334,24 @@ export function buildTrailBasePath(
       a != null && Number.isFinite(a) ? a : fallbackAlt,
     );
     const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
+    const historyOutlierResult = removeDistanceOutliers(
+      pathSlice,
+      altitudeMeters,
+      3.0,
+    );
+    const historySpikeResult = removeSpikePoints(
+      historyOutlierResult.path,
+      historyOutlierResult.altitudes,
+    );
 
     return buildDisplaySpline(
-      toElevatedPoints(pathSlice, altitudeMeters, fallbackAlt),
+      removeSuspiciousDisplayCuts(
+        toElevatedPoints(
+          historySpikeResult.path,
+          historySpikeResult.altitudes,
+          fallbackAlt,
+        ),
+      ),
       MAX_HISTORY_CONTROL_POINTS,
     );
   }
@@ -259,7 +375,9 @@ export function buildTrailBasePath(
   const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
   return buildDisplaySpline(
-    toElevatedPoints(smoothedPath, altitudeMeters, activeFallbackAlt),
+    removeSuspiciousDisplayCuts(
+      toElevatedPoints(smoothedPath, altitudeMeters, activeFallbackAlt),
+    ),
   );
 }
 

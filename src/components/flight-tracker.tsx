@@ -460,6 +460,7 @@ function FlightTrackerInner() {
         <FlightLayers
           flights={displayFlights}
           trails={mergedTrails}
+          selectedEnvelope={trailState.selectedEnvelope}
           onClick={handleClick}
           selectedIcao24={fpvIcao24 ?? selectedIcao24}
           showTrails={settings.showTrails}

@@ -3,7 +3,6 @@ import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { ElevatedPoint } from "./flight-layer-constants";
 import { buildTrailBasePath } from "./trail-base-path";
 
-const PREVIEW_SOURCE_POINTS = 4;
 const PREVIEW_RENDER_POINTS = 21;
 const MIN_ACTIVE_RENDER_POINTS = PREVIEW_RENDER_POINTS + 8;
 const ACTIVE_RENDER_POINTS_PER_DISTANCE = 6;
@@ -13,18 +12,6 @@ export type TrailDisplayGeometry = {
   previewHead: ElevatedPoint[];
   allPoints: ElevatedPoint[];
 };
-
-function sliceTrail(trail: TrailEntry, start: number, end: number): TrailEntry {
-  return {
-    ...trail,
-    path: trail.path.slice(start, end),
-    altitudes: trail.altitudes.slice(start, end),
-    timestamps: trail.timestamps.slice(start, end),
-    baroAltitude:
-      trail.altitudes[Math.min(trail.altitudes.length - 1, end - 1)] ??
-      trail.baroAltitude,
-  };
-}
 
 function dedupePoints(points: ElevatedPoint[]): ElevatedPoint[] {
   const result: ElevatedPoint[] = [];
@@ -52,6 +39,69 @@ function dedupePoints(points: ElevatedPoint[]): ElevatedPoint[] {
   return result;
 }
 
+function collapseDisplayBacktracks(points: ElevatedPoint[]): ElevatedPoint[] {
+  if (points.length < 4) {
+    return points;
+  }
+
+  const result = points.map(
+    (point) => [point[0], point[1], point[2]] as ElevatedPoint,
+  );
+
+  for (let pass = 0; pass < 12; pass += 1) {
+    let changed = false;
+
+    for (let index = 1; index < result.length - 2; index += 1) {
+      const prev = result[index - 1];
+      const current = result[index];
+      const next = result[index + 1];
+      const following = result[index + 2];
+
+      const dx = following[0] - prev[0];
+      const dy = following[1] - prev[1];
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq < 1e-12) {
+        continue;
+      }
+
+      const currentProjection =
+        ((current[0] - prev[0]) * dx + (current[1] - prev[1]) * dy) / lenSq;
+      const nextProjection =
+        ((next[0] - prev[0]) * dx + (next[1] - prev[1]) * dy) / lenSq;
+      const currentCross =
+        dx * (current[1] - prev[1]) - dy * (current[0] - prev[0]);
+      const nextCross = dx * (next[1] - prev[1]) - dy * (next[0] - prev[0]);
+
+      const len1 = Math.hypot(current[0] - prev[0], current[1] - prev[1]);
+      const len2 = Math.hypot(next[0] - current[0], next[1] - current[1]);
+      const len3 = Math.hypot(following[0] - next[0], following[1] - next[1]);
+      const direct = Math.sqrt(lenSq);
+      const detourRatio = (len1 + len2 + len3) / Math.max(direct, 1e-10);
+      const crossTrackRatio =
+        Math.max(Math.abs(currentCross), Math.abs(nextCross)) /
+        Math.max(direct, 1e-10);
+      const backtracks = nextProjection < currentProjection - 0.02;
+      const swingsAcross = currentCross * nextCross < 0;
+
+      if (
+        backtracks &&
+        detourRatio > 1.08 &&
+        (swingsAcross || crossTrackRatio > 0.0015)
+      ) {
+        result.splice(index, 2);
+        changed = true;
+        break;
+      }
+    }
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return result;
+}
+
 function clipFromOldestEnd(
   points: ElevatedPoint[],
   trailDistance: number,
@@ -66,6 +116,18 @@ function clipFromOldestEnd(
   return points.slice(points.length - maxPoints);
 }
 
+function splitContinuousCurve(points: ElevatedPoint[]): TrailDisplayGeometry {
+  const previewHead = points.slice(
+    Math.max(0, points.length - PREVIEW_RENDER_POINTS),
+  );
+
+  return {
+    sealedBody: points.slice(0, points.length - previewHead.length),
+    previewHead,
+    allPoints: points,
+  };
+}
+
 export function buildTrailDisplayGeometry(
   trail: TrailEntry,
   trailDistance: number,
@@ -74,50 +136,12 @@ export function buildTrailDisplayGeometry(
     return { sealedBody: [], previewHead: [], allPoints: [] };
   }
 
-  if (trail.path.length <= PREVIEW_SOURCE_POINTS) {
-    const allPoints = buildTrailBasePath(trail, trail.path.length);
-    const normalized = trail.fullHistory
-      ? dedupePoints(allPoints)
-      : dedupePoints(clipFromOldestEnd(allPoints, trailDistance));
-    const previewHead = normalized.slice(
-      Math.max(0, normalized.length - PREVIEW_RENDER_POINTS),
-    );
-    const sealedBody = normalized.slice(
-      0,
-      normalized.length - previewHead.length,
-    );
-    return { sealedBody, previewHead, allPoints: normalized };
-  }
-
-  const matureCount = Math.max(2, trail.path.length - 1);
-  const matureTrail = sliceTrail(trail, 0, matureCount);
-  const matureDense = buildTrailBasePath(matureTrail, matureTrail.path.length);
-  const sealedBody = matureDense.slice(
-    0,
-    Math.max(0, matureDense.length - PREVIEW_RENDER_POINTS),
+  const continuous = collapseDisplayBacktracks(
+    dedupePoints(buildTrailBasePath(trail, trailDistance)),
   );
-
-  const previewStart = Math.max(0, trail.path.length - PREVIEW_SOURCE_POINTS);
-  const previewTrail = sliceTrail(trail, previewStart, trail.path.length);
-  const previewDense = buildTrailBasePath(
-    previewTrail,
-    previewTrail.path.length,
-  );
-  const previewHead = previewDense.slice(
-    Math.max(0, previewDense.length - PREVIEW_RENDER_POINTS),
-  );
-
-  const combined = dedupePoints([...sealedBody, ...previewHead]);
   const clipped = trail.fullHistory
-    ? combined
-    : dedupePoints(clipFromOldestEnd(combined, trailDistance));
-  const clippedPreview = clipped.slice(
-    Math.max(0, clipped.length - PREVIEW_RENDER_POINTS),
-  );
+    ? continuous
+    : dedupePoints(clipFromOldestEnd(continuous, trailDistance));
 
-  return {
-    sealedBody: clipped.slice(0, clipped.length - clippedPreview.length),
-    previewHead: clippedPreview,
-    allPoints: clipped,
-  };
+  return splitContinuousCurve(clipped);
 }

@@ -56,7 +56,7 @@ export function resolveDisplayTrack(input: {
     return motionTrack;
   }
 
-  return normalizeBearing(lerpAngle(reportedTrack, motionTrack, 0.75));
+  return motionTrack;
 }
 
 // ── Pitch Calculation ──────────────────────────────────────────────────
@@ -192,7 +192,9 @@ export function computeInterpolatedFlights(
         latitude: curr.lat,
         baroAltitude: curr.alt,
         trueTrack: resolveDisplayTrack({
-          reportedTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+          reportedTrack: Number.isFinite(f.trueTrack)
+            ? f.trueTrack!
+            : curr.track,
         }),
       };
     }

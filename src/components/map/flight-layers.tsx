@@ -58,6 +58,7 @@ import { useGlobeDots } from "./use-globe-dots";
 export function FlightLayers({
   flights,
   trails,
+  selectedEnvelope = null,
   onClick,
   selectedIcao24,
   showTrails,
@@ -126,6 +127,7 @@ export function FlightLayers({
 
   const flightsRef = useRef(flights);
   const trailsRef = useRef(trails);
+  const selectedEnvelopeRef = useRef(selectedEnvelope);
   const onClickRef = useRef(onClick);
   const showTrailsRef = useRef(showTrails);
   const trailThicknessRef = useRef(trailThickness);
@@ -159,6 +161,7 @@ export function FlightLayers({
     updateGlobeDotsRef.current = updateGlobeDots;
     flightsRef.current = flights;
     trailsRef.current = trails;
+    selectedEnvelopeRef.current = selectedEnvelope;
     showTrailsRef.current = showTrails;
     trailThicknessRef.current = trailThickness;
     trailDistanceRef.current = trailDistance;
@@ -178,6 +181,7 @@ export function FlightLayers({
     updateGlobeDots,
     flights,
     trails,
+    selectedEnvelope,
     onClick,
     showTrails,
     trailThickness,
@@ -675,6 +679,8 @@ export function FlightLayers({
             interpolatedMap: interpolatedMapRef.current,
             currentTrails,
             trailMap: trailMapRef.current,
+            selectedIcao24: selectedIcao24Ref.current,
+            selectedEnvelope: selectedEnvelopeRef.current,
             trailDistance: trailDistanceRef.current,
             trailThickness: trailThicknessRef.current,
             altColors,

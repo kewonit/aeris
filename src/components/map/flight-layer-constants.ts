@@ -3,6 +3,7 @@ import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEnvelope } from "@/lib/trails/types";
 import type { MutableRefObject } from "react";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
@@ -67,6 +68,7 @@ export type ElevatedPoint = [number, number, number];
 export type FlightLayerProps = {
   flights: FlightState[];
   trails: TrailEntry[];
+  selectedEnvelope?: TrailEnvelope | null;
   onClick: (info: PickingInfo<FlightState> | null) => void;
   selectedIcao24: string | null;
   showTrails: boolean;

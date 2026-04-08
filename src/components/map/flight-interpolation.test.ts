@@ -15,8 +15,7 @@ test("resolveDisplayTrack prefers the actual motion bearing when movement is ava
     currentPosition: { lng: 8.01, lat: 50.0 },
   });
 
-  assert.ok(resolved < 96);
-  assert.ok(resolved > 89);
+  assert.equal(resolved, 90);
 });
 
 test("computeInterpolatedFlights uses motion-aligned heading instead of the raw reported track", () => {
@@ -39,6 +38,5 @@ test("computeInterpolatedFlights uses motion-aligned heading instead of the raw 
     30_000,
   );
 
-  assert.ok((interpolated[0].trueTrack ?? 0) < 96);
-  assert.ok((interpolated[0].trueTrack ?? 0) > 89);
+  assert.equal(Math.round(interpolated[0].trueTrack ?? 0), 90);
 });

@@ -3,6 +3,7 @@ import { altitudeToElevation } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEnvelope } from "@/lib/trails/types";
 import { snapLngToReference } from "@/lib/geo";
 import type { ElevatedPoint } from "./flight-layer-constants";
 import { SELECTION_FADE_MS } from "./flight-layer-constants";
@@ -29,6 +30,7 @@ import {
 } from "./trail-render-segments";
 import { toPathLayerPoints } from "./trail-render-adapter";
 import { buildTrailDisplayGeometry } from "./trail-display-geometry";
+import { buildSelectedTrailRenderGeometry } from "./selected-trail-render-geometry";
 
 // ── Slope limiter (post-elevation-exaggeration) ────────────────────────
 
@@ -217,6 +219,8 @@ export interface TrailLayerParams {
     string,
     { key: string; result: [number, number, number, number][] }
   >;
+  selectedIcao24?: string | null;
+  selectedEnvelope?: TrailEnvelope | null;
   /** Reusable containers — cleared and reused each frame to avoid per-frame allocations */
   handledIdsSet?: Set<string>;
   visibleTrailCacheMap?: Map<string, ElevatedPoint[]>;
@@ -244,6 +248,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
     visible = true,
     trailBasePathCache,
     trailPathCache,
+    selectedIcao24 = null,
+    selectedEnvelope = null,
     handledIdsSet,
     visibleTrailCacheMap,
     activeIcaosSet,
@@ -262,25 +268,72 @@ export function buildTrailLayers(params: TrailLayerParams) {
     : null;
   activeIcaos?.clear();
 
+  const getSelectedEnvelopeForTrail = (
+    trail: TrailEntry,
+  ): TrailEnvelope | null => {
+    if (!selectedIcao24 || trail.icao24 !== selectedIcao24) {
+      return null;
+    }
+
+    if (!selectedEnvelope || selectedEnvelope.icao24 !== trail.icao24) {
+      return null;
+    }
+
+    return selectedEnvelope;
+  };
+
+  const getVisibleGeometryCacheKey = (trail: TrailEntry): string => {
+    const envelope = getSelectedEnvelopeForTrail(trail);
+
+    if (!envelope) {
+      return trailBasePathCacheKey(trail, trailDistance);
+    }
+
+    return [
+      "selected-envelope",
+      trailDistance,
+      envelope.selectionGeneration,
+      envelope.historyRevision,
+      envelope.liveRevision,
+      envelope.historySegments.length,
+      envelope.liveTail.length,
+    ].join("|");
+  };
+
   const getVisibleTrailPoints = (trail: TrailEntry): ElevatedPoint[] => {
     const cached = visibleTrailCache.get(trail.icao24);
     if (cached) return cached;
 
+    const selectedEnvelopeForTrail = getSelectedEnvelopeForTrail(trail);
     let displayPath: ElevatedPoint[] | undefined;
+    const geometryKey = getVisibleGeometryCacheKey(trail);
     if (trailBasePathCache) {
-      const key = trailBasePathCacheKey(trail, trailDistance);
       const entry = trailBasePathCache.get(trail.icao24);
-      if (entry && entry.key === key) {
+      if (entry && entry.key === geometryKey) {
         displayPath = entry.basePath;
       } else {
-        displayPath = buildTrailDisplayGeometry(trail, trailDistance).allPoints;
-        trailBasePathCache.set(trail.icao24, { key, basePath: displayPath });
+        displayPath = selectedEnvelopeForTrail
+          ? buildSelectedTrailRenderGeometry(
+              selectedEnvelopeForTrail,
+              trailDistance,
+            ).allPoints
+          : buildTrailDisplayGeometry(trail, trailDistance).allPoints;
+        trailBasePathCache.set(trail.icao24, {
+          key: geometryKey,
+          basePath: displayPath,
+        });
       }
       activeIcaos?.add(trail.icao24);
     }
 
     const computed =
-      displayPath ?? buildTrailDisplayGeometry(trail, trailDistance).allPoints;
+      displayPath ??
+      (selectedEnvelopeForTrail
+        ? buildSelectedTrailRenderGeometry(
+            selectedEnvelopeForTrail,
+            trailDistance,
+          ).allPoints
+        : buildTrailDisplayGeometry(trail, trailDistance).allPoints);
     visibleTrailCache.set(trail.icao24, computed);
     return computed;
   };
@@ -371,7 +424,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
 
   const trailBodySegments = trailData.flatMap((trail) => {
     const animFlight = interpolatedMap.get(trail.icao24);
-    const pathKey = `${trailBasePathCacheKey(trail, trailDistance)}_${altitudeDisplayMode}_${elevScale.toFixed(3)}`;
+    const pathKey = `${getVisibleGeometryCacheKey(trail)}_${altitudeDisplayMode}_${elevScale.toFixed(3)}`;
     let projectedPoints: [number, number, number][];
 
     if (trailPathCache) {

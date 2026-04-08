@@ -60,3 +60,55 @@ test("parseReadsbTrace keeps only the last departure plus a short runway roll wh
     false,
   );
 });
+
+test("parseReadsbTrace drops an older branch when a large continuity gap splits the latest plausible leg", () => {
+  const track = parseReadsbTrace("800001", {
+    timestamp: 20_000,
+    trace: [
+      [0, 19.22, 72.82, 9_000, 230, 95, 0],
+      [30, 19.24, 72.9, 9_200, 235, 95, 0],
+      [400, 19.07, 72.86, "ground", null, 0, 0],
+      [430, 19.08, 72.87, 300, 90, 80, 0],
+      [470, 19.12, 73.1, 4_500, 220, 82, 0],
+      [510, 19.15, 73.36, 8_000, 230, 86, 0],
+    ],
+  });
+
+  assert.ok(track);
+  assert.deepEqual(
+    track?.path.map((waypoint) => waypoint.longitude),
+    [72.86, 72.87, 73.1, 73.36],
+  );
+});
+
+test("parseReadsbTrace drops impossible distance-over-time jumps even without ground markers", () => {
+  const track = parseReadsbTrace("800001", {
+    timestamp: 20_000,
+    trace: [
+      [0, 19.08, 72.88, 8_000, 220, 88, 0],
+      [40, 19.09, 72.9, 8_100, 225, 87, 0],
+      [80, 20.8, 75.7, 8_200, 230, 85, 0],
+      [120, 20.82, 75.72, 8_300, 232, 84, 0],
+    ],
+  });
+
+  assert.ok(track);
+  assert.deepEqual(
+    track?.path.map((waypoint) => waypoint.longitude),
+    [75.7, 75.72],
+  );
+});
+
+test("parseReadsbTrace keeps sparse but physically plausible same-leg points", () => {
+  const track = parseReadsbTrace("800001", {
+    timestamp: 20_000,
+    trace: [
+      [0, 19.08, 72.88, 8_000, 220, 88, 0],
+      [180, 19.2, 73.22, 8_400, 230, 86, 0],
+      [360, 19.29, 73.55, 8_900, 235, 84, 0],
+    ],
+  });
+
+  assert.ok(track);
+  assert.equal(track?.path.length, 3);
+});
