@@ -56,19 +56,7 @@ export function parseFlightTrack(
     .filter((p): p is TrackWaypoint => p !== null)
     .filter((p) => p.latitude !== null && p.longitude !== null);
 
-  const deduped: TrackWaypoint[] = [];
-  let lastLng: number | null = null;
-  let lastLat: number | null = null;
-  for (const p of parsed) {
-    if (lastLng !== null && lastLat !== null) {
-      if (p.longitude === lastLng && p.latitude === lastLat) continue;
-    }
-    deduped.push(p);
-    lastLng = p.longitude;
-    lastLat = p.latitude;
-  }
-
-  const path = normalizeTrackWaypoints(deduped);
+  const path = normalizeTrackWaypoints(parsed);
   if (path.length < 2) return null;
 
   return {

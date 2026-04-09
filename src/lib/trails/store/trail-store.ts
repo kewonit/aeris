@@ -804,6 +804,19 @@ export function createTrailStore() {
     emit();
   }
 
+  /** Reset all live trail and altitude-filter state after a tab-switch.
+   *  History segments are preserved — only live tails are affected. */
+  function handleVisibilityResume(): void {
+    trails.clear();
+    altitudeStates.clear();
+    for (const envelope of envelopes.values()) {
+      envelope.liveTail = [];
+      envelope.liveRevision += 1;
+    }
+    bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+    emit();
+  }
+
   return {
     subscribe,
     getSnapshot,
@@ -813,6 +826,7 @@ export function createTrailStore() {
     resolveHistory,
     failHistory,
     markSelectedMissing,
+    handleVisibilityResume,
   };
 }
 

@@ -149,3 +149,38 @@ test("keeps canonical live-tail geometry fixed without adding a derived head anc
   ]);
   assert.deepEqual(result.altitudes, [10_000, 10_000, 10_000]);
 });
+
+test("filters GPS spike artefacts from historical trace data", () => {
+  const result = buildTrailGeometry(
+    makeEnvelope({
+      historySegments: [
+        {
+          kind: "historical",
+          provider: "adsb-fi",
+          samples: [
+            historySample({ timestamp: 100, lng: 8.0, lat: 50.0 }),
+            historySample({ timestamp: 200, lng: 8.01, lat: 50.0 }),
+            // GPS spike — big lateral jump perpendicular to path then back
+            historySample({ timestamp: 300, lng: 8.015, lat: 50.05 }),
+            historySample({ timestamp: 400, lng: 8.02, lat: 50.0 }),
+            historySample({ timestamp: 500, lng: 8.03, lat: 50.0 }),
+            historySample({ timestamp: 600, lng: 8.04, lat: 50.0 }),
+          ],
+        },
+      ],
+      liveTail: [],
+    }),
+  );
+
+  // The spike lat (50.05) should be removed — path should be smooth
+  const lats = result.path.map((p) => p[1]);
+  assert.ok(
+    !lats.includes(50.05),
+    "spike lat 50.05 should not appear in filtered path",
+  );
+  // Should still have the non-spike points
+  assert.ok(
+    result.path.length >= 4,
+    "should keep at least the non-spike points",
+  );
+});

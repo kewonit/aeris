@@ -53,6 +53,7 @@ import { buildTrailLayers } from "./flight-layer-builders";
 import { buildSelectionPulseLayers } from "./flight-layer-builders";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import { preloadAllModels } from "./aircraft-model-mapping";
+import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { useGlobeDots } from "./use-globe-dots";
@@ -484,6 +485,17 @@ export function FlightLayers({
         animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
         lastFlightsForInterpRef.current = null;
         resumeSnapRef.current = true;
+
+        // Purge stale trail render caches so the first frame after
+        // resume doesn't flash geometry computed before the tab hide.
+        trailBasePathCacheRef.current.clear();
+        trailPathCacheRef.current.clear();
+        trailColorCacheRef.current.clear();
+        visibleTrailCacheRef.current.clear();
+
+        // Reset live trail + altitude-filter state in the store so
+        // stale smoothing doesn't produce Z artifacts on resume.
+        trailStore.handleVisibilityResume();
       }
     }
     document.addEventListener("visibilitychange", onVisibilityResume);

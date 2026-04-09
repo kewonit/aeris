@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GLOBE_FADE_ZOOM_CEIL } from "./flight-layer-constants";
-import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
+import {
+  GLOBE_FADE_ZOOM_CEIL,
+  TRAIL_BELOW_AIRCRAFT_METERS,
+} from "./flight-layer-constants";
 import {
   getZoomAdjustedElevationScale,
   projectDisplayedAltitudeMeters,

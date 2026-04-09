@@ -1,6 +1,6 @@
 import type { TrailEntry, TrailEnvelope } from "../types";
 import { mergeSegments } from "./merge-segments";
-import { validateSamples } from "./validate-samples";
+import { filterPositionSpikes, validateSamples } from "./validate-samples";
 
 function buildEmptyEntry(envelope: TrailEnvelope): TrailEntry {
   return {
@@ -24,7 +24,7 @@ export function buildTrailGeometry(envelope: TrailEnvelope): TrailEntry {
   const historySegments = envelope.historySegments
     .map((segment) => ({
       ...segment,
-      samples: validateSamples(segment.samples),
+      samples: filterPositionSpikes(validateSamples(segment.samples)),
     }))
     .filter((segment) => segment.samples.length > 0);
 
