@@ -151,6 +151,7 @@ export function CameraController({
     fpvPosRef,
     isFpvActiveRef,
     prevFpvRef,
+    settings.altitudeDisplayMode,
   );
 
   // North-up & reset-view

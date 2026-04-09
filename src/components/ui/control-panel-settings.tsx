@@ -571,6 +571,24 @@ function Toggle({ checked }: { checked: boolean }) {
 
 const CHANGELOG = [
   {
+    date: "Apr 9",
+    title: "Trail system v2 — rendering, geometry & data pipeline",
+    description:
+      "Complete trail overhaul: server trace service with multi-provider fallback, sealed-segment display geometry that keeps the fixed trail body stable across live appends, cusp and backtrack removal, needle-kink filtering, and holding-pattern preservation. Connector rendering follows the recent tail arc. Live trail retention raised beyond 120 points. Altitude-aware color caching, opacity fading, and zoom-linked elevation smoothing.",
+  },
+  {
+    date: "Apr 9",
+    title: "Altitude calibration and trace fallback hardening",
+    description:
+      "Refined altitude presentation so realistic mode recovers to full height sooner at operational zoom levels, while presentation mode maintains a clearer vertical lift. Reduced 3D aircraft model size with zoom-compensated scaling for more balanced on-map proportions. Browser-direct readsb trace fetching now treats malformed JSON responses as provider failures and falls back to the next candidate URL instead of aborting the request.",
+  },
+  {
+    date: "Mar 30",
+    title: "Route detection, aircraft photos & metadata",
+    description:
+      "New route detection system identifies departure airports from trail data. hexdb API integration provides aircraft metadata (type, registration, owner). Aircraft photo fetching with negative-cache backoff. Improved flight card and mobile toast UI.",
+  },
+  {
     date: "Mar 22",
     title: "3D aircraft models & smoother trails",
     description:

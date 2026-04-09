@@ -1,6 +1,9 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 
-import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
+import {
+  GLOBE_FADE_ZOOM_CEIL,
+  TRAIL_BELOW_AIRCRAFT_METERS,
+} from "./flight-layer-constants";
 
 const LOW_ALT_BREAK_M = 3_000;
 const MID_ALT_BREAK_M = 9_000;
@@ -8,6 +11,50 @@ const LOW_ALT_SCALE = 1.46;
 const MID_ALT_SCALE = 1.26;
 const HIGH_ALT_SCALE = 1.1;
 const MIN_DISPLAY_ALTITUDE_METERS = 60;
+const FULL_ELEVATION_SCALE_ZOOM = 6.9;
+
+const ELEVATION_SCALE_PROFILE: Record<
+  AltitudeDisplayMode,
+  {
+    hidden: number;
+    visible: number;
+    city: number;
+  }
+> = {
+  realistic: {
+    hidden: 0.28,
+    visible: 0.88,
+    city: 1,
+  },
+  presentation: {
+    hidden: 0.34,
+    visible: 0.96,
+    city: 1.06,
+  },
+};
+
+export function getZoomAdjustedElevationScale(
+  currentZoom: number,
+  mode: AltitudeDisplayMode = "presentation",
+): number {
+  const profile = ELEVATION_SCALE_PROFILE[mode];
+  if (!Number.isFinite(currentZoom)) return profile.city;
+
+  const zoom = Math.max(0, currentZoom);
+  if (zoom >= FULL_ELEVATION_SCALE_ZOOM) {
+    return profile.city;
+  }
+
+  if (zoom <= GLOBE_FADE_ZOOM_CEIL) {
+    const t = zoom / GLOBE_FADE_ZOOM_CEIL;
+    return profile.hidden + (profile.visible - profile.hidden) * t;
+  }
+
+  const t =
+    (zoom - GLOBE_FADE_ZOOM_CEIL) /
+    (FULL_ELEVATION_SCALE_ZOOM - GLOBE_FADE_ZOOM_CEIL);
+  return profile.visible + (profile.city - profile.visible) * t;
+}
 
 export function projectDisplayedAltitudeMeters(
   altitude: number | null,

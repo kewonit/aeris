@@ -79,13 +79,20 @@ export async function fetchReadsbDirectTrack(
       continue;
     }
 
-    const payload = (await response.json()) as unknown;
-    const track = parseReadsbTrace(icao24, payload);
-    if (track?.path.length && track.path.length >= 2) {
-      return {
-        track,
-        outcome: index === 0 ? "full-history" : "partial-history",
-      };
+    try {
+      const payload = (await response.json()) as unknown;
+      const track = parseReadsbTrace(icao24, payload);
+      if (track?.path.length && track.path.length >= 2) {
+        return {
+          track,
+          outcome: index === 0 ? "full-history" : "partial-history",
+        };
+      }
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      continue;
     }
   }
 

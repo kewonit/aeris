@@ -24,7 +24,6 @@ import { type PickingInfo } from "@deck.gl/core";
 import {
   AIRCRAFT_MIN_PIXELS,
   AIRCRAFT_MAX_PIXELS,
-  BASE_AIRCRAFT_SIZE,
 } from "./flight-layer-constants";
 import {
   ALL_MODEL_KEYS,
@@ -33,6 +32,7 @@ import {
   modelUrl,
 } from "./aircraft-model-mapping";
 import { getAircraftModelCalibration } from "./aircraft-model-calibration";
+import { getAircraftScenegraphSizeScale } from "./aircraft-model-size";
 import { offsetPositionByTrack } from "./flight-math";
 
 // Stable empty array — same reference every frame so deck.gl skips buffer work
@@ -59,6 +59,7 @@ export interface AircraftLayerParams {
   layersVisible: boolean;
   globeFade: number;
   elevScale: number;
+  currentZoom: number;
   altitudeDisplayMode: AltitudeDisplayMode;
   altColors: boolean;
   defaultColor: [number, number, number, number];
@@ -93,6 +94,7 @@ export function buildAircraftModelLayers(
     layersVisible,
     globeFade,
     elevScale,
+    currentZoom,
     altitudeDisplayMode,
     altColors,
     defaultColor,
@@ -161,7 +163,8 @@ export function buildAircraftModelLayers(
         const pitch = pitchByIcao.get(d.icao24) ?? 0;
         const bank = bankByIcao.get(d.icao24) ?? 0;
         const yaw =
-          calibration.yawOffset - (Number.isFinite(src.trueTrack) ? src.trueTrack! : 0);
+          calibration.yawOffset -
+          (Number.isFinite(src.trueTrack) ? src.trueTrack! : 0);
         return [pitch, yaw, calibration.baseRoll + bank];
       },
       getColor: (d) => {
@@ -173,7 +176,10 @@ export function buildAircraftModelLayers(
       getScale: () => {
         return [meshNormalize, meshNormalize, meshNormalize];
       },
-      sizeScale: BASE_AIRCRAFT_SIZE * calibration.displayScale,
+      sizeScale: getAircraftScenegraphSizeScale(
+        calibration.displayScale,
+        currentZoom,
+      ),
       updateTriggers: {
         getPosition: [frameCounter, elevScale, altitudeDisplayMode],
         getOrientation: frameCounter,

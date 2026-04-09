@@ -24,6 +24,7 @@ import {
   AIRCRAFT_PICK_RADIUS_PX,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
+  BASE_AIRCRAFT_SIZE,
   LOD_3D_ZOOM_IN,
   LOD_3D_ZOOM_OUT,
   type FlightLayerProps,
@@ -52,6 +53,7 @@ import { buildTrailLayers } from "./flight-layer-builders";
 import { buildSelectionPulseLayers } from "./flight-layer-builders";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import { preloadAllModels } from "./aircraft-model-mapping";
+import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { useGlobeDots } from "./use-globe-dots";
 
@@ -636,15 +638,12 @@ export function FlightLayers({
 
         const layers = [];
 
-        // Zoom-dependent elevation scale to prevent absurd altitude spikes
-        // at globe zoom levels. Full exaggeration at city zoom (>8).
-        // Computed once per frame and passed to all builders.
-        const elevScale =
-          currentZoom < 5
-            ? 0.15 + (currentZoom / 5) * 0.35
-            : currentZoom < 8
-              ? 0.5 + ((currentZoom - 5) / 3) * 0.5
-              : 1.0;
+        // Tie the height ramp to the actual flight-layer visibility window so
+        // aircraft and trails do not appear overly flattened as they fade in.
+        const elevScale = getZoomAdjustedElevationScale(
+          currentZoom,
+          altitudeDisplayModeRef.current,
+        );
 
         // Shadow layer — always included, toggled via `visible` to retain WebGL state
         layers.push(
@@ -656,7 +655,9 @@ export function FlightLayers({
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
             getIcon: () => "aircraft",
-            getSize: (d) => 20 * aircraftSizeMultiplier(d.typeCode, d.category),
+            getSize: (d) =>
+              BASE_AIRCRAFT_SIZE *
+              aircraftSizeMultiplier(d.typeCode, d.category),
             getColor: () => [0, 0, 0, 60],
             getAngle: (d) =>
               360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -748,6 +749,7 @@ export function FlightLayers({
               layersVisible,
               globeFade,
               elevScale,
+              currentZoom,
               altitudeDisplayMode: altitudeDisplayModeRef.current,
               altColors,
               defaultColor: DEFAULT_COLOR,
@@ -776,7 +778,8 @@ export function FlightLayers({
               ],
               getIcon: () => "aircraft",
               getSize: (d) =>
-                20 * aircraftSizeMultiplier(d.typeCode, d.category),
+                BASE_AIRCRAFT_SIZE *
+                aircraftSizeMultiplier(d.typeCode, d.category),
               getColor: (d) => {
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)

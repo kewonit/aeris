@@ -61,3 +61,54 @@ test("direct trace fetch rethrows aborts instead of treating them as missing dat
     globalThis.fetch = originalFetch;
   }
 });
+
+test("direct trace fetch falls back to the recent URL when a successful response has invalid JSON", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+
+  globalThis.fetch = (async (input) => {
+    const url = String(input);
+    requestedUrls.push(url);
+
+    if (url.includes("trace_full")) {
+      return {
+        ok: true,
+        headers: new Headers({
+          "content-type": "application/json",
+        }),
+        json: async () => {
+          throw new SyntaxError("Unexpected end of JSON input");
+        },
+      } as unknown as Response;
+    }
+
+    return {
+      ok: true,
+      headers: new Headers({
+        "content-type": "application/json",
+      }),
+      json: async () => ({
+        timestamp: 1_000,
+        trace: [
+          [500, 50.0, 8.0, "ground", null, 0, 2],
+          [520, 50.1, 8.1, 1_000, 180, 15, 0],
+          [530, 50.15, 8.2, 1_100, 185, 18, 1],
+          [540, 50.2, 8.3, 1_200, 190, 20, 0],
+        ],
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchReadsbDirectTrack("airplanes-live", "3c66b0");
+
+    assert.equal(result.outcome, "partial-history");
+    assert.ok(result.track);
+    assert.deepEqual(requestedUrls, [
+      "https://globe.airplanes.live/data/traces/b0/trace_full_3c66b0.json",
+      "https://globe.airplanes.live/data/traces/b0/trace_recent_3c66b0.json",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

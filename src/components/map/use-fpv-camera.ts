@@ -12,8 +12,10 @@ import {
   setMapInteractionsEnabled,
   smoothstep,
 } from "./camera-controller-utils";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
+import { altitudeToElevation } from "@/lib/flight-utils";
 
 const DEFAULT_ZOOM = 9.2;
 const DEFAULT_PITCH = 49;
@@ -37,6 +39,7 @@ export function useFpvCamera(
   fpvPosRef: MutableRefObject<MutableRefObject<FpvPosition | null> | undefined>,
   isFpvActiveRef: MutableRefObject<boolean>,
   prevFpvRef: MutableRefObject<string | null>,
+  altitudeDisplayMode: AltitudeDisplayMode = "presentation",
 ) {
   useEffect(() => {
     if (!map || !isLoaded) {
@@ -224,7 +227,10 @@ export function useFpvCamera(
         const canvasW = Math.max(1, canvas.clientWidth);
         const canvasH = Math.max(1, canvas.clientHeight);
 
-        const elevationMeters = Math.max(safeAlt * 5, 200);
+        const elevationMeters = Math.max(
+          altitudeToElevation(safeAlt, altitudeDisplayMode),
+          200,
+        );
         const deltaPx = projectLngLatElevationPixelDelta(
           map,
           targetLng,

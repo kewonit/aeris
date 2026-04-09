@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { GLOBE_FADE_ZOOM_CEIL } from "./flight-layer-constants";
 import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
+  getZoomAdjustedElevationScale,
   projectDisplayedAltitudeMeters,
   projectTrailElevationMeters,
 } from "./altitude-projection";
@@ -46,4 +48,24 @@ test("trail elevation stays below the aircraft projection by the visual offset",
   const trail = projectTrailElevationMeters(2_000, "presentation");
 
   assert.equal(projected - trail, TRAIL_BELOW_AIRCRAFT_METERS);
+});
+
+test("visible flight zooms preserve most of the requested height", () => {
+  const scale = getZoomAdjustedElevationScale(
+    GLOBE_FADE_ZOOM_CEIL,
+    "realistic",
+  );
+  const realistic = projectDisplayedAltitudeMeters(2_000, "realistic") * scale;
+  const presentation =
+    projectDisplayedAltitudeMeters(2_000, "presentation") *
+    getZoomAdjustedElevationScale(GLOBE_FADE_ZOOM_CEIL, "presentation");
+
+  assert.ok(scale >= 0.88);
+  assert.ok(realistic >= 1_760);
+  assert.ok(presentation >= 2_800);
+});
+
+test("presentation mode stays slightly taller than realistic by city zoom", () => {
+  assert.equal(getZoomAdjustedElevationScale(6.9, "realistic"), 1);
+  assert.ok(getZoomAdjustedElevationScale(6.9, "presentation") > 1.04);
 });
