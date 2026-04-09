@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -50,6 +56,8 @@ const PANEL_TABS = [
   { id: "about" as TabId, icon: Info, label: "About" },
 ];
 
+const subscribePortalMount = () => () => {};
+
 type ControlPanelProps = {
   activeCity: City;
   onSelectCity: (city: City) => void;
@@ -70,7 +78,11 @@ export function ControlPanel({
   onLookupFlight,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
-  const portalMounted = typeof document !== "undefined";
+  const portalMounted = useSyncExternalStore(
+    subscribePortalMount,
+    () => true,
+    () => false,
+  );
 
   useEffect(() => {
     function handleOpenSearch() {

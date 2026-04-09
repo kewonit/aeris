@@ -3,8 +3,8 @@ import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
 
-import { buildTrailConnector } from "./trail-connector.ts";
-import { buildConnectorGradientColors } from "./trail-render-segments.ts";
+import { buildTrailConnector } from "./trail-connector";
+import { buildConnectorGradientColors } from "./trail-render-segments";
 
 test("buildTrailConnector returns only a terminal connector path", () => {
   const connector = buildTrailConnector(

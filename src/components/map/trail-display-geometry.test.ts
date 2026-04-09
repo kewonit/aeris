@@ -23,7 +23,7 @@ function makeArcTrail(count: number, fullHistory = false): TrailEntry {
   const timestamps: number[] = [];
 
   for (let index = 0; index < count; index += 1) {
-    const t = totalSamples === 1 ? 0 : index / (totalSamples - 1);
+    const t = index / (totalSamples - 1);
     const angle = start + (end - start) * t;
     path.push([
       centerLng + Math.cos(angle) * radius,

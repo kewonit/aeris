@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { flattenPathColors } from "./trail-gradient-path-layer.ts";
+import { flattenPathColors } from "./trail-gradient-path-layer";
 
 test("flattenPathColors preserves explicit per-vertex colors", () => {
   const result = flattenPathColors(3, [

@@ -17,6 +17,26 @@ function withMockedNow(run: (advanceMs: (ms: number) => void) => void) {
   }
 }
 
+function makeLiveFlight(overrides: {
+  icao24: string;
+  longitude: number;
+  latitude: number;
+  baroAltitude?: number | null;
+  trueTrack?: number | null;
+  velocity?: number | null;
+  onGround?: boolean;
+}) {
+  return {
+    icao24: overrides.icao24,
+    longitude: overrides.longitude,
+    latitude: overrides.latitude,
+    baroAltitude: overrides.baroAltitude ?? 1_200,
+    trueTrack: overrides.trueTrack ?? 90,
+    velocity: overrides.velocity ?? 95,
+    onGround: overrides.onGround ?? false,
+  } as never;
+}
+
 test("empty polls preserve the last trail result when trails already exist", () => {
   const store = createTrailStore();
 
@@ -138,6 +158,28 @@ test("selected envelope is exposed so map rendering can preserve history and liv
   assert.ok((snapshot.selectedEnvelope?.liveTail.length ?? 0) >= 2);
 });
 
+test("ingestLiveFlights keeps selected tracking stable when live ICAO24 casing differs", () => {
+  const store = createTrailStore();
+
+  store.selectAircraft("abc123");
+  withMockedNow(() => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "ABC123",
+        longitude: 72.934,
+        latitude: 19.142,
+      }),
+    ]);
+  });
+
+  const snapshot = store.getSnapshot();
+
+  assert.equal(snapshot.history.selectedIcao24, "abc123");
+  assert.equal(snapshot.selectedEnvelope?.icao24, "abc123");
+  assert.equal(snapshot.history.missingSinceMs, null);
+  assert.ok((snapshot.selectedEnvelope?.liveTail.length ?? 0) >= 1);
+});
+
 test("ingestLiveFlights keeps a longer live step when elapsed time and speed make it plausible", () => {
   const store = createTrailStore();
 
@@ -234,6 +276,185 @@ test("ingestLiveFlights still resets on a true teleport even after a valid live 
   });
 
   assert.equal(store.getSnapshot().trails.length, 0);
+});
+
+test("ingestLiveFlights drops bootstrap points once real low-phase samples establish the live leg", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "depboot",
+        longitude: 72.9898,
+        latitude: 19.0885,
+        baroAltitude: 750,
+        trueTrack: 78,
+        velocity: 82,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "depboot",
+        longitude: 72.9968,
+        latitude: 19.0914,
+        baroAltitude: 900,
+        trueTrack: 58,
+        velocity: 84,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "depboot",
+        longitude: 73.0024,
+        latitude: 19.0968,
+        baroAltitude: 1_050,
+        trueTrack: 34,
+        velocity: 88,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "depboot",
+        longitude: 73.0054,
+        latitude: 19.1038,
+        baroAltitude: 1_220,
+        trueTrack: 18,
+        velocity: 92,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "depboot");
+
+  assert.deepEqual(trail?.path, [
+    [72.9898, 19.0885],
+    [72.9968, 19.0914],
+    [73.0024, 19.0968],
+    [73.0054, 19.1038],
+  ]);
+});
+
+test("ingestLiveFlights preserves a valid low-phase airport turn across consecutive real samples", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro01",
+        longitude: 72.934,
+        latitude: 19.142,
+        baroAltitude: 1_600,
+        trueTrack: 150,
+        velocity: 96,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro01",
+        longitude: 72.939,
+        latitude: 19.135,
+        baroAltitude: 1_420,
+        trueTrack: 168,
+        velocity: 94,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro01",
+        longitude: 72.946,
+        latitude: 19.13,
+        baroAltitude: 1_240,
+        trueTrack: 198,
+        velocity: 92,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro01",
+        longitude: 72.954,
+        latitude: 19.128,
+        baroAltitude: 1_080,
+        trueTrack: 236,
+        velocity: 89,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "appro01");
+
+  assert.deepEqual(trail?.path.slice(-4), [
+    [72.934, 19.142],
+    [72.939, 19.135],
+    [72.946, 19.13],
+    [72.954, 19.128],
+  ]);
+});
+
+test("ingestLiveFlights keeps the first smooth turn sample that descends into low phase", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro-transition01",
+        longitude: 72.934,
+        latitude: 19.142,
+        baroAltitude: 2_200,
+        trueTrack: 150,
+        velocity: 96,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro-transition01",
+        longitude: 72.946,
+        latitude: 19.13,
+        baroAltitude: 2_050,
+        trueTrack: 198,
+        velocity: 92,
+      }),
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "appro-transition01",
+        longitude: 72.954,
+        latitude: 19.128,
+        baroAltitude: 1_900,
+        trueTrack: 236,
+        velocity: 89,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "appro-transition01");
+
+  assert.deepEqual(trail?.path.slice(-3), [
+    [72.934, 19.142],
+    [72.946, 19.13],
+    [72.954, 19.128],
+  ]);
 });
 
 test("ingestLiveFlights keeps sparse holding-pattern samples even when the chord heading diverges from the instantaneous track", () => {

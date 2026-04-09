@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildReadsbTraceUrls,
+  fetchReadsbDirectTrack,
   getDirectTraceProviders,
   getResponseValidators,
 } from "./readsb-direct-client";
@@ -28,4 +29,35 @@ test("response validators extract etag and last-modified when present", () => {
     etag: 'W/"demo"',
     lastModified: "Fri, 03 Apr 2026 18:06:45 GMT",
   });
+});
+
+test("direct trace fetch rethrows aborts instead of treating them as missing data", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+  const abortError = new DOMException(
+    "The operation was aborted.",
+    "AbortError",
+  );
+
+  globalThis.fetch = (async (input) => {
+    requestedUrls.push(String(input));
+    throw abortError;
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      fetchReadsbDirectTrack("airplanes-live", "3c66b0"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.name, "AbortError");
+        return true;
+      },
+    );
+
+    assert.deepEqual(requestedUrls, [
+      "https://globe.airplanes.live/data/traces/b0/trace_full_3c66b0.json",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

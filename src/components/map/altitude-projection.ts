@@ -4,8 +4,8 @@ import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 
 const LOW_ALT_BREAK_M = 3_000;
 const MID_ALT_BREAK_M = 9_000;
-const LOW_ALT_SCALE = 1.32;
-const MID_ALT_SCALE = 1.18;
+const LOW_ALT_SCALE = 1.46;
+const MID_ALT_SCALE = 1.26;
 const HIGH_ALT_SCALE = 1.1;
 const MIN_DISPLAY_ALTITUDE_METERS = 60;
 

@@ -14,7 +14,7 @@ import {
   buildConnectorGradientColors,
   buildTrailLayers,
   trailAltitudeToColor,
-} from "./flight-layer-builders.ts";
+} from "./flight-layer-builders";
 
 const DEFAULT_COLOR: [number, number, number, number] = [255, 255, 255, 255];
 
@@ -44,7 +44,7 @@ function makeArcTrail(count: number, fullHistory = false): TrailEntry {
   const timestamps: number[] = [];
 
   for (let index = 0; index < count; index += 1) {
-    const t = totalSamples === 1 ? 0 : index / (totalSamples - 1);
+    const t = index / (totalSamples - 1);
     const angle = start + (end - start) * t;
     path.push([
       centerLng + Math.cos(angle) * radius,
@@ -247,9 +247,9 @@ test("trail body colors are rebuilt instead of trusting stale persistent color c
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache,
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   });
 
   const trailBodyLayer = layers[0] as unknown as {
@@ -298,9 +298,9 @@ test("buildTrailLayers emits explicit drawable body segments", () => {
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   });
 
   const trailBodyLayer = layers[0] as unknown as {
@@ -395,9 +395,9 @@ test("buildTrailLayers keeps all but the last few live-turn segments fixed acros
     trailBasePathCache,
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   };
 
   const firstLayers = buildTrailLayers({
@@ -456,9 +456,9 @@ test("buildTrailLayers keeps the earlier selected-history turn fixed while the l
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   };
 
   const firstLayers = buildTrailLayers({
@@ -529,9 +529,9 @@ test("buildTrailLayers clips live trail overshoot so the rendered body stays beh
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   });
 
   const trailBodyLayer = layers[0] as unknown as {
@@ -589,9 +589,9 @@ test("buildTrailLayers omits a connector when the trail tail is implausibly far 
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   });
 
   const connectorSegments = (
@@ -638,9 +638,9 @@ test("buildTrailLayers uses segmented selected geometry for the selected aircraf
     trailBasePathCache: new Map(),
     trailPathCache: new Map(),
     trailColorCache: new Map(),
-    handledIdsSet: new Set(),
+    handledIdsSet: new Set<string>(),
     visibleTrailCacheMap: new Map(),
-    activeIcaosSet: new Set(),
+    activeIcaosSet: new Set<string>(),
   };
 
   const activeLayers = buildTrailLayers({

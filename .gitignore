@@ -57,6 +57,7 @@ scripts/heap-analysis/__pycache__/
 
 # internal planning docs (not for public release)
 docs/internal/
+docs/superpowers/
 
 # heap analysis tooling & output
 scripts/
@@ -65,3 +66,4 @@ scripts/heap-analysis/
 # editor settings
 .vscode/
 .idea/
+

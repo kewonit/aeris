@@ -77,7 +77,7 @@ export function buildSelectedTrailRenderGeometry(
     merged.historyBody.length >= 2
       ? buildTrailDisplayGeometry(
           toTrailEntryFromSnapshots(envelope.icao24, merged.historyBody, true),
-          merged.historyBody.length,
+          trailDistance,
         ).allPoints
       : toElevatedPoints(merged.historyBody);
 

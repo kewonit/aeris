@@ -123,3 +123,79 @@ test("mergeSegments degrades instead of snapping to an older interior branch whe
   assert.equal(result.outcome, "live-tail-only");
   assert.deepEqual(result.samples, liveTail);
 });
+
+test("mergeSegments drops a suspect bootstrap prefix before joining selected history to live samples", () => {
+  const result = mergeSegments({
+    referenceAltitude: 4_300,
+    historySegments: [
+      historySegment([
+        historySample({
+          timestamp: 100,
+          lng: 72.8,
+          lat: 19.0,
+          altitude: 4_000,
+        }),
+        historySample({
+          timestamp: 200,
+          lng: 72.9,
+          lat: 19.1,
+          altitude: 4_100,
+        }),
+      ]),
+    ],
+    liveTail: [
+      liveSample({
+        timestamp: 210,
+        lng: 72.62,
+        lat: 18.82,
+        altitude: 4_100,
+        quality: "suspect",
+      }),
+      liveSample({
+        timestamp: 220,
+        lng: 72.71,
+        lat: 18.9,
+        altitude: 4_150,
+        quality: "suspect",
+      }),
+      liveSample({
+        timestamp: 230,
+        lng: 72.91,
+        lat: 19.11,
+        altitude: 4_220,
+      }),
+      liveSample({
+        timestamp: 240,
+        lng: 72.94,
+        lat: 19.13,
+        altitude: 4_300,
+      }),
+    ],
+  });
+
+  assert.equal(result.outcome, "full-history");
+  assert.equal(
+    result.samples.some((sample) => sample.quality === "suspect"),
+    false,
+  );
+  assert.deepEqual(
+    result.historyBody[result.historyBody.length - 1],
+    historySample({
+      timestamp: 200,
+      lng: 72.9,
+      lat: 19.1,
+      altitude: 4_100,
+    }),
+  );
+  assert.deepEqual(result.liveContinuation[0], {
+    ...liveSample({
+      timestamp: 230,
+      lng: 72.91,
+      lat: 19.11,
+      altitude: 4_220,
+    }),
+    lng: 72.9,
+    lat: 19.1,
+    altitude: 4_220,
+  });
+});

@@ -122,6 +122,26 @@ function flattenHistorySegments(
   return historySegments.flatMap((segment) => segment.samples);
 }
 
+function trimSuspectLivePrefix(
+  liveTail: TrailSnapshot[],
+  hasUsableHistory: boolean,
+): TrailSnapshot[] {
+  const firstReliableIndex = liveTail.findIndex(
+    (sample) => sample.quality !== "suspect",
+  );
+
+  if (firstReliableIndex <= 0) {
+    return liveTail;
+  }
+
+  const reliableCount = liveTail.length - firstReliableIndex;
+  if (!hasUsableHistory && reliableCount < 2) {
+    return liveTail;
+  }
+
+  return liveTail.slice(firstReliableIndex);
+}
+
 function getMaxConnectGap(referenceAltitude: number | null): number {
   return referenceAltitude !== null &&
     referenceAltitude < LOW_ALTITUDE_THRESHOLD_M
@@ -189,7 +209,7 @@ export function mergeSegments(params: {
   referenceAltitude: number | null;
 }): MergeSegmentsResult {
   const history = flattenHistorySegments(params.historySegments);
-  const liveTail = params.liveTail;
+  const liveTail = trimSuspectLivePrefix(params.liveTail, history.length >= 2);
 
   if (history.length < 2) {
     return {

@@ -5,7 +5,7 @@ import {
   buildTrailBodyGradientColors,
   buildTrailRenderSegments,
   trimTrailBodyForConnector,
-} from "./trail-render-segments.ts";
+} from "./trail-render-segments";
 
 test("buildTrailRenderSegments emits drawable body segments for an active trail", () => {
   const result = buildTrailRenderSegments({
@@ -80,5 +80,9 @@ test("buildTrailRenderSegments blends adjacent altitude colors for smoother tran
   });
 
   assert.notDeepStrictEqual(result[0].color, pointColors[1]);
-  assert.ok(result[0].color[0] !== pointColors[0][0] || result[0].color[1] !== pointColors[0][1] || result[0].color[2] !== pointColors[0][2]);
+  assert.ok(
+    result[0].color[0] !== pointColors[0][0] ||
+      result[0].color[1] !== pointColors[0][1] ||
+      result[0].color[2] !== pointColors[0][2],
+  );
 });

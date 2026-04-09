@@ -5,7 +5,7 @@ import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
   projectDisplayedAltitudeMeters,
   projectTrailElevationMeters,
-} from "./altitude-projection.ts";
+} from "./altitude-projection";
 
 test("presentation altitude mode is monotonic and much lighter than the old x5 projection", () => {
   const low = projectDisplayedAltitudeMeters(500, "presentation");
@@ -31,6 +31,14 @@ test("presentation mode stays visually separated above realistic mode", () => {
   const realistic = projectDisplayedAltitudeMeters(2_000, "realistic");
 
   assert.ok(presentation > realistic);
+});
+
+test("presentation mode gives low and mid altitudes extra lift for a taller map view", () => {
+  const low = projectDisplayedAltitudeMeters(2_000, "presentation");
+  const mid = projectDisplayedAltitudeMeters(8_000, "presentation");
+
+  assert.ok(low >= 2_900);
+  assert.ok(mid >= 10_500);
 });
 
 test("trail elevation stays below the aircraft projection by the visual offset", () => {

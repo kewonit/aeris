@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/provider-panel";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 
+import {
+  resolveDropdownState,
+  type StatusBarDropdownState,
+} from "./status-bar-state";
+
 type StatusBarProps = {
   flightCount: number;
   cityName: string;
@@ -47,70 +52,61 @@ export function StatusBar({
   atcToggle,
   source,
 }: StatusBarProps) {
-  const [dropdownState, setDropdownState] = useState(() => ({
-    feedDropdownOpen: false,
-    providerDropdownOpen: false,
-    handledAtcToggle: atcToggle,
-  }));
+  const [dropdownState, setDropdownState] = useState<StatusBarDropdownState>(
+    () => ({
+      feedDropdownOpen: false,
+      providerDropdownOpen: false,
+      handledAtcToggle: atcToggle,
+    }),
+  );
   const availableFeeds = useAvailableFeeds(cityIata, cityCoordinates);
 
-  const resolveDropdownState = useCallback(
-    (state: typeof dropdownState) => {
-      const hasPendingExternalToggle =
-        atcToggle !== undefined && atcToggle !== state.handledAtcToggle;
-
-      return {
-        feedDropdownOpen: hasPendingExternalToggle
-          ? !state.feedDropdownOpen
-          : state.feedDropdownOpen,
-        providerDropdownOpen: hasPendingExternalToggle
-          ? false
-          : state.providerDropdownOpen,
-      };
-    },
-    [atcToggle],
+  const { feedDropdownOpen, providerDropdownOpen } = resolveDropdownState(
+    dropdownState,
+    atcToggle,
   );
-
-  const { feedDropdownOpen, providerDropdownOpen } =
-    resolveDropdownState(dropdownState);
 
   const toggleFeedDropdown = useCallback(() => {
     setDropdownState((state) => {
-      const resolved = resolveDropdownState(state);
+      const resolved = resolveDropdownState(state, atcToggle);
       return {
         feedDropdownOpen: !resolved.feedDropdownOpen,
         providerDropdownOpen: false,
-        handledAtcToggle: atcToggle,
+        handledAtcToggle: atcToggle ?? state.handledAtcToggle,
       };
     });
-  }, [atcToggle, resolveDropdownState]);
+  }, [atcToggle]);
 
   const closeFeedDropdown = useCallback(() => {
-    setDropdownState((state) => ({
-      ...resolveDropdownState(state),
-      feedDropdownOpen: false,
-      handledAtcToggle: atcToggle,
-    }));
-  }, [atcToggle, resolveDropdownState]);
+    setDropdownState((state) => {
+      const resolved = resolveDropdownState(state, atcToggle);
+      return {
+        ...state,
+        ...resolved,
+        feedDropdownOpen: false,
+        handledAtcToggle: atcToggle ?? state.handledAtcToggle,
+      };
+    });
+  }, [atcToggle]);
 
   const toggleProviderDropdown = useCallback(() => {
     setDropdownState((state) => {
-      const resolved = resolveDropdownState(state);
+      const resolved = resolveDropdownState(state, atcToggle);
       return {
         feedDropdownOpen: false,
         providerDropdownOpen: !resolved.providerDropdownOpen,
-        handledAtcToggle: atcToggle,
+        handledAtcToggle: atcToggle ?? state.handledAtcToggle,
       };
     });
-  }, [atcToggle, resolveDropdownState]);
+  }, [atcToggle]);
 
   const closeProviderDropdown = useCallback(() => {
     setDropdownState((state) => ({
-      ...resolveDropdownState(state),
+      ...state,
       providerDropdownOpen: false,
-      handledAtcToggle: atcToggle,
+      handledAtcToggle: atcToggle ?? state.handledAtcToggle,
     }));
-  }, [atcToggle, resolveDropdownState]);
+  }, [atcToggle]);
 
   const isAtcPlaying = atc.status === "playing";
   return (

@@ -42,6 +42,7 @@ type CacheEntry = {
   photos: NormalizedPhoto[];
   ts: number;
   ttl: number;
+  failed: boolean;
 };
 
 const cache = new Map<string, CacheEntry>();
@@ -60,6 +61,7 @@ function putCache(
   key: string,
   aircraft: AircraftDetails | null,
   photos: NormalizedPhoto[],
+  failed = false,
 ): void {
   if (cache.size >= CACHE_MAX) {
     const oldest = cache.keys().next().value;
@@ -70,7 +72,32 @@ function putCache(
     photos,
     ts: Date.now(),
     ttl: photos.length > 0 ? CACHE_TTL_MS : NEGATIVE_TTL_MS,
+    failed,
   });
+}
+
+export function deriveAircraftPhotosFlags(params: {
+  hasIcao24: boolean;
+  fallbackResult: Pick<CacheEntry, "failed"> | null;
+  cacheKey: string | null;
+  errorKey: string | null;
+  resolvedKey: string | null;
+}): { loading: boolean; error: boolean } {
+  if (!params.hasIcao24) {
+    return { loading: false, error: false };
+  }
+
+  const hasFallbackResult = params.fallbackResult !== null;
+
+  return {
+    loading:
+      !hasFallbackResult &&
+      params.cacheKey !== params.errorKey &&
+      params.cacheKey !== params.resolvedKey,
+    error:
+      Boolean(params.fallbackResult?.failed) ||
+      (!hasFallbackResult && params.cacheKey === params.errorKey),
+  };
 }
 
 // ── API response types ───────────────────────────────────────────────────────────
@@ -231,7 +258,7 @@ export function useAircraftPhotos(
         },
         () => {
           if (cancelled) return;
-          putCache(normalized, null, []);
+          putCache(normalized, null, [], true);
           setErrorKey(cacheKey);
         },
       );
@@ -262,7 +289,7 @@ export function useAircraftPhotos(
         },
         () => {
           if (cancelled) return;
-          putCache(normalized, null, []);
+          putCache(normalized, null, [], true);
           setErrorKey(cacheKey);
         },
       );
@@ -278,11 +305,18 @@ export function useAircraftPhotos(
     return { photos: [], aircraft: null, loading: false, error: false };
   }
 
+  const { loading, error } = deriveAircraftPhotosFlags({
+    hasIcao24,
+    fallbackResult,
+    cacheKey,
+    errorKey,
+    resolvedKey,
+  });
+
   return {
     photos: fallbackResult?.photos ?? [],
     aircraft: fallbackResult?.aircraft ?? null,
-    loading:
-      !fallbackResult && cacheKey !== errorKey && cacheKey !== resolvedKey,
-    error: !fallbackResult && cacheKey === errorKey,
+    loading,
+    error,
   };
 }

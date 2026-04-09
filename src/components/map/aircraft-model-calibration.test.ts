@@ -4,10 +4,12 @@ import test from "node:test";
 import {
   getAircraftModelCalibration,
   getEffectiveModelScale,
-} from "./aircraft-model-calibration.ts";
+} from "./aircraft-model-calibration";
 
 test("A380 effective scale stays larger than narrowbody effective scale after mesh normalization", () => {
-  assert.ok(getEffectiveModelScale("a380") > getEffectiveModelScale("narrowbody"));
+  assert.ok(
+    getEffectiveModelScale("a380") > getEffectiveModelScale("narrowbody"),
+  );
 });
 
 test("logical model calibration exposes a distinct tail anchor for shared widebody meshes", () => {

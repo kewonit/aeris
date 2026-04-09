@@ -28,6 +28,17 @@ function toTrailProviderId(source: string | null): TrailProviderId | null {
   }
 }
 
+export function getHistoryLoadDisposition(params: {
+  online: boolean;
+  hidden: boolean;
+  requestInFlight: boolean;
+}): "offline" | "hidden" | "in-flight" | "start" {
+  if (!params.online) return "offline";
+  if (params.hidden) return "hidden";
+  if (params.requestInFlight) return "in-flight";
+  return "start";
+}
+
 export function getHistoryRefreshMs(params: {
   provider: TrailProviderId | null;
   creditsRemaining: number | null;
@@ -125,11 +136,17 @@ export function useTrailSystem(params: {
         return;
       }
 
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const disposition = getHistoryLoadDisposition({
+        online: typeof navigator === "undefined" || navigator.onLine,
+        hidden: typeof document !== "undefined" && document.hidden,
+        requestInFlight: currentController !== null,
+      });
+
+      if (disposition === "offline" || disposition === "in-flight") {
         return;
       }
 
-      if (typeof document !== "undefined" && document.hidden) {
+      if (disposition === "hidden") {
         scheduleNext(TRAIL_HISTORY_REFRESH_MS);
         return;
       }
@@ -150,13 +167,13 @@ export function useTrailSystem(params: {
 
       trailStore.startHistoryLoad({ selectionGeneration });
 
-      currentController?.abort();
-      currentController = new AbortController();
+      const controller = new AbortController();
+      currentController = controller;
 
       try {
         const result = await fetchSelectedTrack(
           selectedIcao24,
-          currentController.signal,
+          controller.signal,
         );
 
         if (!active) {
@@ -219,6 +236,10 @@ export function useTrailSystem(params: {
           cooldownUntil: Date.now() + TRAIL_HISTORY_REFRESH_MS,
         });
         scheduleNext(TRAIL_HISTORY_REFRESH_MS);
+      } finally {
+        if (currentController === controller) {
+          currentController = null;
+        }
       }
     };
 

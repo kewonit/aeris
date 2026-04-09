@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getEffectiveModelScale } from "./aircraft-model-calibration.ts";
-import { aircraftSizeMultiplier } from "./aircraft-appearance.ts";
-import { modelDisplayScale } from "./aircraft-model-mapping.ts";
+import { getEffectiveModelScale } from "./aircraft-model-calibration";
+import { aircraftSizeMultiplier } from "./aircraft-appearance";
+import { modelDisplayScale } from "./aircraft-model-mapping";
 
 test("A380 scale stays larger than B737 scale", () => {
   assert.ok(modelDisplayScale("a380") > modelDisplayScale("b737"));
@@ -17,5 +17,7 @@ test("heavy fallback stays larger than narrowbody fallback", () => {
 });
 
 test("effective 3D scale keeps A380 larger than narrowbody", () => {
-  assert.ok(getEffectiveModelScale("a380") > getEffectiveModelScale("narrowbody"));
+  assert.ok(
+    getEffectiveModelScale("a380") > getEffectiveModelScale("narrowbody"),
+  );
 });

@@ -7,6 +7,10 @@ import type { FlightTrack } from "@/lib/opensky";
 
 import { parseReadsbTrace } from "./parse-readsb-trace";
 
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export function getDirectTraceProviders(): TraceProviderId[] {
   return getDirectTraceProviderPolicies().map((provider) => provider.id);
 }
@@ -52,10 +56,19 @@ export async function fetchReadsbDirectTrack(
   const urls = buildReadsbTraceUrls(provider, icao24);
 
   for (let index = 0; index < urls.length; index += 1) {
-    const response = await fetch(urls[index], {
-      cache: "no-store",
-      signal,
-    }).catch(() => null);
+    let response: Response | null = null;
+
+    try {
+      response = await fetch(urls[index], {
+        cache: "no-store",
+        signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      continue;
+    }
 
     if (!response?.ok) {
       continue;

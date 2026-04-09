@@ -45,6 +45,16 @@ All models are optimized for web delivery using `@gltf-transform/cli`:
 > introducing an external WASM decoder dependency.
 > See `public/models/aircraft/NOTICE.md` for details.
 
+## Scale Pipeline
+
+Aircraft size now uses measured mesh metrics plus a separate physical-class scale, instead of one mixed hand-tuned constant table.
+
+1. Mesh measurement: `scripts/inspect-aircraft-model-extents.mjs` measures each GLB's axis spans and centers and writes them to `src/components/map/model-mesh-metrics.ts`. It also keeps `src/components/map/model-mesh-extents.ts` updated for the legacy max-extent normalization input.
+2. Mesh normalization: Scenegraph `getScale` still normalizes by measured max extent so very large raw assets do not dominate the screen.
+3. Composite physical display scale: `sizeScale` now uses family wingspan together with the measured mesh extent. The display multiplier grows with real aircraft class, but only with the square root of the raw mesh extent. This preserves compact silhouettes while preventing one oversized raw mesh from collapsing the hierarchy.
+
+This is what keeps the A380 logically larger than narrowbody and 737-family models even though `a380` still reuses the `widebody-4eng` GLB and that source asset is authored much larger than the narrowbody mesh.
+
 ## Model Assignment
 
 ### Priority: TypeCode → Category

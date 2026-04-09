@@ -6,7 +6,7 @@ import type { FlightState } from "@/lib/opensky";
 import {
   computeInterpolatedFlights,
   resolveDisplayTrack,
-} from "./flight-interpolation.ts";
+} from "./flight-interpolation";
 
 test("resolveDisplayTrack prefers the actual motion bearing when movement is available", () => {
   const resolved = resolveDisplayTrack({

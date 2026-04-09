@@ -3,9 +3,9 @@ import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
 
-import { buildAircraftModelLayers } from "./aircraft-model-layers.ts";
-import { getAircraftModelCalibration } from "./aircraft-model-calibration.ts";
-import { offsetPositionByTrack } from "./flight-math.ts";
+import { buildAircraftModelLayers } from "./aircraft-model-layers";
+import { getAircraftModelCalibration } from "./aircraft-model-calibration";
+import { offsetPositionByTrack } from "./flight-math";
 
 function makeNarrowbodyFlight(): FlightState {
   return {

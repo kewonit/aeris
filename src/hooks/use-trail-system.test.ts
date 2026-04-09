@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getHistoryRefreshMs } from "./use-trail-system";
+import {
+  getHistoryLoadDisposition,
+  getHistoryRefreshMs,
+} from "./use-trail-system";
 
 test("OpenSky refresh slows down as credits fall", () => {
   assert.equal(
@@ -26,5 +29,25 @@ test("non-OpenSky providers keep the normal refresh cadence", () => {
   assert.equal(
     getHistoryRefreshMs({ provider: "adsb-lol", creditsRemaining: null }),
     15_000,
+  );
+});
+
+test("an in-flight history request is reused instead of starting a duplicate load", () => {
+  assert.equal(
+    getHistoryLoadDisposition({
+      online: true,
+      hidden: false,
+      requestInFlight: true,
+    }),
+    "in-flight",
+  );
+
+  assert.equal(
+    getHistoryLoadDisposition({
+      online: true,
+      hidden: false,
+      requestInFlight: false,
+    }),
+    "start",
   );
 });

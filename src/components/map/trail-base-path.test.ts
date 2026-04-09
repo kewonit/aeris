@@ -3,10 +3,7 @@ import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
 
-import {
-  buildTrailBasePath,
-  buildVisibleTrailPoints,
-} from "./trail-base-path.ts";
+import { buildTrailBasePath, buildVisibleTrailPoints } from "./trail-base-path";
 
 function maxHeadingDeltaDeg(points: [number, number, number][]): number {
   let maxDelta = 0;

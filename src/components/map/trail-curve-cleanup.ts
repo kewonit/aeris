@@ -26,10 +26,13 @@ function segmentHeading(a: ElevatedPoint, b: ElevatedPoint): number {
 export function getCurveFootprintMetrics(points: ElevatedPoint[]) {
   const longitudes = points.map((point) => point[0]);
   const latitudes = points.map((point) => point[1]);
-  const width = Math.max(...longitudes) - Math.min(...longitudes);
+  const avgLat =
+    (latitudes.reduce((a, b) => a + b, 0) / latitudes.length) * (Math.PI / 180);
+  const cosLat = Math.max(0.1, Math.cos(avgLat));
+  const width = (Math.max(...longitudes) - Math.min(...longitudes)) * cosLat;
   const height = Math.max(...latitudes) - Math.min(...latitudes);
   const chord = Math.hypot(
-    points[points.length - 1][0] - points[0][0],
+    (points[points.length - 1][0] - points[0][0]) * cosLat,
     points[points.length - 1][1] - points[0][1],
   );
   const path = points
@@ -37,7 +40,10 @@ export function getCurveFootprintMetrics(points: ElevatedPoint[]) {
     .reduce(
       (sum, point, index) =>
         sum +
-        Math.hypot(point[0] - points[index][0], point[1] - points[index][1]),
+        Math.hypot(
+          (point[0] - points[index][0]) * cosLat,
+          point[1] - points[index][1],
+        ),
       0,
     );
 
@@ -116,17 +122,24 @@ export function hasPreservedTurnWindow(points: ElevatedPoint[]): boolean {
   return false;
 }
 
+function isValidPoint(p: ElevatedPoint): boolean {
+  return (
+    Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2])
+  );
+}
+
 export function cleanupControlPointArtifacts(
   points: ElevatedPoint[],
 ): ElevatedPoint[] {
-  if (points.length < 5) {
-    return points.map(clonePoint);
+  const valid = points.filter(isValidPoint);
+  if (valid.length < 5) {
+    return valid.map(clonePoint);
   }
 
   const result = (
-    points.length <= 8 && hasPreservedTurnWindow(points)
-      ? roundSharpCorners3D(points, 20)
-      : points
+    valid.length <= 8 && hasPreservedTurnWindow(valid)
+      ? roundSharpCorners3D(valid, 20)
+      : valid
   ).map(clonePoint);
 
   for (let pass = 0; pass < 6; pass += 1) {
@@ -222,11 +235,12 @@ export function cleanupControlPointArtifacts(
 }
 
 export function cleanupDisplayCurve(points: ElevatedPoint[]): ElevatedPoint[] {
-  if (points.length < 4) {
-    return points.map(clonePoint);
+  const valid = points.filter(isValidPoint);
+  if (valid.length < 4) {
+    return valid.map(clonePoint);
   }
 
-  const result = points.map(clonePoint);
+  const result = valid.map(clonePoint);
 
   for (let pass = 0; pass < 12; pass += 1) {
     let changed = false;

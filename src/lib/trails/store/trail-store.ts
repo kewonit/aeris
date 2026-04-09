@@ -11,6 +11,7 @@ import type {
   TrailHistoryState,
   TrailOutcome,
   TrailProviderId,
+  TrailSampleQuality,
   TrailSegment,
   TrailSnapshot,
 } from "../types";
@@ -24,6 +25,7 @@ type TrailPoint = {
   timestamp: number;
   track: number | null;
   groundSpeed: number | null;
+  quality: TrailSampleQuality;
   onGround: boolean;
 };
 
@@ -53,6 +55,7 @@ const JUMP_THRESHOLD_DEG = 0.15;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
 const BOOTSTRAP_UPDATES = 3;
+const LOW_PHASE_ALTITUDE_M = 2_000;
 const ALTITUDE_RECENT_WINDOW = 6;
 const ALTITUDE_SOFT_STEP_METERS = 500;
 const ALTITUDE_HARD_STEP_METERS = 12_000;
@@ -126,6 +129,13 @@ function getRecentTurnDeltaDeg(
   return normalizeHeadingDeltaDeg(before, after);
 }
 
+function isLowPhaseTrailPoint(point: TrailPoint): boolean {
+  return (
+    point.onGround ||
+    (point.baroAltitude != null && point.baroAltitude <= LOW_PHASE_ALTITUDE_M)
+  );
+}
+
 function trimLiveTrailWindow(
   liveTrail: TrailPoint[],
   now: number,
@@ -170,7 +180,6 @@ function synthesizeHistoricalPolls(flight: FlightState): Position[] {
       gpsJitterDeg *
       jitterSign *
       (0.4 + (index / HISTORICAL_BOOTSTRAP_POLLS) * 0.6);
-
     polls.push([
       flight.longitude -
         Math.sin(heading) * distanceDeg +
@@ -193,7 +202,7 @@ function trailPointToSnapshot(point: TrailPoint): TrailSnapshot {
     altitude: point.baroAltitude,
     track: point.track,
     groundSpeed: point.groundSpeed,
-    quality: "authoritative-live",
+    quality: point.quality,
     onGround: point.onGround,
   };
 }
@@ -432,7 +441,7 @@ export function createTrailStore() {
       }
 
       processedFlightCount += 1;
-      const id = flight.icao24;
+      const id = flight.icao24.trim().toLowerCase();
       current.add(id);
       liveOrder.push(id);
       const speedMps = getFlightSpeedMps(flight);
@@ -457,6 +466,7 @@ export function createTrailStore() {
           flight.velocity != null && Number.isFinite(flight.velocity)
             ? flight.velocity
             : null,
+        quality: "authoritative-live",
         onGround: flight.onGround,
       };
 
@@ -473,6 +483,7 @@ export function createTrailStore() {
                     1000,
                 track: point.track,
                 groundSpeed: point.groundSpeed,
+                quality: "suspect",
                 onGround: point.onGround,
               }))
             : [];
@@ -541,12 +552,21 @@ export function createTrailStore() {
               flight.velocity > 0
                 ? flight.velocity
                 : 100;
+            const lastPoint = liveTrail[liveTrail.length - 1];
             const baseHeadingThreshold =
               speed < 50 ? 110 : speed < 100 ? 90 : 70;
-            const headingThreshold =
+            let headingThreshold =
               sparseInterval || recentTurnDeltaDeg > 55
                 ? Math.max(baseHeadingThreshold, 140)
                 : baseHeadingThreshold;
+
+            if (
+              speed <= 120 &&
+              (isLowPhaseTrailPoint(lastPoint) || isLowPhaseTrailPoint(point))
+            ) {
+              headingThreshold = Math.max(headingThreshold, 150);
+            }
+
             if (headingDelta > headingThreshold) {
               continue;
             }

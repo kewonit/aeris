@@ -20,6 +20,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
+import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import { HeroBanner } from "@/components/ui/hero-banner";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
@@ -515,8 +516,6 @@ function Metric({
 }
 
 // ── Route Banner ───────────────────────────────────────────────────────
-
-import type { FlightRouteInfo } from "@/hooks/use-route-info";
 
 function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
   // Loading state
