@@ -19,6 +19,18 @@ export function getNextNegativeBackoffMs(previousMs: number): number {
   return TRAIL_NEGATIVE_TTLS_MS[TRAIL_NEGATIVE_TTLS_MS.length - 1];
 }
 
+function getCurrentNegativeBackoffMs(errorStreak: number): number {
+  if (errorStreak <= 0) {
+    return 0;
+  }
+
+  const index = Math.min(errorStreak - 1, TRAIL_NEGATIVE_TTLS_MS.length - 1);
+  return (
+    TRAIL_NEGATIVE_TTLS_MS[index] ??
+    TRAIL_NEGATIVE_TTLS_MS[TRAIL_NEGATIVE_TTLS_MS.length - 1]
+  );
+}
+
 export function noteProviderFailure(
   state: ProviderHealth,
   params: {
@@ -26,11 +38,14 @@ export function noteProviderFailure(
     retryAfterMs?: number;
   },
 ): ProviderHealth {
+  const retryAfterMs =
+    params.retryAfterMs ??
+    getNextNegativeBackoffMs(getCurrentNegativeBackoffMs(state.errorStreak));
+
   return {
     ...state,
     errorStreak: state.errorStreak + 1,
-    cooldownUntil:
-      params.now + (params.retryAfterMs ?? getNextNegativeBackoffMs(0)),
+    cooldownUntil: params.now + retryAfterMs,
   };
 }
 

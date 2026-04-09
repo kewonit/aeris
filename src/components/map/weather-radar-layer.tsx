@@ -33,8 +33,8 @@ type WeatherRadarLayerProps = {
 function addSourceAndLayer(
   map: maplibregl.Map,
   tileUrl: string,
-  visibleRef: React.RefObject<boolean>,
-  opacityRef: React.RefObject<number>,
+  visible: boolean,
+  opacity: number,
 ) {
   map.addSource(SOURCE_ID, {
     type: "raster",
@@ -53,7 +53,7 @@ function addSourceAndLayer(
       type: "raster",
       source: SOURCE_ID,
       paint: {
-        "raster-opacity": visibleRef.current ? opacityRef.current : 0,
+        "raster-opacity": visible ? opacity : 0,
         "raster-fade-duration": 300,
       },
     },
@@ -69,12 +69,6 @@ export function WeatherRadarLayer({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentTimeRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const visibleRef = useRef(visible);
-  const opacityRef = useRef(opacity);
-
-  // Keep refs current without recreating callbacks
-  visibleRef.current = visible;
-  opacityRef.current = opacity;
 
   const updateRadarTiles = useCallback(async () => {
     if (!map) return;
@@ -115,15 +109,15 @@ export function WeatherRadarLayer({
           /* already removed */
         }
         // Fall through to re-create below
-        addSourceAndLayer(map, tileUrl, visibleRef, opacityRef);
+        addSourceAndLayer(map, tileUrl, visible, opacity);
       } else {
-        addSourceAndLayer(map, tileUrl, visibleRef, opacityRef);
+        addSourceAndLayer(map, tileUrl, visible, opacity);
       }
     } catch (err) {
       // Ignore AbortError (expected on cleanup) and network failures (retry next interval)
       if (err instanceof DOMException && err.name === "AbortError") return;
     }
-  }, [map]);
+  }, [map, opacity, visible]);
 
   // Initial fetch + periodic refresh
   useEffect(() => {
@@ -168,13 +162,9 @@ export function WeatherRadarLayer({
 
     const onStyleLoad = () => {
       // Only re-add if we had a valid timestamp and source was removed by style swap
-      if (
-        currentTimeRef.current &&
-        !map.getSource(SOURCE_ID) &&
-        visibleRef.current
-      ) {
+      if (currentTimeRef.current && !map.getSource(SOURCE_ID) && visible) {
         const tileUrl = proxyTileUrl(currentTimeRef.current);
-        addSourceAndLayer(map, tileUrl, visibleRef, opacityRef);
+        addSourceAndLayer(map, tileUrl, visible, opacity);
       }
     };
 
@@ -182,7 +172,7 @@ export function WeatherRadarLayer({
     return () => {
       map.off("style.load", onStyleLoad);
     };
-  }, [map, isLoaded]);
+  }, [map, isLoaded, opacity, visible]);
 
   return null;
 }

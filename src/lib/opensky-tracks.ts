@@ -6,6 +6,7 @@ import type {
 } from "./opensky-types";
 import { FETCH_TIMEOUT_MS, ICAO24_REGEX, OPENSKY_API } from "./opensky-types";
 import { parseRateLimitInfo } from "./opensky-parsing";
+import { normalizeTrackWaypoints } from "./trails/source/parse-readsb-trace";
 
 // ── Track Waypoint Parsing ─────────────────────────────────────────────
 
@@ -34,21 +35,12 @@ function parseTrackWaypoint(raw: unknown): TrackWaypoint | null {
 
 // ── Flight Track Parsing ───────────────────────────────────────────────
 
-function parseFlightTrack(
+export function parseFlightTrack(
   icao24: string,
   payload: unknown,
 ): FlightTrack | null {
   if (typeof payload !== "object" || payload === null) return null;
   const data = payload as OpenSkyTrackResponse;
-
-  const startTime =
-    typeof data.startTime === "number" && Number.isFinite(data.startTime)
-      ? data.startTime
-      : 0;
-  const endTime =
-    typeof data.endTime === "number" && Number.isFinite(data.endTime)
-      ? data.endTime
-      : 0;
 
   const callsignRaw =
     typeof data.callsign === "string"
@@ -64,28 +56,25 @@ function parseFlightTrack(
     .filter((p): p is TrackWaypoint => p !== null)
     .filter((p) => p.latitude !== null && p.longitude !== null);
 
-  // Be defensive: some responses can be out-of-order.
-  parsed.sort((a, b) => a.time - b.time);
-
-  // Remove consecutive duplicates (helps avoid long straight chords when data is jittery).
-  const path: TrackWaypoint[] = [];
+  const deduped: TrackWaypoint[] = [];
   let lastLng: number | null = null;
   let lastLat: number | null = null;
   for (const p of parsed) {
     if (lastLng !== null && lastLat !== null) {
       if (p.longitude === lastLng && p.latitude === lastLat) continue;
     }
-    path.push(p);
+    deduped.push(p);
     lastLng = p.longitude;
     lastLat = p.latitude;
   }
 
+  const path = normalizeTrackWaypoints(deduped);
   if (path.length < 2) return null;
 
   return {
     icao24,
-    startTime,
-    endTime,
+    startTime: Math.floor(path[0].time),
+    endTime: Math.floor(path[path.length - 1].time),
     callsign,
     path,
   };

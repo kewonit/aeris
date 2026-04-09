@@ -141,7 +141,8 @@ export function installGpuMemoryMonitor(): void {
   ) {
     // texImage2D has multiple overloads; extract width/height/format
     // Overload: texImage2D(target, level, internalformat, width, height, border, format, type, source)
-    const result = (origTexImage2D as Function).apply(this, args);
+    const texImage2D = origTexImage2D as (...callArgs: unknown[]) => unknown;
+    const result = texImage2D.apply(this, args);
 
     try {
       const boundTex = this.getParameter(
@@ -234,14 +235,22 @@ export function installGpuMemoryMonitor(): void {
   // ── Buffer tracking ────────────────────────────────────────────────
 
   const origBufferData = proto.bufferData;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (proto as any).bufferData = function (
+  proto.bufferData = function (
     this: WebGL2RenderingContext,
     target: number,
-    sizeOrData: number | ArrayBufferView | ArrayBuffer | null,
+    sizeOrData: number | AllowSharedBufferSource | null,
     usage: number,
+    srcOffset?: number,
+    length?: number,
   ) {
-    const result = (origBufferData as Function).apply(this, arguments);
+    const bufferData = origBufferData as (...callArgs: unknown[]) => unknown;
+    const args =
+      typeof srcOffset === "number"
+        ? typeof length === "number"
+          ? [target, sizeOrData, usage, srcOffset, length]
+          : [target, sizeOrData, usage, srcOffset]
+        : [target, sizeOrData, usage];
+    const result = bufferData.apply(this, args);
 
     try {
       const binding =

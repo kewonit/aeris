@@ -186,6 +186,68 @@ function trimTrailForAircraft(
   );
 }
 
+const MAX_CONNECTOR_GAP_METERS = 12_000;
+
+function normalizeTrailTimestampMs(
+  timestamp: number | undefined,
+): number | null {
+  if (timestamp == null || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return null;
+  }
+
+  if (timestamp < 1_000_000_000) {
+    return null;
+  }
+
+  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+}
+
+function shouldRenderConnector(
+  trail: TrailEntry,
+  visiblePoints: ElevatedPoint[],
+  aircraft: FlightState | undefined,
+): boolean {
+  if (
+    !aircraft ||
+    aircraft.longitude == null ||
+    aircraft.latitude == null ||
+    visiblePoints.length === 0
+  ) {
+    return false;
+  }
+
+  const tail = visiblePoints[visiblePoints.length - 1];
+  const aircraftLng = snapLngToReference(aircraft.longitude, tail[0]);
+  const aircraftLat = aircraft.latitude;
+  const dx = aircraftLng - tail[0];
+  const dy = aircraftLat - tail[1];
+  const gapMeters = Math.hypot(
+    dx * 111_320 * Math.cos((aircraftLat * Math.PI) / 180),
+    dy * 111_320,
+  );
+
+  const normalizedTimestampMs = normalizeTrailTimestampMs(
+    trail.timestamps[trail.timestamps.length - 1],
+  );
+  if (normalizedTimestampMs == null) {
+    return gapMeters <= MAX_CONNECTOR_GAP_METERS;
+  }
+
+  const ageMs = Math.max(0, Date.now() - normalizedTimestampMs);
+  const speedMps =
+    aircraft.velocity != null &&
+    Number.isFinite(aircraft.velocity) &&
+    aircraft.velocity > 0
+      ? aircraft.velocity
+      : 220;
+  const allowedMeters = Math.min(
+    MAX_CONNECTOR_GAP_METERS,
+    Math.max(1_500, speedMps * Math.max(5, ageMs / 1000) * 1.8 + 750),
+  );
+
+  return gapMeters <= allowedMeters;
+}
+
 // ── Trail layer builder ────────────────────────────────────────────────
 
 export interface TrailLayerParams {
@@ -401,6 +463,11 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const connectorData = trailData.flatMap((trail) => {
     const aircraft = interpolatedMap.get(trail.icao24);
     const visiblePoints = getRenderableBodyPoints(trail, aircraft);
+
+    if (!shouldRenderConnector(trail, visiblePoints, aircraft)) {
+      return [];
+    }
+
     const connector = buildTrailConnector(
       visiblePoints,
       aircraft,

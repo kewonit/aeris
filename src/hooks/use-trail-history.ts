@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import type { FlightState } from "@/lib/opensky";
 import {
   trailStore,
@@ -9,9 +11,13 @@ import {
 export type { TrailEntry } from "@/lib/trails/types";
 
 export function useTrailHistory(flights?: FlightState[]) {
-  if (flights) {
+  useEffect(() => {
+    if (!flights) {
+      return;
+    }
+
     trailStore.ingestLiveFlights(flights);
-  }
+  }, [flights]);
 
   return useTrailStoreSnapshot((state) => state.trails);
 }

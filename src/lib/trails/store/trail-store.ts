@@ -44,7 +44,11 @@ export type TrailStoreSnapshot = {
   selectedEnvelope: TrailEnvelope | null;
 };
 
-const MAX_POINTS = 120;
+const MAX_LIVE_POINTS = 360;
+const MAX_SELECTED_LIVE_POINTS = 720;
+const MAX_LIVE_AGE_MS = 6 * 60_000;
+const MAX_SELECTED_LIVE_AGE_MS = 12 * 60_000;
+const SPARSE_INTERVAL_MS = 25_000;
 const JUMP_THRESHOLD_DEG = 0.15;
 const HISTORICAL_BOOTSTRAP_POLLS = 3;
 const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
@@ -56,7 +60,6 @@ const ALTITUDE_OUTLIER_BASE_METERS = 1_200;
 const ALTITUDE_OUTLIER_SCALE = 3;
 const ALTITUDE_SMOOTHING_ALPHA_TRUSTED = 0.9;
 const ALTITUDE_SMOOTHING_ALPHA_GUARDED = 0.5;
-const RESUME_GAP_MS = 20_000;
 const MAX_REASONABLE_SPEED_MPS = 350;
 
 function median(values: number[]): number {
@@ -66,6 +69,78 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0
     ? (sorted[middle - 1] + sorted[middle]) / 2
     : sorted[middle];
+}
+
+function getFlightSpeedMps(flight: FlightState): number {
+  return flight.velocity != null &&
+    Number.isFinite(flight.velocity) &&
+    flight.velocity > 0
+    ? flight.velocity
+    : MAX_REASONABLE_SPEED_MPS;
+}
+
+function getPointIntervalMs(now: number, liveTrail: TrailPoint[]): number {
+  const lastTimestamp = liveTrail[liveTrail.length - 1]?.timestamp ?? now;
+  return Math.max(1_000, now - lastTimestamp);
+}
+
+function getDynamicMoveThresholdDeg(params: {
+  speedMps: number;
+  intervalMs: number;
+  baseThresholdDeg: number;
+  safetyMultiplier: number;
+}): number {
+  const intervalSec = Math.max(1, params.intervalMs / 1000);
+  const expectedMoveDeg =
+    (params.speedMps * intervalSec * params.safetyMultiplier) / 111_320;
+
+  return Math.max(params.baseThresholdDeg, expectedMoveDeg);
+}
+
+function normalizeHeadingDeltaDeg(left: number, right: number): number {
+  let delta = Math.abs(left - right);
+  if (delta > 180) {
+    delta = 360 - delta;
+  }
+  return delta;
+}
+
+function getImpliedHeadingDeg(from: Position, to: Position): number {
+  return (
+    ((Math.atan2(to[0] - from[0], to[1] - from[1]) * 180) / Math.PI + 360) % 360
+  );
+}
+
+function getRecentTurnDeltaDeg(
+  liveTrail: TrailPoint[],
+  nextPoint: TrailPoint,
+): number {
+  if (liveTrail.length < 2) {
+    return 0;
+  }
+
+  const previous = liveTrail[liveTrail.length - 2].position;
+  const current = liveTrail[liveTrail.length - 1].position;
+  const before = getImpliedHeadingDeg(previous, current);
+  const after = getImpliedHeadingDeg(current, nextPoint.position);
+  return normalizeHeadingDeltaDeg(before, after);
+}
+
+function trimLiveTrailWindow(
+  liveTrail: TrailPoint[],
+  now: number,
+  selected: boolean,
+): void {
+  const maxPoints = selected ? MAX_SELECTED_LIVE_POINTS : MAX_LIVE_POINTS;
+  const maxAgeMs = selected ? MAX_SELECTED_LIVE_AGE_MS : MAX_LIVE_AGE_MS;
+
+  while (liveTrail.length > maxPoints) {
+    liveTrail.shift();
+  }
+
+  while (liveTrail.length > 2 && now - liveTrail[0].timestamp > maxAgeMs) {
+    liveTrail.shift();
+  }
 }
 
 function synthesizeHistoricalPolls(flight: FlightState): Position[] {
@@ -210,7 +285,6 @@ export function createTrailStore() {
   const envelopes = new Map<string, TrailEnvelope>();
   let seen = new Set<string>();
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
-  let lastUpdateTime = 0;
   let liveOrder: string[] = [];
   const history = createHistoryState();
   let selectedTrack: FlightTrack | null = null;
@@ -343,11 +417,6 @@ export function createTrailStore() {
       return;
     }
 
-    const elapsed = lastUpdateTime > 0 ? now - lastUpdateTime : 0;
-    const isResuming = elapsed > RESUME_GAP_MS;
-    const elapsedSec = elapsed / 1000;
-    lastUpdateTime = now;
-
     const current = new Set<string>();
     let processedFlightCount = 0;
     liveOrder = [];
@@ -366,6 +435,7 @@ export function createTrailStore() {
       const id = flight.icao24;
       current.add(id);
       liveOrder.push(id);
+      const speedMps = getFlightSpeedMps(flight);
 
       let trail = trails.get(id);
       const isNewEntry = !trail;
@@ -418,85 +488,100 @@ export function createTrailStore() {
         const dy = point.position[1] - last[1];
         const distSq = dx * dx + dy * dy;
 
-        const outlierThresholdDeg = 0.035;
-        if (
-          liveTrail.length >= 2 &&
-          distSq > outlierThresholdDeg * outlierThresholdDeg
-        ) {
-          const secondLast = liveTrail[liveTrail.length - 2].position;
-          const dx2 = last[0] - secondLast[0];
-          const dy2 = last[1] - secondLast[1];
-          const prevDistSq = dx2 * dx2 + dy2 * dy2;
-          if (prevDistSq < outlierThresholdDeg * outlierThresholdDeg) {
-            continue;
-          }
-        }
+        const pointIntervalMs = getPointIntervalMs(now, liveTrail);
+        const sparseInterval = pointIntervalMs >= SPARSE_INTERVAL_MS;
+        const recentTurnDeltaDeg = getRecentTurnDeltaDeg(liveTrail, point);
+        const jumpThresholdDeg = getDynamicMoveThresholdDeg({
+          speedMps,
+          intervalMs: pointIntervalMs,
+          baseThresholdDeg: JUMP_THRESHOLD_DEG,
+          safetyMultiplier: 2.0,
+        });
 
-        if (
-          liveTrail.length >= 1 &&
-          flight.trueTrack != null &&
-          Number.isFinite(flight.trueTrack) &&
-          distSq > 1e-10
-        ) {
-          const impliedHeading =
-            ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-          let headingDelta = Math.abs(impliedHeading - flight.trueTrack);
-          if (headingDelta > 180) headingDelta = 360 - headingDelta;
+        if (distSq > jumpThresholdDeg * jumpThresholdDeg) {
+          liveTrail.length = 0;
+          altitudeStates.delete(id);
+        } else {
+          const outlierThresholdDeg = getDynamicMoveThresholdDeg({
+            speedMps,
+            intervalMs: pointIntervalMs,
+            baseThresholdDeg: 0.035,
+            safetyMultiplier: 1.6,
+          });
 
-          const speed =
-            flight.velocity != null &&
-            Number.isFinite(flight.velocity) &&
-            flight.velocity > 0
-              ? flight.velocity
-              : 100;
-          const headingThreshold = speed < 50 ? 110 : speed < 100 ? 90 : 70;
-          if (headingDelta > headingThreshold) {
-            continue;
-          }
-        }
+          if (
+            liveTrail.length >= 2 &&
+            distSq > outlierThresholdDeg * outlierThresholdDeg
+          ) {
+            const secondLast = liveTrail[liveTrail.length - 2].position;
+            const dx2 = last[0] - secondLast[0];
+            const dy2 = last[1] - secondLast[1];
+            const prevDistSq = dx2 * dx2 + dy2 * dy2;
 
-        if (liveTrail.length >= 2) {
-          const prev = liveTrail[liveTrail.length - 2].position;
-          const sdx1 = last[0] - prev[0];
-          const sdy1 = last[1] - prev[1];
-          const slen1 = Math.sqrt(sdx1 * sdx1 + sdy1 * sdy1);
-          const slen2 = Math.sqrt(dx * dx + dy * dy);
-
-          if (slen1 > 1e-8 && slen2 > 1e-8) {
-            const cosine = (sdx1 * dx + sdy1 * dy) / (slen1 * slen2);
-            if (cosine < -0.3) {
+            if (prevDistSq < outlierThresholdDeg * outlierThresholdDeg) {
               continue;
             }
-            if (cosine < 0.1) {
-              const ratio = Math.max(slen1, slen2) / Math.min(slen1, slen2);
-              if (ratio > 3.5) {
+          }
+
+          if (
+            liveTrail.length >= 1 &&
+            flight.trueTrack != null &&
+            Number.isFinite(flight.trueTrack) &&
+            distSq > 1e-10
+          ) {
+            const impliedHeading = getImpliedHeadingDeg(last, point.position);
+            const headingDelta = normalizeHeadingDeltaDeg(
+              impliedHeading,
+              flight.trueTrack,
+            );
+
+            const speed =
+              flight.velocity != null &&
+              Number.isFinite(flight.velocity) &&
+              flight.velocity > 0
+                ? flight.velocity
+                : 100;
+            const baseHeadingThreshold =
+              speed < 50 ? 110 : speed < 100 ? 90 : 70;
+            const headingThreshold =
+              sparseInterval || recentTurnDeltaDeg > 55
+                ? Math.max(baseHeadingThreshold, 140)
+                : baseHeadingThreshold;
+            if (headingDelta > headingThreshold) {
+              continue;
+            }
+          }
+
+          if (liveTrail.length >= 2) {
+            const prev = liveTrail[liveTrail.length - 2].position;
+            const sdx1 = last[0] - prev[0];
+            const sdy1 = last[1] - prev[1];
+            const slen1 = Math.sqrt(sdx1 * sdx1 + sdy1 * sdy1);
+            const slen2 = Math.sqrt(dx * dx + dy * dy);
+
+            if (slen1 > 1e-8 && slen2 > 1e-8) {
+              const cosine = (sdx1 * dx + sdy1 * dy) / (slen1 * slen2);
+              const allowSharpTurn = sparseInterval || recentTurnDeltaDeg > 70;
+
+              if (cosine < (allowSharpTurn ? -0.9 : -0.3)) {
                 continue;
+              }
+              if (cosine < 0.1) {
+                const ratio = Math.max(slen1, slen2) / Math.min(slen1, slen2);
+                if (ratio > (allowSharpTurn ? 8 : 3.5)) {
+                  continue;
+                }
               }
             }
           }
         }
 
-        let effectiveThreshold = JUMP_THRESHOLD_DEG;
-        if (isResuming) {
-          const speed =
-            flight.velocity != null &&
-            Number.isFinite(flight.velocity) &&
-            flight.velocity > 0
-              ? flight.velocity
-              : MAX_REASONABLE_SPEED_MPS;
-          const maxLegitMoveDeg = (speed * elapsedSec * 1.5) / 111_320;
-          effectiveThreshold = Math.max(JUMP_THRESHOLD_DEG, maxLegitMoveDeg);
-        }
-
-        if (distSq > effectiveThreshold * effectiveThreshold) {
-          liveTrail.length = 0;
-          altitudeStates.delete(id);
-        }
-
         liveTrail.push(point);
-        if (liveTrail.length > MAX_POINTS) {
-          liveTrail.splice(0, liveTrail.length - MAX_POINTS);
-        }
+        trimLiveTrailWindow(
+          liveTrail,
+          now,
+          id.trim().toLowerCase() === history.selectedIcao24,
+        );
       }
 
       const envelope = getOrCreateEnvelope(id);

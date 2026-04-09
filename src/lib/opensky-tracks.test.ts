@@ -1,27 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  createOpenSkyCooldownMs,
-  parseOpenSkyTrack,
-  preferNextProvider,
-} from "./server-trace-service";
+import { parseFlightTrack } from "./opensky-tracks";
 
-test("OpenSky cooldown prefers documented retry-after header values", () => {
-  assert.equal(createOpenSkyCooldownMs({ retryAfterHeader: "75" }), 75_000);
-  assert.equal(createOpenSkyCooldownMs({ retryAfterHeader: null }), 60_000);
-});
-
-test("preferred provider only changes after a successful fallback", () => {
-  assert.equal(preferNextProvider("adsb-fi", "adsb-fi"), "adsb-fi");
-  assert.equal(
-    preferNextProvider("adsb-fi", "airplanes-live"),
-    "airplanes-live",
-  );
-});
-
-test("parseOpenSkyTrack keeps only the latest departure leg plus short runway roll", () => {
-  const track = parseOpenSkyTrack("3c66b0", {
+test("parseFlightTrack trims OpenSky responses to the latest plausible departure leg", () => {
+  const track = parseFlightTrack("3c66b0", {
     startTime: 1_000,
     endTime: 1_660,
     path: [
@@ -47,8 +30,8 @@ test("parseOpenSkyTrack keeps only the latest departure leg plus short runway ro
   assert.equal(track?.endTime, 1_660);
 });
 
-test("parseOpenSkyTrack drops impossible cross-country jumps from older branches", () => {
-  const track = parseOpenSkyTrack("800001", {
+test("parseFlightTrack drops implausible older jumps from OpenSky responses", () => {
+  const track = parseFlightTrack("800001", {
     startTime: 20_000,
     endTime: 20_120,
     path: [

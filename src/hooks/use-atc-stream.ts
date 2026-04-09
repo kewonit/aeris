@@ -76,7 +76,7 @@ export function useAtcStream(): UseAtcStreamReturn {
   const [status, setStatus] = useState<AtcStreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [usingProxy, setUsingProxy] = useState(false);
-  const [volume, setVolumeState] = useState(DEFAULT_VOLUME);
+  const [volume, setVolumeState] = useState(loadVolume);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(
     null,
   );
@@ -85,49 +85,15 @@ export function useAtcStream(): UseAtcStreamReturn {
   const feedRef = useRef<AtcFeed | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const tabIdRef = useRef<string>("");
+  const tabIdRef = useRef<string>(createTabId());
   const broadcastRef = useRef<BroadcastChannel | null>(null);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const proxyAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
-
-  // Initialize volume from localStorage
-  useEffect(() => {
-    setVolumeState(loadVolume());
-    tabIdRef.current = createTabId();
-  }, []);
-
-  // ── BroadcastChannel setup ─────────────────────────────────────────
-
-  useEffect(() => {
-    if (typeof BroadcastChannel === "undefined") return;
-
-    const bc = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-    broadcastRef.current = bc;
-
-    bc.onmessage = (event: MessageEvent<BroadcastMessage>) => {
-      const msg = event.data;
-      if (!msg || typeof msg !== "object" || !msg.type) return;
-
-      // Another tab started playing — stop our playback
-      if (
-        msg.type === "playing" &&
-        msg.tabId !== tabIdRef.current &&
-        audioRef.current
-      ) {
-        cleanupAudio();
-        setFeed(null);
-        feedRef.current = null;
-        setStatus("idle");
-        setError(null);
-      }
-    };
-
-    return () => {
-      bc.close();
-      broadcastRef.current = null;
-    };
-  }, []);
+  const stopRef = useRef<() => void>(() => {});
+  const startPlaybackRef = useRef<
+    (targetFeed: AtcFeed, useProxy?: boolean, isReconnect?: boolean) => void
+  >(() => {});
 
   // ── Cleanup helper ─────────────────────────────────────────────────
 
@@ -154,6 +120,60 @@ export function useAtcStream(): UseAtcStreamReturn {
     proxyAttemptedRef.current = false;
   }, []);
 
+  const clearPlaybackState = useCallback(
+    (broadcastStop: boolean) => {
+      stoppedManuallyRef.current = true;
+      cleanupAudio();
+      setFeed(null);
+      feedRef.current = null;
+      setStatus("idle");
+      setError(null);
+      setUsingProxy(false);
+
+      if (!broadcastStop) {
+        return;
+      }
+
+      try {
+        broadcastRef.current?.postMessage({
+          type: "stopped",
+          tabId: tabIdRef.current,
+        } satisfies BroadcastMessage);
+      } catch {
+        // BroadcastChannel may be closed
+      }
+    },
+    [cleanupAudio],
+  );
+
+  // ── BroadcastChannel setup ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+
+    const bc = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+    broadcastRef.current = bc;
+
+    bc.onmessage = (event: MessageEvent<BroadcastMessage>) => {
+      const msg = event.data;
+      if (!msg || typeof msg !== "object" || !msg.type) return;
+
+      // Another tab started playing — stop our playback
+      if (
+        msg.type === "playing" &&
+        msg.tabId !== tabIdRef.current &&
+        audioRef.current
+      ) {
+        clearPlaybackState(false);
+      }
+    };
+
+    return () => {
+      bc.close();
+      broadcastRef.current = null;
+    };
+  }, [clearPlaybackState]);
+
   // ── Media Session API ──────────────────────────────────────────────
 
   const updateMediaSession = useCallback(
@@ -175,11 +195,11 @@ export function useAtcStream(): UseAtcStreamReturn {
       navigator.mediaSession.playbackState = "playing";
 
       navigator.mediaSession.setActionHandler("pause", () => {
-        stop();
+        stopRef.current();
       });
 
       navigator.mediaSession.setActionHandler("stop", () => {
-        stop();
+        stopRef.current();
       });
 
       // No seek/track actions for live streams
@@ -189,12 +209,12 @@ export function useAtcStream(): UseAtcStreamReturn {
       navigator.mediaSession.setActionHandler("previoustrack", null);
       navigator.mediaSession.setActionHandler("nexttrack", null);
     },
-    [], // stop is stable due to useCallback
+    [],
   );
 
   // ── Reconnection logic ────────────────────────────────────────────
 
-  const scheduleReconnect = useCallback(
+  const scheduleReconnectAttempt = useCallback(
     (targetFeed: AtcFeed, useProxy: boolean) => {
       if (stoppedManuallyRef.current) return;
 
@@ -214,7 +234,7 @@ export function useAtcStream(): UseAtcStreamReturn {
       // Don't flash status — keep the error visible while we wait
       reconnectTimerRef.current = setTimeout(() => {
         if (feedRef.current?.id !== targetFeed.id) return;
-        startPlayback(targetFeed, useProxy, true);
+        startPlaybackRef.current(targetFeed, useProxy, true);
       }, delay);
     },
     [],
@@ -306,7 +326,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         if (!useProxy && !proxyAttemptedRef.current) {
           proxyAttemptedRef.current = true;
           setError("Direct stream blocked. Trying proxy...");
-          startPlayback(targetFeed, true);
+          startPlaybackRef.current(targetFeed, true);
           return;
         }
 
@@ -321,7 +341,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         }
 
         // Try to reconnect (silently, up to MAX_RECONNECT_ATTEMPTS)
-        scheduleReconnect(targetFeed, useProxy);
+        scheduleReconnectAttempt(targetFeed, useProxy);
       });
 
       audio.addEventListener("stalled", () => {
@@ -338,7 +358,7 @@ export function useAtcStream(): UseAtcStreamReturn {
       audio.addEventListener("ended", () => {
         if (audioRef.current !== audio) return;
         // Live streams shouldn't end, but if they do, reconnect
-        scheduleReconnect(targetFeed, useProxy);
+        scheduleReconnectAttempt(targetFeed, useProxy);
       });
 
       // Start playback — requires user gesture (handled by UI click)
@@ -349,7 +369,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         setError("Tap to listen — browser requires interaction.");
       });
     },
-    [cleanupAudio, updateMediaSession, scheduleReconnect],
+    [cleanupAudio, scheduleReconnectAttempt, updateMediaSession],
   );
 
   // ── Public API ────────────────────────────────────────────────────
@@ -366,25 +386,17 @@ export function useAtcStream(): UseAtcStreamReturn {
   );
 
   const stop = useCallback(() => {
-    stoppedManuallyRef.current = true;
-    cleanupAudio();
-    setFeed(null);
-    feedRef.current = null;
-    setStatus("idle");
-    setError(null);
-    setUsingProxy(false);
+    clearPlaybackState(true);
     updateMediaSession(null, false);
+  }, [clearPlaybackState, updateMediaSession]);
 
-    // Notify other tabs
-    try {
-      broadcastRef.current?.postMessage({
-        type: "stopped",
-        tabId: tabIdRef.current,
-      } satisfies BroadcastMessage);
-    } catch {
-      // BroadcastChannel may be closed
-    }
-  }, [cleanupAudio, updateMediaSession]);
+  useEffect(() => {
+    startPlaybackRef.current = startPlayback;
+  }, [startPlayback]);
+
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));

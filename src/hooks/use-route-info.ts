@@ -64,7 +64,7 @@ export function useRouteInfo(
   track?: FlightTrack | null,
 ): FlightRouteInfo {
   const [apiRoute, setApiRoute] = useState<RouteInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [apiRouteCallsign, setApiRouteCallsign] = useState<string | null>(null);
   const lastCallsignRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -73,10 +73,8 @@ export function useRouteInfo(
 
   // Fetch route from API when callsign changes
   useEffect(() => {
-    // No flight or no callsign → reset
     if (!callsign) {
-      setApiRoute(null);
-      setLoading(false);
+      abortRef.current?.abort();
       lastCallsignRef.current = null;
       return;
     }
@@ -90,19 +88,17 @@ export function useRouteInfo(
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
-
     lookupRoute(callsign, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) {
           setApiRoute(result);
-          setLoading(false);
+          setApiRouteCallsign(callsign);
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setApiRoute(null);
-          setLoading(false);
+          setApiRouteCallsign(callsign);
         }
       });
 
@@ -112,7 +108,15 @@ export function useRouteInfo(
   }, [callsign]);
 
   // Build the composite route info
-  return buildRouteInfo(flight, apiRoute, loading, track ?? null);
+  const currentApiRoute =
+    callsign && apiRouteCallsign === callsign ? apiRoute : null;
+
+  return buildRouteInfo(
+    flight,
+    currentApiRoute,
+    Boolean(callsign) && apiRouteCallsign !== callsign,
+    track ?? null,
+  );
 }
 
 // ── Composite Builder ──────────────────────────────────────────────────

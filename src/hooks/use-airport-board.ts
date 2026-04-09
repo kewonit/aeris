@@ -1,15 +1,12 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { FlightState } from "@/lib/opensky";
 import type { Airport } from "@/lib/airports";
-import { AIRPORTS, findByIata } from "@/lib/airports";
+import { findByIata } from "@/lib/airports";
 import { formatCallsign, metersToFeet, msToKnots } from "@/lib/flight-utils";
 
 // ── Constants ──────────────────────────────────────────────────────────
-
-/** Minimum map zoom to activate the board (close enough to see an airport). */
-const BOARD_MIN_ZOOM = 9.5;
 
 /** Maximum distance (nautical miles) from airport to include a flight. */
 const BOARD_RADIUS_NM = 35;
@@ -25,9 +22,6 @@ const LOW_ALTITUDE_M = 3048; // ~10,000 ft
 
 /** Maximum flights to show per column. */
 const MAX_PER_COLUMN = 20;
-
-/** Maximum distance (degrees) to search for nearest airport to map center. */
-const NEAREST_AIRPORT_SEARCH_DEG = 1.5;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -113,61 +107,6 @@ function bearingFromTo(
 function angleDiff(a: number, b: number): number {
   const d = Math.abs(((a - b + 540) % 360) - 180);
   return d;
-}
-
-// ── Nearest airport finder (optimized for viewport) ────────────────────
-
-/**
- * Pre-built spatial index: bucket airports by 1° grid cells.
- * Lazy-initialized on first call.
- */
-let _airportGrid: Map<string, Airport[]> | null = null;
-
-function getAirportGrid(): Map<string, Airport[]> {
-  if (_airportGrid) return _airportGrid;
-  _airportGrid = new Map();
-  for (const a of AIRPORTS) {
-    const key = `${Math.floor(a.lat)}:${Math.floor(a.lng)}`;
-    const bucket = _airportGrid.get(key);
-    if (bucket) bucket.push(a);
-    else _airportGrid.set(key, [a]);
-  }
-  return _airportGrid;
-}
-
-/**
- * Find the nearest airport to a given coordinate within `maxDeg` degrees.
- * Uses grid-based spatial lookup to avoid scanning all 72K airports.
- */
-function findNearestAirport(
-  lat: number,
-  lng: number,
-  maxDeg: number = NEAREST_AIRPORT_SEARCH_DEG,
-): Airport | null {
-  const grid = getAirportGrid();
-  const minLat = Math.floor(lat - maxDeg);
-  const maxLat = Math.floor(lat + maxDeg);
-  const minLng = Math.floor(lng - maxDeg);
-  const maxLng = Math.floor(lng + maxDeg);
-
-  let best: Airport | null = null;
-  let bestDist = Infinity;
-
-  for (let gLat = minLat; gLat <= maxLat; gLat++) {
-    for (let gLng = minLng; gLng <= maxLng; gLng++) {
-      const bucket = grid.get(`${gLat}:${gLng}`);
-      if (!bucket) continue;
-      for (const a of bucket) {
-        const d = distanceNm(lat, lng, a.lat, a.lng);
-        if (d < bestDist) {
-          bestDist = d;
-          best = a;
-        }
-      }
-    }
-  }
-
-  return best;
 }
 
 // ── Classification logic ───────────────────────────────────────────────
@@ -359,11 +298,6 @@ export function useAirportBoard(
   /** When set, the board opens for this specific airport (user clicked the dot). */
   selectedAirportIata: string | null = null,
 ): AirportBoardData {
-  const prevAirportRef = useRef<Airport | null>(null);
-  /** Tracks the previous order of icao24 IDs to keep sort stable across updates. */
-  const prevArrivalOrderRef = useRef<string[]>([]);
-  const prevDepartureOrderRef = useRef<string[]>([]);
-
   return useMemo(() => {
     const inactive: AirportBoardData = {
       arrivals: [],
@@ -376,18 +310,13 @@ export function useAirportBoard(
 
     // Only show the board when user explicitly selected an airport
     if (!selectedAirportIata) {
-      prevArrivalOrderRef.current = [];
-      prevDepartureOrderRef.current = [];
       return inactive;
     }
 
     // Find the selected airport
-    let airport: Airport | null = findByIata(selectedAirportIata) ?? null;
+    const airport: Airport | null = findByIata(selectedAirportIata) ?? null;
 
     if (!airport) return inactive;
-
-    // Cache airport to avoid flicker
-    prevAirportRef.current = airport;
 
     const arrivals: BoardFlight[] = [];
     const departures: BoardFlight[] = [];
@@ -399,8 +328,10 @@ export function useAirportBoard(
       // Skip on-ground flights
       if (f.onGround) continue;
 
-      const { direction, dist, brng, bearingToAirport, bDiff, status } =
-        classifyFlight(f, airport);
+      const { direction, dist, brng, bDiff, status } = classifyFlight(
+        f,
+        airport,
+      );
 
       // Skip flights too far away
       if (dist > BOARD_RADIUS_NM) continue;
@@ -430,61 +361,22 @@ export function useAirportBoard(
       else overflights.push(boardFlight);
     }
 
-    // ── Stable sort: preserve previous order, only insert new flights by distance ──
-    // This prevents constant re-ordering when distances change slightly between polls.
-    const stableSort = (
-      list: BoardFlight[],
-      prevOrder: string[],
-    ): BoardFlight[] => {
-      const byId = new Map(list.map((f) => [f.icao24, f]));
-      const result: BoardFlight[] = [];
-      const seen = new Set<string>();
-
-      // 1. Keep previously ordered flights in the same order (if still present)
-      for (const id of prevOrder) {
-        const f = byId.get(id);
-        if (f) {
-          result.push(f);
-          seen.add(id);
-        }
+    const compareBoardFlights = (left: BoardFlight, right: BoardFlight) => {
+      if (left.distanceNm !== right.distanceNm) {
+        return left.distanceNm - right.distanceNm;
       }
 
-      // 2. Insert new flights sorted by distance into the list
-      const newFlights = list
-        .filter((f) => !seen.has(f.icao24))
-        .sort((a, b) => a.distanceNm - b.distanceNm);
-
-      for (const nf of newFlights) {
-        // Find insertion point: first existing flight that is farther away
-        let inserted = false;
-        for (let i = 0; i < result.length; i++) {
-          if (nf.distanceNm < result[i].distanceNm) {
-            result.splice(i, 0, nf);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) result.push(nf);
-      }
-
-      return result;
+      return left.icao24.localeCompare(right.icao24);
     };
 
-    const sortedArrivals = stableSort(arrivals, prevArrivalOrderRef.current);
-    const sortedDepartures = stableSort(
-      departures,
-      prevDepartureOrderRef.current,
-    );
+    const sortedArrivals = [...arrivals].sort(compareBoardFlights);
+    const sortedDepartures = [...departures].sort(compareBoardFlights);
 
     // Sort overflights normally (they're not displayed in the board)
-    overflights.sort((a, b) => a.distanceNm - b.distanceNm);
+    overflights.sort(compareBoardFlights);
 
     const slicedArrivals = sortedArrivals.slice(0, MAX_PER_COLUMN);
     const slicedDepartures = sortedDepartures.slice(0, MAX_PER_COLUMN);
-
-    // Update order refs for next render
-    prevArrivalOrderRef.current = slicedArrivals.map((f) => f.icao24);
-    prevDepartureOrderRef.current = slicedDepartures.map((f) => f.icao24);
 
     return {
       arrivals: slicedArrivals,

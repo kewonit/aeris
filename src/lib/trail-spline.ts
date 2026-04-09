@@ -282,16 +282,23 @@ function catmullRomSplineCore(
     const maxDelta = Math.max(Math.abs(deltaIn), Math.abs(deltaOut));
 
     const STRAIGHT_THRESHOLD = (3 * Math.PI) / 180;
-    const CURVE_THRESHOLD = (15 * Math.PI) / 180;
+    const CURVE_THRESHOLD = (12 * Math.PI) / 180;
+    const MAX_TENSION = 0.85;
+    // Quadratic ease-out: moderate turns get full spline curvature faster
+    // while truly straight segments still get enough linear stability.
+    const t_norm =
+      maxDelta <= STRAIGHT_THRESHOLD
+        ? 0.0
+        : maxDelta >= CURVE_THRESHOLD
+          ? 1.0
+          : (maxDelta - STRAIGHT_THRESHOLD) /
+            (CURVE_THRESHOLD - STRAIGHT_THRESHOLD);
     const tension =
       maxDelta <= STRAIGHT_THRESHOLD
-        ? 0.92
+        ? MAX_TENSION
         : maxDelta >= CURVE_THRESHOLD
           ? 0.0
-          : 0.92 *
-            (1.0 -
-              (maxDelta - STRAIGHT_THRESHOLD) /
-                (CURVE_THRESHOLD - STRAIGHT_THRESHOLD));
+          : MAX_TENSION * (1.0 - t_norm) * (1.0 - t_norm);
 
     result.push(P1);
 

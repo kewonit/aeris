@@ -264,6 +264,44 @@ function downsamplePreservingCurves(
   return best;
 }
 
+export function normalizeTrackWaypoints(
+  waypoints: TrackWaypoint[],
+): TrackWaypoint[] {
+  if (waypoints.length < 2) {
+    return [];
+  }
+
+  const sortedWaypoints = waypoints
+    .slice()
+    .sort((left, right) => left.time - right.time);
+  const legTrimmed = trimToLastFlight(sortedWaypoints);
+  if (legTrimmed.length < 2) {
+    return [];
+  }
+
+  const deduped: TrackWaypoint[] = [legTrimmed[0]];
+
+  for (let index = 1; index < legTrimmed.length; index += 1) {
+    const previous = deduped[deduped.length - 1];
+    const current = legTrimmed[index];
+    const dLat = (current.latitude ?? 0) - (previous.latitude ?? 0);
+    const dLng = (current.longitude ?? 0) - (previous.longitude ?? 0);
+    if (dLat * dLat + dLng * dLng < 0.0003 * 0.0003) {
+      if (current.baroAltitude != null && previous.baroAltitude == null) {
+        deduped[deduped.length - 1] = current;
+      }
+      continue;
+    }
+    deduped.push(current);
+  }
+
+  if (deduped.length < 2) {
+    return [];
+  }
+
+  return downsamplePreservingCurves(deduped, TARGET_WAYPOINTS);
+}
+
 export function parseReadsbTrace(
   hex: string,
   data: unknown,
@@ -391,29 +429,10 @@ export function parseReadsbTrace(
     return null;
   }
 
-  waypoints.sort((left, right) => left.time - right.time);
-  const legTrimmed = trimToLastFlight(waypoints);
-  const deduped: TrackWaypoint[] = [legTrimmed[0]];
-
-  for (let index = 1; index < legTrimmed.length; index += 1) {
-    const previous = deduped[deduped.length - 1];
-    const current = legTrimmed[index];
-    const dLat = (current.latitude ?? 0) - (previous.latitude ?? 0);
-    const dLng = (current.longitude ?? 0) - (previous.longitude ?? 0);
-    if (dLat * dLat + dLng * dLng < 0.0003 * 0.0003) {
-      if (current.baroAltitude != null && previous.baroAltitude == null) {
-        deduped[deduped.length - 1] = current;
-      }
-      continue;
-    }
-    deduped.push(current);
-  }
-
-  if (deduped.length < 2) {
+  const sampled = normalizeTrackWaypoints(waypoints);
+  if (sampled.length < 2) {
     return null;
   }
-
-  const sampled = downsamplePreservingCurves(deduped, TARGET_WAYPOINTS);
 
   return {
     icao24: hex.trim().toLowerCase(),

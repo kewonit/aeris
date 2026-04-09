@@ -549,6 +549,60 @@ test("buildTrailLayers clips live trail overshoot so the rendered body stays beh
   assert.ok(maxBodyLongitude < flight.longitude!);
 });
 
+test("buildTrailLayers omits a connector when the trail tail is implausibly far behind the aircraft", () => {
+  const aircraft = {
+    icao24: "gap01",
+    longitude: 73.6,
+    latitude: 19.8,
+    baroAltitude: 18_000,
+    trueTrack: 70,
+    velocity: 240,
+  } as FlightState;
+
+  const trail: TrailEntry = {
+    icao24: "gap01",
+    path: [
+      [72.88, 19.08],
+      [72.9, 19.09],
+      [72.92, 19.1],
+    ],
+    altitudes: [17_200, 17_350, 17_500],
+    timestamps: [1_000, 11_000, 21_000],
+    baroAltitude: 17_500,
+  };
+
+  const layers = buildTrailLayers({
+    interpolated: [aircraft],
+    interpolatedMap: new Map([[aircraft.icao24, aircraft]]),
+    currentTrails: [trail],
+    trailMap: new Map([[trail.icao24, trail]]),
+    trailDistance: 80,
+    trailThickness: 2,
+    altColors: true,
+    altitudeDisplayMode: "presentation",
+    defaultColor: DEFAULT_COLOR,
+    elapsed: 0,
+    visualFrame: 0,
+    globeFade: 1,
+    currentZoom: 9,
+    elevScale: 1,
+    trailBasePathCache: new Map(),
+    trailPathCache: new Map(),
+    trailColorCache: new Map(),
+    handledIdsSet: new Set(),
+    visibleTrailCacheMap: new Map(),
+    activeIcaosSet: new Set(),
+  });
+
+  const connectorSegments = (
+    layers[1] as unknown as {
+      props: { data: Array<{ path: [number, number, number][] }> };
+    }
+  ).props.data;
+
+  assert.equal(connectorSegments.length, 0);
+});
+
 test("buildTrailLayers uses segmented selected geometry for the selected aircraft overlap body", () => {
   const liveTail = makeRecentArcSamples();
   const activeTrail: TrailEntry = {

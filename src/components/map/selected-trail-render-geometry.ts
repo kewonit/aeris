@@ -1,4 +1,5 @@
 import type { TrailEnvelope, TrailSnapshot } from "@/lib/trails/types";
+import { mergeSegments } from "@/lib/trails/geometry/merge-segments";
 
 import type { ElevatedPoint } from "./flight-layer-constants";
 import { buildTrailDisplayGeometry } from "./trail-display-geometry";
@@ -27,8 +28,12 @@ function toTrailEntryFromSnapshots(
   };
 }
 
-function flattenHistorySegments(envelope: TrailEnvelope): TrailSnapshot[] {
-  return envelope.historySegments.flatMap((segment) => segment.samples);
+function toElevatedPoints(samples: TrailSnapshot[]): ElevatedPoint[] {
+  return samples.map((sample) => [
+    sample.lng,
+    sample.lat,
+    Number.isFinite(sample.altitude) ? Math.max(0, sample.altitude ?? 0) : 0,
+  ]);
 }
 
 function dedupeJoin(points: ElevatedPoint[]): ElevatedPoint[] {
@@ -61,32 +66,49 @@ export function buildSelectedTrailRenderGeometry(
   envelope: TrailEnvelope,
   trailDistance: number,
 ): SelectedTrailRenderGeometry {
-  const historySamples = flattenHistorySegments(envelope);
+  const merged = mergeSegments({
+    liveTail: envelope.liveTail,
+    historySegments: envelope.historySegments,
+    referenceAltitude:
+      envelope.liveTail[envelope.liveTail.length - 1]?.altitude ?? null,
+  });
+
   const historicalBody =
-    historySamples.length >= 2
+    merged.historyBody.length >= 2
       ? buildTrailDisplayGeometry(
-          toTrailEntryFromSnapshots(envelope.icao24, historySamples, true),
-          historySamples.length,
+          toTrailEntryFromSnapshots(envelope.icao24, merged.historyBody, true),
+          merged.historyBody.length,
         ).allPoints
-      : [];
+      : toElevatedPoints(merged.historyBody);
+
+  const bridgeBody = toElevatedPoints(merged.bridge);
 
   const liveGeometry =
-    envelope.liveTail.length >= 2
+    merged.liveContinuation.length >= 2
       ? buildTrailDisplayGeometry(
-          toTrailEntryFromSnapshots(envelope.icao24, envelope.liveTail, false),
+          toTrailEntryFromSnapshots(
+            envelope.icao24,
+            merged.liveContinuation,
+            false,
+          ),
           trailDistance,
         )
-      : { sealedBody: [], previewHead: [], allPoints: [] };
+      : {
+          sealedBody: toElevatedPoints(merged.liveContinuation),
+          previewHead: [],
+          allPoints: toElevatedPoints(merged.liveContinuation),
+        };
 
   const allBodyPoints = dedupeJoin([
     ...historicalBody,
+    ...bridgeBody,
     ...liveGeometry.sealedBody,
   ]);
   const allPoints = dedupeJoin([...allBodyPoints, ...liveGeometry.previewHead]);
 
   return {
     historicalBody,
-    bridgeBody: [],
+    bridgeBody,
     liveContinuationBody: liveGeometry.sealedBody,
     previewHead: liveGeometry.previewHead,
     allBodyPoints,

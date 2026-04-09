@@ -28,6 +28,38 @@ function maxHeadingDeltaDeg(points: [number, number, number][]): number {
   return maxDelta;
 }
 
+function planarBounds(points: [number, number, number][]) {
+  return {
+    width:
+      Math.max(...points.map((point) => point[0])) -
+      Math.min(...points.map((point) => point[0])),
+    height:
+      Math.max(...points.map((point) => point[1])) -
+      Math.min(...points.map((point) => point[1])),
+  };
+}
+
+function makeSparseHoldTrail(fullHistory: boolean) {
+  const path: [number, number][] = [
+    [72.98, 19.18],
+    [73.05, 19.08],
+    [73.0, 18.92],
+    [72.89, 19.0],
+    [72.93, 19.17],
+  ];
+  const altitudes = path.map((_, index) => 5_000 + index * 10);
+  const timestamps = path.map((_, index) => index * 60_000);
+
+  return {
+    icao24: fullHistory ? "hold-hist" : "hold-live",
+    path,
+    altitudes,
+    timestamps,
+    baroAltitude: altitudes[altitudes.length - 1],
+    fullHistory,
+  };
+}
+
 test("fullHistory base path is densified through the shared smoothing path", () => {
   const path: [number, number][] = [
     [-73.0, 40.0],
@@ -217,4 +249,20 @@ test("buildTrailBasePath shortens a sparse alternating zig-zag before display sm
   );
 
   assert.ok(maxHeadingDeltaDeg(basePath) < 12);
+});
+
+test("buildTrailBasePath preserves sparse hold footprint in active mode", () => {
+  const basePath = buildTrailBasePath(makeSparseHoldTrail(false), 80);
+  const bounds = planarBounds(basePath);
+
+  assert.ok(bounds.width > 0.12);
+  assert.ok(bounds.height > 0.18);
+});
+
+test("buildTrailBasePath preserves sparse hold footprint in full-history mode", () => {
+  const basePath = buildTrailBasePath(makeSparseHoldTrail(true), 80);
+  const bounds = planarBounds(basePath);
+
+  assert.ok(bounds.width > 0.12);
+  assert.ok(bounds.height > 0.18);
 });

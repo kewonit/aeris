@@ -6,9 +6,15 @@ import {
   removeSpikePoints,
   removeDistanceOutliers,
   catmullRomSpline3D,
+  roundSharpCorners3D,
 } from "@/lib/trail-smoothing";
 import type { ElevatedPoint } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
+import {
+  cleanupControlPointArtifacts,
+  getCurveFootprintMetrics,
+  hasPreservedTurnWindow,
+} from "./trail-curve-cleanup";
 import {
   trimAfterLargeJump,
   smoothAnimationAltitudes,
@@ -214,112 +220,47 @@ export function buildTrailBasePath(
         ? adaptiveDownsample(elevated, maxControlPoints)
         : elevated;
 
-    return catmullRomSpline3D(
+    const splined = catmullRomSpline3D(
       controlPoints,
       DISPLAY_SPLINE_MIN_POINTS,
       DISPLAY_SPLINE_MAX_POINTS,
     );
+
+    // Post-smooth: round any remaining sharp corners that the Catmull-Rom
+    // couldn't smooth from sparse control points (e.g. departure turns).
+    return roundSharpCorners3D(splined, 8);
   };
 
-  const removeSuspiciousDisplayCuts = (
-    elevated: ElevatedPoint[],
-  ): ElevatedPoint[] => {
-    if (elevated.length < 5) {
-      return elevated;
+  const preserveSparseTurnShape = (
+    path: [number, number][],
+    altitudes: Array<number | null>,
+    fallbackAlt: number,
+  ) => {
+    const sourcePoints = toElevatedPoints(path, altitudes, fallbackAlt);
+    const sourceHasTurnWindow = hasPreservedTurnWindow(sourcePoints);
+    const spikeResult = removeSpikePoints(path, altitudes);
+
+    if (!sourceHasTurnWindow) {
+      return spikeResult;
     }
 
-    const result = elevated.map(
-      (point) => [point[0], point[1], point[2]] as ElevatedPoint,
+    const spikePoints = toElevatedPoints(
+      spikeResult.path,
+      spikeResult.altitudes,
+      fallbackAlt,
     );
+    const sourceFootprint = getCurveFootprintMetrics(sourcePoints);
+    const spikeFootprint = getCurveFootprintMetrics(spikePoints);
 
-    for (let pass = 0; pass < 6; pass += 1) {
-      let bestIndex = -1;
-      let bestScore = Number.NEGATIVE_INFINITY;
-
-      for (let index = 1; index < result.length - 2; index += 1) {
-        const prev = result[index - 1];
-        const current = result[index];
-        const next = result[index + 1];
-        const following = result[index + 2];
-        const dx = following[0] - prev[0];
-        const dy = following[1] - prev[1];
-        const lenSq = dx * dx + dy * dy;
-
-        if (lenSq < 1e-12) {
-          continue;
-        }
-
-        const currentProjection =
-          ((current[0] - prev[0]) * dx + (current[1] - prev[1]) * dy) / lenSq;
-        const nextProjection =
-          ((next[0] - prev[0]) * dx + (next[1] - prev[1]) * dy) / lenSq;
-        const currentCross =
-          dx * (current[1] - prev[1]) - dy * (current[0] - prev[0]);
-        const nextCross = dx * (next[1] - prev[1]) - dy * (next[0] - prev[0]);
-        const direct = Math.sqrt(lenSq);
-        const len1 = Math.hypot(current[0] - prev[0], current[1] - prev[1]);
-        const len2 = Math.hypot(next[0] - current[0], next[1] - current[1]);
-        const len3 = Math.hypot(following[0] - next[0], following[1] - next[1]);
-        const detourRatio = (len1 + len2 + len3) / Math.max(direct, 1e-10);
-        const backtracks = nextProjection < currentProjection - 0.03;
-        const alternatingSides = currentCross * nextCross < 0;
-        const crossTrackRatio =
-          Math.max(Math.abs(currentCross), Math.abs(nextCross)) /
-          Math.max(direct, 1e-10);
-
-        const turn1 =
-          Math.atan2(next[1] - current[1], next[0] - current[0]) -
-          Math.atan2(current[1] - prev[1], current[0] - prev[0]);
-        const turn2 =
-          Math.atan2(following[1] - next[1], following[0] - next[0]) -
-          Math.atan2(next[1] - current[1], next[0] - current[0]);
-        const normalizeTurn = (value: number) => {
-          let nextValue = value;
-          if (nextValue > Math.PI) nextValue -= Math.PI * 2;
-          if (nextValue < -Math.PI) nextValue += Math.PI * 2;
-          return nextValue;
-        };
-        const normalizedTurn1 = normalizeTurn(turn1);
-        const normalizedTurn2 = normalizeTurn(turn2);
-        const alternatingSharpTurns =
-          normalizedTurn1 * normalizedTurn2 < 0 &&
-          Math.abs(normalizedTurn1) > (75 * Math.PI) / 180 &&
-          Math.abs(normalizedTurn2) > (75 * Math.PI) / 180;
-
-        if (alternatingSharpTurns && detourRatio > 1.22) {
-          const score =
-            detourRatio + Math.abs(normalizedTurn1) + Math.abs(normalizedTurn2);
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestIndex = index;
-          }
-
-          continue;
-        }
-
-        if (
-          backtracks &&
-          detourRatio > 1.12 &&
-          (alternatingSides || crossTrackRatio > 0.002)
-        ) {
-          const score = detourRatio + crossTrackRatio;
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestIndex = index;
-          }
-        }
-      }
-
-      if (bestIndex === -1) {
-        break;
-      }
-
-      result.splice(bestIndex, 2);
+    if (
+      !hasPreservedTurnWindow(spikePoints) ||
+      spikeResult.path.length < Math.max(3, Math.ceil(path.length / 2)) ||
+      spikeFootprint.maxSpan < sourceFootprint.maxSpan * 0.65
+    ) {
+      return { path, altitudes };
     }
 
-    return result;
+    return spikeResult;
   };
 
   if (isFullHistory) {
@@ -339,13 +280,14 @@ export function buildTrailBasePath(
       altitudeMeters,
       3.0,
     );
-    const historySpikeResult = removeSpikePoints(
+    const historySpikeResult = preserveSparseTurnShape(
       historyOutlierResult.path,
       historyOutlierResult.altitudes,
+      fallbackAlt,
     );
 
     return buildDisplaySpline(
-      removeSuspiciousDisplayCuts(
+      cleanupControlPointArtifacts(
         toElevatedPoints(
           historySpikeResult.path,
           historySpikeResult.altitudes,
@@ -357,25 +299,25 @@ export function buildTrailBasePath(
   }
 
   // Active trails: filter GPS glitches then spline for visual smoothness.
-  const outlierResult = removeDistanceOutliers(pathSlice, altitudeSlice, 3.0);
-  const spikeResult = removeSpikePoints(
-    outlierResult.path,
-    outlierResult.altitudes,
-  );
-
-  const smoothedPath = spikeResult.path;
-
   const activeFallbackAlt =
     trail.baroAltitude != null && Number.isFinite(trail.baroAltitude)
       ? trail.baroAltitude
       : 0;
+  const outlierResult = removeDistanceOutliers(pathSlice, altitudeSlice, 3.0);
+  const spikeResult = preserveSparseTurnShape(
+    outlierResult.path,
+    outlierResult.altitudes,
+    activeFallbackAlt,
+  );
+
+  const smoothedPath = spikeResult.path;
   const rawAltitudes = spikeResult.altitudes.map((a) =>
     a != null && Number.isFinite(a) ? a : activeFallbackAlt,
   );
   const altitudeMeters = smoothAnimationAltitudes(rawAltitudes, 3);
 
   return buildDisplaySpline(
-    removeSuspiciousDisplayCuts(
+    cleanupControlPointArtifacts(
       toElevatedPoints(smoothedPath, altitudeMeters, activeFallbackAlt),
     ),
   );

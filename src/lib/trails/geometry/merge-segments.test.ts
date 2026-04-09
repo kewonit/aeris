@@ -65,6 +65,16 @@ test("mergeSegments prefers the trailing history tail when history passes near t
     result.samples[result.samples.length - 2],
     historySample({ timestamp: 320, lng: 72.96, lat: 19.18 }),
   );
+  assert.deepEqual(
+    result.historyBody[result.historyBody.length - 1],
+    historySample({ timestamp: 320, lng: 72.96, lat: 19.18 }),
+  );
+  assert.deepEqual(result.liveContinuation[0], {
+    ...liveSample({ timestamp: 330, lng: 72.95, lat: 19.18 }),
+    lng: 72.96,
+    lat: 19.18,
+    altitude: 8_000,
+  });
 });
 
 test("mergeSegments degrades instead of snapping to an older interior branch when the real tail is stale and far away", () => {

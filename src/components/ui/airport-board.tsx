@@ -406,35 +406,17 @@ export function AirportBoard({
 }: AirportBoardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("arrivals");
-  const prevAirportRef = useRef(data.airport?.iata);
 
   const { arrivals, departures, airport, totalFlights } = data;
 
-  // Reset collapsed state when switching airports
-  useEffect(() => {
-    if (airport?.iata !== prevAirportRef.current) {
-      prevAirportRef.current = airport?.iata;
-      setCollapsed(false);
-      setActiveTab("arrivals");
-    }
-  }, [airport?.iata]);
-
-  // Smart tab management: auto-switch only when current tab empties
-  useEffect(() => {
-    if (
-      activeTab === "arrivals" &&
-      arrivals.length === 0 &&
-      departures.length > 0
-    ) {
-      setActiveTab("departures");
-    } else if (
-      activeTab === "departures" &&
-      departures.length === 0 &&
-      arrivals.length > 0
-    ) {
-      setActiveTab("arrivals");
-    }
-  }, [arrivals.length, departures.length, activeTab]);
+  const effectiveTab: Tab =
+    activeTab === "arrivals" && arrivals.length === 0 && departures.length > 0
+      ? "departures"
+      : activeTab === "departures" &&
+          departures.length === 0 &&
+          arrivals.length > 0
+        ? "arrivals"
+        : activeTab;
 
   const handleToggleCollapse = useCallback(() => {
     setCollapsed((c) => !c);
@@ -452,7 +434,7 @@ export function AirportBoard({
 
   if (!airport) return null;
 
-  const currentFlights = activeTab === "arrivals" ? arrivals : departures;
+  const currentFlights = effectiveTab === "arrivals" ? arrivals : departures;
 
   return (
     <motion.div
@@ -542,7 +524,7 @@ export function AirportBoard({
                   {/* ── Desktop: side-by-side columns ── */}
                   <div className="hidden sm:block">
                     <SegmentedControl
-                      activeTab={activeTab}
+                      activeTab={effectiveTab}
                       onTabChange={setActiveTab}
                       arrivalsCount={arrivals.length}
                       departuresCount={departures.length}
@@ -550,7 +532,7 @@ export function AirportBoard({
                     <div className="px-1 pb-2.5 pt-1">
                       <AnimatePresence mode="wait" initial={false}>
                         <motion.div
-                          key={activeTab}
+                          key={effectiveTab}
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
@@ -564,7 +546,7 @@ export function AirportBoard({
                             selectedIcao24={selectedIcao24}
                             onSelectFlight={onSelectFlight}
                             emptyMessage={
-                              activeTab === "arrivals"
+                              effectiveTab === "arrivals"
                                 ? "No arriving flights"
                                 : "No departing flights"
                             }
@@ -577,7 +559,7 @@ export function AirportBoard({
                   {/* ── Mobile: segmented control + single list ── */}
                   <div className="sm:hidden">
                     <SegmentedControl
-                      activeTab={activeTab}
+                      activeTab={effectiveTab}
                       onTabChange={setActiveTab}
                       arrivalsCount={arrivals.length}
                       departuresCount={departures.length}
@@ -586,15 +568,15 @@ export function AirportBoard({
                     <div className="px-1 pb-2.5 pt-1">
                       <AnimatePresence mode="wait" initial={false}>
                         <motion.div
-                          key={activeTab}
+                          key={effectiveTab}
                           initial={{
                             opacity: 0,
-                            x: activeTab === "arrivals" ? -8 : 8,
+                            x: effectiveTab === "arrivals" ? -8 : 8,
                           }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{
                             opacity: 0,
-                            x: activeTab === "arrivals" ? 8 : -8,
+                            x: effectiveTab === "arrivals" ? 8 : -8,
                           }}
                           transition={{
                             duration: 0.18,
@@ -606,7 +588,7 @@ export function AirportBoard({
                             selectedIcao24={selectedIcao24}
                             onSelectFlight={onSelectFlight}
                             emptyMessage={
-                              activeTab === "arrivals"
+                              effectiveTab === "arrivals"
                                 ? "No arriving flights"
                                 : "No departing flights"
                             }

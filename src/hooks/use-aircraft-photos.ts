@@ -177,52 +177,31 @@ export function useAircraftPhotos(
   icao24: string | null,
   registration?: string | null,
 ): UseAircraftPhotosResult {
-  const [photos, setPhotos] = useState<NormalizedPhoto[]>([]);
-  const [aircraft, setAircraft] = useState<AircraftDetails | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const hasIcao24 = Boolean(icao24);
+  const normalized = icao24?.toLowerCase() ?? null;
+  const reg = registration?.trim().toUpperCase() || null;
+  const cacheKey = normalized
+    ? reg
+      ? `${normalized}:${reg}`
+      : normalized
+    : null;
+  const cached = cacheKey ? getCached(cacheKey) : null;
+  const hexCached = normalized && reg ? getCached(normalized) : null;
+  const fallbackResult = cached ?? hexCached;
 
   useEffect(() => {
-    if (!icao24) {
-      setPhotos([]);
-      setAircraft(null);
-      setLoading(false);
-      setError(false);
+    if (!hasIcao24 || !normalized || !cacheKey) {
       return;
     }
 
-    const normalized = icao24.toLowerCase();
-    const reg = registration?.trim().toUpperCase() || null;
-    const cacheKey = reg ? `${normalized}:${reg}` : normalized;
-
-    // Check cache — full key first (includes JetAPI results)
-    const cached = getCached(cacheKey);
     if (cached) {
-      setPhotos(cached.photos);
-      setAircraft(cached.aircraft);
-      setLoading(false);
-      setError(false);
       return;
     }
-
-    // If we have a reg key, also check hex-only cache for instant display
-    const hexCached = reg ? getCached(normalized) : null;
 
     let cancelled = false;
     const controller = new AbortController();
-
-    setLoading(true);
-    setError(false);
-
-    // Show hex-only cached results immediately while JetAPI loads
-    if (hexCached) {
-      setPhotos(hexCached.photos);
-      setAircraft(hexCached.aircraft);
-      setLoading(false);
-    } else {
-      setPhotos([]);
-      setAircraft(null);
-    }
 
     if (reg && !hexCached) {
       // Phase 1: Fast sources (no JetAPI) → show immediately
@@ -231,9 +210,7 @@ export function useAircraftPhotos(
         (fastResult) => {
           if (cancelled) return;
           putCache(normalized, fastResult.aircraft, fastResult.photos);
-          setPhotos(fastResult.photos);
-          setAircraft(fastResult.aircraft);
-          setLoading(false);
+          setResolvedKey(normalized);
 
           // Phase 2: fetch with registration to include JetAPI
           fetchPhotos(normalized, reg, controller.signal).then(
@@ -241,13 +218,13 @@ export function useAircraftPhotos(
               if (cancelled) return;
               const mergedAircraft = fullResult.aircraft ?? fastResult.aircraft;
               putCache(cacheKey, mergedAircraft, fullResult.photos);
-              setPhotos(fullResult.photos);
-              setAircraft(mergedAircraft);
+              setResolvedKey(cacheKey);
             },
             () => {
               // JetAPI failed — keep fast results
               if (!cancelled) {
                 putCache(cacheKey, fastResult.aircraft, fastResult.photos);
+                setResolvedKey(cacheKey);
               }
             },
           );
@@ -255,8 +232,7 @@ export function useAircraftPhotos(
         () => {
           if (cancelled) return;
           putCache(normalized, null, []);
-          setLoading(false);
-          setError(true);
+          setErrorKey(cacheKey);
         },
       );
     } else if (reg && hexCached) {
@@ -266,13 +242,13 @@ export function useAircraftPhotos(
           if (cancelled) return;
           const mergedAircraft = fullResult.aircraft ?? hexCached.aircraft;
           putCache(cacheKey, mergedAircraft, fullResult.photos);
-          setPhotos(fullResult.photos);
-          setAircraft(mergedAircraft);
+          setResolvedKey(cacheKey);
         },
         () => {
           // JetAPI failed — keep cached results
           if (!cancelled) {
             putCache(cacheKey, hexCached.aircraft, hexCached.photos);
+            setResolvedKey(cacheKey);
           }
         },
       );
@@ -282,15 +258,12 @@ export function useAircraftPhotos(
         (result) => {
           if (cancelled) return;
           putCache(normalized, result.aircraft, result.photos);
-          setPhotos(result.photos);
-          setAircraft(result.aircraft);
-          setLoading(false);
+          setResolvedKey(normalized);
         },
         () => {
           if (cancelled) return;
           putCache(normalized, null, []);
-          setLoading(false);
-          setError(true);
+          setErrorKey(cacheKey);
         },
       );
     }
@@ -299,7 +272,17 @@ export function useAircraftPhotos(
       cancelled = true;
       controller.abort();
     };
-  }, [icao24, registration]);
+  }, [cacheKey, cached, hasIcao24, hexCached, normalized, reg]);
 
-  return { photos, aircraft, loading, error };
+  if (!hasIcao24) {
+    return { photos: [], aircraft: null, loading: false, error: false };
+  }
+
+  return {
+    photos: fallbackResult?.photos ?? [],
+    aircraft: fallbackResult?.aircraft ?? null,
+    loading:
+      !fallbackResult && cacheKey !== errorKey && cacheKey !== resolvedKey,
+    error: !fallbackResult && cacheKey === errorKey,
+  };
 }

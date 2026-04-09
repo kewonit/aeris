@@ -26,6 +26,9 @@ const DEFAULT_SPEED_MPS = 220;
 const MIN_SPEED_MPS = 30;
 
 export type MergeSegmentsResult = {
+  historyBody: TrailSnapshot[];
+  bridge: TrailSnapshot[];
+  liveContinuation: TrailSnapshot[];
   samples: TrailSnapshot[];
   outcome: TrailOutcome;
 };
@@ -107,7 +110,7 @@ function trimAndSnapLiveTail(
       ...first,
       lng: join.lng,
       lat: join.lat,
-      altitude: join.altitude ?? first.altitude,
+      altitude: first.altitude ?? join.altitude,
     },
     ...rest,
   ];
@@ -190,6 +193,9 @@ export function mergeSegments(params: {
 
   if (history.length < 2) {
     return {
+      historyBody: [],
+      bridge: [],
+      liveContinuation: liveTail,
       samples: liveTail,
       outcome: "live-tail-only",
     };
@@ -197,6 +203,9 @@ export function mergeSegments(params: {
 
   if (liveTail.length < 1) {
     return {
+      historyBody: history,
+      bridge: [],
+      liveContinuation: [],
       samples: history,
       outcome: "partial-history",
     };
@@ -224,7 +233,11 @@ export function mergeSegments(params: {
       liveTail,
       trimmedHistory[trimmedHistory.length - 1],
     );
+
     return {
+      historyBody: trimmedHistory,
+      bridge: [],
+      liveContinuation: snappedLive,
       samples: [...trimmedHistory, ...snappedLive.slice(1)],
       outcome: "full-history",
     };
@@ -240,6 +253,9 @@ export function mergeSegments(params: {
 
   if (shouldDisconnect || endGap > maxConnectGap) {
     return {
+      historyBody: [],
+      bridge: [],
+      liveContinuation: liveTail,
       samples: liveTail,
       outcome: "live-tail-only",
     };
@@ -257,7 +273,11 @@ export function mergeSegments(params: {
       trimmedHistory[trimmedHistory.length - 1],
       liveStart,
     );
+
     return {
+      historyBody: trimmedHistory,
+      bridge,
+      liveContinuation: liveTail,
       samples: [...trimmedHistory, ...bridge, ...liveTail],
       outcome: "full-history",
     };
@@ -265,7 +285,11 @@ export function mergeSegments(params: {
 
   if (endGap <= CONNECT_BRIDGE_DEG) {
     const snappedLive = trimAndSnapLiveTail(liveTail, historyEnd);
+
     return {
+      historyBody: history,
+      bridge: [],
+      liveContinuation: snappedLive,
       samples: [...history, ...snappedLive.slice(1)],
       outcome: "full-history",
     };
@@ -273,6 +297,9 @@ export function mergeSegments(params: {
 
   const bridge = buildBridge(historyEnd, liveStart);
   return {
+    historyBody: history,
+    bridge,
+    liveContinuation: liveTail,
     samples: [...history, ...bridge, ...liveTail],
     outcome: "partial-history",
   };

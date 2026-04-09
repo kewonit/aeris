@@ -566,6 +566,7 @@ function FlightTrackerInner() {
             {airportBoard.isActive && (
               <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-1/2 mb-14 -translate-x-1/2 sm:mb-16">
                 <AirportBoard
+                  key={airportBoard.airport?.iata ?? "airport-board"}
                   data={airportBoard}
                   onSelectFlight={handleAirportBoardSelect}
                   selectedIcao24={selectedIcao24}

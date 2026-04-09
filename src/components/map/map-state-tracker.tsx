@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useMap } from "@/components/map/map";
 
 export type MapViewState = {
@@ -21,8 +21,6 @@ type MapStateTrackerProps = {
  */
 export function MapStateTracker({ stateRef, onChange }: MapStateTrackerProps) {
   const { map, isLoaded } = useMap();
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (!map || !isLoaded) return;
@@ -36,7 +34,7 @@ export function MapStateTracker({ stateRef, onChange }: MapStateTrackerProps) {
         center: { lat: center.lat, lng: center.lng },
       };
       stateRef.current = next;
-      onChangeRef.current?.(next);
+      onChange?.(next);
     }
 
     // Seed initial state
@@ -49,7 +47,7 @@ export function MapStateTracker({ stateRef, onChange }: MapStateTrackerProps) {
       map.off("moveend", update);
       map.off("zoomend", update);
     };
-  }, [map, isLoaded, stateRef]);
+  }, [map, isLoaded, onChange, stateRef]);
 
   return null;
 }

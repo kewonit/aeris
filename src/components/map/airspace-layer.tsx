@@ -47,14 +47,6 @@ export function AirspaceLayer({
 }: AirspaceLayerProps) {
   const { map, isLoaded } = useMap();
 
-  // Refs to let style.load callback read latest prop values
-  const visibleRef = useRef(visible);
-  visibleRef.current = visible;
-  const opacityRef = useRef(opacity);
-  opacityRef.current = opacity;
-  const hotspotsRef = useRef(showHotspots);
-  hotspotsRef.current = showHotspots;
-
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -79,78 +71,81 @@ export function AirspaceLayer({
   }, [map]);
 
   /** Add airspace + hotspot sources and layers. */
-  const addSources = useCallback(() => {
-    if (!map || !mountedRef.current) return;
-    if (map.getSource(SOURCE_ID)) return; // already added
+  const addSources = useCallback(
+    (nextOpacity: number, nextShowHotspots: boolean) => {
+      if (!map || !mountedRef.current) return;
+      if (map.getSource(SOURCE_ID)) return; // already added
 
-    map.addSource(SOURCE_ID, {
-      type: "raster",
-      tiles: ["/api/airspace-tiles?z={z}&x={x}&y={y}"],
-      tileSize: 256,
-      minzoom: AIRSPACE_MIN_ZOOM,
-      maxzoom: AIRSPACE_MAX_ZOOM,
-      attribution:
-        '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
-    });
-
-    // Insert below the first symbol layer so airspace doesn't occlude
-    // map labels, airport markers, or other overlay text.
-    const layers = map.getStyle()?.layers ?? [];
-    let beforeId: string | undefined;
-    for (const layer of layers) {
-      if (layer.type === "symbol") {
-        beforeId = layer.id;
-        break;
-      }
-    }
-
-    map.addLayer(
-      {
-        id: LAYER_ID,
+      map.addSource(SOURCE_ID, {
         type: "raster",
-        source: SOURCE_ID,
-        minzoom: AIRSPACE_MIN_ZOOM,
-        paint: {
-          "raster-opacity": opacityRef.current,
-          "raster-contrast": AIRSPACE_CONTRAST,
-          "raster-saturation": AIRSPACE_SATURATION,
-          "raster-brightness-min": AIRSPACE_BRIGHTNESS_MIN,
-          "raster-fade-duration": 200,
-        },
-      },
-      beforeId,
-    );
-
-    // ── Hotspots layer (thermal/glider activity) ────────────────────
-    if (!map.getSource(HOTSPOT_SOURCE_ID)) {
-      map.addSource(HOTSPOT_SOURCE_ID, {
-        type: "raster",
-        tiles: ["/api/airspace-tiles?layer=hotspots&z={z}&x={x}&y={y}"],
+        tiles: ["/api/airspace-tiles?z={z}&x={x}&y={y}"],
         tileSize: 256,
         minzoom: AIRSPACE_MIN_ZOOM,
         maxzoom: AIRSPACE_MAX_ZOOM,
         attribution:
           '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
       });
-    }
 
-    map.addLayer(
-      {
-        id: HOTSPOT_LAYER_ID,
-        type: "raster",
-        source: HOTSPOT_SOURCE_ID,
-        minzoom: AIRSPACE_MIN_ZOOM,
-        paint: {
-          "raster-opacity": HOTSPOT_OPACITY,
-          "raster-fade-duration": 200,
+      // Insert below the first symbol layer so airspace doesn't occlude
+      // map labels, airport markers, or other overlay text.
+      const layers = map.getStyle()?.layers ?? [];
+      let beforeId: string | undefined;
+      for (const layer of layers) {
+        if (layer.type === "symbol") {
+          beforeId = layer.id;
+          break;
+        }
+      }
+
+      map.addLayer(
+        {
+          id: LAYER_ID,
+          type: "raster",
+          source: SOURCE_ID,
+          minzoom: AIRSPACE_MIN_ZOOM,
+          paint: {
+            "raster-opacity": nextOpacity,
+            "raster-contrast": AIRSPACE_CONTRAST,
+            "raster-saturation": AIRSPACE_SATURATION,
+            "raster-brightness-min": AIRSPACE_BRIGHTNESS_MIN,
+            "raster-fade-duration": 200,
+          },
         },
-        layout: {
-          visibility: hotspotsRef.current ? "visible" : "none",
+        beforeId,
+      );
+
+      // ── Hotspots layer (thermal/glider activity) ────────────────────
+      if (!map.getSource(HOTSPOT_SOURCE_ID)) {
+        map.addSource(HOTSPOT_SOURCE_ID, {
+          type: "raster",
+          tiles: ["/api/airspace-tiles?layer=hotspots&z={z}&x={x}&y={y}"],
+          tileSize: 256,
+          minzoom: AIRSPACE_MIN_ZOOM,
+          maxzoom: AIRSPACE_MAX_ZOOM,
+          attribution:
+            '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
+        });
+      }
+
+      map.addLayer(
+        {
+          id: HOTSPOT_LAYER_ID,
+          type: "raster",
+          source: HOTSPOT_SOURCE_ID,
+          minzoom: AIRSPACE_MIN_ZOOM,
+          paint: {
+            "raster-opacity": HOTSPOT_OPACITY,
+            "raster-fade-duration": 200,
+          },
+          layout: {
+            visibility: nextShowHotspots ? "visible" : "none",
+          },
         },
-      },
-      beforeId,
-    );
-  }, [map, removeSources]);
+        beforeId,
+      );
+    },
+    [map],
+  );
 
   // ── Add/remove sources based on visibility ─────────────────────────
   // When hidden → remove sources entirely to free tile ArrayBuffers.
@@ -160,13 +155,13 @@ export function AirspaceLayer({
 
     const onStyleLoad = () => {
       // After style swap, re-add only if currently visible
-      if (visibleRef.current) addSources();
+      if (visible) addSources(opacity, showHotspots);
     };
     map.on("style.load", onStyleLoad);
 
     // Initial add (if visible and style already loaded)
     if (visible && map.isStyleLoaded()) {
-      addSources();
+      addSources(opacity, showHotspots);
     } else if (!visible) {
       removeSources();
     }
@@ -175,7 +170,15 @@ export function AirspaceLayer({
       map.off("style.load", onStyleLoad);
       removeSources();
     };
-  }, [map, isLoaded, addSources, removeSources, visible]);
+  }, [
+    map,
+    isLoaded,
+    addSources,
+    opacity,
+    removeSources,
+    showHotspots,
+    visible,
+  ]);
 
   // ── Toggle hotspot layer visibility ────────────────────────────────
   useEffect(() => {

@@ -70,11 +70,7 @@ export function ControlPanel({
   onLookupFlight,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
-  const [portalMounted, setPortalMounted] = useState(false);
-
-  useEffect(() => {
-    setPortalMounted(true);
-  }, []);
+  const portalMounted = typeof document !== "undefined";
 
   useEffect(() => {
     function handleOpenSearch() {

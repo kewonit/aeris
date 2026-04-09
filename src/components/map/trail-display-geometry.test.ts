@@ -87,6 +87,17 @@ function makeApproachTrailWithOlderLoop(): TrailEntry {
   };
 }
 
+function planarBounds(points: [number, number, number][]) {
+  return {
+    width:
+      Math.max(...points.map((point) => point[0])) -
+      Math.min(...points.map((point) => point[0])),
+    height:
+      Math.max(...points.map((point) => point[1])) -
+      Math.min(...points.map((point) => point[1])),
+  };
+}
+
 function worstLocalProjectionDrop(points: [number, number, number][]): number {
   let worst = 0;
 
@@ -274,4 +285,57 @@ test("buildTrailDisplayGeometry removes local backtracks that would render as lo
   );
 
   assert.ok(worstLocalProjectionDrop(geometry.allPoints) > -0.01);
+});
+
+test("buildTrailDisplayGeometry preserves a sparse hold while still removing a tiny interior cusp", () => {
+  const geometry = buildTrailDisplayGeometry(
+    {
+      icao24: "hold-cusp01",
+      path: [
+        [72.98, 19.18],
+        [73.05, 19.08],
+        [73.0, 18.92],
+        [73.004, 18.908],
+        [72.997, 18.909],
+        [72.89, 19.0],
+        [72.93, 19.17],
+      ],
+      altitudes: [5_000, 5_010, 5_020, 5_025, 5_030, 5_040, 5_050],
+      timestamps: [0, 60_000, 120_000, 150_000, 180_000, 240_000, 300_000],
+      baroAltitude: 5_050,
+      fullHistory: true,
+    },
+    80,
+  );
+
+  const bounds = planarBounds(geometry.allPoints);
+
+  assert.ok(bounds.width > 0.12);
+  assert.ok(bounds.height > 0.18);
+  assert.ok(worstLocalProjectionDrop(geometry.allPoints) > -0.01);
+});
+
+test("buildTrailDisplayGeometry preserves a sustained sparse turnback instead of collapsing it into a chord", () => {
+  const geometry = buildTrailDisplayGeometry(
+    {
+      icao24: "hold-geometry01",
+      path: [
+        [72.98, 19.18],
+        [73.05, 19.08],
+        [73.0, 18.92],
+        [72.89, 19.0],
+        [72.93, 19.17],
+      ],
+      altitudes: [5_000, 5_010, 5_020, 5_030, 5_040],
+      timestamps: [0, 60_000, 120_000, 180_000, 240_000],
+      baroAltitude: 5_040,
+      fullHistory: true,
+    },
+    80,
+  );
+
+  const bounds = planarBounds(geometry.allPoints);
+
+  assert.ok(bounds.width > 0.12);
+  assert.ok(bounds.height > 0.18);
 });

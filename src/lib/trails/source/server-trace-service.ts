@@ -8,7 +8,10 @@ import { OPENSKY_API } from "@/lib/opensky-types";
 
 import { getTraceProviderPolicy, type TraceProviderId } from "../providers";
 import type { TrailOutcome } from "../types";
-import { parseReadsbTrace } from "./parse-readsb-trace";
+import {
+  normalizeTrackWaypoints,
+  parseReadsbTrace,
+} from "./parse-readsb-trace";
 
 const TRACE_TIMEOUT_MS = 5_000;
 const OPENSKY_TIMEOUT_MS = 5_000;
@@ -203,7 +206,7 @@ async function fetchReadsbTrace(
   return null;
 }
 
-function parseOpenSkyTrack(
+export function parseOpenSkyTrack(
   icao24: string,
   payload: unknown,
 ): FlightTrack | null {
@@ -212,14 +215,6 @@ function parseOpenSkyTrack(
   }
 
   const data = payload as OpenSkyTrackResponse;
-  const startTime =
-    typeof data.startTime === "number" && Number.isFinite(data.startTime)
-      ? data.startTime
-      : 0;
-  const endTime =
-    typeof data.endTime === "number" && Number.isFinite(data.endTime)
-      ? data.endTime
-      : 0;
   const callsignRaw =
     typeof data.callsign === "string"
       ? data.callsign
@@ -287,14 +282,17 @@ function parseOpenSkyTrack(
     return null;
   }
 
-  path.sort((left, right) => left.time - right.time);
+  const normalizedPath = normalizeTrackWaypoints(path);
+  if (normalizedPath.length < 2) {
+    return null;
+  }
 
   return {
     icao24,
-    startTime,
-    endTime,
+    startTime: Math.floor(normalizedPath[0].time),
+    endTime: Math.floor(normalizedPath[normalizedPath.length - 1].time),
     callsign,
-    path,
+    path: normalizedPath,
   };
 }
 

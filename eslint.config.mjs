@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Skill assets and helper scripts are repository tooling, not app runtime.
+    ".github/skills/**",
   ]),
 ]);
 

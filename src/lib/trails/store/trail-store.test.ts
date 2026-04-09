@@ -3,6 +3,20 @@ import test from "node:test";
 
 import { createTrailStore } from "./trail-store";
 
+function withMockedNow(run: (advanceMs: (ms: number) => void) => void) {
+  const originalNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+
+  try {
+    run((ms: number) => {
+      now += ms;
+    });
+  } finally {
+    Date.now = originalNow;
+  }
+}
+
 test("empty polls preserve the last trail result when trails already exist", () => {
   const store = createTrailStore();
 
@@ -122,4 +136,198 @@ test("selected envelope is exposed so map rendering can preserve history and liv
   assert.equal(snapshot.selectedEnvelope?.icao24, "3c66b0");
   assert.equal(snapshot.selectedEnvelope?.historySegments.length, 1);
   assert.ok((snapshot.selectedEnvelope?.liveTail.length ?? 0) >= 2);
+});
+
+test("ingestLiveFlights keeps a longer live step when elapsed time and speed make it plausible", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 72.8,
+        latitude: 19.0,
+        baroAltitude: 1_000,
+        trueTrack: 90,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 72.818,
+        latitude: 19.0,
+        baroAltitude: 1_010,
+        trueTrack: 88,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(18_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 72.858,
+        latitude: 19.01,
+        baroAltitude: 1_020,
+        trueTrack: 74,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+  });
+
+  const trail = store.getSnapshot().trails[0];
+
+  assert.deepEqual(trail?.path.slice(-3), [
+    [72.8, 19.0],
+    [72.818, 19.0],
+    [72.858, 19.01],
+  ]);
+});
+
+test("ingestLiveFlights still resets on a true teleport even after a valid live leg", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 72.8,
+        latitude: 19.0,
+        baroAltitude: 1_000,
+        trueTrack: 90,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 72.818,
+        latitude: 19.0,
+        baroAltitude: 1_010,
+        trueTrack: 88,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(10_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "3c66b0",
+        longitude: 73.6,
+        latitude: 19.8,
+        baroAltitude: 1_050,
+        trueTrack: 70,
+        velocity: 240,
+        onGround: false,
+      } as never,
+    ]);
+  });
+
+  assert.equal(store.getSnapshot().trails.length, 0);
+});
+
+test("ingestLiveFlights keeps sparse holding-pattern samples even when the chord heading diverges from the instantaneous track", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      {
+        icao24: "hold01",
+        longitude: 72.98,
+        latitude: 19.1,
+        baroAltitude: 5_500,
+        trueTrack: 0,
+        velocity: 115,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(60_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "hold01",
+        longitude: 72.94,
+        latitude: 19.1,
+        baroAltitude: 5_550,
+        trueTrack: 180,
+        velocity: 115,
+        onGround: false,
+      } as never,
+    ]);
+
+    advanceMs(60_000);
+    store.ingestLiveFlights([
+      {
+        icao24: "hold01",
+        longitude: 72.91,
+        latitude: 19.065,
+        baroAltitude: 5_620,
+        trueTrack: 225,
+        velocity: 115,
+        onGround: false,
+      } as never,
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "hold01");
+
+  assert.deepEqual(trail?.path.slice(-3), [
+    [72.98, 19.1],
+    [72.94, 19.1],
+    [72.91, 19.065],
+  ]);
+});
+
+test("ingestLiveFlights retains more than the old 120-point ceiling for recent live motion", () => {
+  const store = createTrailStore();
+  const centerLng = 72.95;
+  const centerLat = 19.08;
+  const radiusLng = 0.018;
+  const radiusLat = 0.012;
+
+  withMockedNow((advanceMs) => {
+    for (let index = 0; index < 180; index += 1) {
+      const angle = (index / 180) * Math.PI * 6;
+      const trueTrack =
+        ((Math.atan2(
+          -Math.sin(angle) * radiusLng,
+          Math.cos(angle) * radiusLat,
+        ) *
+          180) /
+          Math.PI +
+          360) %
+        360;
+      store.ingestLiveFlights([
+        {
+          icao24: "loop01",
+          longitude: centerLng + Math.cos(angle) * radiusLng,
+          latitude: centerLat + Math.sin(angle) * radiusLat,
+          baroAltitude: 4_800 + index,
+          trueTrack,
+          velocity: 95,
+          onGround: false,
+        } as never,
+      ]);
+
+      advanceMs(2_000);
+    }
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "loop01");
+
+  assert.ok((trail?.path.length ?? 0) > 120);
 });
