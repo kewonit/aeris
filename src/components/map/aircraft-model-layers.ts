@@ -42,7 +42,7 @@ const EMPTY_DATA: FlightState[] = [];
 // Models not seen for MODEL_DEACTIVATE_MS are omitted from the layer array
 // entirely, avoiding ScenegraphLayer constructor and deck.gl diffing overhead.
 const modelLastUsed = new Map<string, number>();
-const MODEL_DEACTIVATE_MS = 5_000; // 5 second grace period (covers 1 poll cycle)
+const MODEL_DEACTIVATE_MS = 15_000; // 15 second grace period (covers 3+ poll cycles)
 const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth
 
 // ── Types ──────────────────────────────────────────────────────────────

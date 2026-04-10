@@ -597,11 +597,7 @@ export function createTrailStore() {
         }
 
         liveTrail.push(point);
-        trimLiveTrailWindow(
-          liveTrail,
-          now,
-          id.trim().toLowerCase() === history.selectedIcao24,
-        );
+        trimLiveTrailWindow(liveTrail, now, id === history.selectedIcao24);
       }
 
       const envelope = getOrCreateEnvelope(id);

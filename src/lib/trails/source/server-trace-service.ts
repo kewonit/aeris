@@ -78,6 +78,7 @@ export function preferNextProvider(
 function makeTraceUrls(providerId: TraceProviderId, icao24: string): string[] {
   const policy = getTraceProviderPolicy(providerId);
   const normalized = icao24.trim().toLowerCase();
+  if (!/^[a-f0-9]{6}$/.test(normalized)) return [];
   const suffix = normalized.slice(-2);
 
   return [

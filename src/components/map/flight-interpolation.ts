@@ -230,11 +230,12 @@ export function computeInterpolatedFlights(
     // Continue climb/descent using vertical rate, capped at ±500m
     const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
     const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
+    const safeAlt = Number.isFinite(curr.alt) ? curr.alt : 0;
     return {
       ...f,
       longitude: curr.lng + moveDx,
       latitude: curr.lat + moveDy,
-      baroAltitude: curr.alt + extraAlt,
+      baroAltitude: safeAlt + extraAlt,
       trueTrack: resolveDisplayTrack({
         reportedTrack: curr.track,
         previousPosition: { lng: prev.lng, lat: prev.lat },
@@ -314,9 +315,10 @@ export function updateInterpolatedInPlace(
       const moveDy = Math.cos(heading) * extraDeg;
       const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
       const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
+      const safeAlt = Number.isFinite(curr.alt) ? curr.alt : 0;
       o.longitude = curr.lng + moveDx;
       o.latitude = curr.lat + moveDy;
-      o.baroAltitude = curr.alt + extraAlt;
+      o.baroAltitude = safeAlt + extraAlt;
       o.trueTrack = resolveDisplayTrack({
         reportedTrack: curr.track,
         previousPosition: { lng: prev.lng, lat: prev.lat },

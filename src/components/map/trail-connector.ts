@@ -197,8 +197,16 @@ export function buildTrailConnector(
       : headingDirectionVector && headingAlignment < -0.2
         ? headingDirectionVector
         : fallbackDirection;
-  const [fallbackDirX, fallbackDirY] = fallbackDirection;
-  const [endDirX, endDirY] = endDirection;
+  const resolvedFallback: [number, number] =
+    fallbackDirection[0] !== 0 || fallbackDirection[1] !== 0
+      ? fallbackDirection
+      : (headingDirectionVector ?? [0, 1]);
+  const resolvedEnd: [number, number] =
+    endDirection[0] !== 0 || endDirection[1] !== 0
+      ? endDirection
+      : (headingDirectionVector ?? [0, 1]);
+  const [fallbackDirX, fallbackDirY] = resolvedFallback;
+  const [endDirX, endDirY] = resolvedEnd;
 
   const tailGapMeters = Math.max(
     0,

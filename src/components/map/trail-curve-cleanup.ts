@@ -163,7 +163,7 @@ export function cleanupControlPointArtifacts(
       const dy = following[1] - prev[1];
       const lenSq = dx * dx + dy * dy;
 
-      if (lenSq < 1e-12) {
+      if (lenSq < 1e-10) {
         continue;
       }
 
@@ -262,7 +262,7 @@ export function cleanupDisplayCurve(points: ElevatedPoint[]): ElevatedPoint[] {
       const dx = following[0] - prev[0];
       const dy = following[1] - prev[1];
       const lenSq = dx * dx + dy * dy;
-      if (lenSq < 1e-12) {
+      if (lenSq < 1e-10) {
         continue;
       }
 

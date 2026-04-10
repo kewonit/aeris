@@ -18,6 +18,6 @@ export function toPathLayerPoints(
   return trailOrPoints.path.map((point, index) => [
     point[0],
     point[1],
-    trailOrPoints.altitudes[index] ?? trailOrPoints.baroAltitude ?? 0,
+    trailOrPoints.altitudes[index] ?? 0,
   ]);
 }

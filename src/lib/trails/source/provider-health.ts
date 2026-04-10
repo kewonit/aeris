@@ -25,10 +25,7 @@ function getCurrentNegativeBackoffMs(errorStreak: number): number {
   }
 
   const index = Math.min(errorStreak - 1, TRAIL_NEGATIVE_TTLS_MS.length - 1);
-  return (
-    TRAIL_NEGATIVE_TTLS_MS[index] ??
-    TRAIL_NEGATIVE_TTLS_MS[TRAIL_NEGATIVE_TTLS_MS.length - 1]
-  );
+  return TRAIL_NEGATIVE_TTLS_MS[index];
 }
 
 export function noteProviderFailure(

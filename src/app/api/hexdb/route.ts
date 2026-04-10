@@ -36,13 +36,10 @@ export async function GET(request: NextRequest) {
 
     const body = await res.text();
 
-    const upstreamContentType =
-      res.headers.get("content-type") ?? "application/json";
-
     return new NextResponse(body, {
       status: res.status,
       headers: {
-        "Content-Type": upstreamContentType,
+        "Content-Type": "application/json",
         "Cache-Control": res.ok
           ? "public, s-maxage=300, max-age=600"
           : "no-store",

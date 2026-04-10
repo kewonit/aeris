@@ -36,7 +36,8 @@ export type MergeSegmentsResult = {
 function distanceSq(a: TrailSnapshot, b: TrailSnapshot): number {
   const dx = a.lng - b.lng;
   const dy = a.lat - b.lat;
-  return dx * dx + dy * dy;
+  const result = dx * dx + dy * dy;
+  return Number.isFinite(result) ? result : 0;
 }
 
 function bridgeAltitude(
