@@ -36,10 +36,23 @@ export async function GET(request: NextRequest) {
 
     const body = await res.text();
 
-    return new NextResponse(body, {
-      status: res.status,
+    // Validate upstream actually returned JSON — hexdb.io may return
+    // HTML/text error pages on failures which would break client parsing.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      // Upstream returned non-JSON (e.g. HTML error page) — surface as 502
+      return NextResponse.json(
+        { error: "Upstream returned non-JSON response" },
+        { status: 502, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    // Valid JSON — forward with appropriate status and cache headers
+    return NextResponse.json(parsed, {
+      status: res.ok ? 200 : res.status,
       headers: {
-        "Content-Type": "application/json",
         "Cache-Control": res.ok
           ? "public, s-maxage=300, max-age=600"
           : "no-store",
