@@ -176,8 +176,20 @@ export function useTrailSystem(params: {
           controller.signal,
         );
 
+        // After an async gap, the effect may have been cleaned up or
+        // the selection may have changed.  The generation check in
+        // resolveHistory / failHistory guards against stale results,
+        // so we only need to bail on scheduling here.
         if (!active) {
-          return;
+          // Still resolve if the generation matches — avoids silently
+          // discarding a valid response that would fix the trail.
+          const staleCheck = trailStore.getSnapshot().history;
+          if (
+            staleCheck.selectedIcao24 !== selectedIcao24 ||
+            staleCheck.selectionGeneration !== selectionGeneration
+          ) {
+            return;
+          }
         }
 
         const refreshedHistory = trailStore.getSnapshot().history;
@@ -215,6 +227,11 @@ export function useTrailSystem(params: {
             creditsRemaining: result.creditsRemaining,
             track: null,
           });
+        }
+
+        // Don't schedule refreshes after the effect has been torn down
+        if (!active) {
+          return;
         }
 
         const nextHistory = trailStore.getSnapshot().history;
@@ -260,7 +277,11 @@ export function useTrailSystem(params: {
     return () => {
       active = false;
       clearTimer();
-      currentController?.abort();
+      // Don't abort in-flight fetches — let them complete naturally.
+      // resolveHistory/failHistory guard against stale results via
+      // selectionGeneration, and completing the fetch avoids the
+      // "cancelled request → lost response" race that prevented
+      // historical trails from rendering after React re-mounts.
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

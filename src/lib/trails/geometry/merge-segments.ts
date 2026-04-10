@@ -272,12 +272,17 @@ export function mergeSegments(params: {
       endGap > MODERATE_DISCONNECT_GAP_DEG);
 
   if (shouldDisconnect || endGap > maxConnectGap) {
+    // Preserve history body so the trail still renders when the live
+    // position has drifted far from the last trace point.  A straight-
+    // line bridge spans the gap — not ideal visually, but much better
+    // than discarding the entire historical trail.
+    const bridge = buildBridge(historyEnd, liveStart);
     return {
-      historyBody: [],
-      bridge: [],
+      historyBody: history,
+      bridge,
       liveContinuation: liveTail,
-      samples: liveTail,
-      outcome: "live-tail-only",
+      samples: [...history, ...bridge, ...liveTail],
+      outcome: "partial-history",
     };
   }
 

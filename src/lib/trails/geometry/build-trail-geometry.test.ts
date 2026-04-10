@@ -50,7 +50,7 @@ function makeEnvelope(overrides: Partial<TrailEnvelope> = {}): TrailEnvelope {
   };
 }
 
-test("falls back to live-tail-only when the history gap is implausibly large", () => {
+test("preserves history with a bridge when the history gap is implausibly large", () => {
   const result = buildTrailGeometry(
     makeEnvelope({
       liveTail: [
@@ -71,7 +71,11 @@ test("falls back to live-tail-only when the history gap is implausibly large", (
     }),
   );
 
-  assert.equal(result.outcome, "live-tail-only");
+  assert.equal(result.outcome, "partial-history");
+  assert.ok(
+    result.path.length > 4,
+    "should include history + bridge + live points",
+  );
 });
 
 test("preserves waypoint order through antimeridian normalization", () => {

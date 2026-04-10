@@ -120,8 +120,14 @@ test("mergeSegments degrades instead of snapping to an older interior branch whe
     liveTail,
   });
 
-  assert.equal(result.outcome, "live-tail-only");
-  assert.deepEqual(result.samples, liveTail);
+  assert.equal(result.outcome, "partial-history");
+  assert.equal(result.historyBody.length, 3);
+  assert.ok(result.bridge.length > 0, "should build a bridge across the gap");
+  assert.deepEqual(result.liveContinuation, liveTail);
+  assert.ok(
+    result.samples.length > liveTail.length,
+    "samples should include history + bridge + live",
+  );
 });
 
 test("mergeSegments drops a suspect bootstrap prefix before joining selected history to live samples", () => {
