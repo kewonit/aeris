@@ -294,6 +294,7 @@ export function createTrailStore() {
   const envelopes = new Map<string, TrailEnvelope>();
   let seen = new Set<string>();
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+  let resumePending = false;
   let liveOrder: string[] = [];
   const history = createHistoryState();
   let selectedTrack: FlightTrack | null = null;
@@ -424,6 +425,17 @@ export function createTrailStore() {
 
     if (flights.length === 0 && trails.size > 0) {
       return;
+    }
+
+    // On the first ingestion after a visibility resume, clear live trail
+    // arrays so we don't create straight-line artifacts from the last
+    // pre-background position to the current position. The envelope data
+    // (liveTail, historySegments) is NOT cleared here — it preserves the
+    // visual trail until the loop below updates each envelope with fresh data.
+    if (resumePending && flights.length > 0) {
+      trails.clear();
+      altitudeStates.clear();
+      resumePending = false;
     }
 
     const current = new Set<string>();
@@ -801,9 +813,12 @@ export function createTrailStore() {
   }
 
   /** Signal that the tab just became visible again.
-   *  Preserve existing live trails — fresh poll data will naturally extend them.
-   *  Only reset bootstrap counter so the first few polls fill in any gap. */
+   *  Set a flag so the next ingestLiveFlights call resets live trail arrays
+   *  at the same moment fresh data arrives — this avoids both straight-line
+   *  artifacts (from stale→new position) and visible trail flicker (from
+   *  clearing before new data is available). */
   function handleVisibilityResume(): void {
+    resumePending = true;
     bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
     emit();
   }

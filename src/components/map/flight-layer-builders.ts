@@ -591,9 +591,13 @@ export function buildTrailLayers(params: TrailLayerParams) {
         Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]),
     );
 
+    // NOTE: Do NOT apply limitTrailSlope to connectors. The bezier curve
+    // already produces a smooth altitude transition. limitTrailSlope preserves
+    // endpoints but caps interior points, which creates vertical spikes at
+    // both ends of a short connector that spans a large altitude difference.
     return buildTrailRenderSegments({
       icao24: segment.icao24,
-      points: limitTrailSlope(clean),
+      points: clean,
       kind: "connector",
       altColors,
       defaultColor,

@@ -218,10 +218,16 @@ export function buildTrailConnector(
     horizontalDistanceMeters(dx, dy, aircraftCenterLat) *
       CONNECTOR_MIN_GAP_RETENTION,
   );
+
+  // Use the aircraft heading direction for the head offset — this matches
+  // the model layer's offsetPositionByTrack(pos, trueTrack, -tailAnchor)
+  // so the connector head consistently arrives at the model's tail.
+  const headOffsetDir: [number, number] =
+    headingDirectionVector ?? gapDirection;
   const [headLng, headLat] = offsetPointAlongDirection(
     aircraftCenterLng,
     aircraftCenterLat,
-    [-endDirX || -fallbackDirX, -endDirY || -fallbackDirY],
+    [-headOffsetDir[0], -headOffsetDir[1]],
     tailAnchorMeters,
   );
   const head: ElevatedPoint = [
