@@ -7,8 +7,9 @@ import type { FlightTrack } from "@/lib/opensky";
 
 import { parseReadsbTrace } from "./parse-readsb-trace";
 
-function isAbortError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "AbortError";
+function isAbortError(error: unknown): boolean {
+  if (error == null || typeof error !== "object") return false;
+  return (error as { name?: unknown }).name === "AbortError";
 }
 
 export function getDirectTraceProviders(): TraceProviderId[] {

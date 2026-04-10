@@ -53,7 +53,9 @@ export function buildTrailGeometry(envelope: TrailEnvelope): TrailEntry {
     timestamps: merged.samples.map((sample) => sample.timestamp),
     baroAltitude: merged.samples[merged.samples.length - 1]?.altitude ?? null,
     fullHistory: hasHistory && merged.outcome !== "live-tail-only",
-    provider: hasHistory ? envelope.provider : "live",
+    provider: hasHistory
+      ? (envelope.provider ?? historySegments[0]?.provider ?? "live")
+      : "live",
     outcome: merged.outcome,
     revision: envelope.liveRevision + envelope.historyRevision,
     liveRevision: envelope.liveRevision,

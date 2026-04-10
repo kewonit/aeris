@@ -43,7 +43,9 @@ export async function GET(request: NextRequest) {
       status: res.status,
       headers: {
         "Content-Type": upstreamContentType,
-        "Cache-Control": "public, s-maxage=300, max-age=600",
+        "Cache-Control": res.ok
+          ? "public, s-maxage=300, max-age=600"
+          : "no-store",
       },
     });
   } catch {

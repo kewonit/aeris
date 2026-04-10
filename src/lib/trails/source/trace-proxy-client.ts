@@ -49,6 +49,18 @@ function normalizeNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function isValidFlightTrack(value: unknown): value is FlightTrack {
+  if (value == null || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.icao24 !== "string") return false;
+  if (typeof obj.startTime !== "number" || !Number.isFinite(obj.startTime))
+    return false;
+  if (typeof obj.endTime !== "number" || !Number.isFinite(obj.endTime))
+    return false;
+  if (!Array.isArray(obj.path)) return false;
+  return true;
+}
+
 function normalizeProxyTracePayload(
   icao24: string,
   payload: unknown,
@@ -68,10 +80,11 @@ function normalizeProxyTracePayload(
         ? data.hex.trim().toLowerCase()
         : fallback.hex,
     track:
-      data.track === null ||
-      (typeof data.track === "object" && data.track !== undefined)
-        ? (data.track as FlightTrack | null)
-        : null,
+      data.track === null
+        ? null
+        : isValidFlightTrack(data.track)
+          ? data.track
+          : null,
     source: isTrailProviderId(data.source) ? data.source : fallback.source,
     outcome: isTrailOutcome(data.outcome) ? data.outcome : fallback.outcome,
     creditsRemaining: normalizeNumber(data.creditsRemaining),
