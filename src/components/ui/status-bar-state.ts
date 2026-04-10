@@ -8,18 +8,24 @@ export function resolveDropdownState(
   state: StatusBarDropdownState,
   atcToggle?: number,
 ): Pick<StatusBarDropdownState, "feedDropdownOpen" | "providerDropdownOpen"> {
-  if (
-    atcToggle === undefined ||
-    state.handledAtcToggle === undefined ||
-    atcToggle <= state.handledAtcToggle
-  ) {
+  if (atcToggle === undefined) {
     return {
       feedDropdownOpen: state.feedDropdownOpen,
       providerDropdownOpen: state.providerDropdownOpen,
     };
   }
 
-  const toggleDelta = atcToggle - state.handledAtcToggle;
+  // Treat an undefined handledAtcToggle as a baseline one step behind
+  // the incoming value so the first increment correctly toggles.
+  const baseline = state.handledAtcToggle ?? atcToggle - 1;
+  if (atcToggle <= baseline) {
+    return {
+      feedDropdownOpen: state.feedDropdownOpen,
+      providerDropdownOpen: state.providerDropdownOpen,
+    };
+  }
+
+  const toggleDelta = atcToggle - baseline;
 
   return {
     feedDropdownOpen:

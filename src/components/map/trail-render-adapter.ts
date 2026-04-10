@@ -1,4 +1,4 @@
-import type { TrailEntry } from "@/lib/trails/types";
+import type { TrailEntry } from "@/hooks/use-trail-history";
 
 import type { ElevatedPoint } from "./flight-layer-constants";
 

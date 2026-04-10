@@ -286,7 +286,7 @@ function catmullRomSplineCore(
     const MAX_TENSION = 0.85;
     // Quadratic ease-out: moderate turns get full spline curvature faster
     // while truly straight segments still get enough linear stability.
-    const t_norm =
+    const tNorm =
       maxDelta <= STRAIGHT_THRESHOLD
         ? 0.0
         : maxDelta >= CURVE_THRESHOLD
@@ -298,7 +298,7 @@ function catmullRomSplineCore(
         ? MAX_TENSION
         : maxDelta >= CURVE_THRESHOLD
           ? 0.0
-          : MAX_TENSION * (1.0 - t_norm) * (1.0 - t_norm);
+          : MAX_TENSION * (1.0 - tNorm) * (1.0 - tNorm);
 
     result.push(P1);
 
