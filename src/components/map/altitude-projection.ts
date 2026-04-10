@@ -93,3 +93,36 @@ export function projectTrailElevationMeters(
   if (displayed <= 0) return 0;
   return Math.max(0, displayed - TRAIL_BELOW_AIRCRAFT_METERS);
 }
+
+/**
+ * Inverse of `projectTrailElevationMeters * elevScale`.
+ * Recovers an approximate raw barometric altitude from a projected trail
+ * elevation value.  Used by the trail colour system so that altitude-based
+ * colouring stays consistent with the raw-altitude palette regardless of
+ * the current projection scales.
+ */
+export function unprojectTrailElevationToRawAltitude(
+  projectedElevation: number,
+  elevScale: number,
+  mode: AltitudeDisplayMode = "presentation",
+): number {
+  if (projectedElevation <= 0 || elevScale <= 0) return 0;
+  if (mode === "realistic") {
+    return projectedElevation / elevScale + TRAIL_BELOW_AIRCRAFT_METERS;
+  }
+
+  const displayed =
+    projectedElevation / elevScale + TRAIL_BELOW_AIRCRAFT_METERS;
+
+  const lowBreakProjected = LOW_ALT_BREAK_M * LOW_ALT_SCALE;
+  const midBreakProjected =
+    lowBreakProjected + (MID_ALT_BREAK_M - LOW_ALT_BREAK_M) * MID_ALT_SCALE;
+
+  if (displayed <= lowBreakProjected) {
+    return Math.max(0, displayed / LOW_ALT_SCALE);
+  }
+  if (displayed <= midBreakProjected) {
+    return LOW_ALT_BREAK_M + (displayed - lowBreakProjected) / MID_ALT_SCALE;
+  }
+  return MID_ALT_BREAK_M + (displayed - midBreakProjected) / HIGH_ALT_SCALE;
+}

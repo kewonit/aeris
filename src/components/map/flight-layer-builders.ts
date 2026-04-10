@@ -553,6 +553,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       kind: "body",
       altColors,
       defaultColor,
+      elevCtx: { elevScale, altitudeDisplayMode },
     });
   });
 
@@ -601,6 +602,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       kind: "connector",
       altColors,
       defaultColor,
+      elevCtx: { elevScale, altitudeDisplayMode },
     });
   });
 

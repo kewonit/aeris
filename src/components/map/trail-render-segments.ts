@@ -1,5 +1,7 @@
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { altitudeToColor as aircraftAltitudeToColor } from "@/lib/flight-utils";
 
+import { unprojectTrailElevationToRawAltitude } from "./altitude-projection";
 import { horizontalDistanceFromLngLat } from "./flight-math";
 
 export type TrailRenderSegment = {
@@ -84,17 +86,39 @@ export function trailAltitudeToColor(
   return aircraftAltitudeToColor(altitude);
 }
 
+/** Context needed to un-project trail Z values back to raw altitude for coloring. */
+export type TrailElevationContext = {
+  elevScale: number;
+  altitudeDisplayMode: AltitudeDisplayMode;
+};
+
+function trailPointToRawAltitude(
+  projectedZ: number,
+  ctx: TrailElevationContext | undefined,
+): number | null {
+  if (ctx) {
+    return unprojectTrailElevationToRawAltitude(
+      projectedZ,
+      ctx.elevScale,
+      ctx.altitudeDisplayMode,
+    );
+  }
+  return projectedZ;
+}
+
 export function buildTrailBodyGradientColors(
   points: [number, number, number][],
   altColors: boolean,
   defaultColor: [number, number, number, number],
+  elevCtx?: TrailElevationContext,
 ): [number, number, number, number][] {
   const len = points.length;
 
   return points.map((point, i) => {
     const tVal = len > 1 ? i / (len - 1) : 1;
     const fade = 0.15 + 0.85 * Math.pow(tVal, 1.35);
-    const base = altColors ? trailAltitudeToColor(point[2]) : defaultColor;
+    const rawAlt = trailPointToRawAltitude(point[2], elevCtx);
+    const base = altColors ? trailAltitudeToColor(rawAlt) : defaultColor;
     const brightness = altColors ? 0.72 + 0.28 * Math.pow(tVal, 1.1) : 1;
     const [r, g, b] = scaleTrailColor(base, brightness);
     const alpha = Math.round(55 + fade * 165);
@@ -107,13 +131,15 @@ export function buildConnectorGradientColors(
   points: [number, number, number][],
   altColors: boolean,
   defaultColor: [number, number, number, number],
+  elevCtx?: TrailElevationContext,
 ): [number, number, number, number][] {
   const len = points.length;
 
   return points.map((point, index) => {
     const tVal = len > 1 ? index / (len - 1) : 1;
     const eased = Math.pow(tVal, 1.1);
-    const base = altColors ? trailAltitudeToColor(point[2]) : defaultColor;
+    const rawAlt = trailPointToRawAltitude(point[2], elevCtx);
+    const base = altColors ? trailAltitudeToColor(rawAlt) : defaultColor;
     const brightness = altColors ? 0.94 - 0.12 * eased : 1;
     const [r, g, b] = scaleTrailColor(base, brightness);
     const alpha = Math.round(
@@ -130,6 +156,7 @@ export function buildTrailRenderSegments(input: {
   kind: "body" | "connector";
   altColors: boolean;
   defaultColor: [number, number, number, number];
+  elevCtx?: TrailElevationContext;
 }): TrailRenderSegment[] {
   const gradientColors =
     input.kind === "connector"
@@ -137,11 +164,13 @@ export function buildTrailRenderSegments(input: {
           input.points,
           input.altColors,
           input.defaultColor,
+          input.elevCtx,
         )
       : buildTrailBodyGradientColors(
           input.points,
           input.altColors,
           input.defaultColor,
+          input.elevCtx,
         );
 
   const segments: TrailRenderSegment[] = [];
