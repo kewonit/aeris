@@ -1,6 +1,6 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
-// 3-tier fallback: airplanes.live proxy → adsb.lol proxy → OpenSky.
+// 3-tier fallback: adsb.lol proxy → airplanes.live proxy → OpenSky.
 // Dev/override: ?provider=airplanes|adsb|opensky in the URL.
 // ────────────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ export interface FlightApiFetchResult {
 // cooldown window. After the window elapses the state transitions to
 // HALF-OPEN and a single probe request is allowed through:
 //   • probe succeeds → CLOSED (reset)
-//   • probe fails    → OPEN (cooldown doubles, capped at 120 s)
+//   • probe fails    → OPEN (cooldown doubles, capped at 5 min)
 //
 // What counts as a failure:
 //   ✓ Timeout, HTTP 5xx, non-JSON response, network error
@@ -49,8 +49,8 @@ interface TierCircuit {
 }
 
 const CIRCUIT_FAILURE_THRESHOLD = 3;
-const CIRCUIT_BASE_COOLDOWN_MS = 30_000; // 30 s
-const CIRCUIT_MAX_COOLDOWN_MS = 120_000; // 2 min
+const CIRCUIT_BASE_COOLDOWN_MS = 60_000; // 60 s
+const CIRCUIT_MAX_COOLDOWN_MS = 300_000; // 5 min
 
 const circuits = new Map<string, TierCircuit>();
 
@@ -77,7 +77,7 @@ function recordFailure(tierId: string): void {
   };
   c.failures++;
   if (c.failures >= CIRCUIT_FAILURE_THRESHOLD) {
-    // Cooldown: 30s → 60s → 120s → 120s …
+    // Cooldown: 60s → 120s → 240s → 300s …
     const exponent = c.failures - CIRCUIT_FAILURE_THRESHOLD;
     const cooldown = Math.min(
       CIRCUIT_BASE_COOLDOWN_MS * Math.pow(2, exponent),
@@ -244,6 +244,21 @@ interface NamedTier {
   fn: () => Promise<FlightState[]>;
 }
 
+// ── Sticky Source ──────────────────────────────────────────────────────
+//
+// After a provider succeeds, prefer it for STICKY_WINDOW_MS before
+// trying higher-priority tiers again. This prevents unnecessary
+// flip-flopping between providers when both are healthy.
+
+const STICKY_WINDOW_MS = 60_000; // 60 s
+let stickySource: string | null = null;
+let stickyUntil = 0;
+
+function recordStickySuccess(tierId: string): void {
+  stickySource = tierId;
+  stickyUntil = Date.now() + STICKY_WINDOW_MS;
+}
+
 async function runFallbackChain(
   tiers: NamedTier[],
   signal?: AbortSignal,
@@ -252,7 +267,17 @@ async function runFallbackChain(
   let allSkipped = true;
   let lastTriedId: string | undefined;
 
-  for (const { id, fn } of tiers) {
+  // If we have a sticky source and it's still within the window,
+  // try it first before the normal tier order.
+  const orderedTiers =
+    stickySource && Date.now() < stickyUntil
+      ? [
+          ...tiers.filter((t) => t.id === stickySource),
+          ...tiers.filter((t) => t.id !== stickySource),
+        ]
+      : tiers;
+
+  for (const { id, fn } of orderedTiers) {
     if (shouldSkipTier(id)) continue;
     allSkipped = false;
     lastTriedId = id;
@@ -260,6 +285,7 @@ async function runFallbackChain(
     try {
       const flights = await fn();
       recordSuccess(id);
+      recordStickySuccess(id);
       return { flights, rateLimited: false, source: id };
     } catch (err) {
       if (signal?.aborted) throw err;
@@ -287,7 +313,7 @@ async function runFallbackChain(
 
 /**
  * Fetch flights within a radius of a geographic point.
- * Uses the fallback chain: airplanes.live proxy → adsb.lol proxy → OpenSky.
+ * Uses the fallback chain: adsb.lol proxy → airplanes.live proxy → OpenSky.
  */
 export async function fetchFlightsByPoint(
   lat: number,
@@ -308,8 +334,19 @@ export async function fetchFlightsByPoint(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
+  if (override === "adsb" || override === "auto") {
+    // adsb.lol via proxy — primary data source
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, options);
+      },
+    });
+  }
+
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy (direct fails due to CORS)
+    // airplanes.live via proxy — secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {
@@ -320,27 +357,10 @@ export async function fetchFlightsByPoint(
   }
 
   if (override === "auto") {
-    // Default chain continues: adsb.lol (proxy) → OpenSky
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, options);
-      },
-    });
+    // OpenSky — last resort
     tiers.push({
       id: "opensky",
       fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
-    });
-  }
-
-  if (override === "adsb") {
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, options);
-      },
     });
   }
 
@@ -356,7 +376,7 @@ export async function fetchFlightsByPoint(
 
 /**
  * Fetch a single aircraft by ICAO24 hex address.
- * Uses the fallback chain: airplanes.live proxy → adsb.lol proxy → OpenSky.
+ * Uses the fallback chain: adsb.lol proxy → airplanes.live proxy → OpenSky.
  */
 export async function fetchFlightByHex(
   icao24: string,
@@ -375,8 +395,19 @@ export async function fetchFlightByHex(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
+  if (override === "adsb" || override === "auto") {
+    // adsb.lol via proxy — primary data source
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+  }
+
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy (direct fails due to CORS)
+    // airplanes.live via proxy — secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {
@@ -387,29 +418,12 @@ export async function fetchFlightByHex(
   }
 
   if (override === "auto") {
-    // Default chain continues: adsb.lol proxy → OpenSky
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, parseOpts);
-      },
-    });
+    // OpenSky — last resort
     tiers.push({
       id: "opensky",
       fn: async () => {
         const result = await openskyFetchByIcao24(normalized, signal);
         return result.flight ? [result.flight] : [];
-      },
-    });
-  }
-
-  if (override === "adsb") {
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, parseOpts);
       },
     });
   }
@@ -451,33 +465,23 @@ export async function fetchFlightByCallsign(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
+  if (override === "adsb" || override === "auto") {
+    // adsb.lol via proxy — primary data source
+    tiers.push({
+      id: "adsb",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+  }
+
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy (direct fails due to CORS)
+    // airplanes.live via proxy — secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
-        return parseAircraftList(resp.ac, parseOpts);
-      },
-    });
-  }
-
-  if (override === "auto") {
-    // Default chain continues: adsb.lol proxy
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, parseOpts);
-      },
-    });
-  }
-
-  if (override === "adsb") {
-    tiers.push({
-      id: "adsb",
-      fn: async () => {
-        const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });

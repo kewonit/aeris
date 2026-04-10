@@ -486,15 +486,15 @@ export function FlightLayers({
         lastFlightsForInterpRef.current = null;
         resumeSnapRef.current = true;
 
-        // Purge stale trail render caches so the first frame after
-        // resume doesn't flash geometry computed before the tab hide.
+        // Invalidate trail render caches so the next frame recomputes
+        // geometry from the preserved trail data (not stale cached paths).
         trailBasePathCacheRef.current.clear();
         trailPathCacheRef.current.clear();
         trailColorCacheRef.current.clear();
         visibleTrailCacheRef.current.clear();
 
-        // Reset live trail + altitude-filter state in the store so
-        // stale smoothing doesn't produce Z artifacts on resume.
+        // Signal the trail store that we're back — preserves existing
+        // trails but resets bootstrap counter so gaps fill quickly.
         trailStore.handleVisibilityResume();
       }
     }

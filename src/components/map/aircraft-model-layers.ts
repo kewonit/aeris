@@ -21,10 +21,7 @@ import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { tintAircraftColor, applySpecialTint } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
-import {
-  AIRCRAFT_MIN_PIXELS,
-  AIRCRAFT_MAX_PIXELS,
-} from "./flight-layer-constants";
+import { AIRCRAFT_MIN_PIXELS } from "./flight-layer-constants";
 import {
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
@@ -32,7 +29,10 @@ import {
   modelUrl,
 } from "./aircraft-model-mapping";
 import { getAircraftModelCalibration } from "./aircraft-model-calibration";
-import { getAircraftScenegraphSizeScale } from "./aircraft-model-size";
+import {
+  getAircraftScenegraphSizeScale,
+  getModelMaxPixels,
+} from "./aircraft-model-size";
 import { offsetPositionByTrack } from "./flight-math";
 
 // Stable empty array — same reference every frame so deck.gl skips buffer work
@@ -186,7 +186,7 @@ export function buildAircraftModelLayers(
         getColor: [dataVersion, altColors],
       },
       sizeMinPixels: AIRCRAFT_MIN_PIXELS,
-      sizeMaxPixels: AIRCRAFT_MAX_PIXELS,
+      sizeMaxPixels: getModelMaxPixels(modelKey),
       _lighting: "pbr",
       pickable: hasData,
       onHover: handleHover,

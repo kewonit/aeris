@@ -800,15 +800,10 @@ export function createTrailStore() {
     emit();
   }
 
-  /** Reset all live trail and altitude-filter state after a tab-switch.
-   *  History segments are preserved — only live tails are affected. */
+  /** Signal that the tab just became visible again.
+   *  Preserve existing live trails — fresh poll data will naturally extend them.
+   *  Only reset bootstrap counter so the first few polls fill in any gap. */
   function handleVisibilityResume(): void {
-    trails.clear();
-    altitudeStates.clear();
-    for (const envelope of envelopes.values()) {
-      envelope.liveTail = [];
-      envelope.liveRevision += 1;
-    }
     bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
     emit();
   }

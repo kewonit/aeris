@@ -7,9 +7,9 @@ import {
 
 const LOW_ALT_BREAK_M = 3_000;
 const MID_ALT_BREAK_M = 9_000;
-const LOW_ALT_SCALE = 1.46;
-const MID_ALT_SCALE = 1.26;
-const HIGH_ALT_SCALE = 1.1;
+const LOW_ALT_SCALE = 3.0;
+const MID_ALT_SCALE = 2.5;
+const HIGH_ALT_SCALE = 2.0;
 const MIN_DISPLAY_ALTITUDE_METERS = 60;
 const FULL_ELEVATION_SCALE_ZOOM = 6.9;
 
@@ -29,7 +29,7 @@ const ELEVATION_SCALE_PROFILE: Record<
   presentation: {
     hidden: 0.34,
     visible: 0.96,
-    city: 1.06,
+    city: 1.8,
   },
 };
 
