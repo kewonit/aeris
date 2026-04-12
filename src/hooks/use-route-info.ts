@@ -42,7 +42,7 @@ export type FlightRouteInfo = {
   destinationConfidence: "known" | "high" | "medium" | "low" | null;
   /** How the route was determined */
   source: "api" | "detected" | "estimated" | "mixed" | null;
-  /** Whether route data is currently being fetched */
+  /** Whether route data is being fetched and no route info is available yet */
   loading: boolean;
   /** Short display string, e.g. "LHR → JFK" */
   routeDisplay: string | null;

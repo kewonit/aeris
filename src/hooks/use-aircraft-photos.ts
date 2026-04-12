@@ -299,7 +299,7 @@ export function useAircraftPhotos(
       cancelled = true;
       controller.abort();
     };
-  }, [cacheKey, cached, hasIcao24, hexCached, normalized, reg]);
+  }, [cacheKey, hasIcao24, normalized, reg]);
 
   if (!hasIcao24) {
     return { photos: [], aircraft: null, loading: false, error: false };
