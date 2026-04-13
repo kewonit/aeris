@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
   Plus,
@@ -9,6 +9,9 @@ import {
   ChevronsDown,
   RotateCw,
   RotateCcw,
+  Locate,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 
 type CameraActionType = "zoom" | "pitch" | "bearing";
@@ -93,7 +96,97 @@ function Divider() {
   );
 }
 
+/** One-off action button (no continuous press). */
+function ActionButton({
+  label,
+  title,
+  onClick,
+  children,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.button
+      type="button"
+      className="flex h-8 w-8 items-center justify-center select-none"
+      style={{ color: "rgb(var(--ui-fg) / 0.45)" }}
+      whileHover={{ scale: 1.12 }}
+      whileTap={{ scale: 0.88 }}
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
+function useGeolocation() {
+  const [locating, setLocating] = useState(false);
+
+  const flyToMe = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        window.dispatchEvent(
+          new CustomEvent("aeris:geolocate", {
+            detail: {
+              coordinates: [pos.coords.longitude, pos.coords.latitude] as [
+                number,
+                number,
+              ],
+            },
+          }),
+        );
+      },
+      () => {
+        setLocating(false);
+      },
+      { timeout: 10_000, maximumAge: 300_000 },
+    );
+  }, []);
+
+  return { flyToMe, locating };
+}
+
+function useFullscreen() {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    setSupported(!!document.fullscreenEnabled);
+
+    function onChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  return { isFullscreen, toggle, supported };
+}
+
 export function CameraControls() {
+  const { flyToMe, locating } = useGeolocation();
+  const {
+    isFullscreen,
+    toggle: toggleFullscreen,
+    supported: fsSupported,
+  } = useFullscreen();
   return (
     <motion.div
       initial={{ opacity: 0, x: 12 }}
@@ -170,6 +263,36 @@ export function CameraControls() {
       >
         <RotateCcw className="h-3.5 w-3.5" />
       </ControlButton>
+
+      <div
+        className="mx-auto my-0.5 h-px w-6"
+        style={{ backgroundColor: "rgb(var(--ui-fg) / 0.10)" }}
+      />
+
+      <ActionButton
+        label="Fly to my location"
+        title="Fly to my location"
+        onClick={flyToMe}
+      >
+        <Locate className={`h-3.5 w-3.5 ${locating ? "animate-pulse" : ""}`} />
+      </ActionButton>
+
+      {fsSupported && (
+        <>
+          <Divider />
+          <ActionButton
+            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? (
+              <Minimize className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize className="h-3.5 w-3.5" />
+            )}
+          </ActionButton>
+        </>
+      )}
     </motion.div>
   );
 }

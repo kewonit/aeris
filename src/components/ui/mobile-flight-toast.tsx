@@ -372,7 +372,12 @@ export function MobileFlightToast({
             <Building2 className="h-3 w-3 shrink-0 text-foreground/20" />
             <p className="truncate text-[11px] font-medium text-foreground/45">
               {company}
-              {model ? (
+              {flight?.typeDescription ? (
+                <span className="text-foreground/25">
+                  {" "}
+                  · {flight.typeDescription}
+                </span>
+              ) : model ? (
                 <span className="text-foreground/25"> · {model}</span>
               ) : null}
             </p>
@@ -397,6 +402,20 @@ export function MobileFlightToast({
               </p>
             </div>
           )}
+        {/* Registration fallback from flight data */}
+        {!aircraftDetails?.registration && flight?.registration && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <Plane className="h-3 w-3 shrink-0 text-foreground/20" />
+            <p className="truncate font-mono text-[11px] text-foreground/35">
+              {flight.registration}
+              {flight.typeCode && !flight.typeDescription ? (
+                <span className="ml-1 text-foreground/20">
+                  [{flight.typeCode}]
+                </span>
+              ) : null}
+            </p>
+          </div>
+        )}
         {/* Route info */}
         {(routeInfo.origin || routeInfo.destination) && (
           <div className="mt-2 flex items-center gap-1.5">

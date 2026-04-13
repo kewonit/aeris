@@ -137,7 +137,7 @@ export function StatusBar({
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}

@@ -569,96 +569,203 @@ function Toggle({ checked }: { checked: boolean }) {
   );
 }
 
-const CHANGELOG = [
+const CHANGELOG: {
+  version: string;
+  date: string;
+  entries: { title: string; description: string }[];
+}[] = [
   {
-    date: "Apr 9",
-    title: "Trail system v2 — rendering, geometry & data pipeline",
-    description:
-      "Complete trail overhaul: server trace service with multi-provider fallback, sealed-segment display geometry that keeps the fixed trail body stable across live appends, cusp and backtrack removal, needle-kink filtering, and holding-pattern preservation. Connector rendering follows the recent tail arc. Live trail retention raised beyond 120 points. Altitude-aware color caching, opacity fading, and zoom-linked elevation smoothing.",
+    version: "0.8.2",
+    date: "Apr 12, 2026",
+    entries: [
+      {
+        title: "Route accuracy & React 19 fixes",
+        description:
+          "Origin/destination now prioritises flight-plan database lookups over heuristic trace matching, fixing incorrect airport assignments. Eliminated fallback airports at 0°/0° when hexdb lookups fail. Replaced next-themes with @wrksz/themes to resolve React 19 script-tag rendering warning. Fixed fullscreen button hydration mismatch. Updated Next.js to 16.2.3.",
+      },
+    ],
   },
   {
-    date: "Apr 9",
-    title: "Altitude calibration and trace fallback hardening",
-    description:
-      "Refined altitude presentation so realistic mode recovers to full height sooner at operational zoom levels, while presentation mode maintains a clearer vertical lift. Reduced 3D aircraft model size with zoom-compensated scaling for more balanced on-map proportions. Browser-direct readsb trace fetching now treats malformed JSON responses as provider failures and falls back to the next candidate URL instead of aborting the request.",
+    version: "0.8.1",
+    date: "Jun 25, 2025",
+    entries: [
+      {
+        title: "Geolocation & fullscreen controls",
+        description:
+          "New 'Fly to Me' button uses browser geolocation to center the map on your current location. Fullscreen toggle button for distraction-free viewing. Both controls added to the camera control panel.",
+      },
+      {
+        title: "Aircraft type & registration display",
+        description:
+          "Flight cards now show the specific aircraft type description (e.g. 'AIRBUS A-320') when available from ADS-B data, instead of the generic category hint. Registration numbers displayed with ICAO type codes on both desktop and mobile views.",
+      },
+    ],
   },
   {
-    date: "Mar 30",
-    title: "Route detection, aircraft photos & metadata",
-    description:
-      "New route detection system identifies departure airports from trail data. hexdb API integration provides aircraft metadata (type, registration, owner). Aircraft photo fetching with negative-cache backoff. Improved flight card and mobile toast UI.",
+    version: "0.8.0",
+    date: "Apr 12, 2026",
+    entries: [
+      {
+        title: "Trail system v2 — rendering, geometry & data pipeline",
+        description:
+          "Complete trail overhaul: server trace service with multi-provider fallback, sealed-segment display geometry that keeps the fixed trail body stable across live appends, cusp and backtrack removal, needle-kink filtering, and holding-pattern preservation. Connector rendering follows the recent tail arc. Live trail retention raised beyond 120 points. Altitude-aware color caching, opacity fading, and zoom-linked elevation smoothing.",
+      },
+      {
+        title: "Route detection, aircraft photos & metadata",
+        description:
+          "New route detection system identifies departure airports from trail data. hexdb API integration provides aircraft metadata (type, registration, owner). Aircraft photo fetching with negative-cache backoff. Improved flight card and mobile toast UI.",
+      },
+      {
+        title: "Altitude calibration and trace fallback hardening",
+        description:
+          "Refined altitude presentation so realistic mode recovers to full height sooner at operational zoom levels, while presentation mode maintains a clearer vertical lift. Reduced 3D aircraft model size with zoom-compensated scaling for more balanced on-map proportions. Browser-direct readsb trace fetching now treats malformed JSON responses as provider failures and falls back to the next candidate URL instead of aborting the request.",
+      },
+    ],
   },
   {
-    date: "Mar 22",
-    title: "3D aircraft models & smoother trails",
-    description:
-      "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code — from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15°), denser Catmull–Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
+    version: "0.7.0",
+    date: "Mar 29, 2026",
+    entries: [
+      {
+        title: "Weather radar & airspace overlays",
+        description:
+          "Live precipitation radar from RainViewer with adjustable opacity. Classified airspace boundaries from OpenAIP with thermal hotspot indicators for glider and paraglider activity. ATC audio spectrum visualizer and airport board hook for departure/arrival data.",
+      },
+      {
+        title: "UI theming overhaul",
+        description:
+          "Refactored color schemes across FPV HUD, hero banner, keyboard shortcuts, mobile toast, provider panel, scroll area, and slider to use foreground/background theme variables for consistent dark mode support. Improved readability and accessibility throughout.",
+      },
+      {
+        title: "Flight data parsing & trail quality",
+        description:
+          "Extended FlightState with avionics data (IAS, TAS, Mach, roll, track rate, magnetic heading) and navigation intent fields. Improved GPS outlier filtering and loop cleaning in trail history. Last-leg trimming and nearest airport search for better route context.",
+      },
+    ],
   },
   {
-    date: "Mar 22",
-    title: "Multi-source flight data & circuit breaker",
-    description:
-      "Switched from OpenSky-only to a 2-tier fallback: adsb.lol → OpenSky (airplanes.live available via override). Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
+    version: "0.6.2",
+    date: "Mar 25, 2026",
+    entries: [
+      {
+        title: "SEO & discoverability",
+        description:
+          "Added robots.txt, XML sitemap, and web app manifest. OpenGraph and Twitter card images generated server-side. Custom 404 page. Enhanced metadata across all routes for better search engine indexing.",
+      },
+    ],
   },
   {
-    date: "Mar 22",
-    title: "Code review fixes",
-    description:
-      "Fixed GPU memory monitor (duplicate WebGL enum cases, wrong byte sizes). Selection pulse halos now match aircraft height at all zoom levels. ATC stream properly cancels upstream on timeout. Airspace tile rate-limiter enforces spacing for queued requests. Photo fetch errors now surface to the UI. Spline cache clearing moved from useMemo to useEffect for React strict mode safety.",
+    version: "0.6.1",
+    date: "Mar 24, 2026",
+    entries: [
+      {
+        title: "635 ATC feeds worldwide",
+        description:
+          "Expanded the static ATC feed database from a handful of airports to 635 across all continents with verified LiveATC mount points. Coverage now spans North America, Europe, Asia-Pacific, South America, Africa, and the Middle East.",
+      },
+    ],
   },
   {
-    date: "Mar 21",
-    title: "ATC feed lookup & GPU memory monitor",
-    description:
-      "New ATC lookup module — converts IATA to ICAO codes, finds nearby feeds by geographic proximity, and looks up feeds by airport or centre code. GPU memory monitor tracks WebGL resource allocations (textures, buffers, framebuffers) for debugging resource leaks.",
+    version: "0.6.0",
+    date: "Mar 22, 2026",
+    entries: [
+      {
+        title: "3D aircraft models & smoother trails",
+        description:
+          "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code — from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15\u00B0), denser Catmull\u2013Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
+      },
+      {
+        title: "Multi-source flight data & circuit breaker",
+        description:
+          "Switched from OpenSky-only to a 2-tier fallback: adsb.lol \u2192 OpenSky (airplanes.live available via override). Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
+      },
+      {
+        title: "ATC feed lookup & GPU memory monitor",
+        description:
+          "New ATC lookup module \u2014 converts IATA to ICAO codes, finds nearby feeds by geographic proximity, and looks up feeds by airport or centre code. GPU memory monitor tracks WebGL resource allocations (textures, buffers, framebuffers) for debugging resource leaks.",
+      },
+      {
+        title: "Reliability & polish",
+        description:
+          "Serialised rate limiting in the flight API client. Logo cache with size limits and eviction. Registration country lookup via pre-built O(1) maps. Keyboard shortcuts focus trapping fix. SessionStorage guard for incognito mode. Airspace display toggle in map attribution.",
+      },
+      {
+        title: "Flight API client refactor",
+        description:
+          "New flight-api-client, flight-api-parsing, and flight-api-types modules. useFlights refactored to use the multi-source client \u2014 removed legacy credit management. useFlightMonitors switched to hex-based lookups.",
+      },
+      {
+        title: "Code review fixes",
+        description:
+          "Fixed GPU memory monitor (duplicate WebGL enum cases, wrong byte sizes). Selection pulse halos now match aircraft height at all zoom levels. ATC stream properly cancels upstream on timeout. Airspace tile rate-limiter enforces spacing for queued requests. Photo fetch errors now surface to the UI. Spline cache clearing moved from useMemo to useEffect for React strict mode safety.",
+      },
+    ],
   },
   {
-    date: "Mar 20",
-    title: "Reliability & polish",
-    description:
-      "Serialised rate limiting in the flight API client. Logo cache with size limits and eviction. Registration country lookup via pre-built O(1) maps. Keyboard shortcuts focus trapping fix. SessionStorage guard for incognito mode. Airspace display toggle in map attribution. Utility functions extended with clamp().",
+    version: "0.5.0",
+    date: "Mar 10, 2026",
+    entries: [
+      {
+        title: "Globe mode & aircraft photos",
+        description:
+          "Zoom out to see the entire earth as a 3D sphere with altitude-colored dots for every flight. Trails are now interpolated with centripetal Catmull\u2013Rom splines \u2014 a C\u00B9-continuous piecewise cubic that passes through every waypoint without overshooting, using \u03B1\u2009=\u20090.5 parameterization for natural curvature. Dark terrain, aircraft photo banners in flight cards, and a hard dot-to-flight cutover with zero overlap. Globe mode is in beta \u2014 find it in Settings.",
+      },
+    ],
   },
   {
-    date: "Mar 13",
-    title: "Flight API client & rebase fixes",
-    description:
-      "New flight-api-client, flight-api-parsing, and flight-api-types modules. useFlights refactored to use the multi-source client — removed legacy credit management. useFlightMonitors switched to hex-based lookups. Fixed 6 files that diverged during rebase (IATA codes, globe mode ref, terrain attribution, cache eviction, OpenSky parsing).",
+    version: "0.4.1",
+    date: "Feb 22, 2026",
+    entries: [
+      {
+        title: "Flight history tracking",
+        description:
+          "Full trail rendering for every tracked flight. Airline logo caching so they actually load.",
+      },
+    ],
   },
   {
-    date: "Mar 11",
-    title: "Globe mode & aircraft photos",
-    description:
-      "Zoom out to see the entire earth as a 3D sphere with altitude-colored dots for every flight. Trails are now interpolated with centripetal Catmull\u2013Rom splines — a C\u00B9-continuous piecewise cubic that passes through every waypoint without overshooting, using \u03B1\u2009=\u20090.5 parameterization for natural curvature. Dark terrain, aircraft photo banners in flight cards, and a hard dot-to-flight cutover with zero overlap. Globe mode is in beta — find it in Settings.",
+    version: "0.4.0",
+    date: "Feb 21, 2026",
+    entries: [
+      {
+        title: "First person view",
+        description:
+          "FPV mode \u2014 pick any plane and ride along with a HUD. Also added flight search by callsign.",
+      },
+    ],
   },
   {
-    date: "Feb 22",
-    title: "Flight history tracking",
-    description:
-      "Full trail rendering for every tracked flight. Airline logo caching so they actually load.",
+    version: "0.3.0",
+    date: "Feb 17, 2026",
+    entries: [
+      {
+        title: "Airline logos & attribution",
+        description:
+          "Proper logos for airlines, and attribution for OSM, OpenSky, CARTO, Esri, and everyone whose data makes this work.",
+      },
+    ],
   },
   {
-    date: "Feb 21",
-    title: "First person view",
-    description:
-      "FPV mode — pick any plane and ride along with a HUD. Also added flight search by callsign.",
+    version: "0.2.0",
+    date: "Feb 15, 2026",
+    entries: [
+      {
+        title: "9,000+ airports",
+        description:
+          "Went from a handful of cities to every airport we could find. Copilot helped build the dataset. Added keyboard shortcuts and click-to-select.",
+      },
+    ],
   },
   {
-    date: "Feb 17",
-    title: "Airline logos & attribution",
-    description:
-      "Proper logos for airlines, and attribution for OSM, OpenSky, CARTO, Esri, and everyone whose data makes this work.",
-  },
-  {
-    date: "Feb 15",
-    title: "9,000+ airports",
-    description:
-      "Went from a handful of cities to every airport we could find. Copilot helped build the dataset. Added keyboard shortcuts and click-to-select.",
-  },
-  {
-    date: "Feb 14",
-    title: "Day one",
-    description:
-      "Basic map, flight cards, trail rendering, orbit camera. Spent most of the day fighting Vercel timeouts and OpenSky IP blocks before realizing the API just supports CORS.",
+    version: "0.1.0",
+    date: "Feb 14, 2026",
+    entries: [
+      {
+        title: "Day one",
+        description:
+          "Basic map, flight cards, trail rendering, orbit camera. Spent most of the day fighting Vercel timeouts and OpenSky IP blocks before realizing the API just supports CORS.",
+      },
+    ],
   },
 ];
 
@@ -740,19 +847,29 @@ export function AboutContent() {
 export function ChangelogContent() {
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-4 p-5 pt-3">
-        {CHANGELOG.map((entry, i) => (
-          <div key={`${entry.date}-${i}`} className="flex gap-3">
-            <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-foreground/20 w-11">
-              {entry.date}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-foreground/55">
-                {entry.title}
-              </p>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/30">
-                {entry.description}
-              </p>
+      <div className="flex flex-col gap-5 p-5 pt-3">
+        {CHANGELOG.map((release, i) => (
+          <div key={release.version}>
+            {i > 0 && <div className="mb-5 h-px w-full bg-foreground/6" />}
+            <div className="mb-3 flex items-baseline gap-2">
+              <span className="text-[13px] font-semibold tabular-nums text-foreground/60">
+                v{release.version}
+              </span>
+              <span className="text-[11px] text-foreground/20">
+                {release.date}
+              </span>
+            </div>
+            <div className="flex flex-col gap-3 pl-0.5">
+              {release.entries.map((entry, j) => (
+                <div key={j} className="min-w-0">
+                  <p className="text-[13px] font-medium text-foreground/50">
+                    {entry.title}
+                  </p>
+                  <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/30">
+                    {entry.description}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         ))}

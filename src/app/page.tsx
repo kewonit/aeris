@@ -38,7 +38,7 @@ const jsonLd = [
     ],
     screenshot:
       "https://github.com/user-attachments/assets/9d1f50ed-be4e-4ef5-95ac-257e9129f8c8",
-    softwareVersion: "0.1.0",
+    softwareVersion: "0.5.0",
     isAccessibleForFree: true,
     inLanguage: "en",
   },

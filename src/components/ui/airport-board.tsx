@@ -149,56 +149,32 @@ function FlightRow({
         delay: Math.min(index * 0.02, 0.15),
       }}
       onClick={onSelect}
-      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
+      className={`group relative flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
         isSelected
-          ? "bg-foreground/8 shadow-sm shadow-foreground/5"
+          ? "bg-foreground/8"
           : "hover:bg-foreground/4 active:bg-foreground/6"
       }`}
       aria-label={`${flight.callsign} — ${flight.status}, ${flight.altitude}, ${flight.distanceFormatted}`}
     >
-      {/* Selected indicator bar */}
-      {isSelected && (
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          className="absolute left-0.5 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-foreground/50"
-          transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-        />
-      )}
-
       {/* Status dot */}
-      <div className="flex w-3 shrink-0 items-center justify-center">
-        <span
-          className={`block h-1.5 w-1.5 rounded-full ${style.dot} ${
-            isUrgent ? "animate-pulse" : ""
-          } ${style.glow ? `shadow-md ${style.glow}` : ""}`}
-        />
-      </div>
+      <span
+        className={`block h-1.5 w-1.5 shrink-0 rounded-full ${style.dot} ${
+          isUrgent ? "animate-pulse" : ""
+        } ${style.glow ? `shadow-md ${style.glow}` : ""}`}
+      />
 
-      {/* Callsign — primary info, largest text */}
-      <span className="w-16 shrink-0 truncate font-mono text-[13px] font-semibold tracking-wide text-foreground/90">
+      {/* Callsign */}
+      <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-medium text-foreground/80">
         {flight.callsign}
       </span>
 
-      {/* Status badge */}
-      <span
-        className={`w-16 shrink-0 text-[11px] font-semibold uppercase tracking-wide ${style.text}`}
-      >
+      {/* Status */}
+      <span className={`shrink-0 text-[11px] font-medium ${style.text}`}>
         {flight.status}
       </span>
 
-      {/* Altitude */}
-      <span className="w-16 shrink-0 text-right font-mono text-[12px] tabular-nums text-foreground/50 transition-colors group-hover:text-foreground/70">
-        {flight.altitude}
-      </span>
-
-      {/* V/S — hidden on small screens */}
-      <span className="hidden w-14 shrink-0 justify-end sm:flex">
-        <VRate rate={flight.verticalRate} />
-      </span>
-
       {/* Distance */}
-      <span className="ml-auto w-14 shrink-0 text-right font-mono text-[12px] tabular-nums text-foreground/40 transition-colors group-hover:text-foreground/60">
+      <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground/30">
         {flight.distanceFormatted}
       </span>
     </motion.button>
@@ -209,22 +185,22 @@ function FlightRow({
 
 function TableHead() {
   return (
-    <div className="flex items-center gap-3 px-3 pb-1.5 pt-1">
+    <div className="flex items-center gap-2 px-2.5 pb-1.5 pt-1">
       {/* dot spacer */}
       <span className="w-3 shrink-0" />
-      <span className="w-16 shrink-0 text-[10px] font-medium uppercase tracking-widest text-foreground/20">
+      <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-widest text-foreground/20">
         Flight
       </span>
-      <span className="w-16 shrink-0 text-[10px] font-medium uppercase tracking-widest text-foreground/20">
+      <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-widest text-foreground/20">
         Status
       </span>
-      <span className="w-16 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20">
+      <span className="hidden w-14 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20 sm:block">
         Alt
       </span>
-      <span className="hidden w-14 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20 sm:block">
+      <span className="hidden w-12 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20 sm:block">
         V/S
       </span>
-      <span className="ml-auto w-14 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20">
+      <span className="ml-auto w-12 shrink-0 text-right text-[10px] font-medium uppercase tracking-widest text-foreground/20">
         Dist
       </span>
     </div>
@@ -267,10 +243,9 @@ function FlightList({
 
   return (
     <>
-      <TableHead />
       <div
         ref={scrollRef}
-        className="scrollbar-none max-h-72 overflow-y-auto overscroll-contain"
+        className="scrollbar-none max-h-[60vh] overflow-y-auto overscroll-contain px-1 pb-2"
       >
         <AnimatePresence initial={false}>
           {flights.map((f, i) => (
@@ -284,10 +259,6 @@ function FlightList({
           ))}
         </AnimatePresence>
       </div>
-      {/* Fade bottom edge for scroll overflow */}
-      {flights.length > 5 && (
-        <div className="pointer-events-none h-4 bg-linear-to-t from-black/40 to-transparent" />
-      )}
     </>
   );
 }
@@ -442,12 +413,9 @@ export function AirportBoard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 12, scale: 0.98 }}
       transition={SPRING_GENTLE}
-      className="w-[min(calc(100vw-20px),440px)] sm:w-[min(calc(100vw-32px),580px)]"
+      className="w-80 sm:w-96"
     >
-      <div
-        className="overflow-hidden rounded-2xl border border-foreground/6 shadow-2xl shadow-black/60 backdrop-blur-2xl"
-        style={{ backgroundColor: "rgb(var(--ui-bg) / 0.7)" }}
-      >
+      <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
         {/* ── Header ── */}
         <div
           role="button"
@@ -529,7 +497,7 @@ export function AirportBoard({
                       arrivalsCount={arrivals.length}
                       departuresCount={departures.length}
                     />
-                    <div className="px-1 pb-2.5 pt-1">
+                    <div className="px-1 pb-1 pt-0.5">
                       <AnimatePresence mode="wait" initial={false}>
                         <motion.div
                           key={effectiveTab}
@@ -565,7 +533,7 @@ export function AirportBoard({
                       departuresCount={departures.length}
                     />
 
-                    <div className="px-1 pb-2.5 pt-1">
+                    <div className="px-1 pb-1 pt-0.5">
                       <AnimatePresence mode="wait" initial={false}>
                         <motion.div
                           key={effectiveTab}

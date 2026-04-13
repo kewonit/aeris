@@ -213,8 +213,27 @@ export function FlightCard({
                   <Building2 className="h-3 w-3 text-foreground/25" />
                   <p className="text-xs font-medium text-foreground/50">
                     {company}
-                    {model ? (
+                    {flight?.typeDescription ? (
+                      <span className="text-foreground/30">
+                        {" "}
+                        · {flight.typeDescription}
+                      </span>
+                    ) : model ? (
                       <span className="text-foreground/30"> · {model}</span>
+                    ) : null}
+                  </p>
+                </div>
+              )}
+
+              {flight?.registration && (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <Plane className="h-3 w-3 text-foreground/25" />
+                  <p className="text-[11px] font-mono font-medium text-foreground/40">
+                    {flight.registration}
+                    {flight.typeCode && !flight.typeDescription ? (
+                      <span className="ml-1 text-foreground/25">
+                        [{flight.typeCode}]
+                      </span>
                     ) : null}
                   </p>
                 </div>

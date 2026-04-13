@@ -10,13 +10,14 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import dynamic from "next/dynamic";
-import { useTheme } from "next-themes";
+import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { AirspaceLayer } from "@/components/map/airspace-layer";
 import { WeatherRadarLayer } from "@/components/map/weather-radar-layer";
+import { UserLocationMarker } from "@/components/map/user-location-marker";
 import { FlightLayers } from "@/components/map/flight-layers";
 import {
   MapStateTracker,
@@ -54,6 +55,7 @@ import type { FlightState } from "@/lib/opensky";
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
 import { processDepartures } from "@/lib/route-detection";
+import { findNearestAirport, airportToCity } from "@/lib/airports";
 import type { PickingInfo } from "@deck.gl/core";
 import {
   DEFAULT_CITY,
@@ -109,6 +111,9 @@ function FlightTrackerInner() {
 
   const lookupAbortRef = useRef<AbortController | null>(null);
   const [selectedAirportIata, setSelectedAirportIata] = useState<string | null>(
+    null,
+  );
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
 
@@ -262,6 +267,7 @@ function FlightTrackerInner() {
       if (info?.object) {
         const icao24 = info.object.icao24.toLowerCase();
         setSelectedIcao24((prev) => (prev === icao24 ? null : icao24));
+        setSelectedAirportIata(null);
       } else {
         setSelectedIcao24(null);
       }
@@ -317,6 +323,30 @@ function FlightTrackerInner() {
       }),
     );
   }, [activeCity.coordinates]);
+
+  // Geolocation: find nearest airport, switch active city, store user dot
+  useEffect(() => {
+    function onGeolocate(e: Event) {
+      const { coordinates } = (
+        e as CustomEvent<{ coordinates: [number, number] }>
+      ).detail;
+      setUserLocation(coordinates);
+      const [lng, lat] = coordinates;
+      const nearest = findNearestAirport(lat, lng, 250);
+      if (nearest) {
+        const city = airportToCity(nearest);
+        setActiveCity(city);
+      }
+      // Always fly to the user's actual location (not the airport)
+      window.dispatchEvent(
+        new CustomEvent("aeris:reset-view", {
+          detail: { center: coordinates },
+        }),
+      );
+    }
+    window.addEventListener("aeris:geolocate", onGeolocate);
+    return () => window.removeEventListener("aeris:geolocate", onGeolocate);
+  }, [setActiveCity]);
 
   const handleRandomAirport = useCallback(() => {
     const randomCity = pickRandomAirportCity(activeCity.iata);
@@ -448,6 +478,7 @@ function FlightTrackerInner() {
           onSelectAirport={handleAirportDotClick}
           isDark={mapStyle.dark}
         />
+        <UserLocationMarker coordinates={userLocation} />
         <AirspaceLayer
           visible={settings.showAirspace}
           opacity={settings.airspaceOpacity}
@@ -484,16 +515,43 @@ function FlightTrackerInner() {
 
         {!fpvIcao24 && !isMobile && (
           <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
-            <FlightCard
-              flight={displayFlight}
-              trail={selectedTrail}
-              track={selectedTrack}
-              onClose={handleDeselectFlight}
-              onToggleFpv={handleToggleFpv}
-              isFpvActive={
-                fpvIcao24 !== null && fpvIcao24 === displayFlight?.icao24
-              }
-            />
+            <AnimatePresence mode="wait">
+              {airportBoard.isActive && !displayFlight ? (
+                <motion.div
+                  key="airport-board"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  <AirportBoard
+                    data={airportBoard}
+                    onSelectFlight={handleAirportBoardSelect}
+                    selectedIcao24={selectedIcao24}
+                    onClose={handleAirportBoardClose}
+                  />
+                </motion.div>
+              ) : displayFlight ? (
+                <motion.div
+                  key={`flight-${displayFlight.icao24}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  <FlightCard
+                    flight={displayFlight}
+                    trail={selectedTrail}
+                    track={selectedTrack}
+                    onClose={handleDeselectFlight}
+                    onToggleFpv={handleToggleFpv}
+                    isFpvActive={
+                      fpvIcao24 !== null && fpvIcao24 === displayFlight?.icao24
+                    }
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         )}
 
@@ -558,23 +616,6 @@ function FlightTrackerInner() {
               />
             </div>
           </div>
-        )}
-
-        {/* Airport Departure/Arrival Board — hide on mobile when flight card is open */}
-        {!fpvIcao24 && !showMobileFlightCard && (
-          <AnimatePresence>
-            {airportBoard.isActive && (
-              <div className="pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-1/2 mb-14 -translate-x-1/2 sm:mb-16">
-                <AirportBoard
-                  key={airportBoard.airport?.iata ?? "airport-board"}
-                  data={airportBoard}
-                  onSelectFlight={handleAirportBoardSelect}
-                  selectedIcao24={selectedIcao24}
-                  onClose={handleAirportBoardClose}
-                />
-              </div>
-            )}
-          </AnimatePresence>
         )}
 
         {/* Mobile flight card — native bottom sheet with drag-to-dismiss */}
