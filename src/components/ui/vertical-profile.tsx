@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import { useSettings } from "@/hooks/use-settings";
+import { formatAltitude, formatDistanceAxisNm } from "@/lib/unit-formatters";
 
 const PROFILE_HEIGHT = 100;
 const PROFILE_PADDING_TOP = 14;
@@ -77,6 +79,7 @@ export function VerticalProfile({
   trail,
   navAltitudeMcp,
 }: VerticalProfileProps) {
+  const { settings } = useSettings();
   const points = useMemo<ProfilePoint[]>(() => {
     if (!trail || trail.path.length < MIN_POINTS_TO_RENDER) return [];
 
@@ -166,10 +169,14 @@ export function VerticalProfile({
             Vertical Profile
           </p>
           <p className="font-mono text-[10px] tabular-nums text-foreground/25">
-            FL
-            {Math.round(points[points.length - 1].altFt / 100)
-              .toString()
-              .padStart(3, "0")}
+            {settings.unitSystem === "aviation"
+              ? `FL${Math.round(points[points.length - 1].altFt / 100)
+                  .toString()
+                  .padStart(3, "0")}`
+              : formatAltitude(
+                  points[points.length - 1].altMeters,
+                  settings.unitSystem,
+                )}
           </p>
         </div>
         <svg
@@ -221,11 +228,14 @@ export function VerticalProfile({
                 fontSize={6}
                 fontFamily="monospace"
               >
-                {a >= 1000
+                {settings.unitSystem === "aviation" && a >= 1000
                   ? `FL${Math.round(a / 100)
                       .toString()
                       .padStart(3, "0")}`
-                  : a}
+                  : formatAltitude(a / FEET_PER_METER, settings.unitSystem).replace(
+                      /\s/g,
+                      "",
+                    )}
               </text>
             </g>
           ))}
@@ -276,10 +286,14 @@ export function VerticalProfile({
                   fontFamily="monospace"
                   textAnchor="end"
                 >
-                  SEL FL
-                  {Math.round(navAltitudeMcp / 100)
-                    .toString()
-                    .padStart(3, "0")}
+                  {settings.unitSystem === "aviation"
+                    ? `SEL FL${Math.round(navAltitudeMcp / 100)
+                        .toString()
+                        .padStart(3, "0")}`
+                    : `SEL ${formatAltitude(
+                        navAltitudeMcp / FEET_PER_METER,
+                        settings.unitSystem,
+                      )}`}
                 </text>
               </>
             )}
@@ -320,7 +334,7 @@ export function VerticalProfile({
             fontSize={6}
             fontFamily="monospace"
           >
-            0 nm
+            {formatDistanceAxisNm(0, settings.unitSystem)}
           </text>
           <text
             x={200 - PROFILE_PADDING_X}
@@ -331,7 +345,7 @@ export function VerticalProfile({
             fontFamily="monospace"
             textAnchor="end"
           >
-            {maxDist.toFixed(0)} nm
+            {formatDistanceAxisNm(maxDist, settings.unitSystem)}
           </text>
         </svg>
       </div>

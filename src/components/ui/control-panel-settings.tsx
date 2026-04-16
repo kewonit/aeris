@@ -9,6 +9,7 @@ import {
   Palette,
   Globe,
   ArrowLeftRight,
+  Ruler,
   Shield,
   Flame,
   Eye,
@@ -21,6 +22,7 @@ import {
   WEATHER_RADAR_OPACITY_MIN,
   WEATHER_RADAR_OPACITY_MAX,
   type OrbitDirection,
+  type UnitSystem,
   type Settings,
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -52,6 +54,12 @@ const ALTITUDE_DISPLAY_MODES: {
 }[] = [
   { label: "Presentation", value: "presentation" },
   { label: "Realistic", value: "realistic" },
+];
+
+const UNIT_SYSTEMS: { label: string; value: UnitSystem }[] = [
+  { label: "Aviation", value: "aviation" },
+  { label: "Metric", value: "metric" },
+  { label: "Imperial", value: "imperial" },
 ];
 
 export function SettingsContent() {
@@ -129,6 +137,17 @@ export function SettingsContent() {
           options={ALTITUDE_DISPLAY_MODES}
           value={settings.altitudeDisplayMode}
           onChange={(v) => update("altitudeDisplayMode", v)}
+        />
+
+        {/* ── Units ── */}
+        <SectionHeader title="Units" />
+
+        <SegmentRow
+          icon={<Ruler className="h-4 w-4" />}
+          title="Unit system"
+          options={UNIT_SYSTEMS}
+          value={settings.unitSystem}
+          onChange={(v) => update("unitSystem", v)}
         />
 
         {/* ── Airspace ── */}

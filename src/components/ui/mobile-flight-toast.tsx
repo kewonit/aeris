@@ -18,10 +18,9 @@ import {
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import { useRouteInfo } from "@/hooks/use-route-info";
+import { useSettings } from "@/hooks/use-settings";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import {
-  metersToFeet,
-  msToKnots,
   formatCallsign,
   headingToCardinal,
 } from "@/lib/flight-utils";
@@ -36,6 +35,11 @@ import {
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
+import {
+  formatAltitude,
+  formatSpeed,
+  formatVerticalSpeedValue,
+} from "@/lib/unit-formatters";
 
 type MobileFlightToastProps = {
   flight: FlightState;
@@ -221,6 +225,7 @@ export function MobileFlightToast({
   onToggleFpv,
   isFpvActive = false,
 }: MobileFlightToastProps) {
+  const { settings } = useSettings();
   const airline = lookupAirline(flight.callsign);
   const flightNum = parseFlightNumber(flight.callsign);
   const company = airline ?? `${flight.originCountry} operator`;
@@ -454,12 +459,12 @@ export function MobileFlightToast({
         <MiniMetric
           icon={<ArrowUp className="h-2.5 w-2.5" />}
           label="ALT"
-          value={metersToFeet(flight.baroAltitude)}
+          value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
         />
         <MiniMetric
           icon={<Gauge className="h-2.5 w-2.5" />}
           label="SPD"
-          value={msToKnots(flight.velocity)}
+          value={formatSpeed(flight.velocity, settings.unitSystem)}
         />
         <MiniMetric
           icon={<Compass className="h-2.5 w-2.5" />}
@@ -473,11 +478,10 @@ export function MobileFlightToast({
         <MiniMetric
           icon={<ArrowDown className="h-2.5 w-2.5" />}
           label="V/S"
-          value={
-            flight.verticalRate !== null && Number.isFinite(flight.verticalRate)
-              ? `${flight.verticalRate > 0 ? "+" : ""}${Math.round(flight.verticalRate)}`
-              : "—"
-          }
+          value={formatVerticalSpeedValue(
+            flight.verticalRate,
+            settings.unitSystem,
+          ).text}
         />
       </div>
 

@@ -1,10 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSettings } from "@/hooks/use-settings";
 import type { FlightState } from "@/lib/opensky";
 import type { Airport } from "@/lib/airports";
 import { findByIata } from "@/lib/airports";
-import { formatCallsign, metersToFeet, msToKnots } from "@/lib/flight-utils";
+import { formatCallsign } from "@/lib/flight-utils";
+import {
+  formatAltitude,
+  formatDistanceNm,
+  formatSpeed,
+} from "@/lib/unit-formatters";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -282,12 +288,6 @@ function classifyFlight(
   };
 }
 
-function formatDistance(nm: number): string {
-  if (nm < 0.1) return "<0.1 nm";
-  if (nm < 10) return `${nm.toFixed(1)} nm`;
-  return `${Math.round(nm)} nm`;
-}
-
 // ── Hook ───────────────────────────────────────────────────────────────
 
 export function useAirportBoard(
@@ -298,6 +298,8 @@ export function useAirportBoard(
   /** When set, the board opens for this specific airport (user clicked the dot). */
   selectedAirportIata: string | null = null,
 ): AirportBoardData {
+  const { settings } = useSettings();
+
   return useMemo(() => {
     const inactive: AirportBoardData = {
       arrivals: [],
@@ -336,17 +338,20 @@ export function useAirportBoard(
       // Skip flights too far away
       if (dist > BOARD_RADIUS_NM) continue;
 
-      const boardFlight: BoardFlight = {
-        icao24: f.icao24,
-        callsign: formatCallsign(f.callsign),
-        direction,
-        altitude: metersToFeet(f.baroAltitude ?? f.geoAltitude),
-        altitudeMeters: f.baroAltitude ?? f.geoAltitude,
-        speed: msToKnots(f.velocity),
-        speedMs: f.velocity,
-        distanceNm: dist,
-        distanceFormatted: formatDistance(dist),
-        verticalRate: f.verticalRate,
+        const boardFlight: BoardFlight = {
+          icao24: f.icao24,
+          callsign: formatCallsign(f.callsign),
+          direction,
+          altitude: formatAltitude(
+            f.baroAltitude ?? f.geoAltitude,
+            settings.unitSystem,
+          ),
+          altitudeMeters: f.baroAltitude ?? f.geoAltitude,
+          speed: formatSpeed(f.velocity, settings.unitSystem),
+          speedMs: f.velocity,
+          distanceNm: dist,
+          distanceFormatted: formatDistanceNm(dist, settings.unitSystem),
+          verticalRate: f.verticalRate,
         heading: f.trueTrack,
         bearing: brng,
         bearingDiff: bDiff,
@@ -386,5 +391,5 @@ export function useAirportBoard(
       isActive: true,
       totalFlights: arrivals.length + departures.length,
     };
-  }, [flights, selectedAirportIata]);
+  }, [flights, selectedAirportIata, settings.unitSystem]);
 }

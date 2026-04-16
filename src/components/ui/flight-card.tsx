@@ -26,9 +26,8 @@ import { HeroBanner } from "@/components/ui/hero-banner";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import { VerticalProfile } from "@/components/ui/vertical-profile";
 import type { TrailEntry } from "@/hooks/use-trail-history";
+import { useSettings } from "@/hooks/use-settings";
 import {
-  metersToFeet,
-  msToKnots,
   formatCallsign,
   headingToCardinal,
 } from "@/lib/flight-utils";
@@ -43,6 +42,11 @@ import {
 } from "@/lib/logo-cache";
 import { useRouteInfo } from "@/hooks/use-route-info";
 import { formatAirportCode } from "@/lib/route-lookup";
+import {
+  formatAltitude,
+  formatSpeed,
+  formatVerticalSpeed,
+} from "@/lib/unit-formatters";
 
 type FlightCardProps = {
   flight: FlightState | null;
@@ -61,6 +65,7 @@ export function FlightCard({
   onToggleFpv,
   isFpvActive = false,
 }: FlightCardProps) {
+  const { settings } = useSettings();
   const routeInfo = useRouteInfo(flight, track);
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
@@ -267,12 +272,12 @@ export function FlightCard({
                 <Metric
                   icon={<ArrowUp className="h-3 w-3" />}
                   label="Altitude"
-                  value={metersToFeet(flight.baroAltitude)}
+                  value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
                 />
                 <Metric
                   icon={<Gauge className="h-3 w-3" />}
                   label="Speed"
-                  value={msToKnots(flight.velocity)}
+                  value={formatSpeed(flight.velocity, settings.unitSystem)}
                 />
                 <Metric
                   icon={<Compass className="h-3 w-3" />}
@@ -286,12 +291,10 @@ export function FlightCard({
                 <Metric
                   icon={<ArrowDown className="h-3 w-3" />}
                   label="V/S"
-                  value={
-                    flight.verticalRate !== null &&
-                    Number.isFinite(flight.verticalRate)
-                      ? `${flight.verticalRate > 0 ? "+" : ""}${Math.round(flight.verticalRate)} m/s`
-                      : "—"
-                  }
+                  value={formatVerticalSpeed(
+                    flight.verticalRate,
+                    settings.unitSystem,
+                  )}
                 />
               </div>
 

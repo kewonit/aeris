@@ -25,6 +25,18 @@ import {
   markAirlineLogoFailed,
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
+import { useSettings } from "@/hooks/use-settings";
+import {
+  altitudeValueFromFeet,
+  altitudeValueFromMeters,
+  altitudeUnitLabel,
+  formatTemperatureC,
+  formatVerticalSpeedValue,
+  speedValueFromKnots,
+  speedValueFromMs,
+  speedUnitLabel,
+  verticalSpeedUnitLabel,
+} from "@/lib/unit-formatters";
 
 type FpvHudProps = {
   flight: FlightState;
@@ -138,38 +150,37 @@ function CompassRibbon({ heading }: { heading: number | null }) {
 }
 
 export function FpvHud({ flight, onExit }: FpvHudProps) {
-  const altFeet =
-    flight.baroAltitude !== null && Number.isFinite(flight.baroAltitude)
-      ? Math.round(flight.baroAltitude * 3.28084)
-      : null;
-  const speedKts =
-    flight.velocity !== null && Number.isFinite(flight.velocity)
-      ? Math.round(flight.velocity * 1.944)
-      : null;
+  const { settings } = useSettings();
+  const altDisplay = altitudeValueFromMeters(
+    flight.baroAltitude,
+    settings.unitSystem,
+  );
+  const speedDisplay = speedValueFromMs(flight.velocity, settings.unitSystem);
   const heading =
     flight.trueTrack !== null && Number.isFinite(flight.trueTrack)
       ? flight.trueTrack
       : null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const vs = flight.verticalRate;
-  const vsFpm =
-    vs !== null && Number.isFinite(vs) ? Math.round(vs * 196.85) : null;
-  const vsDisplay = vsFpm !== null ? `${vsFpm > 0 ? "+" : ""}${vsFpm}` : null;
+  const vsDisplay = formatVerticalSpeedValue(vs, settings.unitSystem);
 
   // ── Avionics data (readsb only) ────────────────────────────────────
-  const iasKts = flight.ias ?? null;
+  const iasDisplay = speedValueFromKnots(flight.ias, settings.unitSystem);
   const machNum = flight.mach ?? null;
   const windDir = flight.windDirection ?? null;
-  const windSpd = flight.windSpeed ?? null;
+  const windSpd = speedValueFromKnots(flight.windSpeed, settings.unitSystem);
   const oatC = flight.oat ?? null;
-  const selAlt = flight.navAltitudeMcp ?? null;
+  const selAlt = altitudeValueFromFeet(
+    flight.navAltitudeMcp,
+    settings.unitSystem,
+  );
   const navModes = flight.navModes ?? null;
   const rollDeg = flight.roll ?? null;
   const isMilitary = (flight.dbFlags ?? 0) & 1;
   const emergencyStatus = flight.emergencyStatus ?? null;
 
   const hasAvionicsRow =
-    iasKts !== null ||
+    iasDisplay !== null ||
     machNum !== null ||
     (windDir !== null && windSpd !== null) ||
     oatC !== null;
@@ -348,9 +359,9 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             </div>
             <p className="text-[13px] font-bold tabular-nums text-foreground/90">
-              {altFeet !== null ? altFeet.toLocaleString() : "—"}
-            </p>
-            <p className="text-[8px] font-medium text-foreground/25">ft</p>
+               {altDisplay !== null ? altDisplay.toLocaleString() : "—"}
+             </p>
+            <p className="text-[8px] font-medium text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</p>
           </div>
 
           <div className="flex min-w-11 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
@@ -361,9 +372,9 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             </div>
             <p className="text-[13px] font-bold tabular-nums text-foreground/90">
-              {speedKts ?? "—"}
-            </p>
-            <p className="text-[8px] font-medium text-foreground/25">kts</p>
+               {speedDisplay ?? "—"}
+             </p>
+            <p className="text-[8px] font-medium text-foreground/25">{speedUnitLabel(settings.unitSystem)}</p>
           </div>
 
           <div className="flex min-w-12 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
@@ -375,16 +386,16 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             </div>
             <p
               className={`text-[13px] font-bold tabular-nums ${
-                vs !== null && vs > 0.5
-                  ? "text-emerald-400/80"
-                  : vs !== null && vs < -0.5
+                 vs !== null && vs > 0.5
+                   ? "text-emerald-400/80"
+                 : vs !== null && vs < -0.5
                     ? "text-amber-400/80"
                     : "text-foreground/90"
               }`}
             >
-              {vsDisplay ?? "—"}
-            </p>
-            <p className="text-[8px] font-medium text-foreground/25">fpm</p>
+               {vsDisplay.text ?? "—"}
+             </p>
+            <p className="text-[8px] font-medium text-foreground/25">{verticalSpeedUnitLabel(settings.unitSystem)}</p>
           </div>
 
           <button
@@ -400,15 +411,15 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
         {/* ── Avionics strip (IAS, Mach, Wind, OAT) ──────────────── */}
         {hasAvionicsRow && (
           <div className="flex w-full items-center justify-center gap-3 border-t border-foreground/6 px-3 py-1 sm:gap-4">
-            {iasKts !== null && (
+            {iasDisplay !== null && (
               <span className="flex items-center gap-1 text-[10px] tabular-nums text-foreground/50">
                 <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
                   IAS
                 </span>
                 <span className="font-bold text-foreground/70">
-                  {Math.round(iasKts)}
+                  {iasDisplay}
                 </span>
-                <span className="text-[8px] text-foreground/25">kts</span>
+                <span className="text-[8px] text-foreground/25">{speedUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {machNum !== null && (
@@ -431,14 +442,14 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 <span className="font-bold text-foreground/70">
                   {Math.round(windSpd)}
                 </span>
-                <span className="text-[8px] text-foreground/25">kts</span>
+                <span className="text-[8px] text-foreground/25">{speedUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {oatC !== null && (
               <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
                 <Thermometer className="h-2.5 w-2.5 text-foreground/30" />
                 <span className="font-bold text-foreground/70">
-                  {Math.round(oatC)}°C
+                  {formatTemperatureC(oatC, settings.unitSystem)}
                 </span>
               </span>
             )}
@@ -485,7 +496,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 <span className="font-bold text-cyan-400/70">
                   {selAlt.toLocaleString()}
                 </span>
-                <span className="text-[8px] text-foreground/25">ft</span>
+                <span className="text-[8px] text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
           </div>

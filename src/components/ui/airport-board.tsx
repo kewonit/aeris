@@ -10,7 +10,9 @@ import {
   ArrowDown,
   ArrowUp,
 } from "lucide-react";
+import { useSettings } from "@/hooks/use-settings";
 import type { BoardFlight, AirportBoardData } from "@/hooks/use-airport-board";
+import { formatVerticalSpeedValue } from "@/lib/unit-formatters";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -92,12 +94,19 @@ function statusStyle(status: string): {
 // ── Vertical rate ──────────────────────────────────────────────────────
 
 function VRate({ rate }: { rate: number | null }) {
+  const { settings } = useSettings();
   if (rate === null || !Number.isFinite(rate)) {
     return <span className="text-xs text-foreground/15">—</span>;
   }
 
-  const fpm = Math.round(rate * 196.85);
-  if (Math.abs(fpm) < 100) {
+  const vSpeed = formatVerticalSpeedValue(rate, settings.unitSystem);
+  if (vSpeed.value === null) {
+    return <span className="text-xs text-foreground/15">—</span>;
+  }
+
+  const isMetric = settings.unitSystem === "metric";
+  const levelThreshold = isMetric ? 0.5 : 100;
+  if (Math.abs(vSpeed.value) < levelThreshold) {
     return (
       <span className="inline-flex items-center gap-0.5 text-xs text-foreground/20">
         <span className="inline-block h-px w-3 bg-foreground/15" />
@@ -105,7 +114,7 @@ function VRate({ rate }: { rate: number | null }) {
     );
   }
 
-  const isDown = fpm < 0;
+  const isDown = vSpeed.value < 0;
   return (
     <span
       className={`inline-flex items-center gap-0.5 font-mono text-xs tabular-nums ${
@@ -117,7 +126,7 @@ function VRate({ rate }: { rate: number | null }) {
       ) : (
         <ArrowUp className="h-3 w-3" />
       )}
-      <span>{Math.abs(fpm).toLocaleString()}</span>
+      <span>{Math.abs(vSpeed.value).toLocaleString()}</span>
     </span>
   );
 }

@@ -21,10 +21,10 @@ import type { FlightState } from "@/lib/opensky";
 import {
   formatCallsign,
   altitudeToColor,
-  metersToFeet,
-  msToKnots,
   headingToCardinal,
 } from "@/lib/flight-utils";
+import { useSettings } from "@/hooks/use-settings";
+import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
 
 // ── Recent searches (localStorage) ─────────────────────────────────────
 
@@ -248,6 +248,7 @@ export function SearchContent({
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
 }) {
+  const { settings } = useSettings();
   const [query, setQuery] = useState("");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -605,13 +606,13 @@ export function SearchContent({
                     {flight.baroAltitude != null && (
                       <span className="inline-flex items-center gap-1 rounded-md bg-foreground/3 px-1.5 py-0.5 text-[9px] font-medium text-foreground/30">
                         <AltitudeDot altitude={flight.baroAltitude} />
-                        {metersToFeet(flight.baroAltitude)}
+                        {formatAltitude(flight.baroAltitude, settings.unitSystem)}
                       </span>
                     )}
                     {flight.velocity != null && (
                       <span className="inline-flex items-center gap-1 rounded-md bg-foreground/3 px-1.5 py-0.5 text-[9px] font-medium text-foreground/30">
                         <Gauge className="h-2.5 w-2.5 text-foreground/20" />
-                        {msToKnots(flight.velocity)}
+                        {formatSpeed(flight.velocity, settings.unitSystem)}
                       </span>
                     )}
                     {flight.trueTrack != null && (

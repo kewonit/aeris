@@ -16,6 +16,14 @@ import {
 import type { Airport } from "@/lib/airports";
 import { findNearbyAtcFeeds, iataToIcao } from "@/lib/atc-lookup";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useSettings } from "@/hooks/use-settings";
+import {
+  formatCloudBaseHundredsFeet,
+  formatPressureHpa,
+  formatTemperatureC,
+  formatVisibility,
+  formatWindFromKnots,
+} from "@/lib/unit-formatters";
 
 type MetarData = {
   rawOb?: string;
@@ -67,13 +75,6 @@ function decodeFltCat(cat: string | undefined): {
   }
 }
 
-function formatVisibility(vis: number | string | undefined): string {
-  if (vis === undefined || vis === null) return "—";
-  if (typeof vis === "string") return vis;
-  if (vis >= 9999) return "10+ SM";
-  return `${vis} SM`;
-}
-
 function cloudCoverLabel(cover: string): string {
   switch (cover.toUpperCase()) {
     case "SKC":
@@ -100,6 +101,7 @@ const METAR_CACHE_TTL_MS = 10 * 60 * 1000;
 const metarCache = new Map<string, { data: MetarData; fetchedAt: number }>();
 
 export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
+  const { settings } = useSettings();
   const [metar, setMetar] = useState<MetarData | null>(null);
   const [metarLoading, setMetarLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -258,9 +260,12 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
                       icon={<Wind className="h-3 w-3" />}
                       label="Wind"
                       value={
-                        metar.wspd !== undefined
-                          ? `${metar.wdir ?? "VRB"}° ${metar.wspd}kt${metar.wgst ? ` G${metar.wgst}` : ""}`
-                          : "Calm"
+                        formatWindFromKnots(
+                          metar.wdir,
+                          metar.wspd,
+                          metar.wgst,
+                          settings.unitSystem,
+                        )
                       }
                     />
 
@@ -268,7 +273,7 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
                     <WeatherMetric
                       icon={<Eye className="h-3 w-3" />}
                       label="Visibility"
-                      value={formatVisibility(metar.visib)}
+                      value={formatVisibility(metar.visib, settings.unitSystem)}
                     />
 
                     {/* Temperature */}
@@ -277,7 +282,7 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
                       label="Temp / Dew"
                       value={
                         metar.temp !== undefined
-                          ? `${metar.temp}°C / ${metar.dewp ?? "—"}°C`
+                          ? `${formatTemperatureC(metar.temp, settings.unitSystem)} / ${formatTemperatureC(metar.dewp, settings.unitSystem)}`
                           : "—"
                       }
                     />
@@ -287,9 +292,7 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
                       icon={<Gauge className="h-3 w-3" />}
                       label="QNH"
                       value={
-                        metar.altim !== undefined
-                          ? `${metar.altim.toFixed(0)} hPa`
-                          : "—"
+                        formatPressureHpa(metar.altim, settings.unitSystem)
                       }
                     />
                   </div>
@@ -306,7 +309,7 @@ export function AirportInfoCard({ airport, onClose }: AirportInfoCardProps) {
                           {metar.clouds
                             .map(
                               (c) =>
-                                `${cloudCoverLabel(c.cover)}${c.base != null ? ` ${(c.base * 100).toLocaleString()}ft` : ""}`,
+                                `${cloudCoverLabel(c.cover)}${formatCloudBaseHundredsFeet(c.base, settings.unitSystem)}`,
                             )
                             .join(" · ")}
                         </p>

@@ -15,6 +15,7 @@ import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { clamp } from "@/lib/utils";
 
 export type OrbitDirection = "clockwise" | "counter-clockwise";
+export type UnitSystem = "aviation" | "metric" | "imperial";
 
 export type Settings = {
   autoOrbit: boolean;
@@ -26,6 +27,7 @@ export type Settings = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
+  unitSystem: UnitSystem;
   fpvChaseDistance: number;
   globeMode: boolean;
   showAirspace: boolean;
@@ -87,6 +89,7 @@ const DEFAULT_SETTINGS: Settings = {
   showShadows: true,
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
+  unitSystem: "aviation",
   fpvChaseDistance: 0.0048,
   globeMode: false,
   showAirspace: false,
@@ -98,7 +101,7 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 const WRITE_DEBOUNCE_MS = 300;
 
 type StorageEnvelope = {
@@ -127,6 +130,9 @@ function isValidSettings(obj: unknown): obj is Settings {
     typeof s.showAltitudeColors === "boolean" &&
     (s.altitudeDisplayMode === "presentation" ||
       s.altitudeDisplayMode === "realistic") &&
+    (s.unitSystem === "aviation" ||
+      s.unitSystem === "metric" ||
+      s.unitSystem === "imperial") &&
     typeof s.fpvChaseDistance === "number" &&
     Number.isFinite(s.fpvChaseDistance) &&
     s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&

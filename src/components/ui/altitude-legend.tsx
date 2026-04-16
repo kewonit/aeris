@@ -1,8 +1,13 @@
 "use client";
 
 import { motion } from "motion/react";
+import { useSettings } from "@/hooks/use-settings";
+import { formatAltitude } from "@/lib/unit-formatters";
 
 export function AltitudeLegend() {
+  const { settings } = useSettings();
+  const ticks = [13000, 6096, 3048, 1524, 610, 152, 0];
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 12 }}
@@ -14,7 +19,7 @@ export function AltitudeLegend() {
         backgroundColor: "rgb(var(--ui-bg) / 0.5)",
       }}
       role="img"
-      aria-label="Altitude color scale from 0 feet (green) to 43,000 feet (blue)"
+      aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}
     >
       <p
         className="text-[10px] font-semibold tracking-widest uppercase"
@@ -31,48 +36,15 @@ export function AltitudeLegend() {
           }}
         />
         <div className="flex h-32 flex-col justify-between">
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            43,000 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            20,000 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            10,000 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            5,000 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            2,000 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            500 ft
-          </span>
-          <span
-            className="text-[10px] font-medium"
-            style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-          >
-            0 ft
-          </span>
+          {ticks.map((tick) => (
+            <span
+              key={tick}
+              className="text-[10px] font-medium"
+              style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
+            >
+              {formatAltitude(tick, settings.unitSystem)}
+            </span>
+          ))}
         </div>
       </div>
     </motion.div>
