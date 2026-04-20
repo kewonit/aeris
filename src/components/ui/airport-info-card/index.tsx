@@ -78,10 +78,21 @@ export function AirportInfoCard({
 
   const { metar, loading: metarLoading } = useMetar(icao);
   const { taf, loading: tafLoading } = useTaf(icao);
-  const photoState = useAirportPhoto(
-    airport ? (icao ?? airport.iata) : null,
-    airport?.name ?? null,
+  const photoLookup = useMemo(
+    () =>
+      airport
+        ? {
+            cacheKey: icao ?? airport.iata,
+            name: airport.name,
+            iata: airport.iata,
+            icao,
+            city: airport.city,
+          }
+        : null,
+    [airport, icao],
   );
+
+  const photoState = useAirportPhoto(photoLookup);
 
   const runways = useMemo(() => (icao ? getRunways(icao) : []), [icao]);
 
@@ -184,6 +195,11 @@ export function AirportInfoCard({
           loading={photoState.loading}
           errored={photoState.errored}
           onError={photoState.markErrored}
+          airportName={airport.name}
+          iata={airport.iata}
+          icao={icao}
+          city={airport.city}
+          country={airport.country}
           onClose={isMobile ? undefined : onClose}
         />
 
@@ -191,16 +207,8 @@ export function AirportInfoCard({
           airport={airport}
           icao={icao}
           metar={metar}
-          totalFlights={board.totalFlights}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((c) => !c)}
-          showCloseButton={
-            // Mobile uses swipe-to-dismiss, no close button needed.
-            // Desktop: show inline close only when the photo banner is absent.
-            !isMobile &&
-            (photoState.errored || (!photoState.loading && !photoState.photo))
-          }
-          onClose={onClose}
         />
 
         <AnimatePresence initial={false}>

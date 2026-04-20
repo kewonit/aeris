@@ -138,15 +138,38 @@ type PhotoState = {
   markErrored: () => void;
 };
 
+export type AirportPhotoRequest = {
+  name: string;
+  iata?: string | null;
+  icao?: string | null;
+  city?: string | null;
+};
+
+type AirportPhotoLookup = AirportPhotoRequest & {
+  cacheKey: string;
+};
+
+function buildAirportPhotoUrl(request: string | AirportPhotoRequest): string {
+  const params = new URLSearchParams();
+
+  if (typeof request === "string") {
+    params.set("name", request);
+  } else {
+    params.set("name", request.name);
+    if (request.iata) params.set("iata", request.iata);
+    if (request.icao) params.set("icao", request.icao);
+    if (request.city) params.set("city", request.city);
+  }
+
+  return `/api/airport-photo?${params.toString()}`;
+}
+
 export async function requestAirportPhoto(
-  query: string,
+  request: string | AirportPhotoRequest,
   signal: AbortSignal,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ photo: AirportPhoto | null; cacheable: boolean }> {
-  const res = await fetchImpl(
-    `/api/airport-photo?name=${encodeURIComponent(query)}`,
-    { signal },
-  );
+  const res = await fetchImpl(buildAirportPhotoUrl(request), { signal });
 
   if (!res.ok) {
     return { photo: null, cacheable: false };
@@ -158,17 +181,14 @@ export async function requestAirportPhoto(
 
 /** Fetches a Wikipedia photo for the airport. `cacheKey` keys the cache
  *  (prefer ICAO when available); `query` is sent to the server. */
-export function useAirportPhoto(
-  cacheKey: string | null,
-  query: string | null,
-): PhotoState {
+export function useAirportPhoto(lookup: AirportPhotoLookup | null): PhotoState {
   const [photo, setPhoto] = useState<AirportPhoto | null>(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchPhoto = useCallback(async (key: string, q: string) => {
-    const fresh = getFreshPhoto(key);
+  const fetchPhoto = useCallback(async (nextLookup: AirportPhotoLookup) => {
+    const fresh = getFreshPhoto(nextLookup.cacheKey);
     if (fresh !== undefined) {
       setPhoto(fresh);
       setLoading(false);
@@ -184,11 +204,12 @@ export function useAirportPhoto(
     setPhoto(null);
 
     try {
-      const data = await requestAirportPhoto(q, controller.signal);
+      const { cacheKey, ...request } = nextLookup;
+      const data = await requestAirportPhoto(request, controller.signal);
       if (controller.signal.aborted) return;
 
       if (data.cacheable) {
-        rememberPhoto(key, data.photo);
+        rememberPhoto(cacheKey, data.photo);
       }
 
       setPhoto(data.photo);
@@ -200,15 +221,15 @@ export function useAirportPhoto(
   }, []);
 
   useEffect(() => {
-    if (!cacheKey || !query) {
+    if (!lookup) {
       setPhoto(null);
       setLoading(false);
       setErrored(false);
       return;
     }
-    fetchPhoto(cacheKey, query);
+    fetchPhoto(lookup);
     return () => abortRef.current?.abort();
-  }, [cacheKey, query, fetchPhoto]);
+  }, [lookup, fetchPhoto]);
 
   return {
     photo,
