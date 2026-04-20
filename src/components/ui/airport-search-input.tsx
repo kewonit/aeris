@@ -90,6 +90,8 @@ export function AirportSearchInput({
       country: city.country,
       lat: city.coordinates[1],
       lng: city.coordinates[0],
+      icao: "",
+      elevation_ft: null,
     };
     handleSelect(airport);
   }
@@ -248,7 +250,9 @@ const DropdownRow = memo(function DropdownRow({
         <MapPin className="h-3 w-3 text-foreground/35" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="truncate text-[12px] font-medium text-foreground/75">{name}</p>
+        <p className="truncate text-[12px] font-medium text-foreground/75">
+          {name}
+        </p>
         <p className="text-[10px] text-foreground/25">{detail}</p>
       </div>
       <ChevronRight className="h-3 w-3 shrink-0 text-foreground/10 group-hover:text-foreground/20" />

@@ -25,6 +25,7 @@ import {
   type MapStyleSpec,
   type TerrainProfile,
 } from "@/lib/map-styles";
+import { addBuildings3DLayer } from "./buildings-3d-layer";
 
 // Increase parallel tile requests for faster DEM + base tile loading.
 // Default is 6; 16 allows terrain tiles to saturate HTTP/2 connections.
@@ -167,6 +168,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     const onStyleLoad = () => {
       mapInstance.setProjection({ type: globeMode ? "globe" : "mercator" });
       addAerowayLayers(mapInstance, isDarkRef.current);
+      addBuildings3DLayer(mapInstance, { dark: isDarkRef.current });
     };
 
     mapInstance.once("style.load", onStyleLoad);

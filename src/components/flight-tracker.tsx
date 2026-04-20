@@ -35,8 +35,10 @@ import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
 import { AtcPlayerBar } from "@/components/ui/atc-panel";
-const AirportBoard = dynamic(() =>
-  import("@/components/ui/airport-board").then((mod) => mod.AirportBoard),
+const AirportInfoCard = dynamic(() =>
+  import("@/components/ui/airport-info-card").then(
+    (mod) => mod.AirportInfoCard,
+  ),
 );
 import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
 import { SettingsProvider, useSettings } from "@/hooks/use-settings";
@@ -454,6 +456,9 @@ function FlightTrackerInner() {
 
   // Whether to show the mobile bottom sheet flight card
   const showMobileFlightCard = isMobile && !fpvIcao24 && !!displayFlight;
+  // Whether to show the mobile airport bottom sheet
+  const showMobileAirportCard =
+    isMobile && !fpvIcao24 && !displayFlight && airportBoard.isActive;
 
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-background">
@@ -518,17 +523,18 @@ function FlightTrackerInner() {
             <AnimatePresence mode="wait">
               {airportBoard.isActive && !displayFlight ? (
                 <motion.div
-                  key="airport-board"
+                  key={`airport-${airportBoard.airport?.iata ?? "none"}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
                 >
-                  <AirportBoard
-                    data={airportBoard}
+                  <AirportInfoCard
+                    board={airportBoard}
                     onSelectFlight={handleAirportBoardSelect}
                     selectedIcao24={selectedIcao24}
                     onClose={handleAirportBoardClose}
+                    atc={atc}
                   />
                 </motion.div>
               ) : displayFlight ? (
@@ -650,6 +656,21 @@ function FlightTrackerInner() {
                 isFpvActive={fpvIcao24 === displayFlight.icao24}
               />
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Mobile airport card — self-contained bottom sheet with drag-to-dismiss */}
+        <AnimatePresence>
+          {showMobileAirportCard && (
+            <AirportInfoCard
+              key={`airport-${airportBoard.airport?.iata ?? "none"}`}
+              board={airportBoard}
+              onSelectFlight={handleAirportBoardSelect}
+              selectedIcao24={selectedIcao24}
+              onClose={handleAirportBoardClose}
+              atc={atc}
+              variant="mobile"
+            />
           )}
         </AnimatePresence>
       </div>
