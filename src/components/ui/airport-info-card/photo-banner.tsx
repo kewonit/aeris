@@ -19,8 +19,8 @@ type Props = {
 
 /**
  * Photo banner — 16:9 hero image at top of the airport card.
- * Hides itself (returns null) when there's nothing to show, letting the
- * card fall back to a header-first layout automatically.
+ * Always renders the banner container. When no usable photo is available,
+ * it falls back to the non-photo hero presentation instead of returning null.
  *
  * When `onClose` is provided, a floating close button sits in the top-right
  * corner over a subtle dark scrim so it's always legible regardless of photo.
@@ -48,12 +48,7 @@ export function PhotoBanner({
       <div className="absolute left-8 top-8 h-10 w-10 rounded-full bg-white/20 ring-1 ring-white/10 shadow-[0_0_40px_rgba(255,255,255,0.32)]" />
       <div className="absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-background via-background/70 to-transparent" />
 
-      <div className="absolute inset-0 flex flex-col justify-between p-4 sm:p-5">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.28em] text-foreground/55 backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-foreground/45" />
-          <span>Airport profile</span>
-        </div>
-
+      <div className="absolute inset-0 flex flex-col justify-end p-4 sm:p-5">
         <div className="max-w-[16rem]">
           <div className="flex items-end gap-3">
             <span className="text-[2.6rem] font-semibold tracking-tight text-foreground sm:text-5xl">

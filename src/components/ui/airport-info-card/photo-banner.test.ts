@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { PhotoBanner } from "./photo-banner";
 
-test("PhotoBanner renders a styled airport fallback hero when no photo is available", () => {
+test("PhotoBanner fallback hero omits the decorative profile badge", () => {
   const html = renderToStaticMarkup(
     createElement(PhotoBanner, {
       photo: null,
@@ -25,7 +25,8 @@ test("PhotoBanner renders a styled airport fallback hero when no photo is availa
   assert.match(html, /SFO/);
   assert.match(html, /KSFO/);
   assert.match(html, /San Francisco International Airport/);
-  assert.match(html, /Airport profile/i);
+  assert.doesNotMatch(html, /Airport profile/i);
+  assert.doesNotMatch(html, /bg-foreground\/45/);
   assert.doesNotMatch(html, /Wikipedia/);
 });
 

@@ -75,7 +75,27 @@ type TafState = {
   loading: boolean;
 };
 
-/** Fetches TAF for the given ICAO. Caches absence as well to avoid refetching. */
+export async function requestTaf(
+  code: string,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ taf: TafData | null; cacheable: boolean }> {
+  const res = await fetchImpl(
+    `/api/weather/taf?icao=${encodeURIComponent(code)}`,
+    { signal },
+  );
+
+  if (!res.ok) {
+    return { taf: null, cacheable: false };
+  }
+
+  const data = await res.json();
+  const obs = Array.isArray(data) ? data[0] : data;
+
+  return { taf: obs ?? null, cacheable: true };
+}
+
+/** Fetches TAF for the given ICAO. Caches successful empty results as well. */
 export function useTaf(icao: string | null): TafState {
   const [taf, setTaf] = useState<TafData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,21 +116,14 @@ export function useTaf(icao: string | null): TafState {
     setTaf(null);
 
     try {
-      const res = await fetch(
-        `/api/weather/taf?icao=${encodeURIComponent(code)}`,
-        { signal: controller.signal },
-      );
-      if (!res.ok) {
-        rememberTaf(code, null);
-        setTaf(null);
-        return;
-      }
-      const data = await res.json();
+      const data = await requestTaf(code, controller.signal);
       if (controller.signal.aborted) return;
-      const obs = Array.isArray(data) ? data[0] : data;
-      const resolved = obs ?? null;
-      rememberTaf(code, resolved);
-      setTaf(resolved);
+
+      if (data.cacheable) {
+        rememberTaf(code, data.taf);
+      }
+
+      setTaf(data.taf);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
     } finally {

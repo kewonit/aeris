@@ -1,8 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AirportPhoto } from "./types";
-import { requestAirportPhoto } from "./use-airport-data";
+import type { AirportPhoto, TafData } from "./types";
+import { requestAirportPhoto, requestTaf } from "./use-airport-data";
+
+test("requestTaf treats successful empty responses as cacheable", async () => {
+  const result = await requestTaf(
+    "KSFO",
+    new AbortController().signal,
+    async () =>
+      ({
+        ok: true,
+        json: async () => [],
+      }) as Response,
+  );
+
+  assert.deepEqual(result, { taf: null, cacheable: true });
+});
+
+test("requestTaf avoids caching upstream or server errors", async () => {
+  const result = await requestTaf(
+    "KSFO",
+    new AbortController().signal,
+    async () => ({ ok: false }) as Response,
+  );
+
+  assert.deepEqual(result, { taf: null, cacheable: false });
+});
+
+test("requestTaf returns the first TAF from successful responses", async () => {
+  const taf: TafData = {
+    rawTAF: "KSFO 201720Z 2018/2124 30014KT P6SM FEW020",
+  };
+
+  const result = await requestTaf(
+    "KSFO",
+    new AbortController().signal,
+    async () =>
+      ({
+        ok: true,
+        json: async () => [taf],
+      }) as Response,
+  );
+
+  assert.deepEqual(result, { taf, cacheable: true });
+});
 
 test("requestAirportPhoto forwards optional airport metadata to the route", async () => {
   let requestedUrl = "";

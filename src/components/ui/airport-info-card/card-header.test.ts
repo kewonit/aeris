@@ -19,7 +19,7 @@ const TEST_AIRPORT: Airport = {
   elevation_ft: 13,
 };
 
-test("CardHeader hides placeholder weather chrome and flight counts when category data is missing", () => {
+test("CardHeader omits the flight category badge when category data is missing", () => {
   const html = renderToStaticMarkup(
     createElement(CardHeader, {
       airport: TEST_AIRPORT,
@@ -27,17 +27,13 @@ test("CardHeader hides placeholder weather chrome and flight counts when categor
       metar: {
         rawOb: "KSFO 201656Z 30015KT 10SM FEW008 13/09 A2992",
       },
-      totalFlights: 32,
       collapsed: false,
       onToggleCollapse: () => {},
-      showCloseButton: false,
-      onClose: () => {},
     }),
   );
 
   assert.match(html, /SFO/);
   assert.match(html, /KSFO/);
-  assert.doesNotMatch(html, /box-shadow:0 0 6px 1px currentColor/);
+  assert.doesNotMatch(html, /ring-foreground\/6/);
   assert.doesNotMatch(html, />—</);
-  assert.doesNotMatch(html, />32</);
 });
