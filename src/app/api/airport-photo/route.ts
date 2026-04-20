@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Attribution: per Wikipedia's license (CC BY-SA / CC0 for most files),
 // we return the page URL so the client can link back. User-Agent header
 // identifies this app per Wikimedia's policy:
-// https://api.wikimedia.org/wiki/Documentation/UA_policy
+// https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
 
 const WIKI_SEARCH_BASE = "https://en.wikipedia.org/w/rest.php/v1/search/title";
 const FETCH_TIMEOUT_MS = 6_000;
@@ -55,15 +55,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     const url = `${WIKI_SEARCH_BASE}?q=${encodeURIComponent(name)}&limit=1`;
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": USER_AGENT,
-      },
-    });
-
-    clearTimeout(timeout);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       return NextResponse.json(

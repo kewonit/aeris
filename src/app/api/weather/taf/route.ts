@@ -27,12 +27,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     const url = `${NOAA_BASE}?ids=${encodeURIComponent(icao)}&format=json`;
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-
-    clearTimeout(timeout);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       return NextResponse.json(

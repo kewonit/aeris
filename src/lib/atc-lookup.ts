@@ -106,6 +106,15 @@ for (const [iata, icao] of Object.entries(IATA_TO_ICAO)) {
 let FULL_IATA_TO_ICAO: Map<string, string> | null = null;
 let FULL_ICAO_TO_IATA: Map<string, string> | null = null;
 
+function resetFullMaps(): void {
+  FULL_IATA_TO_ICAO = null;
+  FULL_ICAO_TO_IATA = null;
+}
+
+function hasBuiltFullMaps(): boolean {
+  return FULL_IATA_TO_ICAO !== null && FULL_ICAO_TO_IATA !== null;
+}
+
 function buildFullMaps(): void {
   if (FULL_IATA_TO_ICAO && FULL_ICAO_TO_IATA) return;
   const iataMap = new Map<string, string>();
@@ -147,15 +156,17 @@ export function icaoToIata(icao: string): string | null {
   return FULL_ICAO_TO_IATA!.get(upper) ?? null;
 }
 
+export const __internals = {
+  resetFullMaps,
+  hasBuiltFullMaps,
+};
+
 /** ICAO codes of airports that have ATC feeds. */
 const ICAO_SET = new Set(Object.keys(ATC_FEEDS));
 
 /** Precomputed list of airports that have ATC feeds. */
 const ATC_AIRPORTS: Airport[] = AIRPORTS.filter((a) => {
-  // Match by converting IATA → ICAO convention for known airports
-  // LiveATC uses ICAO codes; our airport DB uses IATA
-  const icao = iataToIcao(a.iata);
-  return icao !== null && ICAO_SET.has(icao);
+  return !!a.icao && ICAO_SET.has(a.icao.toUpperCase());
 });
 
 // ── Lookup Functions ───────────────────────────────────────────────────
@@ -213,7 +224,7 @@ export function findNearbyAtcFeeds(
     const dist = approxDistanceNm(lat, lng, airport.lat, airport.lng);
     if (dist > clampedRadius) continue;
 
-    const icao = iataToIcao(airport.iata);
+    const icao = airport.icao?.toUpperCase() ?? iataToIcao(airport.iata);
     if (!icao) continue;
 
     const feeds = getFeedsByIcao(icao).sort(

@@ -138,6 +138,24 @@ type PhotoState = {
   markErrored: () => void;
 };
 
+export async function requestAirportPhoto(
+  query: string,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ photo: AirportPhoto | null; cacheable: boolean }> {
+  const res = await fetchImpl(
+    `/api/airport-photo?name=${encodeURIComponent(query)}`,
+    { signal },
+  );
+
+  if (!res.ok) {
+    return { photo: null, cacheable: false };
+  }
+
+  const data = (await res.json()) as { photo: AirportPhoto | null };
+  return { photo: data.photo, cacheable: true };
+}
+
 /** Fetches a Wikipedia photo for the airport. `cacheKey` keys the cache
  *  (prefer ICAO when available); `query` is sent to the server. */
 export function useAirportPhoto(
@@ -166,17 +184,13 @@ export function useAirportPhoto(
     setPhoto(null);
 
     try {
-      const res = await fetch(
-        `/api/airport-photo?name=${encodeURIComponent(q)}`,
-        { signal: controller.signal },
-      );
-      if (!res.ok) {
-        rememberPhoto(key, null);
-        return;
-      }
-      const data = (await res.json()) as { photo: AirportPhoto | null };
+      const data = await requestAirportPhoto(q, controller.signal);
       if (controller.signal.aborted) return;
-      rememberPhoto(key, data.photo);
+
+      if (data.cacheable) {
+        rememberPhoto(key, data.photo);
+      }
+
       setPhoto(data.photo);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
