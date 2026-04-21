@@ -593,6 +593,16 @@ const CHANGELOG: {
           "OpenAIP airspace tiles now load only within ~2× the flight fetch radius of the active city instead of the entire globe, cutting tile bandwidth sharply. In FPV mode the bounding box follows the tracked aircraft with 0.5° grid-snap hysteresis so the source only rebuilds every ~30 NM of travel. Fixed two console errors in the airspace renderer: opacity expressions no longer break when composed with zoom interpolations, and tile URLs are now absolute so MapLibre's worker can construct requests.",
       },
       {
+        title: "Weather radar: crisper tiles & scoped fetches",
+        description:
+          "RainViewer radar now uses nearest-neighbour sampling instead of bilinear, preserving the discrete precipitation bins and getting rid of the blurry over-zoomed smear at higher zoom levels. Tile fetches are now scoped to the same active-city / FPV bounding box as airspace (no more pulling global radar when looking at one airport), and the tile URL is absolute so MapLibre's worker no longer fails to parse it.",
+      },
+      {
+        title: "Map overlays no longer randomly disappear",
+        description:
+          "Reworked the airspace and weather radar lifecycle so layers no longer get eagerly torn down on every dependency change. Adds are now atomic (remove + add inside one tick instead of straddling a React boundary), stale async sprite-load and fetch promises are cancelled with a token, and a fallback to MapLibre's `idle` event guarantees the layer comes back even when the style is briefly busy after a city tap. End result: tapping airports rapidly, swapping basemaps mid-flight, or panning during FPV mode no longer leaves the overlays stuck invisible.",
+      },
+      {
         title: "Airport info card with arrivals, departures, weather & photos",
         description:
           "Unified tabbed airport card replaces the separate board/info panes on both desktop and mobile. Arrivals and departures tiles, current METAR plus TAF forecast via a new NOAA proxy, runway layout, ATC frequencies, and a Wikipedia photo banner via a new Wikimedia-compliant proxy. Full-database IATA↔ICAO fallback for airports that aren't in the curated LiveATC list, with lazy-loaded and cached lookup tables. 3D building extrusions added to the map on style load.",

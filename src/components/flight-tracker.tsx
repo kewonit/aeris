@@ -164,18 +164,24 @@ function FlightTrackerInner() {
     fpvSeedCenter,
   );
 
-  // Airspace tiles are scoped to ~2× the flight fetch radius so we
-  // don't pull tiles for the entire globe. Two modes:
+  // Both the airspace and weather radar overlays are scoped to ~2×
+  // the flight fetch radius so we don't pull tiles for the entire
+  // globe. Two modes:
   //   • City mode (default): box centered on `activeCity` with radius
   //     = city.radius × 2 (~300 NM for the seed cities).
   //   • FPV mode: box centered on the tracked aircraft, sized to the
-  //     FPV point-radius × 2 (~240 NM). The center is snapped to a
-  //     0.5° grid so the bbox only re-anchors every ~30 NM of travel —
-  //     otherwise every position tick would force a source re-add.
+  //     FPV point-radius × 2 (~240 NM half-width). The center is
+  //     snapped to a 0.5° grid so the bbox only re-anchors every
+  //     ~30 NM of travel — otherwise every position tick would force
+  //     a source re-add.
   //
-  // The AirspaceLayer debounces identical bounds via `airspaceBoundsKey`,
-  // so returning a freshly allocated array each render is fine — the
-  // effect there only re-runs when the quantised key actually changes.
+  // The overlay layers debounce identical bounds via
+  // `airspaceBoundsKey`, so returning a freshly allocated array each
+  // render is fine — their effects only re-run when the quantised
+  // via
+  // `airspaceBoundsKey`, so returning a freshly allocated array each
+  // render is fine — their effects only re-run when the quantised
+  // key actually changes.
   const airspaceBounds = useMemo(() => {
     if (fpvIcao24) {
       const target = fpvIcao24.toLowerCase();
@@ -541,6 +547,7 @@ function FlightTrackerInner() {
         <WeatherRadarLayer
           visible={settings.showWeatherRadar}
           opacity={settings.weatherRadarOpacity}
+          bounds={airspaceBounds}
         />
         <FlightLayers
           flights={displayFlights}

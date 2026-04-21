@@ -288,6 +288,15 @@ const COS_LAT_FLOOR = 0.05;
 /** Readonly tuple: `[west, south, east, north]` in degrees. */
 export type AirspaceBounds = readonly [number, number, number, number];
 
+/**
+ * Lightweight cancellation token shared by the overlay layers. Async
+ * operations (sprite loading, RainViewer fetches) accept a token and
+ * bail when `current` flips to `true`. The owning effect's cleanup
+ * sets `current = true` so any in-flight work exits before the next
+ * effect run starts a fresh swap.
+ */
+export type CancellationToken = { current: boolean };
+
 type CityLike = {
   readonly coordinates: readonly [number, number];
   readonly radius: number;

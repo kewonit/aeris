@@ -10,6 +10,7 @@ import {
   AIRSPACE_INTERACTIVE_LAYER_IDS,
   airspaceBoundsKey,
   type AirspaceBounds,
+  type CancellationToken,
 } from "@/lib/airspace-style";
 import { AirspacePopup } from "./airspace-popup";
 import type { AirspaceLimit } from "@/lib/airspace-format";
@@ -20,10 +21,38 @@ import type { AirspaceLimit } from "@/lib/airspace-format";
 // style layers from a single vector tile source proxied through
 // /api/airspace-tiles.
 //
-// Source/layer add-remove lifecycle matches the old raster layer:
-// when hidden, the source and all layers are removed entirely to
-// free GPU memory. When shown, sprites are loaded (once), then the
-// source and layers are re-added.
+// Lifecycle:
+//   • On mount or when `visible` flips true: load sprites once, then
+//     add source + layers via an atomic remove-and-add inside a
+//     single effect tick. If MapLibre's style is transiently busy,
+//     the swap is deferred to the next `idle` or `style.load` event
+//     (whichever fires first).
+//   • On `visible=false`: source and layers are removed eagerly to
+//     free GPU memory.
+//   • On `boundsKey` change (city / FPV cell): atomic remove + re-add
+//     with the new `bounds` (MapLibre vector sources don't allow
+//     mutating bounds in place).
+//   • The lifecycle effect cleanup deliberately does NOT remove the
+//     source — see the architectural note on the effect below.
+//   • Final teardown happens in a dedicated unmount-only effect.
+//
+// Async sprite loading is guarded by a `CancellationToken` so a
+// stale add-promise from a previous effect run can't race a newer
+// one and produce duplicate / orphan sourcesLibre's style is transiently busy,
+//     the swap is deferred to the next `idle` or `style.load` event
+//     (whichever fires first).
+//   • On `visible=false`: source and layers are removed eagerly to
+//     free GPU memory.
+//   • On `boundsKey` change (city / FPV cell): atomic remove + re-add
+//     with the new `bounds` (MapLibre vector sources don't allow
+//     mutating bounds in place).
+//   • The lifecycle effect cleanup deliberately does NOT remove the
+//     source — see the architectural note on the effect below.
+//   • Final teardown happens in a dedicated unmount-only effect.
+//
+// Async sprite loading is guarded by a `CancellationToken` so a
+// stale add-promise from a previous effect run can't race a newer
+// one and produce duplicate / orphan sources.
 //
 // Click-to-inspect: clicking an airspace fill opens a popup with
 // class/name/altitude bounds. Cursor turns pointer on hover.
@@ -82,22 +111,25 @@ export function AirspaceLayer({
   bounds = null,
 }: AirspaceLayerProps) {
   const { map, isLoaded } = useMap();
-
   const mountedRef = useRef(true);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const popupRootRef = useRef<Root | null>(null);
   const popupContainerRef = useRef<HTMLDivElement | null>(null);
   const spritesLoadedRef = useRef(false);
-  // Keep opacity in a ref so addAirspace can read the current value at
-  // add-time without triggering a full remount when the slider moves.
+  // Opacity is read by the lifecycle effect (via `opacityRef.current`)
+  // and passed to `addAirspace(nextOpacity, …)` at add-time. The ref
+  // pattern lets the slider update without forcing the lifecycle
+  // effect to re-run — a separate opacity-only effect handles the
+  // in-place paint update.
   const opacityRef = useRef(opacity);
   useEffect(() => {
     opacityRef.current = opacity;
   }, [opacity]);
 
-  // Bounds go through a ref too so `addAirspace` can read the latest
-  // value, and a key string so the add/remove effect below only
-  // re-runs when the box actually changes.
+  // Bounds are read directly inside `addAirspace` via
+  // `boundsRef.current` (so the source always carries the latest box
+  // at add-time), while `boundsKey` is in the lifecycle effect's dep
+  // list so the effect only re-runs when the box actually changes.
   const boundsRef = useRef<AirspaceBounds | null>(bounds);
   useEffect(() => {
     boundsRef.current = bounds;
@@ -192,13 +224,21 @@ export function AirspaceLayer({
   }, [map]);
 
   // ── Add source + layers ──────────────────────────────────────────
+  // The optional `cancelled` ref lets the caller invalidate this
+  // particular invocation: if a newer effect run starts after the
+  // sprite-load await, this stale promise will bail instead of
+  // racing to add a duplicate / orphan source.
   const addAirspace = useCallback(
-    async (nextOpacity: number) => {
+    async (nextOpacity: number, cancelled?: CancellationToken) => {
       if (!map || !mountedRef.current) return;
+      if (cancelled?.current) return;
       if (map.getSource(AIRSPACE_SOURCE_ID)) return;
 
       await ensureSprites();
       if (!mountedRef.current || !map) return;
+      if (cancelled?.current) return;
+      // Re-check after the await — another invocation may have added it.
+      if (map.getSource(AIRSPACE_SOURCE_ID)) return;
 
       // Absolute URL required: MapLibre resolves tile URLs inside a
       // Web Worker where relative paths can't be parsed into Requests.
@@ -209,20 +249,26 @@ export function AirspaceLayer({
       // source always carries the latest box at add-time.
       const currentBounds = boundsRef.current;
 
-      map.addSource(AIRSPACE_SOURCE_ID, {
-        type: "vector",
-        tiles: [`${tileBase}/api/airspace-tiles?z={z}&x={x}&y={y}`],
-        minzoom: AIRSPACE_MIN_ZOOM,
-        maxzoom: AIRSPACE_MAX_ZOOM,
-        // MapLibre skips any tile whose mercator footprint doesn't
-        // intersect this box. Passing a mutable copy because the
-        // spec types want a plain number[].
-        ...(currentBounds
-          ? { bounds: [...currentBounds] as [number, number, number, number] }
-          : {}),
-        attribution:
-          '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
-      });
+      try {
+        map.addSource(AIRSPACE_SOURCE_ID, {
+          type: "vector",
+          tiles: [`${tileBase}/api/airspace-tiles?z={z}&x={x}&y={y}`],
+          minzoom: AIRSPACE_MIN_ZOOM,
+          maxzoom: AIRSPACE_MAX_ZOOM,
+          // MapLibre skips any tile whose mercator footprint doesn't
+          // intersect this box. Passing a mutable copy because the
+          // spec types want a plain number[].
+          ...(currentBounds
+            ? { bounds: [...currentBounds] as [number, number, number, number] }
+            : {}),
+          attribution:
+            '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
+        });
+      } catch {
+        // Style swap or duplicate add — bail; the next effect run
+        // will reconcile.
+        return;
+      }
 
       // Insert below first symbol layer so base-map labels stay on top.
       const layers = map.getStyle()?.layers ?? [];
@@ -235,7 +281,12 @@ export function AirspaceLayer({
       }
 
       for (const layer of AIRSPACE_LAYERS) {
-        map.addLayer(layer, beforeId);
+        if (map.getLayer(layer.id)) continue;
+        try {
+          map.addLayer(layer, beforeId);
+        } catch {
+          /* layer raced with removal — skip */
+        }
       }
       applyOpacity(nextOpacity);
     },
@@ -292,44 +343,128 @@ export function AirspaceLayer({
   );
 
   // ── Add/remove based on visibility + bounds ──────────────────────
-  // Opacity is intentionally *not* in the dep list: the opacity-only
-  // effect below handles slider updates without tearing down tiles.
+  // Architectural note: cleanup deliberately does NOT call
+  // removeAirspace(). Tearing down on every dep change (boundsKey
+  // shifts, visibility toggles, callback identity changes) created a
+  // gap window where the layer was gone; if `addAirspace` then raced
+  // with the cleanup, sprites finished loading after unmount, or
+  // `idle` fired late, the layer would silently stay missing — the
+  // "fragile / randomly disappear" symptom.
   //
-  // `boundsKey` IS in the dep list so switching city re-adds the source
-  // with the new bounding box. Tiles inside the new box are served
-  // from the browser HTTP cache (the tile proxy sets
-  // `Cache-Control: public, max-age=86400, immutable`), so the
-  // teardown/rebuild is effectively free on the network.
+  // Instead the effect body atomically swaps in place: remove (if
+  // present) → add. The dedicated unmount effect below handles the
+  // final teardown.
+  //
+  // Opacity is intentionally *not* in the dep list: a separate
+  // opacity-only effect handles slider updates without rebuilds.
   useEffect(() => {
     if (!map || !isLoaded) return;
 
+    const cancelled = { current: false };
+    let pendingIdle: (() => void) | null = null;
+    let pendingStyleLoad: (() => void) | null = null;
+
+    const performSwap = () => {
+      if (cancelled.current || !mountedRef.current) return;
+      // Atomic: remove (if present) then add. Both inside the same
+      // synchronous tick — MapLibre never sees the in-between gap on
+      // a render frame.
+      removeAirspace();
+      void addAirspace(opacityRef.current, cancelled);
+    };
+
+    const trySwap = () => {
+      if (cancelled.current) return;
+      if (map.isStyleLoaded()) {
+        performSwap();
+      } else {
+        // Style transiently not ready (common during a city tap's
+        // camera fly + tile fetch). Wait for the next idle, OR for
+        // the next style.load — whichever fires first.
+        pendingIdle = () => {
+          pendingIdle = null;
+          if (pendingStyleLoad) {
+            map.off("style.load", pendingStyleLoad);
+            pendingStyleLoad = null;
+          }
+          performSwap();
+        };
+        pendingStyleLoad = () => {
+          pendingStyleLoad = null;
+          if (pendingIdle) {
+            map.off("idle", pendingIdle);
+            pendingIdle = null;
+          }
+          // Style swap wipes images — force sprite reload.
+          spritesLoadedRef.current = false;
+          performSwap();
+        };
+        map.once("idle", pendingIdle);
+        map.once("style.load", pendingStyleLoad);
+      }
+    };
+
+    // Style reloads (basemap swap) wipe MapLibre's image registry
+    // and all sources/layers. We must re-register sprites and
+    // re-add. Note: this is a long-lived listener, separate from
+    // the one-shot one inside trySwap.
     const onStyleLoad = () => {
-      // A style reload wipes MapLibre's image registry, so force the
-      // sprite re-registration before any layer using fill-pattern is
-      // added back.
+      if (cancelled.current) return;
       spritesLoadedRef.current = false;
-      if (visible) void addAirspace(opacityRef.current);
+      if (visible) {
+        // Re-add after style settles. Using a microtask delay so
+        // MapLibre has finished its internal style-load bookkeeping.
+        Promise.resolve().then(() => {
+          if (!cancelled.current && visible) trySwap();
+        });
+      }
     };
     map.on("style.load", onStyleLoad);
 
-    if (visible && map.isStyleLoaded()) {
-      // Ensure we always hit the add path with the latest bounds even
-      // if a previous source is still attached.
-      if (map.getSource(AIRSPACE_SOURCE_ID)) removeAirspace();
-      void addAirspace(opacityRef.current);
-    } else if (!visible) {
+    if (visible) {
+      trySwap();
+    } else {
+      // Hidden: remove eagerly so we free GPU memory.
       removeAirspace();
       popupRef.current?.remove();
       popupRef.current = null;
     }
 
     return () => {
+      cancelled.current = true;
+      if (pendingIdle) map.off("idle", pendingIdle);
+      if (pendingStyleLoad) map.off("style.load", pendingStyleLoad);
       map.off("style.load", onStyleLoad);
-      removeAirspace();
-      popupRef.current?.remove();
-      popupRootRef.current?.unmount();
+      // NOTE: do NOT call removeAirspace here — see comment above.
     };
   }, [map, isLoaded, visible, boundsKey, addAirspace, removeAirspace]);
+
+  // ── Unmount-only teardown ────────────────────────────────────────
+  // Separate effect so the source/layers persist across re-renders
+  // and only tear down when the component truly unmounts (or the
+  // map instance changes).
+  useEffect(() => {
+    return () => {
+      removeAirspace();
+      popupRef.current?.remove();
+      popupRef.current = null;
+      // Defer React unmount to a microtask so we don't unmount inside
+      // a render commit phase (React warns on synchronous unmount of
+      // a root mid-commit). Capture the current root in case popupRoot
+      // is replaced before the microtask fires.
+      const root = popupRootRef.current;
+      popupRootRef.current = null;
+      if (root) {
+        Promise.resolve().then(() => {
+          try {
+            root.unmount();
+          } catch {
+            /* already unmounted */
+          }
+        });
+      }
+    };
+  }, [removeAirspace]);
 
   // ── Opacity updates ──────────────────────────────────────────────
   useEffect(() => {
