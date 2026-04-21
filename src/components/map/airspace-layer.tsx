@@ -38,20 +38,6 @@ import type { AirspaceLimit } from "@/lib/airspace-format";
 //
 // Async sprite loading is guarded by a `CancellationToken` so a
 // stale add-promise from a previous effect run can't race a newer
-// one and produce duplicate / orphan sourcesLibre's style is transiently busy,
-//     the swap is deferred to the next `idle` or `style.load` event
-//     (whichever fires first).
-//   • On `visible=false`: source and layers are removed eagerly to
-//     free GPU memory.
-//   • On `boundsKey` change (city / FPV cell): atomic remove + re-add
-//     with the new `bounds` (MapLibre vector sources don't allow
-//     mutating bounds in place).
-//   • The lifecycle effect cleanup deliberately does NOT remove the
-//     source — see the architectural note on the effect below.
-//   • Final teardown happens in a dedicated unmount-only effect.
-//
-// Async sprite loading is guarded by a `CancellationToken` so a
-// stale add-promise from a previous effect run can't race a newer
 // one and produce duplicate / orphan sources.
 //
 // Click-to-inspect: clicking an airspace fill opens a popup with

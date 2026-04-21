@@ -178,9 +178,6 @@ function FlightTrackerInner() {
   // The overlay layers debounce identical bounds via
   // `airspaceBoundsKey`, so returning a freshly allocated array each
   // render is fine — their effects only re-run when the quantised
-  // via
-  // `airspaceBoundsKey`, so returning a freshly allocated array each
-  // render is fine — their effects only re-run when the quantised
   // key actually changes.
   const airspaceBounds = useMemo(() => {
     if (fpvIcao24) {

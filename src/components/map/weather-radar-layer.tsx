@@ -233,7 +233,6 @@ export function WeatherRadarLayer({
     // in place, so a bounds-key change requires a full remove + add.
     // We tear down here unconditionally; `updateRadarTiles` below
     // re-creates the source with `boundsRef.current` once the next
-    // RainViewer frame is fetched (or immediately, if cached)
     // RainViewer frame is fetched (or immediately, if cached).
     if (map.getSource(SOURCE_ID)) {
       removeRadarFromMap(map);
