@@ -11,7 +11,6 @@ import {
   ArrowLeftRight,
   Ruler,
   Shield,
-  Flame,
   Eye,
   CloudRain,
 } from "lucide-react";
@@ -162,19 +161,10 @@ export function SettingsContent() {
         />
 
         {settings.showAirspace && (
-          <>
-            <AirspaceOpacitySlider
-              value={settings.airspaceOpacity}
-              onChange={(v) => update("airspaceOpacity", v)}
-            />
-            <SettingRow
-              icon={<Flame className="h-4 w-4" />}
-              title="Thermal hotspots"
-              description="Glider & paraglider thermal activity areas"
-              checked={settings.showAirspaceHotspots}
-              onChange={(v) => update("showAirspaceHotspots", v)}
-            />
-          </>
+          <AirspaceOpacitySlider
+            value={settings.airspaceOpacity}
+            onChange={(v) => update("airspaceOpacity", v)}
+          />
         )}
 
         {/* ── Weather ── */}
@@ -593,6 +583,27 @@ const CHANGELOG: {
   date: string;
   entries: { title: string; description: string }[];
 }[] = [
+  {
+    version: "0.8.3",
+    date: "Apr 21, 2026",
+    entries: [
+      {
+        title: "Scoped airspace overlay + FPV follow",
+        description:
+          "OpenAIP airspace tiles now load only within ~2× the flight fetch radius of the active city instead of the entire globe, cutting tile bandwidth sharply. In FPV mode the bounding box follows the tracked aircraft with 0.5° grid-snap hysteresis so the source only rebuilds every ~30 NM of travel. Fixed two console errors in the airspace renderer: opacity expressions no longer break when composed with zoom interpolations, and tile URLs are now absolute so MapLibre's worker can construct requests.",
+      },
+      {
+        title: "Airport info card with arrivals, departures, weather & photos",
+        description:
+          "Unified tabbed airport card replaces the separate board/info panes on both desktop and mobile. Arrivals and departures tiles, current METAR plus TAF forecast via a new NOAA proxy, runway layout, ATC frequencies, and a Wikipedia photo banner via a new Wikimedia-compliant proxy. Full-database IATA↔ICAO fallback for airports that aren't in the curated LiveATC list, with lazy-loaded and cached lookup tables. 3D building extrusions added to the map on style load.",
+      },
+      {
+        title: "Configurable unit system",
+        description:
+          "New Unit system setting with Aviation (ft, kts, fpm, NM, °C, hPa), Metric (m, km/h, m/s, km, °C, hPa), and Imperial (ft, mph, fpm, mi, °F, inHg) modes, persisted across sessions. Unit conversions and formatting centralised in shared helpers; flight card, mobile toast, search chips, airport board, FPV HUD, altitude legend, weather card, and vertical profile all respect the selected system. Internal thresholds unchanged — this is a display-layer toggle only.",
+      },
+    ],
+  },
   {
     version: "0.8.2",
     date: "Apr 12, 2026",

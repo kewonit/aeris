@@ -111,11 +111,16 @@ Models are optimised GLB files (no Draco compression — avoids external WASM de
 
 ## Environment Variables
 
-| Variable            | Required | Description                     |
-| ------------------- | -------- | ------------------------------- |
-| `NEXT_PUBLIC_GA_ID` | No       | Google Analytics measurement ID |
+All variables are optional — Aeris runs with no secrets. See `.env.example` for the full template.
 
-No API keys are needed. Flight data comes from public ADS-B APIs with a built-in 3-tier fallback chain (airplanes.live → adsb.lol → OpenSky).
+| Variable                | Required | Description                                                                                                                                                                           |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_GA_ID`     | No       | Google Analytics 4 measurement ID.                                                                                                                                                    |
+| `OPENSKY_CLIENT_ID`     | No       | OAuth2 client id for the server-side OpenSky trace fallback in `src/lib/trails/source/server-trace-service.ts`. Without it, the trace service falls back to public ADS-B aggregators. |
+| `OPENSKY_CLIENT_SECRET` | No       | OAuth2 secret that pairs with `OPENSKY_CLIENT_ID`. Set both or neither.                                                                                                               |
+| `OPENAIP_API_KEY`       | No       | API key used by the airspace vector-tile proxy `src/app/api/airspace-tiles/route.ts`. Without it the airspace overlay stays empty; flight rendering is unaffected.                    |
+
+Live flight data (airplanes.live, adsb.lol) is called directly from the browser with CORS — no credentials needed.
 
 ## License
 

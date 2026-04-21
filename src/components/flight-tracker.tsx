@@ -58,6 +58,12 @@ import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { formatCallsign } from "@/lib/flight-utils";
 import { processDepartures } from "@/lib/route-detection";
 import { findNearestAirport, airportToCity } from "@/lib/airports";
+import {
+  computeAirspaceBounds,
+  FPV_BOUNDS_SNAP_DEG,
+  FPV_AIRSPACE_RADIUS_DEG,
+  AIRSPACE_RADIUS_MULTIPLIER,
+} from "@/lib/airspace-style";
 import type { PickingInfo } from "@deck.gl/core";
 import {
   DEFAULT_CITY,
@@ -157,6 +163,49 @@ function FlightTrackerInner() {
     fpvIcao24,
     fpvSeedCenter,
   );
+
+  // Airspace tiles are scoped to ~2× the flight fetch radius so we
+  // don't pull tiles for the entire globe. Two modes:
+  //   • City mode (default): box centered on `activeCity` with radius
+  //     = city.radius × 2 (~300 NM for the seed cities).
+  //   • FPV mode: box centered on the tracked aircraft, sized to the
+  //     FPV point-radius × 2 (~240 NM). The center is snapped to a
+  //     0.5° grid so the bbox only re-anchors every ~30 NM of travel —
+  //     otherwise every position tick would force a source re-add.
+  //
+  // The AirspaceLayer debounces identical bounds via `airspaceBoundsKey`,
+  // so returning a freshly allocated array each render is fine — the
+  // effect there only re-runs when the quantised key actually changes.
+  const airspaceBounds = useMemo(() => {
+    if (fpvIcao24) {
+      const target = fpvIcao24.toLowerCase();
+      const tracked = flights.find((f) => f.icao24.toLowerCase() === target);
+      const lng =
+        tracked && Number.isFinite(tracked.longitude)
+          ? (tracked.longitude as number)
+          : (fpvSeedCenter?.lng ?? null);
+      const lat =
+        tracked && Number.isFinite(tracked.latitude)
+          ? (tracked.latitude as number)
+          : (fpvSeedCenter?.lat ?? null);
+      if (lng !== null && lat !== null) {
+        const snap = FPV_BOUNDS_SNAP_DEG;
+        const snappedLng = Math.round(lng / snap) * snap;
+        const snappedLat = Math.round(lat / snap) * snap;
+        return computeAirspaceBounds(
+          {
+            coordinates: [snappedLng, snappedLat],
+            // AIRSPACE_RADIUS_MULTIPLIER is applied inside
+            // computeAirspaceBounds; dividing here keeps the final
+            // half-width at exactly FPV_AIRSPACE_RADIUS_DEG.
+            radius: FPV_AIRSPACE_RADIUS_DEG / AIRSPACE_RADIUS_MULTIPLIER,
+          },
+          AIRSPACE_RADIUS_MULTIPLIER,
+        );
+      }
+    }
+    return computeAirspaceBounds(activeCity);
+  }, [fpvIcao24, flights, fpvSeedCenter, activeCity]);
 
   const displayFlights = flights;
   const trailState = useTrailSystem({
@@ -487,7 +536,7 @@ function FlightTrackerInner() {
         <AirspaceLayer
           visible={settings.showAirspace}
           opacity={settings.airspaceOpacity}
-          showHotspots={settings.showAirspaceHotspots}
+          bounds={airspaceBounds}
         />
         <WeatherRadarLayer
           visible={settings.showWeatherRadar}

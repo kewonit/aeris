@@ -32,7 +32,6 @@ export type Settings = {
   globeMode: boolean;
   showAirspace: boolean;
   airspaceOpacity: number;
-  showAirspaceHotspots: boolean;
   showAtcPanel: boolean;
   showWeatherRadar: boolean;
   weatherRadarOpacity: number;
@@ -94,7 +93,6 @@ const DEFAULT_SETTINGS: Settings = {
   globeMode: false,
   showAirspace: false,
   airspaceOpacity: 0.78,
-  showAirspaceHotspots: false,
   showAtcPanel: false,
   showWeatherRadar: false,
   weatherRadarOpacity: 0.5,
@@ -143,7 +141,6 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.airspaceOpacity) &&
     s.airspaceOpacity >= AIRSPACE_OPACITY_MIN &&
     s.airspaceOpacity <= AIRSPACE_OPACITY_MAX &&
-    typeof s.showAirspaceHotspots === "boolean" &&
     typeof s.showAtcPanel === "boolean" &&
     typeof s.showWeatherRadar === "boolean" &&
     typeof s.weatherRadarOpacity === "number" &&
