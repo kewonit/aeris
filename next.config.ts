@@ -17,15 +17,14 @@ const directTraceConnectSrc = Array.from(
 // NOTE: planespotters.net, airport-data.com, and jetapi.dev are
 // server-side only (accessed via /api/aircraft-photos proxy route). CSP does
 // not apply to server-side fetches, so they are not listed in connect-src.
-// adsbdb.com is used client-side for route lookups.
-// hexdb.io is proxied via /api/hexdb (no CORS headers from hexdb.io).
+// adsbdb.com and hexdb.io are server-side only for route lookup via /api/routes.
 const cspHeader = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
-  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com https://api.adsbdb.com ${directTraceConnectSrc};
+  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com ${directTraceConnectSrc};
   worker-src 'self' blob:;
   child-src blob:;
   object-src 'none';
@@ -80,7 +79,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/api/:path*",
+        source: "/api/((?!routes(?:/|$)).*)",
         headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
       },
       {

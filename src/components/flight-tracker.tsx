@@ -84,16 +84,29 @@ import {
 
 type FlightTrackerProps = {
   airspaceAvailable?: boolean;
+  /**
+   * City resolved on the server from the URL (e.g. /city/[code]).
+   * When provided, this takes precedence over any client-side URL parsing
+   * to avoid hydration flicker and keep SSR output in sync with the client.
+   */
+  initialCity?: City;
 };
 
-function FlightTrackerInner({ airspaceAvailable = true }: FlightTrackerProps) {
+function FlightTrackerInner({
+  airspaceAvailable = true,
+  initialCity,
+}: FlightTrackerProps) {
   // useSyncExternalStore with a no-op subscriber reads localStorage once
   // on the client while returning DEFAULT_CITY on the server — SSR-safe
   // hydration without useEffect flicker.
+  //
+  // When the server already resolved a city (from a /city/[code] route),
+  // use that as both the server snapshot and the client snapshot so
+  // hydration matches and we skip one client-side URL parse.
   const hydratedCity = useSyncExternalStore(
     subscribeNoop,
-    resolveInitialCity,
-    () => DEFAULT_CITY,
+    initialCity ? () => initialCity : resolveInitialCity,
+    () => initialCity ?? DEFAULT_CITY,
   );
   const hydratedStyle = useSyncExternalStore(
     subscribeNoop,
@@ -747,11 +760,15 @@ function FlightTrackerInner({ airspaceAvailable = true }: FlightTrackerProps) {
 
 export function FlightTracker({
   airspaceAvailable = true,
+  initialCity,
 }: FlightTrackerProps) {
   return (
     <ErrorBoundary>
       <SettingsProvider>
-        <FlightTrackerInner airspaceAvailable={airspaceAvailable} />
+        <FlightTrackerInner
+          airspaceAvailable={airspaceAvailable}
+          initialCity={initialCity}
+        />
       </SettingsProvider>
     </ErrorBoundary>
   );

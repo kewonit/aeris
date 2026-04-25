@@ -24,6 +24,8 @@
 .github/agents
 .github/skills
 .github/copilot-instructions.md
+.agents/skills
+skills-lock.json
 
 # misc
 .DS_Store

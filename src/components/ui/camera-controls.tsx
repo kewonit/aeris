@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useEffect, useState } from "react";
+import {
+  useCallback,
+  useRef,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { motion } from "motion/react";
 import {
   Plus,
@@ -96,6 +102,39 @@ function Divider() {
   );
 }
 
+export function shouldRenderFullscreenToggle(
+  mounted: boolean,
+  supported: boolean,
+) {
+  return mounted && supported;
+}
+
+function subscribeFullscreen(onStoreChange: () => void) {
+  if (typeof document === "undefined") return () => {};
+  document.addEventListener("fullscreenchange", onStoreChange);
+  return () => document.removeEventListener("fullscreenchange", onStoreChange);
+}
+
+function subscribeNoop() {
+  return () => {};
+}
+
+function getClientMountedSnapshot() {
+  return true;
+}
+
+function getServerFullscreenSnapshot() {
+  return false;
+}
+
+function getFullscreenSnapshot() {
+  return typeof document !== "undefined" && !!document.fullscreenElement;
+}
+
+function getFullscreenSupportedSnapshot() {
+  return typeof document !== "undefined" && !!document.fullscreenEnabled;
+}
+
 /** One-off action button (no continuous press). */
 function ActionButton({
   label,
@@ -156,18 +195,21 @@ function useGeolocation() {
 }
 
 function useFullscreen() {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [supported, setSupported] = useState(false);
-
-  useEffect(() => {
-    setSupported(!!document.fullscreenEnabled);
-
-    function onChange() {
-      setIsFullscreen(!!document.fullscreenElement);
-    }
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    getClientMountedSnapshot,
+    getServerFullscreenSnapshot,
+  );
+  const isFullscreen = useSyncExternalStore(
+    subscribeFullscreen,
+    getFullscreenSnapshot,
+    getServerFullscreenSnapshot,
+  );
+  const supported = useSyncExternalStore(
+    subscribeFullscreen,
+    getFullscreenSupportedSnapshot,
+    getServerFullscreenSnapshot,
+  );
 
   const toggle = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -177,7 +219,7 @@ function useFullscreen() {
     }
   }, []);
 
-  return { isFullscreen, toggle, supported };
+  return { isFullscreen, toggle, supported, mounted };
 }
 
 export function CameraControls() {
@@ -186,6 +228,7 @@ export function CameraControls() {
     isFullscreen,
     toggle: toggleFullscreen,
     supported: fsSupported,
+    mounted,
   } = useFullscreen();
   return (
     <motion.div
@@ -277,7 +320,7 @@ export function CameraControls() {
         <Locate className={`h-3.5 w-3.5 ${locating ? "animate-pulse" : ""}`} />
       </ActionButton>
 
-      {fsSupported && (
+      {shouldRenderFullscreenToggle(mounted, fsSupported) && (
         <>
           <Divider />
           <ActionButton

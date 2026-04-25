@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
+import { GoogleAnalytics } from "@next/third-parties/google";
+import { ThemeProvider } from "@wrksz/themes/next";
 import { Toaster } from "sonner";
-import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -12,6 +12,7 @@ const inter = Inter({
 });
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+const GA_ID_VALID = GA_ID && /^G-[A-Z0-9]+$/.test(GA_ID) ? GA_ID : null;
 
 const title = "Aeris — Real-Time 3D Flight Tracking";
 const description =
@@ -101,17 +102,6 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
-        {GA_ID && /^G-[A-Z0-9]+$/.test(GA_ID) && (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-              strategy="afterInteractive"
-            />
-            <Script id="gtag-init" strategy="afterInteractive">
-              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${GA_ID}');`}
-            </Script>
-          </>
-        )}
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider
@@ -133,6 +123,11 @@ export default function RootLayout({
             }}
           />
         </ThemeProvider>
+        {/* Uses @next/third-parties, which patches router events to fire a
+            gtag('config', id, { page_path }) on every App Router navigation.
+            Without this, client-side URL changes (e.g. /city/bom → /city/lhr)
+            would not register page_views in GA4. */}
+        {GA_ID_VALID && <GoogleAnalytics gaId={GA_ID_VALID} />}
       </body>
     </html>
   );

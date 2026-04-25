@@ -2,16 +2,16 @@
 
 // ── Route Info Hook ─────────────────────────────────────────────────
 //
-// Combines four data sources to provide the best possible route
+// Combines open route-database data with observed departure data
 // information for a selected flight:
 //
-//   1. API lookup (adsbdb.com combined endpoint → hexdb.io fallback)
-//   2. Trace-based departure detection (first waypoint of trace)
-//   3. Client-side departure detection (ground→airborne transition)
-//   4. Client-side destination estimation (heading + altitude heuristic)
+//   1. Free route database lookup (adsbdb.com → hexdb.io fallback)
+//   2. Trace-based observed departure (first waypoint of trace)
+//   3. Client-side observed departure (ground→airborne transition)
 //
-// All sources are combined — API data is supplemented (not replaced)
-// by trace/detection data when the API is missing origin or destination.
+// Destination prediction is intentionally not used. If the open route
+// databases do not know a destination, the UI should show a partial or
+// unavailable route rather than inventing one.
 //
 // Only triggers API lookups for the *selected* flight to avoid
 // spamming the API with requests for all visible aircraft.
@@ -19,29 +19,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
-import {
-  lookupRoute,
-  formatAirportCode,
-  type RouteInfo,
-  type RouteAirport,
-} from "@/lib/route-lookup";
-import {
-  getDeparture,
-  departureFromTrace,
-  estimateDestination,
-} from "@/lib/route-detection";
+import { lookupRoute, formatAirportCode } from "../lib/route-lookup";
+import type { RouteInfo, RouteAirport } from "../lib/route-lookup";
+import { getDeparture, departureFromTrace } from "@/lib/route-detection";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type FlightRouteInfo = {
-  /** Origin airport (from API, departure detection, or null) */
+  /** Origin airport (from route database, observed departure, or null) */
   origin: RouteAirport | null;
-  /** Destination airport (from API or estimation) */
+  /** Destination airport from route databases only */
   destination: RouteAirport | null;
   /** Confidence level for the destination */
-  destinationConfidence: "known" | "high" | "medium" | "low" | null;
+  destinationConfidence: "known" | null;
   /** How the route was determined */
-  source: "api" | "detected" | "estimated" | "mixed" | null;
+  source: "route-database" | "observed" | "mixed" | null;
   /** Whether route data is being fetched and no route info is available yet */
   loading: boolean;
   /** Short display string, e.g. "LHR → JFK" */
@@ -89,7 +81,7 @@ export function useRouteInfo(
     abortRef.current = controller;
 
     lookupRoute(callsign, controller.signal)
-      .then((result) => {
+      .then((result: RouteInfo | null) => {
         if (!controller.signal.aborted) {
           setApiRoute(result);
           setApiRouteCallsign(callsign);
@@ -125,15 +117,14 @@ export function useRouteInfo(
 // route info. Each field (origin, destination) is filled independently
 // using a priority cascade:
 //
-//   origin:      trace departure  →  API  →  live departure detection
-//   destination: API  →  heading/altitude estimation
+//   origin:      route API → trace departure → live departure detection
+//   destination: route API only
 //
-// Trace-based departure is prioritised over API because the API returns
-// schedule/historical route data for the callsign (e.g. "SG106 usually
-// flies BOM→DEL") while the trace shows where THIS flight actually
-// departed from (e.g. PNQ today).
+// Destination prediction is intentionally excluded. If open route databases
+// do not know the destination, the UI should show a partial or unavailable
+// route rather than inventing one.
 
-function buildRouteInfo(
+export function buildRouteInfo(
   flight: FlightState | null,
   apiRoute: RouteInfo | null,
   loading: boolean,
@@ -147,43 +138,36 @@ function buildRouteInfo(
   const liveDeparture = getDeparture(flight.icao24);
   const liveOrigin = liveDeparture?.airport ?? null;
 
-  // Priority: trace > API > live detection
-  // Trace departure uses actual ADS-B waypoints near an airport, so it
-  // reflects the real departure for THIS flight, not historical schedules.
-  const origin = traceDeparture ?? apiOrigin ?? liveOrigin;
+  // Treat route database data as a single route record. Observed departure
+  // fills only when the database has no origin, and never creates a guessed
+  // destination.
+  const observedOrigin = traceDeparture ?? liveOrigin;
+  const origin = apiOrigin ?? observedOrigin;
 
   // ── Gather destination candidates ──────────────────────────────────
   const apiDestination = apiRoute?.destination ?? null;
-  const departureIata =
-    (traceDeparture?.iata ?? apiOrigin?.iata ?? liveOrigin?.iata) || undefined;
-  const estimate = estimateDestination(flight, departureIata);
-
-  // Priority: API > heading estimation
-  const destination = apiDestination ?? estimate?.airport ?? null;
+  const destination = apiDestination;
 
   // ── Determine confidence ───────────────────────────────────────────
   let destinationConfidence: FlightRouteInfo["destinationConfidence"] = null;
   if (apiDestination) {
     destinationConfidence = "known";
-  } else if (estimate) {
-    destinationConfidence = estimate.confidence;
   }
 
   // ── Determine source label ─────────────────────────────────────────
   let source: FlightRouteInfo["source"] = null;
   if (origin || destination) {
-    const originIsTrace = !!traceDeparture;
-    const originIsApi = !originIsTrace && !!apiOrigin;
-    const destIsApi = !!apiDestination;
+    const hasApiData = !!apiOrigin || !!apiDestination;
+    const usesObservedOrigin = !apiOrigin && !!observedOrigin;
 
-    if (originIsApi && destIsApi) {
-      source = "api";
-    } else if (!originIsApi && !destIsApi) {
-      if (traceDeparture || liveOrigin) source = "detected";
-      else if (estimate) source = "estimated";
-      else source = "detected";
-    } else {
+    if (hasApiData && usesObservedOrigin) {
       source = "mixed";
+    } else if (hasApiData) {
+      source = "route-database";
+    } else if (usesObservedOrigin) {
+      source = "observed";
+    } else {
+      source = null;
     }
   }
 
