@@ -294,7 +294,6 @@ export function createTrailStore() {
   const envelopes = new Map<string, TrailEnvelope>();
   let seen = new Set<string>();
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
-  let resumePending = false;
   let liveOrder: string[] = [];
   const history = createHistoryState();
   let selectedTrack: FlightTrack | null = null;
@@ -427,17 +426,6 @@ export function createTrailStore() {
       return;
     }
 
-    // On the first ingestion after a visibility resume, clear live trail
-    // arrays so we don't create straight-line artifacts from the last
-    // pre-background position to the current position. The envelope data
-    // (liveTail, historySegments) is NOT cleared here — it preserves the
-    // visual trail until the loop below updates each envelope with fresh data.
-    if (resumePending && flights.length > 0) {
-      trails.clear();
-      altitudeStates.clear();
-      resumePending = false;
-    }
-
     const current = new Set<string>();
     let processedFlightCount = 0;
     liveOrder = [];
@@ -465,7 +453,7 @@ export function createTrailStore() {
         altitudeStates.delete(id);
       }
 
-      const filteredAltitude = filterAltitude(id, flight.baroAltitude);
+      let filteredAltitude = filterAltitude(id, flight.baroAltitude);
       const point: TrailPoint = {
         position: [flight.longitude, flight.latitude],
         baroAltitude: filteredAltitude,
@@ -524,6 +512,9 @@ export function createTrailStore() {
         if (distSq > jumpThresholdDeg * jumpThresholdDeg) {
           liveTrail.length = 0;
           altitudeStates.delete(id);
+          // Rebuild altitude smoothing from the accepted reset point.
+          filteredAltitude = filterAltitude(id, flight.baroAltitude);
+          point.baroAltitude = filteredAltitude;
         } else {
           const outlierThresholdDeg = getDynamicMoveThresholdDeg({
             speedMps,
@@ -813,12 +804,10 @@ export function createTrailStore() {
   }
 
   /** Signal that the tab just became visible again.
-   *  Set a flag so the next ingestLiveFlights call resets live trail arrays
-   *  at the same moment fresh data arrives — this avoids both straight-line
-   *  artifacts (from stale→new position) and visible trail flicker (from
-   *  clearing before new data is available). */
+   *  Keep existing trail arrays loaded; the next live ingest uses elapsed time,
+   *  dynamic movement thresholds, and bounded trim windows to append plausible
+   *  motion or reset true teleports without wiping every active trail. */
   function handleVisibilityResume(): void {
-    resumePending = true;
     bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
     emit();
   }

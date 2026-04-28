@@ -321,6 +321,56 @@ test("buildTrailLayers emits explicit drawable body segments", () => {
   );
 });
 
+test("buildTrailLayers honors a 0.5 pixel trail thickness without min-width upscaling", () => {
+  const trail = makeTrail();
+  const flight = makeFlight();
+
+  const layers = buildTrailLayers({
+    interpolated: [flight],
+    interpolatedMap: new Map([[flight.icao24, flight]]),
+    currentTrails: [trail],
+    trailMap: new Map([[trail.icao24, trail]]),
+    trailDistance: 48,
+    trailThickness: 0.5,
+    altColors: true,
+    altitudeDisplayMode: "presentation",
+    defaultColor: DEFAULT_COLOR,
+    elapsed: 0,
+    visualFrame: 0,
+    globeFade: 1,
+    currentZoom: 9,
+    elevScale: 1,
+    trailBasePathCache: new Map(),
+    trailPathCache: new Map(),
+    trailColorCache: new Map(),
+    handledIdsSet: new Set<string>(),
+    visibleTrailCacheMap: new Map(),
+    activeIcaosSet: new Set<string>(),
+  });
+
+  const trailBodyLayer = layers[0] as unknown as {
+    props: {
+      getWidth: number;
+      widthMinPixels: number;
+      widthMaxPixels: number;
+    };
+  };
+  const connectorLayer = layers[1] as unknown as {
+    props: {
+      getWidth: number;
+      widthMinPixels: number;
+      widthMaxPixels: number;
+    };
+  };
+
+  assert.equal(trailBodyLayer.props.getWidth, 0.5);
+  assert.equal(connectorLayer.props.getWidth, 0.5);
+  assert.equal(trailBodyLayer.props.widthMinPixels, 0.5);
+  assert.equal(connectorLayer.props.widthMinPixels, 0.5);
+  assert.equal(trailBodyLayer.props.widthMaxPixels, 0.5);
+  assert.equal(connectorLayer.props.widthMaxPixels, 0.5);
+});
+
 test("connector gradient starts at the trail tail alpha and softens toward the aircraft", () => {
   const colors = buildConnectorGradientColors(
     [

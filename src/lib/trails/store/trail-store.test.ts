@@ -232,6 +232,473 @@ test("ingestLiveFlights keeps a longer live step when elapsed time and speed mak
   ]);
 });
 
+test("visibility resume keeps the existing live trail when fresh data arrives", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.92,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.98,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+
+  assert.deepEqual(trail?.path.slice(-4), [
+    [72.9, 19.0],
+    [72.91, 19.0],
+    [72.92, 19.0],
+    [72.98, 19.0],
+  ]);
+});
+
+test("visibility resume keeps selected live trails when fresh data arrives", () => {
+  const store = createTrailStore();
+  store.selectAircraft("resume01");
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.96,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  assert.deepEqual(
+    store.getSnapshot().selectedEnvelope?.entry?.path.slice(-3),
+    [
+      [72.9, 19.0],
+      [72.91, 19.0],
+      [72.96, 19.0],
+    ],
+  );
+});
+
+test("visibility resume keeps trails through an immediate empty poll", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+    store.ingestLiveFlights([]);
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.97,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+
+  assert.deepEqual(trail?.path.slice(-3), [
+    [72.9, 19.0],
+    [72.91, 19.0],
+    [72.97, 19.0],
+  ]);
+});
+
+test("visibility resume keeps multiple aircraft trails independently", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+      makeLiveFlight({
+        icao24: "resume02",
+        longitude: 73.1,
+        latitude: 19.2,
+        trueTrack: 180,
+        velocity: 210,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+      makeLiveFlight({
+        icao24: "resume02",
+        longitude: 73.1,
+        latitude: 19.19,
+        trueTrack: 180,
+        velocity: 210,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.97,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+      makeLiveFlight({
+        icao24: "resume02",
+        longitude: 73.1,
+        latitude: 19.13,
+        trueTrack: 180,
+        velocity: 210,
+      }),
+    ]);
+  });
+
+  const trails = new Map(
+    store.getSnapshot().trails.map((entry) => [entry.icao24, entry]),
+  );
+
+  assert.deepEqual(trails.get("resume01")?.path.slice(-3), [
+    [72.9, 19.0],
+    [72.91, 19.0],
+    [72.97, 19.0],
+  ]);
+  assert.deepEqual(trails.get("resume02")?.path.slice(-3), [
+    [73.1, 19.2],
+    [73.1, 19.19],
+    [73.1, 19.13],
+  ]);
+});
+
+test("visibility resume trims aged live trails instead of clearing them", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.92,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(7 * 60_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.98,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+
+  // Age trimming preserves a drawable two-point live trail.
+  assert.deepEqual(trail?.path, [
+    [72.92, 19.0],
+    [72.98, 19.0],
+  ]);
+});
+
+test("visibility resume preserves altitude smoothing for the next live sample", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        baroAltitude: 1_000,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        baroAltitude: 1_020,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.95,
+        latitude: 19.0,
+        baroAltitude: 9_000,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+  const lastAltitude = trail?.altitudes.at(-1);
+
+  assert.ok(
+    lastAltitude != null && lastAltitude < 2_000,
+    "resume should preserve smoothing and guard an implausible altitude jump",
+  );
+});
+
+test("visibility resume still resets a true post-resume teleport", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 73.8,
+        latitude: 19.8,
+        trueTrack: 70,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+
+  assert.equal(trail, undefined);
+});
+
+test("post-resume teleport starts the new trail with reset altitude smoothing", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.9,
+        latitude: 19.0,
+        baroAltitude: 1_000,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 72.91,
+        latitude: 19.0,
+        baroAltitude: 1_020,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(30_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 73.8,
+        latitude: 19.8,
+        baroAltitude: 9_000,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume01",
+        longitude: 73.81,
+        latitude: 19.8,
+        baroAltitude: 9_020,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume01");
+
+  assert.deepEqual(trail?.path, [
+    [73.8, 19.8],
+    [73.81, 19.8],
+  ]);
+  assert.ok(
+    trail?.altitudes.every((altitude) => (altitude ?? 0) > 8_000),
+    "teleport reset should not reuse low-altitude smoothing state",
+  );
+});
+
 test("ingestLiveFlights still resets on a true teleport even after a valid live leg", () => {
   const store = createTrailStore();
 

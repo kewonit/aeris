@@ -37,10 +37,10 @@ export type Settings = {
   weatherRadarOpacity: number;
 };
 
-const TRAIL_THICKNESS_MIN = 0.5;
-const TRAIL_THICKNESS_MAX = 8;
-const TRAIL_DISTANCE_MIN = 12;
-const TRAIL_DISTANCE_MAX = 120;
+export const TRAIL_THICKNESS_MIN = 0.5;
+export const TRAIL_THICKNESS_MAX = 8;
+export const TRAIL_DISTANCE_MIN = 12;
+export const TRAIL_DISTANCE_MAX = 120;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
@@ -48,7 +48,7 @@ export const AIRSPACE_OPACITY_MAX = 1.0;
 export const WEATHER_RADAR_OPACITY_MIN = 0.15;
 export const WEATHER_RADAR_OPACITY_MAX = 0.9;
 
-function normalizeSettings(input: Settings): Settings {
+export function normalizeSettings(input: Settings): Settings {
   return {
     ...input,
     orbitSpeed: clamp(input.orbitSpeed, 0.02, 0.5),
@@ -78,13 +78,13 @@ function normalizeSettings(input: Settings): Settings {
   };
 }
 
-const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_SETTINGS: Settings = {
   autoOrbit: true,
   orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
-  trailThickness: 1.3,
-  trailDistance: 80,
+  trailThickness: 0.5,
+  trailDistance: 48,
   showShadows: true,
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
@@ -99,13 +99,38 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 const WRITE_DEBOUNCE_MS = 300;
+
+const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
+const LEGACY_TRAIL_DISTANCE_DEFAULT = 80;
 
 type StorageEnvelope = {
   v: number;
   data: Settings;
 };
+
+export function migrateSettingsDefaults(
+  input: Settings,
+  fromVersion: number,
+): Settings {
+  if (fromVersion >= STORAGE_VERSION) {
+    return input;
+  }
+
+  const next = { ...input };
+
+  if (
+    fromVersion < 4 &&
+    next.trailThickness === LEGACY_TRAIL_THICKNESS_DEFAULT &&
+    next.trailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
+  ) {
+    next.trailThickness = DEFAULT_SETTINGS.trailThickness;
+    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
+  }
+
+  return next;
+}
 
 function isValidSettings(obj: unknown): obj is Settings {
   if (typeof obj !== "object" || obj === null) return false;
@@ -166,9 +191,15 @@ function loadSettings(): Settings {
           }
         }
       }
-      return normalizeSettings(merged);
+      const version = Number.isFinite(envelope.v) ? envelope.v : 0;
+      return normalizeSettings(migrateSettingsDefaults(merged, version));
     }
-    return normalizeSettings({ ...DEFAULT_SETTINGS, ...envelope.data });
+    return normalizeSettings(
+      migrateSettingsDefaults(
+        { ...DEFAULT_SETTINGS, ...envelope.data },
+        envelope.v,
+      ),
+    );
   } catch {
     // Corrupted or unreadable localStorage — fall back to defaults
     return DEFAULT_SETTINGS;

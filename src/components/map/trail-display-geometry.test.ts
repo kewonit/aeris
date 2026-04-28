@@ -150,6 +150,36 @@ function joinHeadingDeltaDeg(geometry: {
   return (delta * 180) / Math.PI;
 }
 
+function selfIntersectionCount(points: [number, number, number][]): number {
+  let count = 0;
+
+  const orientation = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+  ) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+
+  for (let left = 0; left < points.length - 1; left += 1) {
+    for (let right = left + 2; right < points.length - 1; right += 1) {
+      if (right === left + 1) continue;
+
+      const a = points[left];
+      const b = points[left + 1];
+      const c = points[right];
+      const d = points[right + 1];
+
+      if (
+        orientation(a, b, c) !== orientation(a, b, d) &&
+        orientation(c, d, a) !== orientation(c, d, b)
+      ) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
 test("buildTrailDisplayGeometry keeps the sealed prefix fixed across a live append", () => {
   const first = buildTrailDisplayGeometry(makeArcTrail(12), 80);
   const second = buildTrailDisplayGeometry(makeArcTrail(13), 80);
@@ -285,6 +315,34 @@ test("buildTrailDisplayGeometry removes local backtracks that would render as lo
   );
 
   assert.ok(worstLocalProjectionDrop(geometry.allPoints) > -0.01);
+});
+
+test("buildTrailDisplayGeometry removes a wide local hook without flattening the live tail", () => {
+  const geometry = buildTrailDisplayGeometry(
+    {
+      icao24: "wide-hook01",
+      path: [
+        [72.8, 19.0],
+        [72.9, 18.985],
+        [72.98, 18.94],
+        [72.93, 18.885],
+        [72.86, 18.92],
+        [72.94, 18.985],
+        [73.08, 19.005],
+        [73.22, 19.015],
+      ],
+      altitudes: [2200, 2210, 2220, 2230, 2240, 2250, 2260, 2270],
+      timestamps: [1, 2, 3, 4, 5, 6, 7, 8],
+      baroAltitude: 2270,
+    },
+    80,
+  );
+
+  const bounds = planarBounds(geometry.allPoints);
+
+  assert.ok(worstLocalProjectionDrop(geometry.allPoints) > -0.01);
+  assert.equal(selfIntersectionCount(geometry.allPoints), 0);
+  assert.ok(bounds.width > 0.25);
 });
 
 test("buildTrailDisplayGeometry preserves a sparse hold while still removing a tiny interior cusp", () => {

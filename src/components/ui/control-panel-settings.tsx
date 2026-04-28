@@ -20,6 +20,10 @@ import {
   AIRSPACE_OPACITY_MAX,
   WEATHER_RADAR_OPACITY_MIN,
   WEATHER_RADAR_OPACITY_MAX,
+  TRAIL_THICKNESS_MIN,
+  TRAIL_THICKNESS_MAX,
+  TRAIL_DISTANCE_MIN,
+  TRAIL_DISTANCE_MAX,
   type OrbitDirection,
   type UnitSystem,
   type Settings,
@@ -37,11 +41,6 @@ const ORBIT_SPEED_PRESETS = [
 const ORBIT_SPEED_MIN = 0.02;
 const ORBIT_SPEED_MAX = 0.5;
 const ORBIT_SNAP_THRESHOLD = 0.025;
-const TRAIL_THICKNESS_MIN = 0.5;
-const TRAIL_THICKNESS_MAX = 8;
-const TRAIL_DISTANCE_MIN = 12;
-const TRAIL_DISTANCE_MAX = 120;
-
 const ORBIT_DIRECTIONS: { label: string; value: OrbitDirection }[] = [
   { label: "Clockwise", value: "clockwise" },
   { label: "Counter", value: "counter-clockwise" },

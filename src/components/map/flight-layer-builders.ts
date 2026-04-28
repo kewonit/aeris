@@ -460,6 +460,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
     }
   }
 
+  const trailWidthPixels = Math.max(0, trailThickness);
+
   const connectorData = trailData.flatMap((trail) => {
     const aircraft = interpolatedMap.get(trail.icao24);
     const visiblePoints = getRenderableBodyPoints(trail, aircraft);
@@ -565,10 +567,10 @@ export function buildTrailLayers(params: TrailLayerParams) {
     opacity: globeFade,
     getPath: (d) => d.path,
     getColor: (d) => d.color,
-    getWidth: trailThickness * 1.15,
+    getWidth: trailWidthPixels,
     widthUnits: "pixels",
-    widthMinPixels: Math.max(1.5, trailThickness * 0.9),
-    widthMaxPixels: Math.max(3, trailThickness * 2.4),
+    widthMinPixels: trailWidthPixels,
+    widthMaxPixels: trailWidthPixels,
     wrapLongitude: true,
     billboard: true,
     capRounded: true,
@@ -614,10 +616,10 @@ export function buildTrailLayers(params: TrailLayerParams) {
     opacity: globeFade,
     getPath: (d) => d.path,
     getColor: (d) => d.color,
-    getWidth: trailThickness,
+    getWidth: trailWidthPixels,
     widthUnits: "pixels",
-    widthMinPixels: Math.max(1, trailThickness * 0.6),
-    widthMaxPixels: Math.max(2, trailThickness * 1.8),
+    widthMinPixels: trailWidthPixels,
+    widthMaxPixels: trailWidthPixels,
     wrapLongitude: true,
     billboard: true,
     capRounded: true,

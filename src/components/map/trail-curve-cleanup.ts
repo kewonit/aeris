@@ -7,6 +7,10 @@ const MIN_PRESERVE_PATH_TO_CHORD_RATIO = 1.18;
 const MIN_PRESERVE_SPAN_DEG = 0.06;
 const MIN_PRESERVE_SIGNED_TURN_RAD = (90 * Math.PI) / 180;
 const MAX_TINY_CUSP_SPAN_DEG = 0.08;
+const MAX_LOCAL_HOOK_SPAN_DEG = 0.18;
+const MAX_LOCAL_HOOK_SEGMENT_GAP = 260;
+const MIN_LOCAL_HOOK_PATH_TO_CHORD_RATIO = 2.5;
+const SEGMENT_INTERSECTION_EPSILON = 1e-12;
 
 function clonePoint(point: ElevatedPoint): ElevatedPoint {
   return [point[0], point[1], point[2]];
@@ -21,6 +25,37 @@ function normalizeTurn(value: number): number {
 
 function segmentHeading(a: ElevatedPoint, b: ElevatedPoint): number {
   return Math.atan2(b[1] - a[1], b[0] - a[0]);
+}
+
+function segmentCross(
+  a: ElevatedPoint,
+  b: ElevatedPoint,
+  c: ElevatedPoint,
+): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function segmentsStrictlyIntersect(
+  a: ElevatedPoint,
+  b: ElevatedPoint,
+  c: ElevatedPoint,
+  d: ElevatedPoint,
+): boolean {
+  const abC = segmentCross(a, b, c);
+  const abD = segmentCross(a, b, d);
+  const cdA = segmentCross(c, d, a);
+  const cdB = segmentCross(c, d, b);
+
+  if (
+    Math.abs(abC) <= SEGMENT_INTERSECTION_EPSILON ||
+    Math.abs(abD) <= SEGMENT_INTERSECTION_EPSILON ||
+    Math.abs(cdA) <= SEGMENT_INTERSECTION_EPSILON ||
+    Math.abs(cdB) <= SEGMENT_INTERSECTION_EPSILON
+  ) {
+    return false;
+  }
+
+  return abC * abD < 0 && cdA * cdB < 0;
 }
 
 export function getCurveFootprintMetrics(points: ElevatedPoint[]) {
@@ -240,24 +275,20 @@ export function cleanupDisplayCurve(points: ElevatedPoint[]): ElevatedPoint[] {
     return valid.map(clonePoint);
   }
 
-  const result = valid.map(clonePoint);
+  const result = removeLocalSelfIntersectionLoops(valid.map(clonePoint));
 
   for (let pass = 0; pass < 12; pass += 1) {
     let changed = false;
 
     for (let index = 1; index < result.length - 2; index += 1) {
-      const window = result.slice(
-        Math.max(0, index - 1),
-        Math.min(result.length, index + 3),
-      );
-      if (shouldPreserveTurnWindow(window)) {
-        continue;
-      }
-
       const prev = result[index - 1];
       const current = result[index];
       const next = result[index + 1];
       const following = result[index + 2];
+      const window = result.slice(
+        Math.max(0, index - 1),
+        Math.min(result.length, index + 3),
+      );
 
       const dx = following[0] - prev[0];
       const dy = following[1] - prev[1];
@@ -285,6 +316,26 @@ export function cleanupDisplayCurve(points: ElevatedPoint[]): ElevatedPoint[] {
       const backtracks = nextProjection < currentProjection - 0.02;
       const swingsAcross = currentCross * nextCross < 0;
       const maxSpan = getCurveFootprintMetrics(window).maxSpan;
+      const localSelfCross = segmentsStrictlyIntersect(
+        prev,
+        current,
+        next,
+        following,
+      );
+
+      if (
+        localSelfCross &&
+        detourRatio > 1.03 &&
+        maxSpan <= MAX_LOCAL_HOOK_SPAN_DEG
+      ) {
+        result.splice(index, 2);
+        changed = true;
+        break;
+      }
+
+      if (shouldPreserveTurnWindow(window)) {
+        continue;
+      }
 
       if (
         backtracks &&
@@ -301,6 +352,63 @@ export function cleanupDisplayCurve(points: ElevatedPoint[]): ElevatedPoint[] {
     if (!changed) {
       break;
     }
+  }
+
+  return result;
+}
+
+function removeLocalSelfIntersectionLoops(
+  points: ElevatedPoint[],
+): ElevatedPoint[] {
+  const result = points.map(clonePoint);
+
+  for (let pass = 0; pass < 6; pass += 1) {
+    let bestStart = -1;
+    let bestEnd = -1;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let start = 0; start < result.length - 3; start += 1) {
+      const maxEnd = Math.min(
+        result.length - 2,
+        start + MAX_LOCAL_HOOK_SEGMENT_GAP,
+      );
+
+      for (let end = start + 2; end <= maxEnd; end += 1) {
+        if (
+          !segmentsStrictlyIntersect(
+            result[start],
+            result[start + 1],
+            result[end],
+            result[end + 1],
+          )
+        ) {
+          continue;
+        }
+
+        const loop = result.slice(start, end + 2);
+        const metrics = getCurveFootprintMetrics(loop);
+
+        if (
+          metrics.maxSpan > MAX_LOCAL_HOOK_SPAN_DEG ||
+          metrics.pathToChordRatio < MIN_LOCAL_HOOK_PATH_TO_CHORD_RATIO
+        ) {
+          continue;
+        }
+
+        const score = metrics.pathToChordRatio + loop.length / 100;
+        if (score > bestScore) {
+          bestScore = score;
+          bestStart = start;
+          bestEnd = end;
+        }
+      }
+    }
+
+    if (bestStart === -1 || bestEnd <= bestStart) {
+      break;
+    }
+
+    result.splice(bestStart + 1, bestEnd - bestStart);
   }
 
   return result;
