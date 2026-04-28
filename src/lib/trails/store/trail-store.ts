@@ -64,6 +64,7 @@ const ALTITUDE_OUTLIER_SCALE = 3;
 const ALTITUDE_SMOOTHING_ALPHA_TRUSTED = 0.9;
 const ALTITUDE_SMOOTHING_ALPHA_GUARDED = 0.5;
 const MAX_REASONABLE_SPEED_MPS = 350;
+const MAX_POST_RESUME_JOIN_METERS = 12_000;
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -80,6 +81,14 @@ function getFlightSpeedMps(flight: FlightState): number {
     flight.velocity > 0
     ? flight.velocity
     : MAX_REASONABLE_SPEED_MPS;
+}
+
+function getPositionDistanceMeters(left: Position, right: Position): number {
+  const latitude = (left[1] + right[1]) / 2;
+  return Math.hypot(
+    (right[0] - left[0]) * 111_320 * Math.cos((latitude * Math.PI) / 180),
+    (right[1] - left[1]) * 111_320,
+  );
 }
 
 function getPointIntervalMs(now: number, liveTrail: TrailPoint[]): number {
@@ -294,6 +303,7 @@ export function createTrailStore() {
   const envelopes = new Map<string, TrailEnvelope>();
   let seen = new Set<string>();
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+  let resumeBarrierAtMs: number | null = null;
   let liveOrder: string[] = [];
   const history = createHistoryState();
   let selectedTrack: FlightTrack | null = null;
@@ -508,8 +518,17 @@ export function createTrailStore() {
           baseThresholdDeg: JUMP_THRESHOLD_DEG,
           safetyMultiplier: 2.0,
         });
+        const lastPoint = liveTrail[liveTrail.length - 1];
+        const crossesResumeBarrier =
+          resumeBarrierAtMs != null && lastPoint.timestamp <= resumeBarrierAtMs;
+        const resumeGapMeters = crossesResumeBarrier
+          ? getPositionDistanceMeters(lastPoint.position, point.position)
+          : 0;
 
-        if (distSq > jumpThresholdDeg * jumpThresholdDeg) {
+        if (
+          resumeGapMeters > MAX_POST_RESUME_JOIN_METERS ||
+          distSq > jumpThresholdDeg * jumpThresholdDeg
+        ) {
           liveTrail.length = 0;
           altitudeStates.delete(id);
           // Rebuild altitude smoothing from the accepted reset point.
@@ -636,6 +655,10 @@ export function createTrailStore() {
 
     if (bootstrapUpdatesRemaining > 0 && processedFlightCount > 0) {
       bootstrapUpdatesRemaining -= 1;
+    }
+
+    if (processedFlightCount > 0) {
+      resumeBarrierAtMs = null;
     }
 
     emit();
@@ -808,6 +831,7 @@ export function createTrailStore() {
    *  dynamic movement thresholds, and bounded trim windows to append plausible
    *  motion or reset true teleports without wiping every active trail. */
   function handleVisibilityResume(): void {
+    resumeBarrierAtMs = Date.now();
     bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
     emit();
   }

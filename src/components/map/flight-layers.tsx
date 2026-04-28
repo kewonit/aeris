@@ -46,6 +46,8 @@ import {
   computePitchByIcao,
   computeBankByIcao,
   computeInterpolatedFlights,
+  FLIGHT_RENDER_STALE_MS,
+  getSafeInterpolationProgress,
   updateInterpolatedInPlace,
 } from "./flight-interpolation";
 
@@ -124,6 +126,7 @@ export function FlightLayers({
   // so aircraft freeze at last-known positions on stale data instead
   // of extrapolating forward on minutes-old headings.
   const resumeSnapRef = useRef(false);
+  const pageActiveRef = useRef(true);
 
   // Data version increments when raw flight data changes — drives color/scale updateTriggers
   const dataVersionRef = useRef(0);
@@ -206,9 +209,8 @@ export function FlightLayers({
 
     // If data is stale (tab was hidden 15s+), snap directly to new
     // positions instead of slowly interpolating from outdated ones.
-    const STALE_THRESHOLD_MS = 15_000;
     const isStale =
-      dataTimestampRef.current > 0 && elapsed > STALE_THRESHOLD_MS;
+      dataTimestampRef.current > 0 && elapsed > FLIGHT_RENDER_STALE_MS;
 
     if (isStale) {
       const snap = new Map<string, Snapshot>();
@@ -469,44 +471,66 @@ export function FlightLayers({
       180, 220, 255, 200,
     ];
 
-    // Snap aircraft to last-known positions on tab resume so they
-    // don't slowly slide from stale locations.  dataTimestampRef is
-    // intentionally NOT reset — keeping it stale ensures the next
-    // data arrival triggers the stale-data guard and snaps directly
-    // to fresh positions instead of interpolating from minutes-old ones.
-    // resumeSnapRef prevents dead reckoning on stale headings during
-    // the brief window before fresh data arrives.
-    function onVisibilityResume() {
-      if (document.visibilityState === "visible") {
-        const curr = currSnapshotsRef.current;
-        if (curr.size > 0) {
-          prevSnapshotsRef.current = new Map(curr);
-        }
-        animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
-        lastFlightsForInterpRef.current = null;
-        resumeSnapRef.current = true;
+    const isPageActive = () =>
+      document.visibilityState === "visible" &&
+      (typeof document.hasFocus !== "function" || document.hasFocus());
 
-        // Invalidate trail render caches so the next frame recomputes
-        // geometry from the preserved trail data (not stale cached paths).
-        trailBasePathCacheRef.current.clear();
-        trailPathCacheRef.current.clear();
-        trailColorCacheRef.current.clear();
-        visibleTrailCacheRef.current.clear();
+    function freezeAtCurrentSnapshots() {
+      const curr = currSnapshotsRef.current;
+      if (curr.size > 0) {
+        prevSnapshotsRef.current = new Map(curr);
+      }
+      animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
+      lastFlightsForInterpRef.current = null;
+      resumeSnapRef.current = true;
 
-        // Signal the trail store that we're back — preserves existing
-        // trails but resets bootstrap counter so gaps fill quickly.
+      trailBasePathCacheRef.current.clear();
+      trailPathCacheRef.current.clear();
+      trailColorCacheRef.current.clear();
+      visibleTrailCacheRef.current.clear();
+    }
+
+    function markPageInactive() {
+      pageActiveRef.current = false;
+      freezeAtCurrentSnapshots();
+    }
+
+    function handlePageResume() {
+      pageActiveRef.current = isPageActive();
+      freezeAtCurrentSnapshots();
+
+      if (pageActiveRef.current) {
+        // Preserve existing trails but reset bootstrap counter so gaps fill quickly.
         trailStore.handleVisibilityResume();
       }
     }
-    document.addEventListener("visibilitychange", onVisibilityResume);
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        handlePageResume();
+      } else {
+        markPageInactive();
+      }
+    }
+    pageActiveRef.current = isPageActive();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", markPageInactive);
+    window.addEventListener("focus", handlePageResume);
+    window.addEventListener("pagehide", markPageInactive);
+    window.addEventListener("pageshow", handlePageResume);
 
     function buildAndPushLayers() {
       animFrameRef.current = requestAnimationFrame(buildAndPushLayers);
 
-      // Skip all rendering work when tab is hidden — saves CPU/GPU.
-      // RAF is already throttled to ~1fps in background but each tick
-      // would still construct layers & run interpolation for nothing.
-      if (document.hidden) return;
+      // Skip rendering while the tab is hidden or the window is blurred.
+      // Focus can be lost while the page remains visible, so checking only
+      // document.hidden still lets stale trail/aircraft frames churn.
+      if (!isPageActive()) {
+        if (pageActiveRef.current) {
+          markPageInactive();
+        }
+        return;
+      }
 
       const overlay = overlayRef.current;
       if (!overlay) return;
@@ -533,13 +557,15 @@ export function FlightLayers({
 
       try {
         const elapsed = performance.now() - dataTimestampRef.current;
-        // After tab resume, clamp rawT so aircraft freeze at last-known
-        // positions instead of dead-reckoning forward on stale headings.
-        // Cleared when fresh flight data arrives in the flights useEffect.
-        const rawT = resumeSnapRef.current
-          ? Math.min(elapsed / animDurationRef.current, 1)
-          : elapsed / animDurationRef.current;
-        const tPos = Math.min(rawT, 1);
+        const progress = getSafeInterpolationProgress({
+          elapsedMs: elapsed,
+          animDurationMs: animDurationRef.current,
+          // `resumeSnapRef` stays true until fresh flight data arrives; during
+          // that resume window we render the latest authoritative snapshot only.
+          pageActive: pageActiveRef.current && !resumeSnapRef.current,
+        });
+        const rawT = progress.rawT;
+        const tPos = progress.tPos;
         const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
         const currentFlights = flightsRef.current;
@@ -834,7 +860,11 @@ export function FlightLayers({
     buildAndPushLayers();
     return () => {
       cancelAnimationFrame(animFrameRef.current);
-      document.removeEventListener("visibilitychange", onVisibilityResume);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", markPageInactive);
+      window.removeEventListener("focus", handlePageResume);
+      window.removeEventListener("pagehide", markPageInactive);
+      window.removeEventListener("pageshow", handlePageResume);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
 

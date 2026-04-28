@@ -9,6 +9,44 @@ import {
 } from "./flight-math";
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
+export const FLIGHT_RENDER_STALE_MS = 15_000;
+export const MAX_FLIGHT_EXTRAPOLATION_MS = 2_000;
+
+export function getSafeInterpolationProgress(input: {
+  elapsedMs: number;
+  animDurationMs: number;
+  pageActive: boolean;
+  staleThresholdMs?: number;
+  maxExtrapolationMs?: number;
+}): { rawT: number; tPos: number } {
+  const elapsedMs = Number.isFinite(input.elapsedMs)
+    ? Math.max(0, input.elapsedMs)
+    : 0;
+  const animDurationMs =
+    Number.isFinite(input.animDurationMs) && input.animDurationMs > 0
+      ? input.animDurationMs
+      : 1;
+  const staleThresholdMs = Math.max(
+    0,
+    input.staleThresholdMs ?? FLIGHT_RENDER_STALE_MS,
+  );
+  const maxExtrapolationMs = Math.max(
+    0,
+    input.maxExtrapolationMs ?? MAX_FLIGHT_EXTRAPOLATION_MS,
+  );
+  const stale = elapsedMs >= staleThresholdMs;
+
+  if (!input.pageActive || stale) {
+    return { rawT: 1, tPos: 1 };
+  }
+
+  const rawT = Math.min(
+    elapsedMs / animDurationMs,
+    1 + maxExtrapolationMs / animDurationMs,
+  );
+
+  return { rawT, tPos: Math.min(rawT, 1) };
+}
 
 function normalizeBearing(bearing: number): number {
   return ((bearing % 360) + 360) % 360;

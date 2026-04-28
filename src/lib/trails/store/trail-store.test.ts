@@ -471,6 +471,71 @@ test("visibility resume keeps multiple aircraft trails independently", () => {
   ]);
 });
 
+test("visibility resume starts a clean trail when the post-resume gap is too large to connect", () => {
+  const store = createTrailStore();
+
+  withMockedNow((advanceMs) => {
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume-gap",
+        longitude: 72.9,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume-gap",
+        longitude: 72.91,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    store.handleVisibilityResume();
+
+    advanceMs(120_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume-gap",
+        longitude: 73.2,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+
+    assert.equal(
+      store.getSnapshot().trails.find((entry) => entry.icao24 === "resume-gap"),
+      undefined,
+    );
+
+    advanceMs(5_000);
+    store.ingestLiveFlights([
+      makeLiveFlight({
+        icao24: "resume-gap",
+        longitude: 73.21,
+        latitude: 19.0,
+        trueTrack: 90,
+        velocity: 230,
+      }),
+    ]);
+  });
+
+  const trail = store
+    .getSnapshot()
+    .trails.find((entry) => entry.icao24 === "resume-gap");
+
+  assert.deepEqual(trail?.path, [
+    [73.2, 19.0],
+    [73.21, 19.0],
+  ]);
+});
+
 test("visibility resume trims aged live trails instead of clearing them", () => {
   const store = createTrailStore();
 

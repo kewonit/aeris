@@ -5,7 +5,7 @@ import type { FlightState } from "@/lib/opensky";
 
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import { getAircraftModelCalibration } from "./aircraft-model-calibration";
-import { BASE_3D_MODEL_SIZE } from "./aircraft-model-size";
+import { BASE_3D_MODEL_SIZE, getModelMaxPixels } from "./aircraft-model-size";
 import { offsetPositionByTrack } from "./flight-math";
 
 function makeNarrowbodyFlight(): FlightState {
@@ -30,6 +30,9 @@ function findNarrowbodyLayer(layers: unknown[]) {
   ) as {
     props: {
       sizeScale: number;
+      sizeMinPixels: number;
+      sizeMaxPixels: number;
+      getScale: () => [number, number, number];
     };
   };
 }
@@ -106,7 +109,7 @@ test("buildAircraftModelLayers uses the smaller 3D base size at the reference zo
   );
 });
 
-test("buildAircraftModelLayers increases 3D sizeScale as zoom decreases", () => {
+test("buildAircraftModelLayers keeps 3D aircraft sizing stable across zoom", () => {
   const flight = makeNarrowbodyFlight();
   const nearLayers = buildAircraftModelLayers({
     rawFlights: [flight],
@@ -145,6 +148,16 @@ test("buildAircraftModelLayers increases 3D sizeScale as zoom decreases", () => 
 
   const nearLayer = findNarrowbodyLayer(nearLayers);
   const farLayer = findNarrowbodyLayer(farLayers);
+  const calibration = getAircraftModelCalibration("narrowbody");
+  const normalizedModelExtent =
+    calibration.meshMaxExtent * nearLayer.props.getScale()[0];
+  const targetScreenPixels = getModelMaxPixels("narrowbody");
+  const nearScreenPixels =
+    nearLayer.props.sizeMinPixels * normalizedModelExtent;
 
-  assert.equal(farLayer.props.sizeScale, nearLayer.props.sizeScale * 2);
+  assert.equal(farLayer.props.sizeScale, nearLayer.props.sizeScale);
+  assert.ok(Math.abs(nearScreenPixels - targetScreenPixels) < 1e-9);
+  assert.equal(nearLayer.props.sizeMinPixels, nearLayer.props.sizeMaxPixels);
+  assert.equal(farLayer.props.sizeMinPixels, nearLayer.props.sizeMinPixels);
+  assert.equal(farLayer.props.sizeMaxPixels, nearLayer.props.sizeMaxPixels);
 });

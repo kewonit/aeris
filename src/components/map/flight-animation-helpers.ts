@@ -23,8 +23,11 @@ export {
 } from "./trail-base-path";
 
 export {
+  FLIGHT_RENDER_STALE_MS,
+  MAX_FLIGHT_EXTRAPOLATION_MS,
   computePitchByIcao,
   computeBankByIcao,
+  getSafeInterpolationProgress,
   computeInterpolatedFlights,
   updateInterpolatedInPlace,
 } from "./flight-interpolation";

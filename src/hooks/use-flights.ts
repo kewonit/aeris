@@ -241,7 +241,7 @@ export function useFlights(
 
     const activeCity = city;
 
-    function onVisibilityChange() {
+    function resumePollingIfNeeded() {
       if (document.visibilityState !== "visible") {
         clearSchedule();
         abortRef.current?.abort();
@@ -260,9 +260,21 @@ export function useFlights(
       }
     }
 
+    function onVisibilityChange() {
+      resumePollingIfNeeded();
+    }
+
+    function onWindowFocus() {
+      if (document.visibilityState === "visible") {
+        resumePollingIfNeeded();
+      }
+    }
+
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onWindowFocus);
     };
   }, [city, fetchData, scheduleNext, clearSchedule]);
 

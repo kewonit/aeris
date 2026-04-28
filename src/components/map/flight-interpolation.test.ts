@@ -5,6 +5,7 @@ import type { FlightState } from "@/lib/opensky";
 
 import {
   computeInterpolatedFlights,
+  getSafeInterpolationProgress,
   resolveDisplayTrack,
 } from "./flight-interpolation";
 
@@ -39,4 +40,40 @@ test("computeInterpolatedFlights uses motion-aligned heading instead of the raw 
   );
 
   assert.equal(Math.round(interpolated[0].trueTrack ?? 0), 90);
+});
+
+test("getSafeInterpolationProgress freezes at the current snapshot while the page is inactive", () => {
+  const progress = getSafeInterpolationProgress({
+    elapsedMs: 120_000,
+    animDurationMs: 8_000,
+    pageActive: false,
+  });
+
+  assert.equal(progress.rawT, 1);
+  assert.equal(progress.tPos, 1);
+});
+
+test("getSafeInterpolationProgress freezes stale active data at the current snapshot", () => {
+  const progress = getSafeInterpolationProgress({
+    elapsedMs: 16_000,
+    animDurationMs: 8_000,
+    pageActive: true,
+    staleThresholdMs: 15_000,
+  });
+
+  assert.equal(progress.rawT, 1);
+  assert.equal(progress.tPos, 1);
+});
+
+test("getSafeInterpolationProgress bounds active dead reckoning to a small window", () => {
+  const progress = getSafeInterpolationProgress({
+    elapsedMs: 40_000,
+    animDurationMs: 8_000,
+    pageActive: true,
+    staleThresholdMs: 60_000,
+    maxExtrapolationMs: 2_000,
+  });
+
+  assert.equal(progress.rawT, 1.25);
+  assert.equal(progress.tPos, 1);
 });

@@ -21,7 +21,6 @@ import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { tintAircraftColor, applySpecialTint } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
-import { AIRCRAFT_MIN_PIXELS } from "./flight-layer-constants";
 import {
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
@@ -31,7 +30,7 @@ import {
 import { getAircraftModelCalibration } from "./aircraft-model-calibration";
 import {
   getAircraftScenegraphSizeScale,
-  getModelMaxPixels,
+  getModelSceneUnitPixels,
 } from "./aircraft-model-size";
 import { offsetPositionByTrack } from "./flight-math";
 
@@ -132,6 +131,11 @@ export function buildAircraftModelLayers(
     // Pre-compute the yaw offset once per layer (not per-flight per-frame)
     const meshNormalize = modelNormScale(modelKey);
     const calibration = getAircraftModelCalibration(modelKey);
+    const normalizedModelExtent = calibration.meshMaxExtent * meshNormalize;
+    const modelUnitPixels = getModelSceneUnitPixels(
+      modelKey,
+      normalizedModelExtent,
+    );
 
     return new ScenegraphLayer<FlightState>({
       id: `flight-aircraft-${modelKey}`,
@@ -185,8 +189,8 @@ export function buildAircraftModelLayers(
         getOrientation: frameCounter,
         getColor: [dataVersion, altColors],
       },
-      sizeMinPixels: AIRCRAFT_MIN_PIXELS,
-      sizeMaxPixels: getModelMaxPixels(modelKey),
+      sizeMinPixels: modelUnitPixels,
+      sizeMaxPixels: modelUnitPixels,
       _lighting: "pbr",
       pickable: hasData,
       onHover: handleHover,

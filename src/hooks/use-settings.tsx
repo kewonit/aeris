@@ -83,7 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
-  trailThickness: 0.5,
+  trailThickness: 1.0,
   trailDistance: 48,
   showShadows: true,
   showAltitudeColors: true,
@@ -99,11 +99,13 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 5;
 const WRITE_DEBOUNCE_MS = 300;
 
 const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
 const LEGACY_TRAIL_DISTANCE_DEFAULT = 80;
+const PREVIOUS_TRAIL_THICKNESS_DEFAULT = 0.5;
+const PREVIOUS_TRAIL_DISTANCE_DEFAULT = 48;
 
 type StorageEnvelope = {
   v: number;
@@ -124,6 +126,15 @@ export function migrateSettingsDefaults(
     fromVersion < 4 &&
     next.trailThickness === LEGACY_TRAIL_THICKNESS_DEFAULT &&
     next.trailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
+  ) {
+    next.trailThickness = DEFAULT_SETTINGS.trailThickness;
+    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
+  }
+
+  if (
+    fromVersion < 5 &&
+    next.trailThickness === PREVIOUS_TRAIL_THICKNESS_DEFAULT &&
+    next.trailDistance === PREVIOUS_TRAIL_DISTANCE_DEFAULT
   ) {
     next.trailThickness = DEFAULT_SETTINGS.trailThickness;
     next.trailDistance = DEFAULT_SETTINGS.trailDistance;

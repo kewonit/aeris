@@ -7,6 +7,7 @@ import {
   BASE_3D_MODEL_SIZE,
   getAircraftModelZoomCompensation,
   getAircraftScenegraphSizeScale,
+  getModelMaxPixels,
 } from "./aircraft-model-size";
 import { modelDisplayScale } from "./aircraft-model-mapping";
 
@@ -25,15 +26,22 @@ test("3D zoom compensation is neutral at the reference zoom", () => {
   assert.equal(getAircraftModelZoomCompensation(6), 1);
 });
 
-test("3D zoom compensation grows as the camera zooms out", () => {
-  assert.equal(getAircraftModelZoomCompensation(5), 2);
+test("3D zoom compensation stays neutral as the camera zoom changes", () => {
+  assert.equal(getAircraftModelZoomCompensation(5), 1);
+  assert.equal(getAircraftModelZoomCompensation(8), 1);
 });
 
 test("3D zoom compensation safely ignores non-finite zoom values", () => {
   assert.equal(getAircraftModelZoomCompensation(Number.NaN), 1);
 });
 
-test("scenegraph size scale keeps A380 larger than narrowbody after zoom compensation", () => {
+test("3D full-aircraft pixel targets are large enough for map readability", () => {
+  assert.equal(getModelMaxPixels("a380"), 48);
+  assert.ok(getModelMaxPixels("narrowbody") > 32);
+  assert.ok(getModelMaxPixels("narrowbody") < 33);
+});
+
+test("scenegraph size scale keeps A380 larger than narrowbody without zoom compensation", () => {
   assert.ok(
     getAircraftScenegraphSizeScale(modelDisplayScale("a380"), 5) >
       getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 5),
@@ -41,6 +49,10 @@ test("scenegraph size scale keeps A380 larger than narrowbody after zoom compens
   assert.equal(
     getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 6),
     BASE_3D_MODEL_SIZE * modelDisplayScale("narrowbody"),
+  );
+  assert.equal(
+    getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 5),
+    getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 8),
   );
 });
 
