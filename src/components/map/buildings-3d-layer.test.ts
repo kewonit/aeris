@@ -142,7 +142,7 @@ test("addBuildings3DLayer swallows addLayer failures (e.g. missing source-layer)
     setPaintProperty: () => {},
   } as never;
 
-  // Must not throw — silently skips on tilesets without buildings.
+  // Must not throw - silently skips on tilesets without buildings.
   assert.doesNotThrow(() => addBuildings3DLayer(map, { dark: true }));
 });
 

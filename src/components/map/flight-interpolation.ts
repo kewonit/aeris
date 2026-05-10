@@ -172,7 +172,7 @@ const MAX_BANK_DEG = 25;
 /**
  * Compute a turn-coupled bank angle for each aircraft.
  * The bank follows a sine-bell curve over the animation cycle so it
- * peaks mid-turn and eases to zero at the start/end — mimicking how
+ * peaks mid-turn and eases to zero at the start/end - mimicking how
  * real aircraft roll into and out of turns.
  */
 export function computeBankByIcao(
@@ -311,7 +311,7 @@ export function updateInterpolatedInPlace(
     const f = rawFlights[i];
     if (!o || !f) continue;
 
-    // Skip raw references — these flights had no position or snapshot,
+    // Skip raw references - these flights had no position or snapshot,
     // so computeInterpolatedFlights returned the raw object directly.
     // Mutating them would corrupt the source data.
     if (o === f) continue;

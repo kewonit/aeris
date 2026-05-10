@@ -11,7 +11,7 @@ const jsonLd = [
     name: "Aeris",
     url: siteUrl,
     description:
-      "Track live flights in stunning 3D over the world's busiest airspaces. See real-time ADS-B data with altitude-aware rendering — low altitudes glow cyan, high altitudes shift to gold. Free and open source.",
+      "Track live flights in stunning 3D over the world's busiest airspaces. See real-time ADS-B data with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.",
     applicationCategory: "TravelApplication",
     operatingSystem: "Any",
     browserRequirements: "Requires WebGL support",
@@ -50,7 +50,7 @@ const jsonLd = [
     name: "Aeris",
     url: siteUrl,
     description:
-      "Real-time 3D flight tracking — altitude-aware, visually stunning, and completely free.",
+      "Real-time 3D flight tracking - altitude-aware, visually stunning, and completely free.",
     inLanguage: "en",
     publisher: {
       "@type": "Person",
@@ -73,7 +73,7 @@ const jsonLd = [
       {
         "@type": "ListItem",
         position: 1,
-        name: "Aeris — Real-Time 3D Flight Tracking",
+        name: "Aeris - Real-Time 3D Flight Tracking",
         item: siteUrl,
       },
     ],

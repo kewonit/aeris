@@ -82,7 +82,7 @@ export function pinIncrementalBasePath(
   }
 
   // Quick sanity check: the first few points should be nearly identical.
-  // If they diverge, the trail was likely reset — skip pinning.
+  // If they diverge, the trail was likely reset - skip pinning.
   const dx = Math.abs(oldBasePath[0][0] - newBasePath[0][0]);
   const dy = Math.abs(oldBasePath[0][1] - newBasePath[0][1]);
   if (dx > 0.001 || dy > 0.001) {
@@ -134,7 +134,7 @@ export function pinIncrementalBasePath(
 
 /**
  * Computes the expensive base path (smoothing + densification) for a trail.
- * This result is cacheable across animation frames — it only depends on
+ * This result is cacheable across animation frames - it only depends on
  * trail.path, trail.altitudes, trailDistance, and fullHistory.
  * The per-frame head attachment (trimPathAheadOfAircraft) is NOT included.
  */

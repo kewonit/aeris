@@ -79,7 +79,7 @@ const LOGO_SLUG_ALIASES: Record<string, string> = {
   europeanairintl: "dhl",
   eatleipzig: "dhl",
   bacityflyer: "british-airways",
-  aircanadароuge: "air-canada",
+  aircanadarouge: "air-canada",
   aircanadaexpress: "air-canada",
   horizonair: "alaska-airlines",
   aeromexicoconnect: "aeromexico",

@@ -263,7 +263,7 @@ export function StatusBar({
         </motion.div>
       </div>
 
-      {/* Dropdowns — positioned above entire status bar */}
+      {/* Dropdowns - positioned above entire status bar */}
       <ProviderDropdown
         open={providerDropdownOpen}
         onClose={closeProviderDropdown}

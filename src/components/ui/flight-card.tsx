@@ -186,7 +186,7 @@ export function FlightCard({
                     <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-foreground/10 bg-white/95 p-3.5 shadow-sm">
                       {genericLogoFailed ? (
                         <span className="text-[22px] font-semibold text-background/25">
-                          —
+                          -
                         </span>
                       ) : (
                         <Image
@@ -285,7 +285,7 @@ export function FlightCard({
                   value={
                     heading !== null && Number.isFinite(heading)
                       ? `${Math.round(heading)}° ${cardinal}`
-                      : "—"
+                      : "-"
                   }
                 />
                 <Metric
@@ -579,7 +579,7 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
               )}
             </>
           ) : (
-            <span className="text-xs text-foreground/20">—</span>
+            <span className="text-xs text-foreground/20">-</span>
           )}
         </div>
 
@@ -604,7 +604,7 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
               )}
             </>
           ) : (
-            <span className="text-xs text-foreground/20">—</span>
+            <span className="text-xs text-foreground/20">-</span>
           )}
         </div>
       </div>

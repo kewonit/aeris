@@ -152,7 +152,7 @@ export function filterGroundSegments<T extends WaypointLike>(
 const MIN_GROUND_BEFORE_TAKEOFF = 2;
 
 /**
- * Trim a historical track to the last flight leg — from the last
+ * Trim a historical track to the last flight leg - from the last
  * departure airport to the current position.
  *
  * Scans for the last ground→airborne transition with at least
@@ -196,7 +196,7 @@ export function trimToLastDeparture<T extends WaypointLike>(
   }
 
   if (lastTakeoffIdx <= 0) {
-    // No significant takeoff found — fall back to simple ground stripping
+    // No significant takeoff found - fall back to simple ground stripping
     return filterGroundSegments(waypoints);
   }
 

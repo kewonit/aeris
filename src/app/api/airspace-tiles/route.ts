@@ -20,7 +20,7 @@ import {
 //   https://{a,b,c}.api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.pbf
 //
 // Docs: https://docs.openaip.net/?urls.primaryName=Tiles%20API
-// License: CC BY-NC 4.0 — attribution required.
+// License: CC BY-NC 4.0 - attribution required.
 // ────────────────────────────────────────────────────────────────────
 
 const SUBDOMAINS = ["a", "b", "c"] as const;
@@ -136,7 +136,7 @@ async function fetchUpstream(
           return null;
         }
 
-        // Keep the abort timer active while streaming the body — a
+        // Keep the abort timer active while streaming the body - a
         // hung upstream can stall arrayBuffer() indefinitely otherwise.
         const data = await res.arrayBuffer();
         clearTimeout(timer);

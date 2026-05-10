@@ -1,5 +1,5 @@
 /**
- * Trail path utility functions — smoothing, trimming, and fallback generation.
+ * Trail path utility functions - smoothing, trimming, and fallback generation.
  *
  * Extracted from trail-base-path.ts to keep each module under ~300 lines.
  */
@@ -109,7 +109,7 @@ export function smoothElevatedPath(
     current = next;
   }
 
-  // Absolute output cap — prevents downstream per-point processing
+  // Absolute output cap - prevents downstream per-point processing
   // (color mapping, altitude effects) from becoming a bottleneck.
   const MAX_SMOOTH_OUTPUT = 6000;
   if (current.length > MAX_SMOOTH_OUTPUT) {
@@ -225,7 +225,7 @@ export function trimPathAheadOfAircraft(
   }
 
   // Trim at the fractional clip point on the nearest segment instead of
-  // at the segment start — eliminates a visible positional jump.
+  // at the segment start - eliminates a visible positional jump.
   const trimmed = points.slice(0, bestIndex + 1);
   const segA = points[bestIndex];
   const segB = points[bestIndex + 1];
@@ -264,7 +264,7 @@ export function trimPathAheadOfAircraft(
       const dot = tLen > 1e-10 ? (tdx * dx + tdy * dy) / (tLen * dist) : 0;
 
       // CP1 lever: extends clip point along the trail tangent.
-      // Scaled by alignment — avoids loops when trail points away.
+      // Scaled by alignment - avoids loops when trail points away.
       const lever1 =
         Math.max(0, dot) * Math.min(0.45, 0.5 * Math.min(1, dist / 0.005));
 
@@ -287,7 +287,7 @@ export function trimPathAheadOfAircraft(
         ahy = dist > 1e-10 ? dy / dist : tuy;
       }
 
-      // CP2 lever: always positive — aircraft control point pulls
+      // CP2 lever: always positive - aircraft control point pulls
       // backwards along the flight direction.
       const lever2 = Math.min(0.45, 0.5 * Math.min(1, dist / 0.005));
       const cp2x = px - ahx * dist * lever2;
@@ -320,7 +320,7 @@ export function trimPathAheadOfAircraft(
   // Stop the trail slightly short of the aircraft center so it visually
   // connects at the tail rather than passing through the icon body.
   // Use 75% of the remaining distance from the last Bézier point to the
-  // aircraft — this is proportional to the arc length, so it works at
+  // aircraft - this is proportional to the arc length, so it works at
   // any zoom level without needing pixel-to-degree conversion.
   if (trimmed.length >= 2) {
     const lastPt = trimmed[trimmed.length - 1];

@@ -97,7 +97,7 @@ function FlightTrackerInner({
   initialCity,
 }: FlightTrackerProps) {
   // useSyncExternalStore with a no-op subscriber reads localStorage once
-  // on the client while returning DEFAULT_CITY on the server — SSR-safe
+  // on the client while returning DEFAULT_CITY on the server - SSR-safe
   // hydration without useEffect flicker.
   //
   // When the server already resolved a city (from a /city/[code] route),
@@ -161,7 +161,7 @@ function FlightTrackerInner({
     syncCityToUrl(city);
   }, []);
 
-  /** Called when user clicks an airport dot on the map — navigates AND opens the board. */
+  /** Called when user clicks an airport dot on the map - navigates AND opens the board. */
   const handleAirportDotClick = useCallback((city: City) => {
     setCityOverride(city);
     setSelectedIcao24(null);
@@ -190,12 +190,12 @@ function FlightTrackerInner({
   //   • FPV mode: box centered on the tracked aircraft, sized to the
   //     FPV point-radius × 2 (~240 NM half-width). The center is
   //     snapped to a 0.5° grid so the bbox only re-anchors every
-  //     ~30 NM of travel — otherwise every position tick would force
+  //     ~30 NM of travel - otherwise every position tick would force
   //     a source re-add.
   //
   // The overlay layers debounce identical bounds via
   // `airspaceBoundsKey`, so returning a freshly allocated array each
-  // render is fine — their effects only re-run when the quantised
+  // render is fine - their effects only re-run when the quantised
   // key actually changes.
   const airspaceBounds = useMemo(() => {
     if (fpvIcao24) {
@@ -242,7 +242,7 @@ function FlightTrackerInner({
     if (displayFlights.length > 0) processDepartures(displayFlights);
   }, [displayFlights]);
 
-  // Single Map for O(1) flight lookups — replaces 4× O(n) find() calls per poll
+  // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
   const displayFlightMap = useMemo(() => {
     const m = new Map<string, FlightState>();
     for (const f of displayFlights) m.set(f.icao24, f);
@@ -670,7 +670,7 @@ function FlightTrackerInner({
           </div>
         )}
 
-        {/* ATC Player Bar — top-center on mobile, bottom-center on desktop */}
+        {/* ATC Player Bar - top-center on mobile, bottom-center on desktop */}
         {!fpvIcao24 && (
           <AnimatePresence>
             {atc.feed && (
@@ -698,7 +698,7 @@ function FlightTrackerInner({
           </div>
         )}
 
-        {/* Mobile flight card — native bottom sheet with drag-to-dismiss */}
+        {/* Mobile flight card - native bottom sheet with drag-to-dismiss */}
         <AnimatePresence>
           {showMobileFlightCard && displayFlight && (
             <motion.div
@@ -733,7 +733,7 @@ function FlightTrackerInner({
           )}
         </AnimatePresence>
 
-        {/* Mobile airport card — self-contained bottom sheet with drag-to-dismiss */}
+        {/* Mobile airport card - self-contained bottom sheet with drag-to-dismiss */}
         <AnimatePresence>
           {showMobileAirportCard && (
             <AirportInfoCard

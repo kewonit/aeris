@@ -1,15 +1,15 @@
-﻿"use client";
+"use client";
 
 import { useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { getOrCreateConnection } from "@/components/ui/atc-waveform";
 
-// ── Constants ──────────────────────────────────────────────────────────
+// -- Constants ----------------------------------------------------------
 
 const BAR_COUNT = 64;
 const CANVAS_PADDING = 20;
 const LERP_UP = 0.24; // Quick attack
-const LERP_DOWN = 0.07; // Slow decay — silky smooth
+const LERP_DOWN = 0.07; // Slow decay - silky smooth
 
 type VisualizationMode = "spectrum" | "waveform" | "combined";
 
@@ -19,7 +19,7 @@ const MODES: { key: VisualizationMode; label: string }[] = [
   { key: "combined", label: "Combined" },
 ];
 
-// ── Voice-range bin mapping (logarithmic spread) ───────────────────────
+// -- Voice-range bin mapping (logarithmic spread) -----------------------
 
 function buildBinRanges(
   binCount: number,
@@ -37,18 +37,18 @@ function buildBinRanges(
   return ranges;
 }
 
-// ── Accent color helper ────────────────────────────────────────────────
+// -- Accent color helper ------------------------------------------------
 
 function accent(intensity: number, alpha: number): string {
   const v = Math.min(intensity, 1);
-  // Refined emerald/mint — clean and cohesive
+  // Refined emerald/mint - clean and cohesive
   const r = Math.round(48 + v * 40);
   const g = Math.round(205 + v * 35);
   const b = Math.round(148 + v * 32);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// ── Segmented Control (Apple-style) ────────────────────────────────────
+// -- Segmented Control (Apple-style) ------------------------------------
 
 function SegmentedControl({
   mode,
@@ -100,7 +100,7 @@ function SegmentedControl({
   );
 }
 
-// ── Component ──────────────────────────────────────────────────────────
+// -- Component ----------------------------------------------------------
 
 export function AtcSpectrum({
   audioElement,
@@ -119,7 +119,7 @@ export function AtcSpectrum({
   const barsRef = useRef<number[]>(new Array(BAR_COUNT).fill(0));
   const [mode, setMode] = useState<VisualizationMode>("combined");
 
-  // ── Connect to Web Audio API ────────────────────────────────────────
+  // -- Connect to Web Audio API ----------------------------------------
   useEffect(() => {
     if (!active || !audioElement) {
       barsRef.current = new Array(BAR_COUNT).fill(0);
@@ -130,7 +130,7 @@ export function AtcSpectrum({
     analyserRef.current = getOrCreateConnection(audioElement);
   }, [active, audioElement]);
 
-  // ── Resize observer for responsive canvas ───────────────────────────
+  // -- Resize observer for responsive canvas ---------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -153,7 +153,7 @@ export function AtcSpectrum({
     return () => ro.disconnect();
   }, []);
 
-  // ── Main render loop ────────────────────────────────────────────────
+  // -- Main render loop ------------------------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -199,7 +199,7 @@ export function AtcSpectrum({
       const maxBarH = H - CANVAS_PADDING * 2;
       const currentMode = mode;
 
-      // ── Pre-compute bar values ────────────────────────────────────
+      // -- Pre-compute bar values ------------------------------------
       let hasSignal = false;
       let peakVal = 0;
 
@@ -226,7 +226,7 @@ export function AtcSpectrum({
         if (barsRef.current[i] > peakVal) peakVal = barsRef.current[i];
       }
 
-      // ── Ambient glow from bottom ─────────────────────────────────
+      // -- Ambient glow from bottom ---------------------------------
       if (hasSignal && peakVal > 0.12) {
         const glowAlpha = Math.min(peakVal * 0.05, 0.035);
         const glow = ctx!.createRadialGradient(
@@ -239,7 +239,7 @@ export function AtcSpectrum({
         ctx!.fillRect(0, 0, W, H);
       }
 
-      // ── Spectrum bars ─────────────────────────────────────────────
+      // -- Spectrum bars ---------------------------------------------
       if (currentMode === "spectrum" || currentMode === "combined") {
         const totalBarW = drawW / BAR_COUNT;
         const barW = Math.max(2, totalBarW * 0.55);
@@ -286,7 +286,7 @@ export function AtcSpectrum({
         }
       }
 
-      // ── Waveform / Oscilloscope ───────────────────────────────────
+      // -- Waveform / Oscilloscope -----------------------------------
       if (
         (currentMode === "waveform" || currentMode === "combined") &&
         timeData

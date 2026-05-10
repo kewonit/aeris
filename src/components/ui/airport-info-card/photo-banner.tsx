@@ -18,7 +18,7 @@ type Props = {
 };
 
 /**
- * Photo banner — 16:9 hero image at top of the airport card.
+ * Photo banner - 16:9 hero image at top of the airport card.
  * Always renders the banner container. When no usable photo is available,
  * it falls back to the non-photo hero presentation instead of returning null.
  *
@@ -102,7 +102,7 @@ export function PhotoBanner({
         </>
       )}
 
-      {/* Floating close — always rendered so the skeleton is also dismissible. */}
+      {/* Floating close - always rendered so the skeleton is also dismissible. */}
       {onClose && (
         <button
           type="button"

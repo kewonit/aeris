@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // ── TAF Proxy ──────────────────────────────────────────────────────────
 //
 // Proxies Terminal Area Forecast (TAF) requests to the NOAA Aviation
-// Weather API. Same upstream family as the METAR endpoint — no API key,
+// Weather API. Same upstream family as the METAR endpoint - no API key,
 // validates the ICAO code to prevent SSRF, caches at the edge.
 
 const NOAA_BASE = "https://aviationweather.gov/api/data/taf";

@@ -116,7 +116,7 @@ export function useFlightMonitors(
           }
         })
         .catch(() => {
-          // Flight lookup failed (network error, timeout, or abort) — reset pending state
+          // Flight lookup failed (network error, timeout, or abort) - reset pending state
           if (pendingFpvRef.current === pending) {
             pendingFpvRef.current = null;
           }
@@ -262,7 +262,7 @@ export function useFlightMonitors(
           setRepoStars(data.stargazers_count);
         }
       } catch {
-        // GitHub API failures are non-critical — star count is cosmetic
+        // GitHub API failures are non-critical - star count is cosmetic
       }
     }
 

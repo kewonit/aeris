@@ -7,7 +7,7 @@ export const TERRAIN_HILLSHADE_LAYER_ID = "aeris-terrain-hillshade";
 
 /**
  * Single shared DEM source for both terrain mesh AND hillshade.
- * Uses AWS Terrain Tiles (Mapzen/Tilezen) — free, reliable, globally cached on S3.
+ * Uses AWS Terrain Tiles (Mapzen/Tilezen) - free, reliable, globally cached on S3.
  * Terrarium encoding: elevation = (R * 256 + G + B / 256) - 32768
  * maxzoom capped at 12 (terrain detail beyond that is imperceptible for flight tracking).
  */
@@ -32,7 +32,7 @@ export const DARK_TERRAIN_SPEC: Record<string, unknown> = {
 export const DARK_TERRAIN_HILLSHADE_LAYER: Record<string, unknown> = {
   id: TERRAIN_HILLSHADE_LAYER_ID,
   type: "hillshade",
-  source: TERRAIN_DEM_SOURCE_ID, // reuse same DEM source — no duplicate tile fetches
+  source: TERRAIN_DEM_SOURCE_ID, // reuse same DEM source - no duplicate tile fetches
   minzoom: 3, // skip hillshade at globe zoom (invisible anyway, saves GPU)
   layout: { visibility: "visible" },
   paint: {

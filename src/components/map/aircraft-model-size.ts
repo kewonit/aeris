@@ -6,7 +6,7 @@ import {
 export const BASE_3D_MODEL_SIZE = 18;
 export const AIRCRAFT_3D_MAX_SCREEN_PIXELS = 48;
 
-/** The widest wingspan in the model set — used as reference for max-pixel scaling. */
+/** The widest wingspan in the model set - used as reference for max-pixel scaling. */
 const MAX_WINGSPAN_M = Math.max(...Object.values(MODEL_KEY_WINGSPAN));
 
 /**

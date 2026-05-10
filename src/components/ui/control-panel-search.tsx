@@ -5,8 +5,6 @@ import { Command } from "cmdk";
 import {
   Search,
   X,
-  MapPin,
-  Plane,
   Eye,
   Loader2,
   Clock,
@@ -25,6 +23,9 @@ import {
 } from "@/lib/flight-utils";
 import { useSettings } from "@/hooks/use-settings";
 import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
+import { lookupAirline } from "@/lib/airlines";
+import { CountryFlag } from "@/components/ui/country-flag";
+import { AirlineLogo } from "@/components/ui/airline-logo";
 
 // ── Recent searches (localStorage) ─────────────────────────────────────
 
@@ -56,7 +57,7 @@ function getRecents(): string[] {
     }
     return valid.map((e) => e.q);
   } catch {
-    // localStorage unavailable or corrupted — return empty recent list
+    // localStorage unavailable or corrupted - return empty recent list
     return [];
   }
 }
@@ -144,95 +145,6 @@ function AltitudeDot({ altitude }: { altitude: number | null }) {
   );
 }
 
-// ── Country code to flag emoji ─────────────────────────────────────────
-
-function countryFlag(countryName: string): string {
-  const COUNTRY_ISO: Record<string, string> = {
-    "united states": "US",
-    usa: "US",
-    us: "US",
-    "united kingdom": "GB",
-    uk: "GB",
-    gb: "GB",
-    germany: "DE",
-    france: "FR",
-    spain: "ES",
-    italy: "IT",
-    canada: "CA",
-    australia: "AU",
-    japan: "JP",
-    china: "CN",
-    india: "IN",
-    brazil: "BR",
-    russia: "RU",
-    mexico: "MX",
-    "south korea": "KR",
-    netherlands: "NL",
-    switzerland: "CH",
-    sweden: "SE",
-    norway: "NO",
-    denmark: "DK",
-    ireland: "IE",
-    portugal: "PT",
-    austria: "AT",
-    belgium: "BE",
-    turkey: "TR",
-    thailand: "TH",
-    singapore: "SG",
-    malaysia: "MY",
-    indonesia: "ID",
-    philippines: "PH",
-    "united arab emirates": "AE",
-    "saudi arabia": "SA",
-    qatar: "QA",
-    israel: "IL",
-    "south africa": "ZA",
-    egypt: "EG",
-    "new zealand": "NZ",
-    argentina: "AR",
-    chile: "CL",
-    colombia: "CO",
-    peru: "PE",
-    poland: "PL",
-    czechia: "CZ",
-    "czech republic": "CZ",
-    romania: "RO",
-    greece: "GR",
-    finland: "FI",
-    vietnam: "VN",
-    taiwan: "TW",
-    "hong kong": "HK",
-    pakistan: "PK",
-    bangladesh: "BD",
-    ukraine: "UA",
-    hungary: "HU",
-    morocco: "MA",
-    nigeria: "NG",
-    kenya: "KE",
-    iceland: "IS",
-    luxembourg: "LU",
-    croatia: "HR",
-    serbia: "RS",
-    bulgaria: "BG",
-    slovakia: "SK",
-    slovenia: "SI",
-    estonia: "EE",
-    latvia: "LV",
-    lithuania: "LT",
-    malta: "MT",
-    cyprus: "CY",
-  };
-
-  const key = countryName.trim().toLowerCase();
-  const iso = COUNTRY_ISO[key];
-  if (!iso) return "";
-
-  // Convert ISO code to flag emoji using regional indicator symbols
-  return String.fromCodePoint(
-    ...iso.split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
-  );
-}
-
 // ── Main SearchContent ─────────────────────────────────────────────────
 
 export function SearchContent({
@@ -263,7 +175,8 @@ export function SearchContent({
 
   // Auto-focus with a frame delay for dialog mounting
   useEffect(() => {
-    requestAnimationFrame(() => inputRef.current?.focus());
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
   }, []);
 
   // Live search results
@@ -326,7 +239,7 @@ export function SearchContent({
           setLookupError(
             isIcao24Query
               ? "Flight not found for this ICAO24 right now"
-              : 'No live flight match found — try a callsign like "UAL123" or ICAO24 hex',
+              : 'No live flight match found - try a callsign like "UAL123" or ICAO24 hex',
           );
         }
       } finally {
@@ -565,7 +478,7 @@ export function SearchContent({
           <Command.Group heading="Live Flights">
             {flightMatches.map((flight) => {
               const cs = formatCallsign(flight.callsign);
-              const flag = countryFlag(flight.originCountry);
+              const airline = lookupAirline(flight.callsign);
               return (
                 <Command.Item
                   key={flight.icao24}
@@ -574,9 +487,12 @@ export function SearchContent({
                   onSelect={() => void openFlight(flight.icao24, false)}
                   className="search-item"
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/4">
-                    <Plane className="h-3.5 w-3.5 text-foreground/40" />
-                  </div>
+                  <AirlineLogo
+                    callsign={flight.callsign}
+                    airlineName={airline}
+                    size={20}
+                    className="shrink-0"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-[13px] font-semibold text-foreground/80">
@@ -596,7 +512,11 @@ export function SearchContent({
                         />
                       </span>
                       <span className="text-foreground/10">·</span>
-                      {flag && <span className="text-[10px]">{flag}</span>}
+                      <CountryFlag
+                        country={flight.originCountry}
+                        size={10}
+                        className="rounded-[1px]"
+                      />
                       <span>{flight.originCountry}</span>
                     </div>
                   </div>
@@ -628,10 +548,11 @@ export function SearchContent({
                     )}
                   </div>
 
-                  {/* FPV button — visible on hover/keyboard-select */}
+                  {/* FPV button - visible on hover/keyboard-select */}
                   {!flight.onGround && (
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={(e) => {
                         e.stopPropagation();
                         void openFlight(flight.icao24, true);
@@ -662,27 +583,23 @@ export function SearchContent({
                 onSelect={() => onSelect(city)}
                 className="search-item"
               >
-                <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                    activeCity?.id === city.id ? "bg-foreground/8" : "bg-foreground/4"
-                  }`}
-                >
-                  <MapPin
-                    className={`h-3.5 w-3.5 ${
-                      activeCity?.id === city.id
-                        ? "text-foreground/60"
-                        : "text-foreground/35"
-                    }`}
-                  />
-                </div>
+                <CountryFlag
+                  code={city.country}
+                  size={16}
+                  className="shrink-0 rounded-sm"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-[13px] font-medium text-foreground/80">
                     <HighlightMatch text={city.name} query={query} />
                   </p>
-                  <p className="text-[10px] font-medium text-foreground/25">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-foreground/25">
                     <HighlightMatch text={city.iata} query={query} />
                     <span className="text-foreground/10"> · </span>
-                    {city.country}
+                    <CountryFlag
+                      code={city.country}
+                      size={10}
+                      className="inline-block rounded-[1px]"
+                    />
                   </p>
                 </div>
                 {activeCity?.id === city.id && (
@@ -711,30 +628,25 @@ export function SearchContent({
                 onSelect={() => onSelect(airportToCity(airport))}
                 className="search-item"
               >
-                <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                    activeCity?.iata === airport.iata
-                      ? "bg-foreground/8"
-                      : "bg-foreground/4"
-                  }`}
-                >
-                  <MapPin
-                    className={`h-3.5 w-3.5 ${
-                      activeCity?.iata === airport.iata
-                        ? "text-foreground/60"
-                        : "text-foreground/35"
-                    }`}
-                  />
-                </div>
+                <CountryFlag
+                  code={airport.country}
+                  size={16}
+                  className="shrink-0 rounded-sm"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-[13px] font-medium text-foreground/80">
                     <HighlightMatch text={airport.name} query={query} />
                   </p>
-                  <p className="text-[10px] font-medium text-foreground/25">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-foreground/25">
                     <HighlightMatch text={airport.iata} query={query} />
-                    <span className="text-foreground/10"> · </span>
-                    <HighlightMatch text={airport.city} query={query} />,{" "}
-                    {airport.country}
+                    <span className="text-foreground/10">·</span>
+                    <HighlightMatch text={airport.city} query={query} />
+                    <span className="text-foreground/10">·</span>
+                    <CountryFlag
+                      code={airport.country}
+                      size={10}
+                      className="rounded-[1px]"
+                    />
                   </p>
                 </div>
                 {activeCity?.iata === airport.iata && (

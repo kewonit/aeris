@@ -158,7 +158,7 @@ export function useAtcStream(): UseAtcStreamReturn {
       const msg = event.data;
       if (!msg || typeof msg !== "object" || !msg.type) return;
 
-      // Another tab started playing — stop our playback
+      // Another tab started playing - stop our playback
       if (
         msg.type === "playing" &&
         msg.tabId !== tabIdRef.current &&
@@ -231,7 +231,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         RECONNECT_MAX_MS,
       );
 
-      // Don't flash status — keep the error visible while we wait
+      // Don't flash status - keep the error visible while we wait
       reconnectTimerRef.current = setTimeout(() => {
         if (feedRef.current?.id !== targetFeed.id) return;
         startPlaybackRef.current(targetFeed, useProxy, true);
@@ -255,13 +255,13 @@ export function useAtcStream(): UseAtcStreamReturn {
       audioRef.current = audio;
       setAudioElement(audio);
       audio.volume = loadVolume();
-      // Allow audio to play in background — do NOT add visibility listeners
+      // Allow audio to play in background - do NOT add visibility listeners
       audio.preload = "none";
 
       // Build stream URL
       let src: string;
       if (useProxy) {
-        // Same-origin proxy — enable CORS for Web Audio API analysis
+        // Same-origin proxy - enable CORS for Web Audio API analysis
         audio.crossOrigin = "anonymous";
         // Validate mount point exists in our allowlist before proxying
         if (!VALID_MOUNT_POINTS.has(targetFeed.mountPoint)) {
@@ -310,7 +310,7 @@ export function useAtcStream(): UseAtcStreamReturn {
 
       audio.addEventListener("waiting", () => {
         if (audioRef.current !== audio) return;
-        // Debounce — only show "loading" if buffering persists >1.2s
+        // Debounce - only show "loading" if buffering persists >1.2s
         if (!stalledTimerRef.current) {
           stalledTimerRef.current = setTimeout(() => {
             stalledTimerRef.current = null;
@@ -330,12 +330,12 @@ export function useAtcStream(): UseAtcStreamReturn {
           return;
         }
 
-        // Both direct and proxy failed — stay in "error" (not "blocked")
+        // Both direct and proxy failed - stay in "error" (not "blocked")
         setUsingProxy(useProxy);
         setStatus("error");
 
         if (proxyAttemptedRef.current && useProxy) {
-          setError("Stream unavailable — try another frequency.");
+          setError("Stream unavailable - try another frequency.");
         } else {
           setError("Stream connection failed.");
         }
@@ -346,7 +346,7 @@ export function useAtcStream(): UseAtcStreamReturn {
 
       audio.addEventListener("stalled", () => {
         if (audioRef.current !== audio) return;
-        // Debounce — only show "loading" if stall persists >1.2s
+        // Debounce - only show "loading" if stall persists >1.2s
         if (!stalledTimerRef.current) {
           stalledTimerRef.current = setTimeout(() => {
             stalledTimerRef.current = null;
@@ -361,12 +361,12 @@ export function useAtcStream(): UseAtcStreamReturn {
         scheduleReconnectAttempt(targetFeed, useProxy);
       });
 
-      // Start playback — requires user gesture (handled by UI click)
+      // Start playback - requires user gesture (handled by UI click)
       audio.play().catch(() => {
-        // Autoplay blocked — user must interact first
+        // Autoplay blocked - user must interact first
         if (audioRef.current !== audio) return;
         setStatus("blocked");
-        setError("Tap to listen — browser requires interaction.");
+        setError("Tap to listen - browser requires interaction.");
       });
     },
     [cleanupAudio, scheduleReconnectAttempt, updateMediaSession],
@@ -407,7 +407,7 @@ export function useAtcStream(): UseAtcStreamReturn {
     }
   }, []);
 
-  // Resume after autoplay block — must be called from a user gesture
+  // Resume after autoplay block - must be called from a user gesture
   const resume = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -416,7 +416,7 @@ export function useAtcStream(): UseAtcStreamReturn {
     setError(null);
     audio.play().catch(() => {
       setStatus("blocked");
-      setError("Tap to listen — browser requires interaction.");
+      setError("Tap to listen - browser requires interaction.");
     });
   }, []);
 

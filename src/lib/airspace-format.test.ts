@@ -27,23 +27,23 @@ test("formatAirspaceLimit returns 'value unit datum' for AMSL/AGL", () => {
   );
 });
 
-test("formatAirspaceLimit falls back to '—' on null/undefined inputs", () => {
-  assert.equal(formatAirspaceLimit(null), "—");
-  assert.equal(formatAirspaceLimit(undefined), "—");
+test("formatAirspaceLimit falls back to '-' on null/undefined inputs", () => {
+  assert.equal(formatAirspaceLimit(null), "-");
+  assert.equal(formatAirspaceLimit(undefined), "-");
   assert.equal(
     formatAirspaceLimit({
       value: null as unknown as number,
       unit: "ft",
       referenceDatum: "AMSL",
     }),
-    "—",
+    "-",
   );
 });
 
 test("formatAirspaceTitle uppercases icao_class when classified", () => {
   assert.equal(
     formatAirspaceTitle({ icao_class: "c", type: "other", name: "LHR TMA" }),
-    "C — LHR TMA",
+    "C - LHR TMA",
   );
 });
 
@@ -54,7 +54,7 @@ test("formatAirspaceTitle falls back to uppercase type when unclassified", () =>
       type: "restricted",
       name: "R-2508",
     }),
-    "RESTRICTED — R-2508",
+    "RESTRICTED - R-2508",
   );
 });
 
@@ -79,7 +79,7 @@ test("formatAirspaceLimit rejects non-numeric value and NaN/Infinity", () => {
       unit: "ft",
       referenceDatum: "AMSL",
     }),
-    "—",
+    "-",
   );
   assert.equal(
     formatAirspaceLimit({
@@ -87,18 +87,18 @@ test("formatAirspaceLimit rejects non-numeric value and NaN/Infinity", () => {
       unit: "ft",
       referenceDatum: "AMSL",
     }),
-    "—",
+    "-",
   );
 });
 
-test("formatAirspaceLimit returns '—' when unit or datum missing (non-STD)", () => {
+test("formatAirspaceLimit returns '-' when unit or datum missing (non-STD)", () => {
   assert.equal(
     formatAirspaceLimit({ value: 100, unit: "", referenceDatum: "AMSL" }),
-    "—",
+    "-",
   );
   assert.equal(
     formatAirspaceLimit({ value: 100, unit: "ft", referenceDatum: "" }),
-    "—",
+    "-",
   );
 });
 
@@ -117,7 +117,7 @@ test("formatAirspaceTitle handles whitespace-only name and mixed-case unclassifi
       type: "other",
       name: "  LHR TMA  ",
     }),
-    "C — LHR TMA",
+    "C - LHR TMA",
   );
 });
 
@@ -128,6 +128,6 @@ test("formatAirspaceTitle handles missing/nullish icao_class gracefully", () => 
       type: "restricted",
       name: "R-2508",
     }),
-    "RESTRICTED — R-2508",
+    "RESTRICTED - R-2508",
   );
 });

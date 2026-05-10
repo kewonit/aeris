@@ -68,7 +68,7 @@ export function WeatherSection({ metar, loading, hasIcao, unitSystem }: Props) {
           value={
             metar.temp !== undefined
               ? `${formatTemperatureC(metar.temp, unitSystem)} / ${formatTemperatureC(metar.dewp, unitSystem)}`
-              : "—"
+              : "-"
           }
         />
         <Metric

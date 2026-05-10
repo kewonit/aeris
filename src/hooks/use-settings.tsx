@@ -212,7 +212,7 @@ function loadSettings(): Settings {
       ),
     );
   } catch {
-    // Corrupted or unreadable localStorage — fall back to defaults
+    // Corrupted or unreadable localStorage - fall back to defaults
     return DEFAULT_SETTINGS;
   }
 }

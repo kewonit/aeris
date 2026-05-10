@@ -38,7 +38,7 @@ export type AirportInfoCardProps = {
   selectedIcao24: string | null;
   /** Close the card. */
   onClose: () => void;
-  /** Shared ATC stream — when provided, frequency rows become interactive. */
+  /** Shared ATC stream - when provided, frequency rows become interactive. */
   atc?: UseAtcStreamReturn;
   /**
    * Layout variant:
@@ -103,7 +103,7 @@ export function AirportInfoCard({
   }, [airport, icao]);
 
   // Auto-fall back when the preferred tab has nothing to show.
-  // Compute during render — avoids setState-in-effect cascades.
+  // Compute during render - avoids setState-in-effect cascades.
   const hasFlights = board.totalFlights > 0;
   const hasWeather = !!metar;
   const effectiveMainTab: MainTab =
@@ -174,17 +174,17 @@ export function AirportInfoCard({
       >
         {isMobile && (
           <>
-            {/* Visual gradient scrim — pointer-events none so it doesn't eat the close-button taps. */}
+            {/* Visual gradient scrim - pointer-events none so it doesn't eat the close-button taps. */}
             <div
               className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-linear-to-b from-background/40 to-transparent"
               aria-hidden
             />
-            {/* Drag grab target — centered pill, narrow hit area. */}
+            {/* Drag grab target - centered pill, narrow hit area. */}
             <button
               type="button"
               onPointerDown={(e) => dragControls.start(e)}
               className="absolute top-0 left-1/2 z-20 flex h-10 w-28 -translate-x-1/2 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-              aria-label="Drag handle — drag down to dismiss"
+              aria-label="Drag handle - drag down to dismiss"
             >
               <span className="block h-1 w-12 rounded-full bg-foreground/55 shadow-sm" />
             </button>

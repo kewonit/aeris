@@ -164,7 +164,7 @@ test("filters GPS spike artefacts from historical trace data", () => {
           samples: [
             historySample({ timestamp: 100, lng: 8.0, lat: 50.0 }),
             historySample({ timestamp: 200, lng: 8.01, lat: 50.0 }),
-            // GPS spike — big lateral jump perpendicular to path then back
+            // GPS spike - big lateral jump perpendicular to path then back
             historySample({ timestamp: 300, lng: 8.015, lat: 50.05 }),
             historySample({ timestamp: 400, lng: 8.02, lat: 50.0 }),
             historySample({ timestamp: 500, lng: 8.03, lat: 50.0 }),
@@ -176,7 +176,7 @@ test("filters GPS spike artefacts from historical trace data", () => {
     }),
   );
 
-  // The spike lat (50.05) should be removed — path should be smooth
+  // The spike lat (50.05) should be removed - path should be smooth
   const lats = result.path.map((p) => p[1]);
   assert.ok(
     !lats.includes(50.05),

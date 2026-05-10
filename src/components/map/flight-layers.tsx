@@ -87,7 +87,7 @@ export function FlightLayers({
   const dataTimestampRef = useRef(0);
   const animDurationRef = useRef(DEFAULT_ANIM_DURATION_MS);
   const animFrameRef = useRef(0);
-  // Recent poll intervals for median smoothing — prevents event loop
+  // Recent poll intervals for median smoothing - prevents event loop
   // stalls from inflating animDuration beyond the true poll cadence.
   const recentIntervalsRef = useRef<number[]>([]);
 
@@ -98,7 +98,7 @@ export function FlightLayers({
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
   const pitchMapRef = useRef(new Map<string, number>());
   const bankMapRef = useRef(new Map<string, number>());
-  // Reusable containers for buildTrailLayers — clear+reuse each frame
+  // Reusable containers for buildTrailLayers - clear+reuse each frame
   const handledIdsRef = useRef(new Set<string>());
   const visibleTrailCacheRef = useRef(new Map<string, ElevatedPoint[]>());
   const activeIcaosRef = useRef(new Set<string>());
@@ -112,11 +112,11 @@ export function FlightLayers({
       { key: string; result: [number, number, number, number][] }
     >(),
   );
-  // Cached trail-by-icao24 Map — rebuilt only when trailsRef changes, not every frame
+  // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
   const trailMapRef = useRef(new Map<string, TrailEntry>());
   const lastTrailsForMapRef = useRef<TrailEntry[] | null>(null);
 
-  // Interpolation pool — reuse FlightState objects between animation frames
+  // Interpolation pool - reuse FlightState objects between animation frames
   // to avoid ~18K object allocations/sec from spread syntax
   const interpArrayRef = useRef<FlightState[]>([]);
   const lastFlightsForInterpRef = useRef<FlightState[] | null>(null);
@@ -128,7 +128,7 @@ export function FlightLayers({
   const resumeSnapRef = useRef(false);
   const pageActiveRef = useRef(true);
 
-  // Data version increments when raw flight data changes — drives color/scale updateTriggers
+  // Data version increments when raw flight data changes - drives color/scale updateTriggers
   const dataVersionRef = useRef(0);
 
   const flightsRef = useRef(flights);
@@ -308,7 +308,7 @@ export function FlightLayers({
       );
     }
     dataTimestampRef.current = now;
-    // Fresh data arrived — allow dead reckoning again (was blocked during
+    // Fresh data arrived - allow dead reckoning again (was blocked during
     // the brief window after tab resume to prevent stale-heading extrapolation).
     resumeSnapRef.current = false;
     // Increment data version so model layers know color/scale need recomputation
@@ -339,7 +339,7 @@ export function FlightLayers({
     [onClick],
   );
 
-  // Stable refs for event handlers — prevents RAF loop restart when handlers change
+  // Stable refs for event handlers - prevents RAF loop restart when handlers change
   const handleHoverRef = useRef(handleHover);
   const handleClickRef = useRef(handleClick);
   useEffect(() => {
@@ -452,7 +452,7 @@ export function FlightLayers({
     };
   }, [map, isLoaded]);
 
-  // Visual frame counter — increments once per rendered frame.
+  // Visual frame counter - increments once per rendered frame.
   // Used in updateTriggers so deck.gl recomputes attributes only when we push.
   const visualFrameRef = useRef(0);
   // LOD state: true = render 3D ScenegraphLayers, false = render 2D IconLayer.
@@ -466,7 +466,7 @@ export function FlightLayers({
   useEffect(() => {
     if (!atlasUrl) return;
 
-    // Hoisted constant — avoids allocating a new array every frame
+    // Hoisted constant - avoids allocating a new array every frame
     const DEFAULT_COLOR: [number, number, number, number] = [
       180, 220, 255, 200,
     ];
@@ -587,7 +587,7 @@ export function FlightLayers({
           interpArrayRef.current = interpolated;
           lastFlightsForInterpRef.current = currentFlights;
 
-          // Rebuild Map only on new poll — updateInterpolatedInPlace mutates
+          // Rebuild Map only on new poll - updateInterpolatedInPlace mutates
           // the same FlightState objects in-place, so existing Map entries
           // remain valid between polls.
           const interpolatedMap = interpolatedMapRef.current;
@@ -609,7 +609,7 @@ export function FlightLayers({
           );
         }
 
-        // FPV position output — O(1) Map lookup instead of O(n) find
+        // FPV position output - O(1) Map lookup instead of O(n) find
         const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
         const fpvPosOut = fpvPosRef.current;
         if (fpvPosOut && fpvId) {
@@ -649,7 +649,7 @@ export function FlightLayers({
         const altColors = showAltColorsRef.current;
         const visibleFlights = interpolated;
 
-        // Pitch/bank change slowly — recompute at ~10fps regardless of
+        // Pitch/bank change slowly - recompute at ~10fps regardless of
         // animation frame rate. Values are retained in pitchMapRef/bankMapRef
         // between compute frames.
         const PITCH_BANK_INTERVAL_MS = 100;
@@ -683,7 +683,7 @@ export function FlightLayers({
           altitudeDisplayModeRef.current,
         );
 
-        // Shadow layer — always included, toggled via `visible` to retain WebGL state
+        // Shadow layer - always included, toggled via `visible` to retain WebGL state
         layers.push(
           new IconLayer<FlightState>({
             id: "flight-shadows",
@@ -711,7 +711,7 @@ export function FlightLayers({
           }),
         );
 
-        // Trail layer — always included, toggled via `visible` to retain WebGL state
+        // Trail layer - always included, toggled via `visible` to retain WebGL state
         layers.push(
           ...buildTrailLayers({
             interpolated,
@@ -740,7 +740,7 @@ export function FlightLayers({
           }),
         );
 
-        // Selection pulse layers (halo + rings) — skip entirely when
+        // Selection pulse layers (halo + rings) - skip entirely when
         // nothing is selected and no fade-out is in progress. Saves
         // constructing 4 IconLayer objects + deck.gl diffing per frame.
         if (selectedIcao24Ref.current || prevSelectedRef.current) {

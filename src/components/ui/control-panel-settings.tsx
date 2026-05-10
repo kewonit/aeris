@@ -630,7 +630,7 @@ const CHANGELOG: {
       {
         title: "Configurable unit system",
         description:
-          "New Unit system setting with Aviation (ft, kts, fpm, NM, °C, hPa), Metric (m, km/h, m/s, km, °C, hPa), and Imperial (ft, mph, fpm, mi, °F, inHg) modes, persisted across sessions. Unit conversions and formatting centralised in shared helpers; flight card, mobile toast, search chips, airport board, FPV HUD, altitude legend, weather card, and vertical profile all respect the selected system. Internal thresholds unchanged — this is a display-layer toggle only.",
+          "New Unit system setting with Aviation (ft, kts, fpm, NM, °C, hPa), Metric (m, km/h, m/s, km, °C, hPa), and Imperial (ft, mph, fpm, mi, °F, inHg) modes, persisted across sessions. Unit conversions and formatting centralised in shared helpers; flight card, mobile toast, search chips, airport board, FPV HUD, altitude legend, weather card, and vertical profile all respect the selected system. Internal thresholds unchanged - this is a display-layer toggle only.",
       },
     ],
   },
@@ -666,7 +666,7 @@ const CHANGELOG: {
     date: "Apr 12, 2026",
     entries: [
       {
-        title: "Trail system v2 — rendering, geometry & data pipeline",
+        title: "Trail system v2 - rendering, geometry & data pipeline",
         description:
           "Complete trail overhaul: server trace service with multi-provider fallback, sealed-segment display geometry that keeps the fixed trail body stable across live appends, cusp and backtrack removal, needle-kink filtering, and holding-pattern preservation. Connector rendering follows the recent tail arc. Live trail retention raised beyond 120 points. Altitude-aware color caching, opacity fading, and zoom-linked elevation smoothing.",
       },
@@ -732,7 +732,7 @@ const CHANGELOG: {
       {
         title: "3D aircraft models & smoother trails",
         description:
-          "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code — from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15\u00B0), denser Catmull\u2013Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
+          "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code - from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15\u00B0), denser Catmull\u2013Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
       },
       {
         title: "Multi-source flight data & circuit breaker",
@@ -839,7 +839,7 @@ export function AboutContent() {
 
         <div className="space-y-3 text-[13px] leading-relaxed text-foreground/40">
           <p>
-            Live flight tracking in 3D. The planes you see are real — position
+            Live flight tracking in 3D. The planes you see are real - position
             data comes from ADS-B Exchange, adsb.lol, and OpenSky Network,
             updated every few seconds via ADS-B receivers people run on their
             roofs worldwide.
@@ -873,7 +873,7 @@ export function AboutContent() {
           >
             @kewonit
           </a>
-          . Open to internships —{" "}
+          . Open to internships -{" "}
           <a
             href="mailto:kew@edbn.me"
             className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"

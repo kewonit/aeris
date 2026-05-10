@@ -7,7 +7,7 @@ export type Airport = {
   country: string;
   lat: number;
   lng: number;
-  /** ICAO code (4-letter). Empty string if unknown — never null to keep the type narrow. */
+  /** ICAO code (4-letter). Empty string if unknown - never null to keep the type narrow. */
   icao: string;
   /** Elevation in feet AMSL. null when OurAirports has no value. */
   elevation_ft: number | null;

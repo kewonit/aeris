@@ -240,7 +240,7 @@ export const AIRSPACE_INTERACTIVE_LAYER_IDS: string[] = [
 // The airspace overlay is scoped to a circle around the active city
 // so we don't pull down the whole world's vector tiles just to look
 // at flights near one airport. MapLibre's vector source accepts a
-// static `bounds` box (west, south, east, north) — tiles that don't
+// static `bounds` box (west, south, east, north) - tiles that don't
 // intersect the box are never requested.
 //
 // We size the box at roughly 2× the flight fetch radius so the user
@@ -267,7 +267,7 @@ export const FPV_AIRSPACE_RADIUS_DEG = 4;
  * Grid snap applied to the FPV bbox center, so the source only
  * re-creates when the aircraft has flown about half a degree
  * (~30 NM / ~55 km at the equator). At typical cruise speeds that's
- * roughly one re-add every few minutes — cheap, and each cell's tiles
+ * roughly one re-add every few minutes - cheap, and each cell's tiles
  * are already in the browser HTTP cache after the first visit.
  */
 export const FPV_BOUNDS_SNAP_DEG = 0.5;
@@ -347,7 +347,7 @@ export function computeAirspaceBounds(
   const south = clamp(lat - latSpan, MERCATOR_MIN_LAT, MERCATOR_MAX_LAT);
   const north = clamp(lat + latSpan, MERCATOR_MIN_LAT, MERCATOR_MAX_LAT);
 
-  // Degenerate box (e.g. the clamp collapsed a pole-straddling box) —
+  // Degenerate box (e.g. the clamp collapsed a pole-straddling box) -
   // fall back to no restriction rather than sending MapLibre a zero-area
   // rectangle that would hide the layer entirely.
   if (east <= west || north <= south) return null;

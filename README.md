@@ -1,6 +1,6 @@
 # Aeris
 
-Real-time 3D flight tracking — altitude-aware, visually stunning.
+Real-time 3D flight tracking - altitude-aware, visually stunning.
 
 Aeris renders live air traffic over the world's busiest airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold. Select a city, and the camera glides to that airspace with spring-eased animation.
 
@@ -42,18 +42,18 @@ src/
 ├── app/
 │   ├── globals.css            Tailwind config, theme vars
 │   ├── layout.tsx             Root layout (Inter font)
-│   ├── page.tsx               Entry — renders <FlightTracker />
+│   ├── page.tsx               Entry - renders <FlightTracker />
 │   └── api/flights/route.ts   adsb.lol reverse proxy (CORS workaround + rate limit)
 ├── components/
-│   ├── flight-tracker.tsx     Orchestrator — state, camera, layers, UI
+│   ├── flight-tracker.tsx     Orchestrator - state, camera, layers, UI
 │   ├── map/
 │   │   ├── map.tsx            MapLibre GL wrapper with React context
-│   │   ├── flight-layers.tsx  Deck.gl overlay — icons, trails, shadows, animation
+│   │   ├── flight-layers.tsx  Deck.gl overlay - icons, trails, shadows, animation
 │   │   ├── aircraft-model-mapping.ts  ADS-B category → 3D model key + bucketing
 │   │   └── aircraft-model-layers.ts   Builds per-model ScenegraphLayers
 │   └── ui/
 │       ├── altitude-legend.tsx
-│       ├── control-panel.tsx  Tabbed dialog — search, map style, settings
+│       ├── control-panel.tsx  Tabbed dialog - search, map style, settings
 │       ├── flight-card.tsx    Hover card with flight details
 │       ├── scroll-area.tsx    Custom scrollbar
 │       ├── slider.tsx         Orbit speed slider (Radix)
@@ -87,20 +87,20 @@ Aeris renders 14 distinct aircraft silhouettes based on ADS-B emitter category a
 | --------------- | ------------------------------- | ---------------------------------------------- |
 | `narrowbody`    | A320, B737 family               | Category 3 (Small), 4 (Large), 5 (High vortex) |
 | `widebody-2eng` | A330, A350, B777, B787          | Category 6 (Heavy)                             |
-| `widebody-4eng` | A380, B747, A340                | —                                              |
+| `widebody-4eng` | A380, B747, A340                | -                                              |
 | `a380`          | Airbus A380                     | Type codes A38x                                |
 | `b737`          | Boeing 737 family               | Type codes B73x, B3xM                          |
-| `regional-jet`  | CRJ, E-Jets, Fokker             | —                                              |
+| `regional-jet`  | CRJ, E-Jets, Fokker             | -                                              |
 | `light-prop`    | Cessna, Piper, Cirrus           | Category 2 (Light), 12 (Ultralight)            |
-| `turboprop`     | ATR, Dash-8, Saab               | —                                              |
+| `turboprop`     | ATR, Dash-8, Saab               | -                                              |
 | `helicopter`    | All rotorcraft                  | Category 8 (Rotorcraft)                        |
-| `bizjet`        | Gulfstream, Citation, Learjet   | —                                              |
+| `bizjet`        | Gulfstream, Citation, Learjet   | -                                              |
 | `glider`        | Sailplanes                      | Category 9 (Glider)                            |
 | `fighter`       | Military fast-movers            | Category 7 (High-perf)                         |
 | `drone`         | UAVs                            | Category 14 (UAV)                              |
 | `generic`       | Fallback for unknown categories | Category 0, 1, default                         |
 
-Models are optimised GLB files (no Draco compression — avoids external WASM decoder dependency) served from Cloudinary CDN (local backups in `public/models/aircraft/`). A second-tier mapping from ICAO type codes (A320, B738, etc.) refines the assignment when type data is available via the readsb feed.
+Models are optimised GLB files (no Draco compression - avoids external WASM decoder dependency) served from Cloudinary CDN (local backups in `public/models/aircraft/`). A second-tier mapping from ICAO type codes (A320, B738, etc.) refines the assignment when type data is available via the readsb feed.
 
 - **Smooth animation**: Catmull-Rom spline trails, per-frame interpolation between polls
 - **Glassmorphism**: `backdrop-blur-2xl`, `bg-black/60`, `border-white/[0.08]`
@@ -111,7 +111,7 @@ Models are optimised GLB files (no Draco compression — avoids external WASM de
 
 ## Environment Variables
 
-All variables are optional — Aeris runs with no secrets. See `.env.example` for the full template.
+All variables are optional - Aeris runs with no secrets. See `.env.example` for the full template.
 
 | Variable                | Required | Description                                                                                                                                                                                                           |
 | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +120,7 @@ All variables are optional — Aeris runs with no secrets. See `.env.example` fo
 | `OPENSKY_CLIENT_SECRET` | No       | OAuth2 secret that pairs with `OPENSKY_CLIENT_ID`. Set both or neither.                                                                                                                                               |
 | `OPENAIP_API_KEY`       | No       | API key used by the airspace vector-tile proxy `src/app/api/airspace-tiles/route.ts`. Without it the airspace overlay is disabled cleanly and the client skips OpenAIP tile requests; flight rendering is unaffected. |
 
-Live flight data (airplanes.live, adsb.lol) is called directly from the browser with CORS — no credentials needed.
+Live flight data (airplanes.live, adsb.lol) is called directly from the browser with CORS - no credentials needed.
 
 ## License
 

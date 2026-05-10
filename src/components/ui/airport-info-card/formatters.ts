@@ -22,7 +22,7 @@ export function decodeFltCat(cat: string | undefined): {
       };
     default:
       return {
-        label: "—",
+        label: "-",
         color: "text-foreground/40",
         dotColor: "bg-foreground/20",
       };
@@ -64,7 +64,7 @@ export function surfaceLabel(surface: string | null): string {
 }
 
 export function formatRunwayLength(ft: number | null, metric: boolean): string {
-  if (ft == null) return "—";
+  if (ft == null) return "-";
   if (metric) return `${Math.round(ft * 0.3048).toLocaleString()} m`;
   return `${ft.toLocaleString()} ft`;
 }
@@ -73,7 +73,7 @@ export function formatElevation(
   ft: number | null,
   unitSystem: "aviation" | "metric" | "imperial",
 ): string {
-  if (ft == null) return "—";
+  if (ft == null) return "-";
   if (unitSystem === "metric") {
     return `${Math.round(ft * 0.3048).toLocaleString()} m`;
   }

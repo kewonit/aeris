@@ -52,7 +52,7 @@ export const ALL_MODEL_KEYS: readonly AircraftModelKey[] = [
 const CLOUDINARY_CLOUD = "dfyrk32ua";
 const CLOUDINARY_FOLDER = "aeris/models/aircraft";
 
-// Per-model Cloudinary versions from upload response — ensures optimal
+// Per-model Cloudinary versions from upload response - ensures optimal
 // CDN cache (long-lived Cache-Control) and instant busting on re-upload.
 const MODEL_CDN_VERSIONS: Readonly<Record<string, number>> = {
   b737: 1774203409,
@@ -219,7 +219,7 @@ export function categoryToModelKey(category: number | null): AircraftModelKey {
 /**
  * Maps ICAO type designator to a model key. Returns null for unrecognized types.
  *
- * Patterns checked in priority order — first match wins. This ordering
+ * Patterns checked in priority order - first match wins. This ordering
  * prevents false positives (e.g. C919 matching bizjet C[5-9]xx, or
  * Fokker F28 matching the fighter F-series pattern).
  *

@@ -14,9 +14,9 @@ const inter = Inter({
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const GA_ID_VALID = GA_ID && /^G-[A-Z0-9]+$/.test(GA_ID) ? GA_ID : null;
 
-const title = "Aeris — Real-Time 3D Flight Tracking";
+const title = "Aeris - Real-Time 3D Flight Tracking";
 const description =
-  "Track live flights in stunning 3D over the world's busiest airspaces. See real-time ADS-B data with altitude-aware rendering — low altitudes glow cyan, high altitudes shift to gold. Free and open source.";
+  "Track live flights in stunning 3D over the world's busiest airspaces. See real-time ADS-B data with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.";
 const siteUrl = "https://aeris.edbn.me";
 
 export const metadata: Metadata = {

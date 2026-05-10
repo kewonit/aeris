@@ -254,7 +254,7 @@ export interface TrailLayerParams {
   interpolated: FlightState[];
   interpolatedMap: Map<string, FlightState>;
   currentTrails: TrailEntry[];
-  /** Pre-built trail-by-icao24 Map — passed from parent to avoid per-frame allocation */
+  /** Pre-built trail-by-icao24 Map - passed from parent to avoid per-frame allocation */
   trailMap: Map<string, TrailEntry>;
   trailDistance: number;
   trailThickness: number;
@@ -262,11 +262,11 @@ export interface TrailLayerParams {
   altitudeDisplayMode: AltitudeDisplayMode;
   defaultColor: [number, number, number, number];
   elapsed: number;
-  /** Visual frame counter — throttled counter that only increments on rendered frames */
+  /** Visual frame counter - throttled counter that only increments on rendered frames */
   visualFrame: number;
   globeFade: number;
   currentZoom: number;
-  /** Pre-computed zoom-dependent elevation scale — avoids recomputing per accessor call */
+  /** Pre-computed zoom-dependent elevation scale - avoids recomputing per accessor call */
   elevScale: number;
   visible?: boolean;
   /** Persistent cache for expensive base path computations across frames */
@@ -283,7 +283,7 @@ export interface TrailLayerParams {
   >;
   selectedIcao24?: string | null;
   selectedEnvelope?: TrailEnvelope | null;
-  /** Reusable containers — cleared and reused each frame to avoid per-frame allocations */
+  /** Reusable containers - cleared and reused each frame to avoid per-frame allocations */
   handledIdsSet?: Set<string>;
   visibleTrailCacheMap?: Map<string, ElevatedPoint[]>;
   activeIcaosSet?: Set<string>;
@@ -713,7 +713,7 @@ export function buildSelectionPulseLayers(
     // Previous double-smoothStep created sharp snap transitions.
     const breath = Math.sin(breathT * Math.PI * 2);
 
-    // Subtle background glow — barely visible, provides soft ambient light.
+    // Subtle background glow - barely visible, provides soft ambient light.
     // At 86px with 40% clear center: clear zone = 17px radius, well outside
     // the largest aircraft icon (~12px radius).
     const haloSize = 86 + 1.5 * breath;
@@ -739,9 +739,9 @@ export function buildSelectionPulseLayers(
     );
 
     // Single clean ring that gently breathes in size and opacity.
-    // No expansion animation — just a calm, static indicator.
+    // No expansion animation - just a calm, static indicator.
     // In sync with halo (no phase offset) for a unified pulse.
-    // At 68px, ring inner edge = 0.57 * 34 = 19px — clears the aircraft.
+    // At 68px, ring inner edge = 0.57 * 34 = 19px - clears the aircraft.
     const ringSize = 68 + 1.5 * breath;
     const ringAlpha = Math.round((28 + 6 * breath) * op);
 

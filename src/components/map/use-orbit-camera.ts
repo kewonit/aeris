@@ -54,7 +54,7 @@ export function useOrbitCamera(
 
       function tick(now: number) {
         if (!map || isInteractingRef.current) return;
-        // Skip orbit rotation when tab is hidden — saves CPU and
+        // Skip orbit rotation when tab is hidden - saves CPU and
         // prevents large bearing jumps on resume.
         if (document.hidden) {
           lastTime = 0;

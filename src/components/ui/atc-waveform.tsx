@@ -61,7 +61,7 @@ function buildBinRanges(
   barCount: number,
 ): [number, number][] {
   // Only use the lower portion where voice/content actually lives
-  // For 128 bins at 44100 Hz: bin 30 ≈ 5 160 Hz — covers voice + harmonics
+  // For 128 bins at 44100 Hz: bin 30 ≈ 5 160 Hz - covers voice + harmonics
   const maxBin = Math.min(Math.ceil(binCount * 0.25), binCount);
   const usable = maxBin - 1; // bins 1..maxBin
   const ranges: [number, number][] = [];
@@ -125,7 +125,7 @@ export function AtcWaveform({
     };
   }, [active, audioElement]);
 
-  // ── Animation loop (always runs — idle or active) ────────────────
+  // ── Animation loop (always runs - idle or active) ────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -162,7 +162,7 @@ export function AtcWaveform({
     const ro = new ResizeObserver(() => syncCanvasSize());
     ro.observe(canvas);
 
-    // Hoist allocations out of draw loop — only reallocate when binCount changes
+    // Hoist allocations out of draw loop - only reallocate when binCount changes
     let dataArray: Uint8Array<ArrayBuffer> | null = null;
     let binRanges: [number, number][] | null = null;
     let lastBinCount = 0;

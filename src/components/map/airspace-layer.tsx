@@ -33,7 +33,7 @@ import type { AirspaceLimit } from "@/lib/airspace-format";
 //     with the new `bounds` (MapLibre vector sources don't allow
 //     mutating bounds in place).
 //   • The lifecycle effect cleanup deliberately does NOT remove the
-//     source — see the architectural note on the effect below.
+//     source - see the architectural note on the effect below.
 //   • Final teardown happens in a dedicated unmount-only effect.
 //
 // Async sprite loading is guarded by a `CancellationToken` so a
@@ -105,7 +105,7 @@ export function AirspaceLayer({
   // Opacity is read by the lifecycle effect (via `opacityRef.current`)
   // and passed to `addAirspace(nextOpacity, …)` at add-time. The ref
   // pattern lets the slider update without forcing the lifecycle
-  // effect to re-run — a separate opacity-only effect handles the
+  // effect to re-run - a separate opacity-only effect handles the
   // in-place paint update.
   const opacityRef = useRef(opacity);
   useEffect(() => {
@@ -143,7 +143,7 @@ export function AirspaceLayer({
               map.addImage(id, img.data);
             } catch {
               // Another caller may have registered the same id between
-              // our hasImage() check and addImage() — benign race.
+              // our hasImage() check and addImage() - benign race.
             }
           }
         } catch {
@@ -185,7 +185,7 @@ export function AirspaceLayer({
               scaleOpacity(base, nextOpacity),
             );
           }
-          // symbol layer (labels) ignores opacity multiplier — always full
+          // symbol layer (labels) ignores opacity multiplier - always full
         } catch {
           /* layer may be in the process of being removed */
         }
@@ -223,7 +223,7 @@ export function AirspaceLayer({
       await ensureSprites();
       if (!mountedRef.current || !map) return;
       if (cancelled?.current) return;
-      // Re-check after the await — another invocation may have added it.
+      // Re-check after the await - another invocation may have added it.
       if (map.getSource(AIRSPACE_SOURCE_ID)) return;
 
       // Absolute URL required: MapLibre resolves tile URLs inside a
@@ -251,7 +251,7 @@ export function AirspaceLayer({
             '&copy; <a href="https://www.openaip.net" target="_blank">OpenAIP</a>',
         });
       } catch {
-        // Style swap or duplicate add — bail; the next effect run
+        // Style swap or duplicate add - bail; the next effect run
         // will reconcile.
         return;
       }
@@ -271,7 +271,7 @@ export function AirspaceLayer({
         try {
           map.addLayer(layer, beforeId);
         } catch {
-          /* layer raced with removal — skip */
+          /* layer raced with removal - skip */
         }
       }
       applyOpacity(nextOpacity);
@@ -334,7 +334,7 @@ export function AirspaceLayer({
   // shifts, visibility toggles, callback identity changes) created a
   // gap window where the layer was gone; if `addAirspace` then raced
   // with the cleanup, sprites finished loading after unmount, or
-  // `idle` fired late, the layer would silently stay missing — the
+  // `idle` fired late, the layer would silently stay missing - the
   // "fragile / randomly disappear" symptom.
   //
   // Instead the effect body atomically swaps in place: remove (if
@@ -353,7 +353,7 @@ export function AirspaceLayer({
     const performSwap = () => {
       if (cancelled.current || !mountedRef.current) return;
       // Atomic: remove (if present) then add. Both inside the same
-      // synchronous tick — MapLibre never sees the in-between gap on
+      // synchronous tick - MapLibre never sees the in-between gap on
       // a render frame.
       removeAirspace();
       void addAirspace(opacityRef.current, cancelled);
@@ -366,7 +366,7 @@ export function AirspaceLayer({
       } else {
         // Style transiently not ready (common during a city tap's
         // camera fly + tile fetch). Wait for the next idle, OR for
-        // the next style.load — whichever fires first.
+        // the next style.load - whichever fires first.
         pendingIdle = () => {
           pendingIdle = null;
           if (pendingStyleLoad) {
@@ -381,7 +381,7 @@ export function AirspaceLayer({
             map.off("idle", pendingIdle);
             pendingIdle = null;
           }
-          // Style swap wipes images — force sprite reload.
+          // Style swap wipes images - force sprite reload.
           spritesLoadedRef.current = false;
           performSwap();
         };
@@ -421,7 +421,7 @@ export function AirspaceLayer({
       if (pendingIdle) map.off("idle", pendingIdle);
       if (pendingStyleLoad) map.off("style.load", pendingStyleLoad);
       map.off("style.load", onStyleLoad);
-      // NOTE: do NOT call removeAirspace here — see comment above.
+      // NOTE: do NOT call removeAirspace here - see comment above.
     };
   }, [map, isLoaded, visible, boundsKey, addAirspace, removeAirspace]);
 
@@ -504,7 +504,7 @@ export function AirspaceLayer({
 /**
  * Multiplies a base opacity (possibly an interpolate expression) by a
  * scalar multiplier for the user's opacity slider. MapLibre accepts
- * a `["*", base, multiplier]` expression — we wrap the original paint
+ * a `["*", base, multiplier]` expression - we wrap the original paint
  * value and return the result.
  */
 function scaleOpacity(base: unknown, multiplier: number): unknown {
@@ -512,7 +512,7 @@ function scaleOpacity(base: unknown, multiplier: number): unknown {
   if (base === undefined || base === null) return multiplier;
 
   // Expressions containing ["zoom"] (interpolate / step) must remain the
-  // top-level expression — MapLibre rejects ["*", <interpolate>, m]. So
+  // top-level expression - MapLibre rejects ["*", <interpolate>, m]. So
   // instead of wrapping, we push the multiplier down to the output stops.
   if (Array.isArray(base) && base.length > 0) {
     const op = base[0];
@@ -580,7 +580,7 @@ function scaleOpacity(base: unknown, multiplier: number): unknown {
       ];
     }
 
-    // Unknown / leaf expression with no ["zoom"] reference — multiplying
+    // Unknown / leaf expression with no ["zoom"] reference - multiplying
     // via ["*", …] is safe. If it turns out to contain zoom we'd fail,
     // but the common MapLibre output expressions are handled above.
     if (multiplier === 1) return base;

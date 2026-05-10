@@ -123,7 +123,7 @@ function buildFullMaps(): void {
     if (!a.icao) continue;
     const iata = a.iata.toUpperCase();
     const icao = a.icao.toUpperCase();
-    // First-writer wins — OurAirports occasionally has duplicate IATAs for
+    // First-writer wins - OurAirports occasionally has duplicate IATAs for
     // decommissioned airports. Our DB is already de-duped, so this is rare.
     if (!iataMap.has(iata)) iataMap.set(iata, icao);
     if (!icaoMap.has(icao)) icaoMap.set(icao, iata);
@@ -173,7 +173,7 @@ const ATC_AIRPORTS: Airport[] = AIRPORTS.filter((a) => {
 
 /**
  * Simple distance approximation in nautical miles (good enough for feed lookup).
- * Uses equirectangular approximation — accurate to ~1% within 60nm.
+ * Uses equirectangular approximation - accurate to ~1% within 60nm.
  */
 function approxDistanceNm(
   lat1: number,

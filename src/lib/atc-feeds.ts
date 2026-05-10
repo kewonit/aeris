@@ -23,7 +23,7 @@ import type { AtcFeed } from "./atc-types";
  *
  * - Airports NOT covered by LiveATC have been removed.
  *   Many major European airports (CDG, Frankfurt, Munich,
- *   Madrid, Barcelona, Rome, etc.) have NO LiveATC feeds — ATC radio
+ *   Madrid, Barcelona, Rome, etc.) have NO LiveATC feeds - ATC radio
  *   broadcasting is restricted or illegal in those countries.
  *
  * - LiveATC mount point naming is NOT standardized. It varies wildly
@@ -524,12 +524,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
   // ── Europe ───────────────────────────────────────────────────────
   // NOTE: Many major European airports (CDG, Frankfurt, Munich, Madrid,
   // Barcelona, Rome, Gatwick, Vienna, Copenhagen, Stockholm, Warsaw)
-  // do NOT have LiveATC feeds — ATC radio reception/broadcasting is
+  // do NOT have LiveATC feeds - ATC radio reception/broadcasting is
   // restricted or illegal in France, Germany, Spain, Italy, Austria,
   // Denmark, Sweden, Poland, and others.
 
   EGLL: [
-    // CSV verified — single combined Tower/Approach feed
+    // CSV verified - single combined Tower/Approach feed
     feed("EGLL", "combined", "Heathrow Tower/Approach", "118.700", "egll_twr"),
   ],
 
@@ -614,7 +614,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
   ],
 
   LTFJ: [
-    // CSV verified — Sabiha Gokcen (NOT Istanbul IST/LTFM main)
+    // CSV verified - Sabiha Gokcen (NOT Istanbul IST/LTFM main)
     feed("LTFJ", "combined", "Sabiha Gokcen Del/Gnd/Twr", "118.100", "ltfj2"),
   ],
 
@@ -664,7 +664,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
   ],
 
   WSSS: [
-    // CSV verified — single combined feed
+    // CSV verified - single combined feed
     feed("WSSS", "combined", "Changi Del/Gnd/App/Radar", "119.800", "wsss3"),
   ],
 
@@ -716,7 +716,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
   ],
 
   YMML: [
-    // CSV verified — single combined feed
+    // CSV verified - single combined feed
     feed("YMML", "combined", "Melbourne Tower/App/Center", "120.500", "ymml3"),
   ],
 
@@ -778,14 +778,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Anguilla --
-  // Clayton J. Lloyd International Airport (The Valley, Anguilla) — CSV verified
+  // Clayton J. Lloyd International Airport (The Valley, Anguilla) - CSV verified
   TQPF: [
     feed("TQPF", "tower", "Tower", "", "tncs_tqpf_twr"),
   ],
 
 
   // -- Bahamas --
-  // Deadman\'s Cay Airport (Deadman's Cay, Bahamas) — CSV verified
+  // Deadman\'s Cay Airport (Deadman's Cay, Bahamas) - CSV verified
   MYLD: [
     feed("MYLD", "approach", "Nassau Approach", "", "myld1_app"),
     feed("MYLD", "center", "Miami Center/FSS (Bahamas Area)", "", "myld1_zma"),
@@ -807,21 +807,21 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Exuma International Airport (Exuma, Bahamas) — CSV verified
+  // Exuma International Airport (Exuma, Bahamas) - CSV verified
   MYEF: [
     feed("MYEF", "tower", "Tower/CTAF", "", "myld1_twr"),
   ],
 
 
   // -- Barbados --
-  // Grantley Adams International Airport (Bridgetown, Barbados) — CSV verified
+  // Grantley Adams International Airport (Bridgetown, Barbados) - CSV verified
   TBPB: [
     feed("TBPB", "combined", "Gnd/Twr/Radar/Center", "", "tbpb"),
   ],
 
 
   // -- Bermuda --
-  // L F Wade International Airport (Hamilton, Bermuda) — CSV verified
+  // L F Wade International Airport (Hamilton, Bermuda) - CSV verified
   TXKF: [
     feed("TXKF", "tower", "Tower", "", "txkf2_twr"),
     feed("TXKF", "atis", "ATIS", "", "txkf2_atis"),
@@ -831,17 +831,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Canada --
-  // Abbotsford International Airport (Abbotsford, British Columbia, Canada) — CSV verified
+  // Abbotsford International Airport (Abbotsford, British Columbia, Canada) - CSV verified
   CYXX: [
     feed("CYXX", "tower", "Tower", "", "cyxx"),
   ],
 
-  // Boundary Bay Airport (Boundary Bay, British Columbia, Canada) — CSV verified
+  // Boundary Bay Airport (Boundary Bay, British Columbia, Canada) - CSV verified
   CZBB: [
     feed("CZBB", "tower", "Tower (Inner)", "", "czbb2"),
   ],
 
-  // Brantford Airport (Brantford, Ontario, Canada) — CSV verified
+  // Brantford Airport (Brantford, Ontario, Canada) - CSV verified
   CYFD: [
     feed("CYFD", "center", "ATF (CTAF)", "", "cyfd"),
     feedN(
@@ -854,24 +854,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Springbank Airport (Calgary, Alberta, Canada) — CSV verified
+  // Springbank Airport (Calgary, Alberta, Canada) - CSV verified
   CYBW: [
     feed("CYBW", "tower", "Tower (Outer)", "", "cybw3_twr_outer"),
   ],
 
-  // Calgary International Airport (Calgary, Alberta, Canada) — CSV verified
+  // Calgary International Airport (Calgary, Alberta, Canada) - CSV verified
   CYYC: [
     feed("CYYC", "tower", "Tower #1", "", "cyyc2_twr"),
     feed("CYYC", "approach", "App/Dep", "", "cyyc2_app"),
     feed("CYYC", "combined", "Twr/App/Dep", "", "cyyc2_1"),
   ],
 
-  // Charlottetown Airport (Charlottetown, Prince Edward Island, Canada) — CSV verified
+  // Charlottetown Airport (Charlottetown, Prince Edward Island, Canada) - CSV verified
   CYYG: [
     feed("CYYG", "combined", "Twr/App/Dep", "", "cyyg2"),
   ],
 
-  // Edmonton International Airport (Edmonton, Alberta, Canada) — CSV verified
+  // Edmonton International Airport (Edmonton, Alberta, Canada) - CSV verified
   CYEG: [
     feed("CYEG", "tower", "Tower", "", "cyeg_twr"),
     feed("CYEG", "ground", "Del/Gnd/Misc", "", "cyeg_gnd_misc"),
@@ -889,17 +889,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("CYEG", "combined", "VFR Advisory", "", "cyeg_vfr"),
   ],
 
-  // Fredericton International Airport (Fredericton, New Brunswick, Canada) — CSV verified
+  // Fredericton International Airport (Fredericton, New Brunswick, Canada) - CSV verified
   CYFC: [
     feed("CYFC", "combined", "Ground/Tower", "", "cyfc2"),
   ],
 
-  // Gander International Airport (Gander, Newfoundland, Canada) — CSV verified
+  // Gander International Airport (Gander, Newfoundland, Canada) - CSV verified
   CYQX: [
     feed("CYQX", "combined", "Ground/Tower", "", "cyqx1_gnd_twr"),
   ],
 
-  // Goose Bay Airport/CFB Goose Bay (Goose Bay, Newfoundland, Canada) — CSV verified
+  // Goose Bay Airport/CFB Goose Bay (Goose Bay, Newfoundland, Canada) - CSV verified
   CYYR: [
     feed("CYYR", "center", "Gander Center", "", "cyyr_center"),
     feed("CYYR", "combined", "Del/Gnd/Twr/App #1", "", "cyyr_local"),
@@ -921,13 +921,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // CFB Greenwood Airport (Greenwood, Nova Scotia, Canada) — CSV verified
+  // CFB Greenwood Airport (Greenwood, Nova Scotia, Canada) - CSV verified
   CYZX: [
     feed("CYZX", "approach", "App/Dep/PAR", "", "cyzx1_app"),
     feed("CYZX", "combined", "Ground/Tower", "", "cyzx1_twr"),
   ],
 
-  // CFB Shearwater Airport (Halifax, Nova Scotia, Canada) — CSV verified
+  // CFB Shearwater Airport (Halifax, Nova Scotia, Canada) - CSV verified
   CYAW: [
     feed("CYAW", "atis", "ATIS", "", "cyaw_atis"),
     feed("CYAW", "combined", "Gnd/Twr", "", "cyaw1_gnd_twr"),
@@ -941,12 +941,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Halifax International Airport (Halifax, Nova Scotia, Canada) — CSV verified
+  // Halifax International Airport (Halifax, Nova Scotia, Canada) - CSV verified
   CYHZ: [
     feed("CYHZ", "combined", "Delivery/Ground/Tower/Approach", "", "cyhz3"),
   ],
 
-  // Iqaluit Airport (Iqaluit, Nunavut, Canada) — CSV verified
+  // Iqaluit Airport (Iqaluit, Nunavut, Canada) - CSV verified
   CYFB: [
     feed("CYFB", "center", "CTAF/RDO", "", "cyfb_ctaf"),
     feedN(
@@ -967,13 +967,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Langley Regional Airport (Langley, British Columbia, Canada) — CSV verified
+  // Langley Regional Airport (Langley, British Columbia, Canada) - CSV verified
   CYNJ: [
     feed("CYNJ", "tower", "Tower", "", "cynj2"),
     feed("CYNJ", "ground", "Ground", "", "cynj2_gnd"),
   ],
 
-  // London International Airport (London, Ontario, Canada) — CSV verified
+  // London International Airport (London, Ontario, Canada) - CSV verified
   CYXU: [
     feed("CYXU", "tower", "Tower (Both)", "", "cyxu1_twr"),
     feedN(
@@ -1014,28 +1014,28 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Saint-Hubert Airport (Montreal, Quebec, Canada) — CSV verified
+  // Saint-Hubert Airport (Montreal, Quebec, Canada) - CSV verified
   CYHU: [
     feed("CYHU", "tower", "Tower", "", "cyhu"),
   ],
 
-  // Montreal-Mirabel International Airport (Montreal, Quebec, Canada) — CSV verified
+  // Montreal-Mirabel International Airport (Montreal, Quebec, Canada) - CSV verified
   CYMX: [
     feed("CYMX", "combined", "Gnd/Twr/Radio", "", "cymx2"),
   ],
 
-  // Oshawa Municipal Airport (Oshawa, Ontario, Canada) — CSV verified
+  // Oshawa Municipal Airport (Oshawa, Ontario, Canada) - CSV verified
   CYOO: [
     feed("CYOO", "tower", "Tower", "", "cyoo5_twr"),
     feed("CYOO", "ground", "Ground", "", "cyoo5_gnd"),
   ],
 
-  // Ottawa MacDonald Cartier International Airport (Ottawa, Ontario, Canada) — CSV verified
+  // Ottawa MacDonald Cartier International Airport (Ottawa, Ontario, Canada) - CSV verified
   CYOW: [
     feed("CYOW", "combined", "Gnd/Twr/App", "", "cyow3"),
   ],
 
-  // Ottawa/Rockcliffe Airport (Ottawa, Ontario, Canada) — CSV verified
+  // Ottawa/Rockcliffe Airport (Ottawa, Ontario, Canada) - CSV verified
   CYRO: [
     feed("CYRO", "center", "Area Guard", "", "cyro1_guard"),
     feedN(
@@ -1056,7 +1056,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Peterborough Airport (Peterborough, Ontario, Canada) — CSV verified
+  // Peterborough Airport (Peterborough, Ontario, Canada) - CSV verified
   CYPQ: [
     feed("CYPQ", "approach", "Regional/Radar", "", "cypq6_app"),
     feed("CYPQ", "atis", "AWOS", "", "cypq6_awos"),
@@ -1071,12 +1071,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Pitt Meadows Airport (Pitt Meadows, British Columbia, Canada) — CSV verified
+  // Pitt Meadows Airport (Pitt Meadows, British Columbia, Canada) - CSV verified
   CYPK: [
     feed("CYPK", "tower", "Tower", "", "cypk2"),
   ],
 
-  // Quebec Jean Lesage International Airport (Quebec, Quebec, Canada) — CSV verified
+  // Quebec Jean Lesage International Airport (Quebec, Quebec, Canada) - CSV verified
   CYQB: [
     feed("CYQB", "approach", "App/Dep (Terminal/124.0)", "", "cyqb1_app_124000"),
     feedN(
@@ -1132,17 +1132,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Regina International Airport (Regina, Saskatchewan, Canada) — CSV verified
+  // Regina International Airport (Regina, Saskatchewan, Canada) - CSV verified
   CYQR: [
     feed("CYQR", "combined", "Gnd/Twr/Center", "", "cyqr3"),
   ],
 
-  // Rocky Mountain House Airport (Rocky Mountain House, Alberta, Canada) — CSV verified
+  // Rocky Mountain House Airport (Rocky Mountain House, Alberta, Canada) - CSV verified
   CYRM: [
     feed("CYRM", "center", "CTAF", "", "cyrm2"),
   ],
 
-  // John G. Diefenbaker International Airport (Saskatoon, Saskatchewan, Canada) — CSV verified
+  // John G. Diefenbaker International Airport (Saskatoon, Saskatchewan, Canada) - CSV verified
   CYXE: [
     feed("CYXE", "approach", "App/Dep/Center", "", "cyxe2_cywg"),
     feed("CYXE", "combined", "Area VFR/Misc", "", "cyxe2_vfr_misc"),
@@ -1156,7 +1156,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Sault Ste. Marie Airport (Sault Ste. Marie, Ontario, Canada) — CSV verified
+  // Sault Ste. Marie Airport (Sault Ste. Marie, Ontario, Canada) - CSV verified
   CYAM: [
     feed("CYAM", "tower", "Tower", "", "cyam_twr"),
     feed("CYAM", "ground", "Ground/Misc", "", "cyam_gnd_misc"),
@@ -1172,7 +1172,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Sherbrooke Airport (Sherbrooke, Quebec, Canada) — CSV verified
+  // Sherbrooke Airport (Sherbrooke, Quebec, Canada) - CSV verified
   CYSC: [
     feed("CYSC", "center", "CTAF", "", "cysc1_ctaf"),
     feedN(
@@ -1202,12 +1202,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // St. Jean Airport (St. Jean, Quebec, Canada) — CSV verified
+  // St. Jean Airport (St. Jean, Quebec, Canada) - CSV verified
   CYJN: [
     feed("CYJN", "combined", "Ground/Tower", "", "cyjn"),
   ],
 
-  // St. John\'s International Airport (St. John's, Newfoundland, Canada) — CSV verified
+  // St. John\'s International Airport (St. John's, Newfoundland, Canada) - CSV verified
   CYYT: [
     feed("CYYT", "tower", "Tower", "", "cyyt1_twr"),
     feed("CYYT", "ground", "Ground", "", "cyyt1_gnd"),
@@ -1224,22 +1224,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("CYYT", "combined", "Ground/Tower", "", "cyyt1_gnd_twr"),
   ],
 
-  // Sudbury Airport (Sudbury, Ontario, Canada) — CSV verified
+  // Sudbury Airport (Sudbury, Ontario, Canada) - CSV verified
   CYSB: [
     feed("CYSB", "combined", "Gnd/Twr/Center", "", "cysb"),
   ],
 
-  // Summerside Airport (Summerside, Prince Edward Island, Canada) — CSV verified
+  // Summerside Airport (Summerside, Prince Edward Island, Canada) - CSV verified
   CYSU: [
     feed("CYSU", "center", "CTAF/Unicom", "", "cysu2"),
   ],
 
-  // Thunder Bay Airport (Thunder Bay, Ontario, Canada) — CSV verified
+  // Thunder Bay Airport (Thunder Bay, Ontario, Canada) - CSV verified
   CYQT: [
     feed("CYQT", "combined", "Ground/Tower", "", "cyqt"),
   ],
 
-  // Timmins/Victor M. Power Airport (Timmins, Ontario, Canada) — CSV verified
+  // Timmins/Victor M. Power Airport (Timmins, Ontario, Canada) - CSV verified
   CYTS: [
     feed("CYTS", "center", "FSS/Misc", "", "cyts_misc"),
     feedN(
@@ -1260,13 +1260,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Billy Bishop Toronto City Airport (Toronto, Ontario, Canada) — CSV verified
+  // Billy Bishop Toronto City Airport (Toronto, Ontario, Canada) - CSV verified
   CYTZ: [
     feed("CYTZ", "tower", "Tower", "", "cytz4"),
     feed("CYTZ", "approach", "Approach", "", "cytz_app"),
   ],
 
-  // Trois Rivieres Airport (Trois-Rivieres, Quebec, Canada) — CSV verified
+  // Trois Rivieres Airport (Trois-Rivieres, Quebec, Canada) - CSV verified
   CYRQ: [
     feed("CYRQ", "center", "CTAF", "", "cyrq"),
     feedN(
@@ -1279,27 +1279,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Val-D\'Or Airport (Val-D'Or, Quebec, Canada) — CSV verified
+  // Val-D\'Or Airport (Val-D'Or, Quebec, Canada) - CSV verified
   CYVO: [
     feed("CYVO", "ground", "Gnd/RDO/Center", "", "cyvo"),
   ],
 
-  // Vancouver Harbour Airport (Vancouver, British Columbia, Canada) — CSV verified
+  // Vancouver Harbour Airport (Vancouver, British Columbia, Canada) - CSV verified
   CYHC: [
     feed("CYHC", "combined", "Del/Twr/App", "", "cyhc2"),
   ],
 
-  // Victoria Inner Harbour Airport (Victoria, British Columbia, Canada) — CSV verified
+  // Victoria Inner Harbour Airport (Victoria, British Columbia, Canada) - CSV verified
   CYWH: [
     feed("CYWH", "center", "FISE/Terminal", "", "cywh2_misc"),
   ],
 
-  // Victoria International Airport (Victoria, British Columbia, Canada) — CSV verified
+  // Victoria International Airport (Victoria, British Columbia, Canada) - CSV verified
   CYYJ: [
     feed("CYYJ", "tower", "Tower (Inner)", "", "cyyj2_twr_inner"),
   ],
 
-  // Waterloo Airport (Waterloo, Ontario, Canada) — CSV verified
+  // Waterloo Airport (Waterloo, Ontario, Canada) - CSV verified
   CYKF: [
     feed("CYKF", "tower", "Tower", "", "cykf3_twr"),
     feed("CYKF", "ground", "Ground", "", "cykf3_gnd"),
@@ -1314,7 +1314,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Winnipeg James Armstrong Richardson International Airport (Winnipeg, Manitoba, Canada) — CSV verified
+  // Winnipeg James Armstrong Richardson International Airport (Winnipeg, Manitoba, Canada) - CSV verified
   CYWG: [
     feed("CYWG", "approach", "App/Dep", "", "cywg2_misc1"),
     feed("CYWG", "atis", "ATIS", "", "cywg2_misc3"),
@@ -1322,7 +1322,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("CYWG", "combined", "Del/Gnd/Twr", "", "cywg2_misc"),
   ],
 
-  // Yarmouth Airport (Yarmouth, Nova Scotia, Canada) — CSV verified
+  // Yarmouth Airport (Yarmouth, Nova Scotia, Canada) - CSV verified
   CYQI: [
     feed("CYQI", "center", "CTAF/UNICOM", "", "cyqi3"),
     feedN(
@@ -1376,48 +1376,48 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("CYQI", "combined", "Wildfire/SAR Aircraft", "", "cyqi4"),
   ],
 
-  // Yellowknife Airport (Yellowknife, Northwest Territories, Canada) — CSV verified
+  // Yellowknife Airport (Yellowknife, Northwest Territories, Canada) - CSV verified
   CYZF: [
     feed("CYZF", "combined", "Gnd/Twr/Center", "", "cyzf"),
   ],
 
 
   // -- Costa Rica --
-  // Tobias Bolanos International Airport (San Jose, Costa Rica) — CSV verified
+  // Tobias Bolanos International Airport (San Jose, Costa Rica) - CSV verified
   MRPV: [
     feed("MRPV", "combined", "Ground/Tower", "", "mrpv_gnd_twr"),
   ],
 
 
   // -- Guatemala --
-  // La Aurora International Airport (Guatemala City, Guatemala) — CSV verified
+  // La Aurora International Airport (Guatemala City, Guatemala) - CSV verified
   MGGT: [
     feed("MGGT", "combined", "Gnd/Twr/App/Center", "", "mggt3_all"),
   ],
 
-  // Quetzaltenango Airport (Quezaltenango, Guatemala) — CSV verified
+  // Quetzaltenango Airport (Quezaltenango, Guatemala) - CSV verified
   MGQZ: [
     feed("MGQZ", "center", "CTAF", "", "mgqz2_ctaf"),
   ],
 
 
   // -- Honduras --
-  // Palmerola International Airport (Comayagua, Honduras) — CSV verified
+  // Palmerola International Airport (Comayagua, Honduras) - CSV verified
   MHPR: [
     feed("MHPR", "combined", "Gnd/Twr/App", "", "mhsc2"),
   ],
 
-  // Goloson International Airport (La Ceiba, Honduras) — CSV verified
+  // Goloson International Airport (La Ceiba, Honduras) - CSV verified
   MHLC: [
     feed("MHLC", "combined", "Gnd/Twr/Center", "", "mhlc"),
   ],
 
-  // Ramon Villeda Morales International Airport (San Pedro Sula, Honduras) — CSV verified
+  // Ramon Villeda Morales International Airport (San Pedro Sula, Honduras) - CSV verified
   MHLM: [
     feed("MHLM", "combined", "Gnd/Twr/App", "", "mhlm"),
   ],
 
-  // Toncontin International Airport (Tegucigalpa, Honduras) — CSV verified
+  // Toncontin International Airport (Tegucigalpa, Honduras) - CSV verified
   MHTG: [
     feed("MHTG", "atis", "ATIS", "", "mhtg_atis"),
     feed("MHTG", "combined", "Gnd/Twr/App/Ctr/Ops", "", "mhtg"),
@@ -1425,57 +1425,57 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Mexico --
-  // Matamoros International Airport (Brownsville-Matamoros, Mexico) — CSV verified
+  // Matamoros International Airport (Brownsville-Matamoros, Mexico) - CSV verified
   MMMA: [
     feed("MMMA", "combined", "Twr/App", "", "kbro2_mmma_app"),
   ],
 
-  // Cuernavaca Airport (Cuernavaca, Mexico) — CSV verified
+  // Cuernavaca Airport (Cuernavaca, Mexico) - CSV verified
   MMCB: [
     feed("MMCB", "tower", "Tower", "", "mmcb2"),
   ],
 
-  // Don Miguel Hidalgo y Costilla International (Guadalajara, Mexico) — CSV verified
+  // Don Miguel Hidalgo y Costilla International (Guadalajara, Mexico) - CSV verified
   MMGL: [
     feed("MMGL", "combined", "Tower/Approach", "", "mmgl"),
   ],
 
-  // Hermosillo International Airport (Hermosillo, Mexico) — CSV verified
+  // Hermosillo International Airport (Hermosillo, Mexico) - CSV verified
   MMHO: [
     feed("MMHO", "tower", "Tower", "", "mmho_twr"),
     feed("MMHO", "approach", "App/Dep", "", "mmho_app"),
     feed("MMHO", "combined", "Twr/App", "", "mmho_twr_app"),
   ],
 
-  // Gen Manuel Marquez Airport (La Paz, Mexico) — CSV verified
+  // Gen Manuel Marquez Airport (La Paz, Mexico) - CSV verified
   MMLP: [
     feed("MMLP", "combined", "Twr/App", "", "mmlp"),
   ],
 
-  // Licenciado Manuel Crescencio Rejon International Airport (Merida, Mexico) — CSV verified
+  // Licenciado Manuel Crescencio Rejon International Airport (Merida, Mexico) - CSV verified
   MMMD: [
     feed("MMMD", "tower", "Tower", "", "mmmd1_twr"),
     feed("MMMD", "approach", "App/Dep", "", "mmmd1_app"),
     feed("MMMD", "center", "Merida Center 125.8/123.75", "", "mmmd1_ctr"),
   ],
 
-  // General Mariano Escobedo International Airport (Monterrey, Mexico) — CSV verified
+  // General Mariano Escobedo International Airport (Monterrey, Mexico) - CSV verified
   MMMY: [
     feed("MMMY", "approach", "Approach", "", "mmmy3_app"),
     feed("MMMY", "combined", "Tower/Approach", "", "mmmy"),
   ],
 
-  // Queretaro Intercontinental Airport (Queretaro, Mexico) — CSV verified
+  // Queretaro Intercontinental Airport (Queretaro, Mexico) - CSV verified
   MMQT: [
     feed("MMQT", "combined", "Tower/App", "", "mmqt3"),
   ],
 
-  // Ponciano Arriaga International Airport (San Luis Potosi, Mexico) — CSV verified
+  // Ponciano Arriaga International Airport (San Luis Potosi, Mexico) - CSV verified
   MMSP: [
     feed("MMSP", "combined", "Twr/App/Center", "", "mmsp3"),
   ],
 
-  // Felipe Angeles International Airport (Santa Lucia, Mexico) — CSV verified
+  // Felipe Angeles International Airport (Santa Lucia, Mexico) - CSV verified
   MMSM: [
     feed("MMSM", "tower", "Tower 118.25", "", "mmmx1_mmsm_twr_118250"),
     feedN(
@@ -1507,38 +1507,38 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("MMSM", "atis", "ATIS", "", "mmmx1_mmsm_atis"),
   ],
 
-  // Bahias de Huatulco International Airport (Santa Maria Huatulco, Mexico) — CSV verified
+  // Bahias de Huatulco International Airport (Santa Maria Huatulco, Mexico) - CSV verified
   MMBT: [
     feed("MMBT", "tower", "Twr/Center", "", "mmbt_misc"),
   ],
 
-  // Tijuana International Airport (Tijuana, Mexico) — CSV verified
+  // Tijuana International Airport (Tijuana, Mexico) - CSV verified
   MMTJ: [
     feed("MMTJ", "approach", "Approach", "", "mmtj_app"),
     feed("MMTJ", "combined", "Twr/Ramp", "", "mmtj"),
   ],
 
-  // Toluca International Airport (Toluca, Mexico) — CSV verified
+  // Toluca International Airport (Toluca, Mexico) - CSV verified
   MMTO: [
     feed("MMTO", "tower", "Tower", "", "mmto3_twr"),
     feed("MMTO", "ground", "Ground", "", "mmto3_gnd"),
     feed("MMTO", "approach", "App/Dep", "", "mmto3_app"),
   ],
 
-  // Torreon International Airport (Torreon, Mexico) — CSV verified
+  // Torreon International Airport (Torreon, Mexico) - CSV verified
   MMTC: [
     feed("MMTC", "combined", "Twr/App/Center #1", "", "mmtc"),
   ],
 
 
   // -- Panama --
-  // Marcos A Gelabert International Airport (Panama City, Panama) — CSV verified
+  // Marcos A Gelabert International Airport (Panama City, Panama) - CSV verified
   MPMG: [
     feed("MPMG", "approach", "Panama App/Dep #2", "", "mppa2_app_dep"),
     feed("MPMG", "center", "Panama Center #2", "", "mppa2_ctr"),
   ],
 
-  // Panama Pacifico International Airport (Panama City, Panama) — CSV verified
+  // Panama Pacifico International Airport (Panama City, Panama) - CSV verified
   MPPA: [
     feed("MPPA", "tower", "Tower", "", "mppa2_twr"),
     feed("MPPA", "approach", "Approach/Departure", "", "mppa2_app_dep"),
@@ -1547,14 +1547,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Saba --
-  // Juancho E. Yrausquin Airport (Hell's Gate, Saba) — CSV verified
+  // Juancho E. Yrausquin Airport (Hell's Gate, Saba) - CSV verified
   TNCS: [
     feed("TNCS", "tower", "Info/TFFJ Twr", "", "tncs2"),
   ],
 
 
   // -- Sint Maarten --
-  // Princess Juliana International Airport (Philipsburg, Sint Maarten) — CSV verified
+  // Princess Juliana International Airport (Philipsburg, Sint Maarten) - CSV verified
   TNCM: [
     feed("TNCM", "tower", "Tower", "", "tncm_twr2"),
     feed("TNCM", "combined", "Tower/Approach/Departure", "", "tncm1_app"),
@@ -1562,7 +1562,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- United States --
-  // Abilene Regional Airport (Abilene, Texas, United States) — CSV verified
+  // Abilene Regional Airport (Abilene, Texas, United States) - CSV verified
   KABI: [
     feed("KABI", "tower", "Tower", "", "kabi4_twr"),
     feed("KABI", "ground", "Ground", "", "kabi4_gnd"),
@@ -1572,7 +1572,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KABI", "combined", "ZFW 63 (Abilene Low)", "", "kabi4_zfw_127450"),
   ],
 
-  // Albany International Airport (Albany, New York, United States) — CSV verified
+  // Albany International Airport (Albany, New York, United States) - CSV verified
   KALB: [
     feed("KALB", "tower", "Tower", "", "kalb2_twr"),
     feed("KALB", "ground", "Ground", "", "kalb2_gnd"),
@@ -1580,7 +1580,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KALB", "atis", "ATIS", "", "kalb2_atis"),
   ],
 
-  // Albuquerque International Sunport Airport (Albuquerque, New Mexico, United States) — CSV verified
+  // Albuquerque International Sunport Airport (Albuquerque, New Mexico, United States) - CSV verified
   KABQ: [
     feed("KABQ", "tower", "Tower", "", "kabq2_2"),
     feedN(
@@ -1605,22 +1605,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KABQ", "combined", "Twr/App/ZAB", "", "kabq1_1"),
   ],
 
-  // Double Eagle II Airport (Albuquerque, New Mexico, United States) — CSV verified
+  // Double Eagle II Airport (Albuquerque, New Mexico, United States) - CSV verified
   KAEG: [
     feed("KAEG", "combined", "Twr/App", "", "kabq1_2"),
   ],
 
-  // Elmendorf Air Force Base (Anchorage, Alaska, United States) — CSV verified
+  // Elmendorf Air Force Base (Anchorage, Alaska, United States) - CSV verified
   PAED: [
     feed("PAED", "tower", "Tower", "", "pamr2_paed_twr"),
   ],
 
-  // Lake Hood Seaplane Base (Anchorage, Alaska, United States) — CSV verified
+  // Lake Hood Seaplane Base (Anchorage, Alaska, United States) - CSV verified
   PALH: [
     feed("PALH", "tower", "Tower", "", "panc3_palh"),
   ],
 
-  // Merrill Field Airport (Anchorage, Alaska, United States) — CSV verified
+  // Merrill Field Airport (Anchorage, Alaska, United States) - CSV verified
   PAMR: [
     feed("PAMR", "tower", "Tower", "", "pamr2_twr"),
     feedN(
@@ -1635,29 +1635,29 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("PAMR", "center", "Anchorage Area CTAF 122.9", "", "pamr2_area_ctaf"),
   ],
 
-  // Ankeny Regional Airport (Ankeny, Iowa, United States) — CSV verified
+  // Ankeny Regional Airport (Ankeny, Iowa, United States) - CSV verified
   KIKV: [
     feed("KIKV", "ground", "Del/CTAF", "", "kikv2"),
   ],
 
-  // Ann Arbor Municipal Airport (Ann Arbor, Michigan, United States) — CSV verified
+  // Ann Arbor Municipal Airport (Ann Arbor, Michigan, United States) - CSV verified
   KARB: [
     feed("KARB", "ground", "Ground", "", "karb2_gnd"),
     feed("KARB", "atis", "ATIS", "", "karb2_atis"),
     feed("KARB", "combined", "Gnd/Twr", "", "karb2_gnd_twr"),
   ],
 
-  // Appleton International Airport (Appleton, Wisconsin, United States) — CSV verified
+  // Appleton International Airport (Appleton, Wisconsin, United States) - CSV verified
   KATW: [
     feed("KATW", "tower", "Tower", "", "katw2"),
   ],
 
-  // Arlington Municipal Airport (Arlington, Washington, United States) — CSV verified
+  // Arlington Municipal Airport (Arlington, Washington, United States) - CSV verified
   KAWO: [
     feed("KAWO", "center", "CTAF/Clearance", "", "kawo3"),
   ],
 
-  // Asheville Regional Airport (Asheville, North Carolina, United States) — CSV verified
+  // Asheville Regional Airport (Asheville, North Carolina, United States) - CSV verified
   KAVL: [
     feed("KAVL", "tower", "Tower", "", "kavl2_twr"),
     feed("KAVL", "ground", "Ground", "", "kavl2_gnd"),
@@ -1683,7 +1683,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Aspen-Pitkin County Airport/Sardy Field (Aspen, Colorado, United States) — CSV verified
+  // Aspen-Pitkin County Airport/Sardy Field (Aspen, Colorado, United States) - CSV verified
   KASE: [
     feed("KASE", "tower", "Tower", "", "kase2_twr2"),
     feed("KASE", "approach", "Approach/Denver Center", "", "kase2_app_ctr"),
@@ -1700,7 +1700,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Atlantic City International Airport (Atlantic City, New Jersey, United States) — CSV verified
+  // Atlantic City International Airport (Atlantic City, New Jersey, United States) - CSV verified
   KACY: [
     feed("KACY", "tower", "Tower", "", "kacy_a_twr"),
     feed("KACY", "ground", "Clearance Delivery", "", "kacy_a_del"),
@@ -1741,7 +1741,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Auburn University Regional Airport (Auburn, Alabama, United States) — CSV verified
+  // Auburn University Regional Airport (Auburn, Alabama, United States) - CSV verified
   KAUO: [
     feed("KAUO", "approach", "Del/App", "", "kauo1_del_app"),
     feed("KAUO", "atis", "ATIS", "", "kauo1_atis"),
@@ -1756,7 +1756,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Baltimore/Washington International Thurgood Marshall Airport (Baltimore, Maryland, United States) — CSV verified
+  // Baltimore/Washington International Thurgood Marshall Airport (Baltimore, Maryland, United States) - CSV verified
   KBWI: [
     feed("KBWI", "tower", "Tower #1", "", "kbwi_es_twr"),
     feed("KBWI", "ground", "Clearance Delivery", "", "kbwi_es_del"),
@@ -1804,7 +1804,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Martin State Airport (Baltimore, Maryland, United States) — CSV verified
+  // Martin State Airport (Baltimore, Maryland, United States) - CSV verified
   KMTN: [
     feed("KMTN", "tower", "Tower", "", "kmtn1_twr"),
     feed("KMTN", "ground", "Ground", "", "kmtn1_gnd"),
@@ -1813,7 +1813,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KMTN", "combined", "Ground/Tower", "", "kmtn1_gnd_twr"),
   ],
 
-  // Bangor International Airport (Bangor, Maine, United States) — CSV verified
+  // Bangor International Airport (Bangor, Maine, United States) - CSV verified
   KBGR: [
     feed("KBGR", "approach", "App/Dep", "", "kbgr_app"),
     feed("KBGR", "atis", "ATIS", "", "kbgr_atis"),
@@ -1828,7 +1828,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Bartow Executive Airport (Bartow, Florida, United States) — CSV verified
+  // Bartow Executive Airport (Bartow, Florida, United States) - CSV verified
   KBOW: [
     feed("KBOW", "tower", "Tower/CTAF #1", "", "kbow1_twr"),
     feedN(
@@ -1844,7 +1844,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBOW", "combined", "Gnd/Twr/Misc", "", "kbow1_s"),
   ],
 
-  // Baton Rouge Metropolitan Airport - Ryan Field (Baton Rouge, Louisiana, United States) — CSV verified
+  // Baton Rouge Metropolitan Airport - Ryan Field (Baton Rouge, Louisiana, United States) - CSV verified
   KBTR: [
     feed("KBTR", "tower", "Tower", "", "kbtr2_twr"),
     feed("KBTR", "ground", "Ground", "", "kbtr2_gnd"),
@@ -1852,7 +1852,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBTR", "atis", "ATIS", "", "kbtr2_atis"),
   ],
 
-  // Laurence G Hanscom Field Airport (Bedford, Massachusetts, United States) — CSV verified
+  // Laurence G Hanscom Field Airport (Bedford, Massachusetts, United States) - CSV verified
   KBED: [
     feed("KBED", "tower", "Tower", "", "kbed1_twr"),
     feed("KBED", "ground", "Clearance Delivery", "", "kbed1_del"),
@@ -1893,22 +1893,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBED", "combined", "Gnd/Twr", "", "kbed1_gnd_twr"),
   ],
 
-  // Bellingham International Airport (Bellingham, Washington, United States) — CSV verified
+  // Bellingham International Airport (Bellingham, Washington, United States) - CSV verified
   KBLI: [
     feed("KBLI", "tower", "Tower", "", "kbli2"),
   ],
 
-  // Monmouth Executive Airport (Belmar/Farmingdale, New Jersey, United States) — CSV verified
+  // Monmouth Executive Airport (Belmar/Farmingdale, New Jersey, United States) - CSV verified
   KBLM: [
     feed("KBLM", "combined", "KBLM/N12/3N6/KMJX", "", "kblm2"),
   ],
 
-  // Bemidji Regional Airport (Bemidji, Minnesota, United States) — CSV verified
+  // Bemidji Regional Airport (Bemidji, Minnesota, United States) - CSV verified
   KBJI: [
     feed("KBJI", "center", "CTAF/ZMP", "", "kbji"),
   ],
 
-  // Bend Municipal Airport (Bend, Oregon, United States) — CSV verified
+  // Bend Municipal Airport (Bend, Oregon, United States) - CSV verified
   KBDN: [
     feed("KBDN", "center", "CTAF", "", "kbdn2_ctaf"),
     feedN(
@@ -1929,19 +1929,19 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Bentonville Municipal Airport/Louise M Thaden Field (Bentonville, Arkansas, United States) — CSV verified
+  // Bentonville Municipal Airport/Louise M Thaden Field (Bentonville, Arkansas, United States) - CSV verified
   KVBT: [
     feed("KVBT", "combined", "KROG/KXNA/KVBT/Misc", "", "krog"),
   ],
 
-  // Bethel Airport (Bethel, Alaska, United States) — CSV verified
+  // Bethel Airport (Bethel, Alaska, United States) - CSV verified
   PABE: [
     feed("PABE", "atis", "ATIS", "", "pabe1_atis"),
     feed("PABE", "center", "ZAN Anchorage Center (Bethel)", "", "pabe1_zan"),
     feed("PABE", "combined", "Ground/Tower", "", "pabe1_gnd_twr"),
   ],
 
-  // Beverly Municipal Airport (Beverly, Massachusetts, United States) — CSV verified
+  // Beverly Municipal Airport (Beverly, Massachusetts, United States) - CSV verified
   KBVY: [
     feed("KBVY", "tower", "Tower #1", "", "kbvy"),
     feedN(
@@ -1956,7 +1956,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBVY", "atis", "ATIS", "", "kbvy_atis"),
   ],
 
-  // Billings Logan International Airport (Billings, Montana, United States) — CSV verified
+  // Billings Logan International Airport (Billings, Montana, United States) - CSV verified
   KBIL: [
     feed("KBIL", "tower", "Tower", "", "kbil_twr"),
     feed("KBIL", "ground", "Ground", "", "kbil_gnd"),
@@ -1964,7 +1964,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBIL", "center", "ZLC Salt Lake Center (Sector 15)", "", "zlc_bil"),
   ],
 
-  // Greater Binghamton Airport/Edwin A Link Field (Binghamton, New York, United States) — CSV verified
+  // Greater Binghamton Airport/Edwin A Link Field (Binghamton, New York, United States) - CSV verified
   KBGM: [
     feed("KBGM", "tower", "Tower", "", "kbgm1_twr"),
     feed("KBGM", "ground", "Ground", "", "kbgm1_gnd"),
@@ -2013,24 +2013,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Birmingham-Shuttlesworth International Airport (Birmingham, Alabama, United States) — CSV verified
+  // Birmingham-Shuttlesworth International Airport (Birmingham, Alabama, United States) - CSV verified
   KBHM: [
     feed("KBHM", "combined", "Del/Gnd/Twr/App", "", "kbhm"),
   ],
 
-  // Bismarck Municipal Airport (Bismarck, North Dakota, United States) — CSV verified
+  // Bismarck Municipal Airport (Bismarck, North Dakota, United States) - CSV verified
   KBIS: [
     feed("KBIS", "approach", "App/Dep", "", "kbis3_app"),
     feed("KBIS", "combined", "Gnd/Twr", "", "kbis3_gnd_twr"),
   ],
 
-  // Virginia Tech/Montgomery Executive Airport (Blacksburg, Virginia, United States) — CSV verified
+  // Virginia Tech/Montgomery Executive Airport (Blacksburg, Virginia, United States) - CSV verified
   KBCB: [
     feed("KBCB", "atis", "AWOS", "", "kbcb2_awos"),
     feed("KBCB", "center", "CTAF", "", "kbcb2_ctaf"),
   ],
 
-  // Boca Raton Airport (Boca Raton, Florida, United States) — CSV verified
+  // Boca Raton Airport (Boca Raton, Florida, United States) - CSV verified
   KBCT: [
     feed("KBCT", "tower", "Tower", "", "kbct1_twr"),
     feed("KBCT", "ground", "Ground", "", "kbct1_gnd"),
@@ -2040,13 +2040,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBCT", "combined", "Ground/Tower", "", "kbct1_gnd_twr"),
   ],
 
-  // Boise Air Terminal/Gowen Field (Boise, Idaho, United States) — CSV verified
+  // Boise Air Terminal/Gowen Field (Boise, Idaho, United States) - CSV verified
   KBOI: [
     feed("KBOI", "ground", "Del/Gnd", "", "kboi_gnd"),
     feed("KBOI", "combined", "Twr/App", "", "kboi"),
   ],
 
-  // Bozeman Yellowstone International Airport (Bozeman, Montana, United States) — CSV verified
+  // Bozeman Yellowstone International Airport (Bozeman, Montana, United States) - CSV verified
   KBZN: [
     feed("KBZN", "tower", "Tower", "", "kbzn1_twr2"),
     feed("KBZN", "ground", "Ground", "", "kbzn1_gnd"),
@@ -2080,12 +2080,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Bremerton National Airport (Bremerton, Washington, United States) — CSV verified
+  // Bremerton National Airport (Bremerton, Washington, United States) - CSV verified
   KPWT: [
     feed("KPWT", "center", "CTAF", "", "kpwt"),
   ],
 
-  // Igor I Sikorsky Memorial Airport (Bridgeport, Connecticut, United States) — CSV verified
+  // Igor I Sikorsky Memorial Airport (Bridgeport, Connecticut, United States) - CSV verified
   KBDR: [
     feed("KBDR", "approach", "New York Approach (LOVES Sector)", "", "kbdr_app"),
     feed("KBDR", "combined", "Del/Gnd/Twr", "", "kbdr_twr"),
@@ -2099,34 +2099,34 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Tri-Cities Regional Airport (Bristol/Johnson/Kingsport, Tennessee, United States) — CSV verified
+  // Tri-Cities Regional Airport (Bristol/Johnson/Kingsport, Tennessee, United States) - CSV verified
   KTRI: [
     feed("KTRI", "combined", "Gnd/Twr/App", "", "ktri"),
   ],
 
-  // Brownsville/South Padre Island International Airport (Brownsville, Texas, United States) — CSV verified
+  // Brownsville/South Padre Island International Airport (Brownsville, Texas, United States) - CSV verified
   KBRO: [
     feed("KBRO", "tower", "Tower", "", "kbro2_twr"),
     feed("KBRO", "approach", "App/Dep", "", "kbro2_app"),
   ],
 
-  // Brunswick Executive Airport (Brunswick, Maine, United States) — CSV verified
+  // Brunswick Executive Airport (Brunswick, Maine, United States) - CSV verified
   KBXM: [
     feed("KBXM", "atis", "CTAF/AWOS", "", "kbxm2"),
   ],
 
-  // Buckeye Municipal Airport (Buckeye, Arizona, United States) — CSV verified
+  // Buckeye Municipal Airport (Buckeye, Arizona, United States) - CSV verified
   KBXK: [
     feed("KBXK", "atis", "AWOS", "", "kbxk1_awos"),
     feed("KBXK", "center", "CTAF", "", "kbxk1_ctaf"),
   ],
 
-  // Buffalo Niagara International Airport (Buffalo, New York, United States) — CSV verified
+  // Buffalo Niagara International Airport (Buffalo, New York, United States) - CSV verified
   KBUF: [
     feed("KBUF", "combined", "Gnd/Twr/App", "", "kbuf1_dgta"),
   ],
 
-  // Bob Hope Airport (Burbank, California, United States) — CSV verified
+  // Bob Hope Airport (Burbank, California, United States) - CSV verified
   KBUR: [
     feed("KBUR", "tower", "Tower", "", "kbur3_gnd_twr"),
     feed("KBUR", "approach", "SOCAL Approach (Moorpark Sector) #1", "", "kbur3_gnd_twr_128_750"),
@@ -2156,7 +2156,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Patrick Leahy Burlington International Airport (Burlington, Vermont, United States) — CSV verified
+  // Patrick Leahy Burlington International Airport (Burlington, Vermont, United States) - CSV verified
   KBTV: [
     feed("KBTV", "approach", "App/Dep", "", "kbtv_app"),
     feed("KBTV", "atis", "ATIS", "", "kbtv_atis"),
@@ -2179,12 +2179,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Burlington-Alamance Regional Airport (Burlington, North Carolina, United States) — CSV verified
+  // Burlington-Alamance Regional Airport (Burlington, North Carolina, United States) - CSV verified
   KBUY: [
     feed("KBUY", "center", "CTAF", "", "kbuy2"),
   ],
 
-  // Essex County Airport (Caldwell, New Jersey, United States) — CSV verified
+  // Essex County Airport (Caldwell, New Jersey, United States) - CSV verified
   KCDW: [
     feed("KCDW", "combined", "Del/Gnd/Twr #1", "", "kcdw1"),
     feedN(
@@ -2197,7 +2197,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Volk Field (Camp Douglas, Wisconsin, United States) — CSV verified
+  // Volk Field (Camp Douglas, Wisconsin, United States) - CSV verified
   KVOK: [
     feed("KVOK", "tower", "Tower", "", "kvok2_twr"),
     feedN(
@@ -2229,22 +2229,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KVOK", "atis", "ATIS", "", "kvok2_atis"),
   ],
 
-  // Joint Base Andrews (Camp Springs, Maryland, United States) — CSV verified
+  // Joint Base Andrews (Camp Springs, Maryland, United States) - CSV verified
   KADW: [
     feed("KADW", "tower", "KDAA/KADW Tower", "", "kdaa2_twr"),
   ],
 
-  // Canandaigua Airport (Canandaigua, New York, United States) — CSV verified
+  // Canandaigua Airport (Canandaigua, New York, United States) - CSV verified
   KIUA: [
     feed("KIUA", "center", "CTAF", "", "kiua1_ctaf"),
   ],
 
-  // Carson Airport (Carson City, Nevada, United States) — CSV verified
+  // Carson Airport (Carson City, Nevada, United States) - CSV verified
   KCXP: [
     feed("KCXP", "center", "CTAF", "", "kcxp1"),
   ],
 
-  // Casa Grande Municipal Airport (Casa Grande, Arizona, United States) — CSV verified
+  // Casa Grande Municipal Airport (Casa Grande, Arizona, United States) - CSV verified
   KCGZ: [
     feed("KCGZ", "atis", "AWOS", "", "kcgz1_awos"),
     feed("KCGZ", "center", "CTAF", "", "kcgz1_ctaf"),
@@ -2259,7 +2259,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KCGZ", "combined", "SE/SW Practice Area", "", "kcgz1_se_pract"),
   ],
 
-  // Casper/Natrona County International Airport (Casper, Wyoming, United States) — CSV verified
+  // Casper/Natrona County International Airport (Casper, Wyoming, United States) - CSV verified
   KCPR: [
     feed("KCPR", "combined", "Gnd/Twr/App", "", "kcpr2"),
     feedN(
@@ -2272,7 +2272,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // The Eastern Iowa Airport (Cedar Rapids, Iowa, United States) — CSV verified
+  // The Eastern Iowa Airport (Cedar Rapids, Iowa, United States) - CSV verified
   KCID: [
     feed("KCID", "combined", "Gnd/Twr/App", "", "kcid3"),
     feedN(
@@ -2285,7 +2285,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Chandler Municipal Airport (Chandler, Arizona, United States) — CSV verified
+  // Chandler Municipal Airport (Chandler, Arizona, United States) - CSV verified
   KCHD: [
     feed("KCHD", "tower", "Tower (North)", "", "kchd_twr1"),
     feedN(
@@ -2307,22 +2307,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Charleston Air Force Base/International Airport (Charleston, South Carolina, United States) — CSV verified
+  // Charleston Air Force Base/International Airport (Charleston, South Carolina, United States) - CSV verified
   KCHS: [
     feed("KCHS", "combined", "Gnd/Twr/App", "", "kchs"),
   ],
 
-  // Yeager Airport (Charleston, West Virginia, United States) — CSV verified
+  // Yeager Airport (Charleston, West Virginia, United States) - CSV verified
   KCRW: [
     feed("KCRW", "combined", "Tower/Approach", "", "kcrw"),
   ],
 
-  // Charleston Executive Airport (Charleston, South Carolina, United States) — CSV verified
+  // Charleston Executive Airport (Charleston, South Carolina, United States) - CSV verified
   KJZI: [
     feed("KJZI", "center", "CTAF", "", "kjzi2"),
   ],
 
-  // Charlottesville-Albemarle Airport (Charlottesville, Virginia, United States) — CSV verified
+  // Charlottesville-Albemarle Airport (Charlottesville, Virginia, United States) - CSV verified
   KCHO: [
     feed("KCHO", "tower", "Tower", "", "kcho3_ctf"),
     feed("KCHO", "approach", "App/Dep", "", "kcho3_app"),
@@ -2369,23 +2369,23 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Chatham Municipal Airport (Chatham, Massachusetts, United States) — CSV verified
+  // Chatham Municipal Airport (Chatham, Massachusetts, United States) - CSV verified
   KCQX: [
     feed("KCQX", "center", "5B6/KCQX/KPVC CTAF", "", "khya2_122800"),
   ],
 
-  // Lovell Field Airport (Chattanooga, Tennessee, United States) — CSV verified
+  // Lovell Field Airport (Chattanooga, Tennessee, United States) - CSV verified
   KCHA: [
     feed("KCHA", "combined", "Twr/App", "", "kcha2"),
   ],
 
-  // Chehalis-Centralia Airport (Chehalis, Washington, United States) — CSV verified
+  // Chehalis-Centralia Airport (Chehalis, Washington, United States) - CSV verified
   KCLS: [
     feed("KCLS", "approach", "Seattle Approach (KCLS Area)", "", "kcls2_app"),
     feed("KCLS", "center", "CTAF", "", "kcls2_ctaf"),
   ],
 
-  // Cherry Point Marine Corps Air Station (Cunningham Field) (Cherry Point, North Carolina, United States) — CSV verified
+  // Cherry Point Marine Corps Air Station (Cunningham Field) (Cherry Point, North Carolina, United States) - CSV verified
   KNKT: [
     feed("KNKT", "combined", "Aerial Refueling Ops", "", "knkt1_ar"),
     feedN(
@@ -2398,12 +2398,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Cheyenne Regional Airport/Jerry Olson Field (Cheyenne, Wyoming, United States) — CSV verified
+  // Cheyenne Regional Airport/Jerry Olson Field (Cheyenne, Wyoming, United States) - CSV verified
   KCYS: [
     feed("KCYS", "combined", "Gnd/Twr/App/Center", "", "kcys"),
   ],
 
-  // Chino Airport (Chino, California, United States) — CSV verified
+  // Chino Airport (Chino, California, United States) - CSV verified
   KCNO: [
     feed("KCNO", "tower", "Tower #1", "", "kcno1_twr"),
     feedN(
@@ -2427,7 +2427,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KCNO", "combined", "Ground/Tower", "", "kcno1_gnd_twr"),
   ],
 
-  // North Central West Virginia Airport (Clarksburg, West Virginia, United States) — CSV verified
+  // North Central West Virginia Airport (Clarksburg, West Virginia, United States) - CSV verified
   KCKB: [
     feed("KCKB", "tower", "Tower", "", "kckb_twr"),
     feed("KCKB", "ground", "Ground", "", "kckb_gnd"),
@@ -2461,17 +2461,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KCKB", "combined", "Ground/Tower", "", "kckb_gnd_twr"),
   ],
 
-  // Clearwater Air Park (Clearwater, Florida, United States) — CSV verified
+  // Clearwater Air Park (Clearwater, Florida, United States) - CSV verified
   KCLW: [
     feed("KCLW", "center", "CTAF", "", "kpie1_kclw_ctaf"),
   ],
 
-  // Heritage Field Airport (Coatesville, Pennsylvania, United States) — CSV verified
+  // Heritage Field Airport (Coatesville, Pennsylvania, United States) - CSV verified
   KPTW: [
     feed("KPTW", "center", "CTAF", "", "kptw3_ctaf"),
   ],
 
-  // Coeur d\'Alene Airport - Pappy Boyington Field (Coeur d'Alene, Idaho, United States) — CSV verified
+  // Coeur d\'Alene Airport - Pappy Boyington Field (Coeur d'Alene, Idaho, United States) - CSV verified
   KCOE: [
     feed("KCOE", "center", "CTAF", "", "kcoe2_ctaf"),
     feedN(
@@ -2492,28 +2492,28 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Columbia Metropolitan Airport (Columbia, South Carolina, United States) — CSV verified
+  // Columbia Metropolitan Airport (Columbia, South Carolina, United States) - CSV verified
   KCAE: [
     feed("KCAE", "combined", "Twr/App", "", "kcae2"),
   ],
 
-  // Concord Municipal Airport (Concord, New Hampshire, United States) — CSV verified
+  // Concord Municipal Airport (Concord, New Hampshire, United States) - CSV verified
   KCON: [
     feed("KCON", "center", "KCON/KDAW/KFIT CTAF", "", "kmht_murp_122700"),
   ],
 
-  // Concord Regional Airport (Concord, North Carolina, United States) — CSV verified
+  // Concord Regional Airport (Concord, North Carolina, United States) - CSV verified
   KJQF: [
     feed("KJQF", "combined", "Ground/Tower", "", "kjqf"),
   ],
 
-  // Danbury Municipal Airport (Danbury, Connecticut, United States) — CSV verified
+  // Danbury Municipal Airport (Danbury, Connecticut, United States) - CSV verified
   KDXR: [
     feed("KDXR", "atis", "ATIS", "", "kdxr_atis"),
     feed("KDXR", "combined", "Ground/Tower", "", "kdxr"),
   ],
 
-  // Daytona Beach International Airport (Daytona Beach, Florida, United States) — CSV verified
+  // Daytona Beach International Airport (Daytona Beach, Florida, United States) - CSV verified
   KDAB: [
     feed("KDAB", "tower", "Tower (118.1) #1", "", "kdab_twr_sec_radio"),
     feedN(
@@ -2610,7 +2610,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KDAB", "combined", "ZJX Daytona Beach", "", "zjx_dab"),
   ],
 
-  // DeLand Municipal Airport-Sidney H Taylor Field (DeLand, Florida, United States) — CSV verified
+  // DeLand Municipal Airport-Sidney H Taylor Field (DeLand, Florida, United States) - CSV verified
   KDED: [
     feed("KDED", "center", "CTAF", "", "kded_ctaf"),
     feedN(
@@ -2631,12 +2631,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Deadhorse Airport (Deadhorse, Alaska, United States) — CSV verified
+  // Deadhorse Airport (Deadhorse, Alaska, United States) - CSV verified
   PASC: [
     feed("PASC", "center", "CTAF/Unicom/AFIS/App", "", "pasc"),
   ],
 
-  // Centennial Airport (Denver, Colorado, United States) — CSV verified
+  // Centennial Airport (Denver, Colorado, United States) - CSV verified
   KAPA: [
     feed("KAPA", "tower", "Tower (Primary)", "", "kapa2_twr1"),
     feedN(
@@ -2659,19 +2659,19 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KAPA", "approach", "App/Dep", "", "kapa2_app"),
   ],
 
-  // Rocky Mountain Metropolitan Airport (Denver, Colorado, United States) — CSV verified
+  // Rocky Mountain Metropolitan Airport (Denver, Colorado, United States) - CSV verified
   KBJC: [
     feed("KBJC", "atis", "ATIS", "", "kden1_kbjc_atis"),
     feed("KBJC", "combined", "Ground/Tower", "", "kbjc3"),
   ],
 
-  // Des Moines International Airport (Des Moines, Iowa, United States) — CSV verified
+  // Des Moines International Airport (Des Moines, Iowa, United States) - CSV verified
   KDSM: [
     feed("KDSM", "tower", "Tower", "", "kdsm3_twr"),
     feed("KDSM", "atis", "ATIS", "", "kdsm3_atis"),
   ],
 
-  // Dover Air Force Base (Dover, Delaware, United States) — CSV verified
+  // Dover Air Force Base (Dover, Delaware, United States) - CSV verified
   KDOV: [
     feed("KDOV", "tower", "Tower", "", "kdov2_twr"),
     feed("KDOV", "approach", "Gnd/App", "", "kdov2_gnd_app"),
@@ -2687,7 +2687,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Dubuque Regional Airport (Dubuque, Iowa, United States) — CSV verified
+  // Dubuque Regional Airport (Dubuque, Iowa, United States) - CSV verified
   KDBQ: [
     feed("KDBQ", "center", "ZAU Sector 63 #2", "", "zau_dbq_63"),
     feedN(
@@ -2716,33 +2716,33 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Duluth International Airport (Duluth, Minnesota, United States) — CSV verified
+  // Duluth International Airport (Duluth, Minnesota, United States) - CSV verified
   KDLH: [
     feed("KDLH", "center", "ZMP Sector 25/DLH ANG", "", "kdlh2"),
     feed("KDLH", "combined", "Gnd/Twr/App", "", "kdlh1"),
   ],
 
-  // Eagle River Union Airport (Eagle River, Wisconsin, United States) — CSV verified
+  // Eagle River Union Airport (Eagle River, Wisconsin, United States) - CSV verified
   KEGV: [
     feed("KEGV", "center", "CTAF", "", "ksbm3"),
   ],
 
-  // East Hampton Town Airport (East Hampton, New York, United States) — CSV verified
+  // East Hampton Town Airport (East Hampton, New York, United States) - CSV verified
   KJPX: [
     feed("KJPX", "tower", "CTAF/Tower", "", "khto2"),
   ],
 
-  // Easton/Newnam Field Airport (Easton, Maryland, United States) — CSV verified
+  // Easton/Newnam Field Airport (Easton, Maryland, United States) - CSV verified
   KESN: [
     feed("KESN", "combined", "Ground/Tower", "", "kesn2"),
   ],
 
-  // Chippewa Valley Regional Airport (Eau Claire, Wisconsin, United States) — CSV verified
+  // Chippewa Valley Regional Airport (Eau Claire, Wisconsin, United States) - CSV verified
   KEAU: [
     feed("KEAU", "combined", "Ground/Tower", "", "keau2_gnd_twr"),
   ],
 
-  // El Paso International Airport (El Paso, Texas, United States) — CSV verified
+  // El Paso International Airport (El Paso, Texas, United States) - CSV verified
   KELP: [
     feed("KELP", "tower", "Tower", "", "kelp1_twr"),
     feed("KELP", "ground", "Ground", "", "kelp1_gnd"),
@@ -2758,7 +2758,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KELP", "combined", "Gnd/Twr/App/Dep", "", "kelp1"),
   ],
 
-  // Elmira/Corning Regional Airport (Elmira, New York, United States) — CSV verified
+  // Elmira/Corning Regional Airport (Elmira, New York, United States) - CSV verified
   KELM: [
     feed("KELM", "tower", "Tower", "", "kelm1_twr"),
     feed("KELM", "ground", "Del/Ground", "", "kelm1_del_gnd"),
@@ -2768,12 +2768,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KELM", "combined", "Del/Gnd/Twr/App", "", "kelm1_all"),
   ],
 
-  // Snohomish County Airport (Paine Field) (Everett, Washington, United States) — CSV verified
+  // Snohomish County Airport (Paine Field) (Everett, Washington, United States) - CSV verified
   KPAE: [
     feed("KPAE", "combined", "Ground/Tower", "", "kpae"),
   ],
 
-  // Fairbanks International Airport (Fairbanks, Alaska, United States) — CSV verified
+  // Fairbanks International Airport (Fairbanks, Alaska, United States) - CSV verified
   PAFA: [
     feed("PAFA", "tower", "Tower", "", "pafa1_twr"),
     feed("PAFA", "ground", "Del/Gnd", "", "pafa1_del_gnd"),
@@ -2781,12 +2781,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("PAFA", "center", "Anchorage Center (PAFA Area)", "", "pafa1_ctr"),
   ],
 
-  // H L Sonny Callahan Airport (Fairhope, Alabama, United States) — CSV verified
+  // H L Sonny Callahan Airport (Fairhope, Alabama, United States) - CSV verified
   KCQF: [
     feed("KCQF", "center", "CTAF/Misc", "", "kcqf"),
   ],
 
-  // Cape Cod Coast Guard Air Station (Falmouth, Massachusetts, United States) — CSV verified
+  // Cape Cod Coast Guard Air Station (Falmouth, Massachusetts, United States) - CSV verified
   KFMH: [
     feed("KFMH", "tower", "Tower", "", "kfmh1_twr"),
     feed("KFMH", "ground", "Ground", "", "kfmh1_gnd"),
@@ -2811,12 +2811,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Hector International Airport (Fargo, North Dakota, United States) — CSV verified
+  // Hector International Airport (Fargo, North Dakota, United States) - CSV verified
   KFAR: [
     feed("KFAR", "tower", "Tower", "", "kfar2"),
   ],
 
-  // Republic Airport (Farmingdale, New York, United States) — CSV verified
+  // Republic Airport (Farmingdale, New York, United States) - CSV verified
   KFRG: [
     feed("KFRG", "tower", "Tower #1", "", "kfrg_twr1"),
     feedN(
@@ -2840,34 +2840,34 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KFRG", "combined", "Ground/Tower #2", "", "kfrg9_gnd_twr"),
   ],
 
-  // Northwest Arkansas Regional Airport (Fayetteville/Springdale/Rogers, Arkansas, United States) — CSV verified
+  // Northwest Arkansas Regional Airport (Fayetteville/Springdale/Rogers, Arkansas, United States) - CSV verified
   KXNA: [
     feed("KXNA", "combined", "KROG/KXNA/KVBT/Misc", "", "krog"),
   ],
 
-  // Fitchburg Municipal Airport (Fitchburg, Massachusetts, United States) — CSV verified
+  // Fitchburg Municipal Airport (Fitchburg, Massachusetts, United States) - CSV verified
   KFIT: [
     feed("KFIT", "center", "KCON/KDAW/KFIT CTAF", "", "kmht_murp_122700"),
   ],
 
-  // Flagstaff Pulliam Airport (Flagstaff, Arizona, United States) — CSV verified
+  // Flagstaff Pulliam Airport (Flagstaff, Arizona, United States) - CSV verified
   KFLG: [
     feed("KFLG", "combined", "Ground/Tower", "", "kflg"),
   ],
 
-  // Bishop International Airport (Flint, Michigan, United States) — CSV verified
+  // Bishop International Airport (Flint, Michigan, United States) - CSV verified
   KFNT: [
     feed("KFNT", "tower", "Tower", "", "kfnt2_twr"),
     feed("KFNT", "approach", "App/Dep", "", "kfnt2_app"),
     feed("KFNT", "center", "ZOB Sector 12", "", "kfnt2_zob12"),
   ],
 
-  // Florence Regional Airport (Florence, South Carolina, United States) — CSV verified
+  // Florence Regional Airport (Florence, South Carolina, United States) - CSV verified
   KFLO: [
     feed("KFLO", "combined", "Gnd/Twr/App", "", "kflo2"),
   ],
 
-  // Fond Du Lac County Airport (Fond du Lac, Wisconsin, United States) — CSV verified
+  // Fond Du Lac County Airport (Fond du Lac, Wisconsin, United States) - CSV verified
   KFLD: [
     feed("KFLD", "tower", "Tower (Temp Tower for EAA)", "", "kfld_twr"),
     feed("KFLD", "ground", "Ground (Temp Ground for EAA)", "", "kfld_gnd"),
@@ -2882,17 +2882,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Davison Army Airfield (Fort Belvoir, Virginia, United States) — CSV verified
+  // Davison Army Airfield (Fort Belvoir, Virginia, United States) - CSV verified
   KDAA: [
     feed("KDAA", "tower", "KDAA/KADW Tower", "", "kdaa2_twr"),
   ],
 
-  // Sierra Vista Municipal Airport-Libby Army Airfield (Fort Huachuca/Sierra Vista, Arizona, United States) — CSV verified
+  // Sierra Vista Municipal Airport-Libby Army Airfield (Fort Huachuca/Sierra Vista, Arizona, United States) - CSV verified
   KFHU: [
     feed("KFHU", "combined", "Gnd/Twr/Radar", "", "kfhu"),
   ],
 
-  // Fort Lauderdale Executive Airport (Fort Lauderdale, Florida, United States) — CSV verified
+  // Fort Lauderdale Executive Airport (Fort Lauderdale, Florida, United States) - CSV verified
   KFXE: [
     feed("KFXE", "tower", "Tower #2", "", "kfxe3_twr2"),
     feed("KFXE", "ground", "Ground", "", "kfxe3_gnd"),
@@ -2900,7 +2900,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KFXE", "atis", "ATIS", "", "kfxe3_atis"),
   ],
 
-  // Page Field Airport (Fort Myers, Florida, United States) — CSV verified
+  // Page Field Airport (Fort Myers, Florida, United States) - CSV verified
   KFMY: [
     feed("KFMY", "tower", "Tower", "", "kfmy_twr"),
     feed("KFMY", "ground", "Ground #1", "", "kfmy_gnd"),
@@ -2965,12 +2965,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KFMY", "combined", "Ground/Tower", "", "kfmy_gnd_twr"),
   ],
 
-  // Southwest Florida International Airport (Fort Myers, Florida, United States) — CSV verified
+  // Southwest Florida International Airport (Fort Myers, Florida, United States) - CSV verified
   KRSW: [
     feed("KRSW", "combined", "Gnd/Twr/App/Dep", "", "krsw2"),
   ],
 
-  // St Lucie County International Airport (Fort Pierce, Florida, United States) — CSV verified
+  // St Lucie County International Airport (Fort Pierce, Florida, United States) - CSV verified
   KFPR: [
     feed("KFPR", "tower", "Tower", "", "kfpr3_twr"),
     feed("KFPR", "ground", "Ground", "", "kfpr3_gnd"),
@@ -2978,18 +2978,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KFPR", "combined", "Ground/Tower", "", "kfpr3_gnd_twr"),
   ],
 
-  // Fort Smith Regional Airport (Fort Smith, Arkansas, United States) — CSV verified
+  // Fort Smith Regional Airport (Fort Smith, Arkansas, United States) - CSV verified
   KFSM: [
     feed("KFSM", "combined", "Gnd/Twr/App", "", "kfsm1"),
   ],
 
-  // Frederick Municipal Airport (Frederick, Maryland, United States) — CSV verified
+  // Frederick Municipal Airport (Frederick, Maryland, United States) - CSV verified
   KFDK: [
     feed("KFDK", "atis", "ATIS", "", "kfdk2_atis"),
     feed("KFDK", "combined", "Del/Gnd/Twr/CTAF #1", "", "kfdk2"),
   ],
 
-  // Potomac Airfield (Friendly, Maryland, United States) — CSV verified
+  // Potomac Airfield (Friendly, Maryland, United States) - CSV verified
   KVKX: [
     feed("KVKX", "center", "Area Guard", "", "kvkx1_guard"),
     feedN(
@@ -3018,17 +3018,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Gainesville Regional Airport (Gainesville, Florida, United States) — CSV verified
+  // Gainesville Regional Airport (Gainesville, Florida, United States) - CSV verified
   KGNV: [
     feed("KGNV", "combined", "Ground/Tower", "", "kgnv"),
   ],
 
-  // Montgomery County Airpark (Gaithersburg, Maryland, United States) — CSV verified
+  // Montgomery County Airpark (Gaithersburg, Maryland, United States) - CSV verified
   KGAI: [
     feed("KGAI", "center", "CTAF/UNICOM", "", "kgai"),
   ],
 
-  // Delaware Coastal Airport (Georgetown, Delaware, United States) — CSV verified
+  // Delaware Coastal Airport (Georgetown, Delaware, United States) - CSV verified
   KGED: [
     feed("KGED", "ground", "Clearance Delivery", "", "kged2_del"),
     feed("KGED", "atis", "ASOS", "", "kged2_asos"),
@@ -3043,12 +3043,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Georgetown County Airport (Georgetown, South Carolina, United States) — CSV verified
+  // Georgetown County Airport (Georgetown, South Carolina, United States) - CSV verified
   KGGE: [
     feed("KGGE", "center", "CTAF", "", "kgge2"),
   ],
 
-  // Glendale Municipal Airport (Glendale, Arizona, United States) — CSV verified
+  // Glendale Municipal Airport (Glendale, Arizona, United States) - CSV verified
   KGEU: [
     feed("KGEU", "tower", "Tower", "", "kgeu1_twr"),
     feed("KGEU", "ground", "Ground", "", "kgeu1_gnd"),
@@ -3056,31 +3056,31 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KGEU", "atis", "ATIS", "", "kgeu1_atis"),
   ],
 
-  // Luke Air Force Base (Glendale, Arizona, United States) — CSV verified
+  // Luke Air Force Base (Glendale, Arizona, United States) - CSV verified
   KLUF: [
     feed("KLUF", "approach", "App/Dep", "", "kphx5_kluf_app"),
     feed("KLUF", "combined", "Del/Gnd/Twr/Misc", "", "kphx5_kluf_gnd_twr"),
   ],
 
-  // Floyd Bennett Memorial Airport (Glens Falls, New York, United States) — CSV verified
+  // Floyd Bennett Memorial Airport (Glens Falls, New York, United States) - CSV verified
   KGFL: [
     feed("KGFL", "center", "Area CTAF", "", "kgfl1_ctaf"),
   ],
 
-  // Glenwood Springs Municipal Airport (Glenwood Springs, Colorado, United States) — CSV verified
+  // Glenwood Springs Municipal Airport (Glenwood Springs, Colorado, United States) - CSV verified
   KGWS: [
     feed("KGWS", "center", "CTAF/Guard", "", "kgws2"),
     feed("KGWS", "combined", "Aerial Firefighting (Temporary)", "", "kgws_fire"),
   ],
 
-  // Phoenix Goodyear Airport (Goodyear, Arizona, United States) — CSV verified
+  // Phoenix Goodyear Airport (Goodyear, Arizona, United States) - CSV verified
   KGYR: [
     feed("KGYR", "tower", "Tower", "", "kgyr2_twr"),
     feed("KGYR", "ground", "Ground", "", "kgyr2_gnd"),
     feed("KGYR", "combined", "Ground/Tower", "", "kgyr2_gnd_twr"),
   ],
 
-  // Grand Forks International Airport (Grand Forks, North Dakota, United States) — CSV verified
+  // Grand Forks International Airport (Grand Forks, North Dakota, United States) - CSV verified
   KGFK: [
     feed("KGFK", "tower", "Tower (Both)", "", "kgfk3_twr"),
     feedN(
@@ -3095,7 +3095,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KGFK", "approach", "Approach", "", "kgfk3_app"),
   ],
 
-  // Gerald R. Ford International Airport (Grand Rapids, Michigan, United States) — CSV verified
+  // Gerald R. Ford International Airport (Grand Rapids, Michigan, United States) - CSV verified
   KGRR: [
     feed("KGRR", "tower", "Tower", "", "kgrr2_2_twr"),
     feed("KGRR", "ground", "Clearance Delivery", "", "kgrr2_2_del"),
@@ -3144,14 +3144,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Austin Straubel International Airport (Green Bay, Wisconsin, United States) — CSV verified
+  // Austin Straubel International Airport (Green Bay, Wisconsin, United States) - CSV verified
   KGRB: [
     feed("KGRB", "approach", "App/Dep", "", "kgrb1_app"),
     feed("KGRB", "center", "ZMP Sector 04/14", "", "kgrb1_zmp"),
     feed("KGRB", "combined", "Gnd/Twr", "", "kgrb1_gnd_twr"),
   ],
 
-  // Piedmont Triad International Airport (Greensboro, North Carolina, United States) — CSV verified
+  // Piedmont Triad International Airport (Greensboro, North Carolina, United States) - CSV verified
   KGSO: [
     feed("KGSO", "tower", "Tower", "", "kgso1_twr"),
     feed("KGSO", "ground", "Del/Gnd", "", "kgso1_del_gnd"),
@@ -3192,7 +3192,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Greenville Downtown Airport (Greenville, South Carolina, United States) — CSV verified
+  // Greenville Downtown Airport (Greenville, South Carolina, United States) - CSV verified
   KGMU: [
     feed("KGMU", "tower", "Tower", "", "kgmu_twr"),
     feed("KGMU", "ground", "Ground", "", "kgmu_gnd"),
@@ -3200,18 +3200,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KGMU", "combined", "Ground/Tower", "", "kgmu"),
   ],
 
-  // Donaldson Field Airport (Greenville, South Carolina, United States) — CSV verified
+  // Donaldson Field Airport (Greenville, South Carolina, United States) - CSV verified
   KGYH: [
     feed("KGYH", "tower", "Tower", "", "kgmu_kgyh_twr"),
     feed("KGYH", "combined", "Ground/Tower", "", "kgyh2"),
   ],
 
-  // Pitt-Greenville Airport (Greenville, North Carolina, United States) — CSV verified
+  // Pitt-Greenville Airport (Greenville, North Carolina, United States) - CSV verified
   KPGV: [
     feed("KPGV", "center", "CTAF", "", "kpgv"),
   ],
 
-  // Greenville Spartanburg International Airport (Greer, South Carolina, United States) — CSV verified
+  // Greenville Spartanburg International Airport (Greer, South Carolina, United States) - CSV verified
   KGSP: [
     feed("KGSP", "tower", "Tower", "", "kgmu_kgsp_twr"),
     feed("KGSP", "approach", "App/Dep (East)", "", "kgmu_kgsp_app_e"),
@@ -3235,44 +3235,44 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Jack Edwards National Airport (Gulf Shores, Alabama, United States) — CSV verified
+  // Jack Edwards National Airport (Gulf Shores, Alabama, United States) - CSV verified
   KJKA: [
     feed("KJKA", "tower", "Tower", "", "kjka2_twr"),
   ],
 
-  // Gulfport-Biloxi International Airport (Gulfport, Mississippi, United States) — CSV verified
+  // Gulfport-Biloxi International Airport (Gulfport, Mississippi, United States) - CSV verified
   KGPT: [
     feed("KGPT", "combined", "Gnd/Twr/App", "", "kgpt2"),
   ],
 
-  // Hagerstown Regional Airport-Richard A Henson Field (Hagerstown, Maryland, United States) — CSV verified
+  // Hagerstown Regional Airport-Richard A Henson Field (Hagerstown, Maryland, United States) - CSV verified
   KHGR: [
     feed("KHGR", "tower", "Tower", "", "kmrb1_khgr_twr"),
     feed("KHGR", "center", "ZDC Sector 06 (HGR)", "", "kmrb1_zdc_hgr"),
   ],
 
-  // Friedman Memorial Airport (Hailey, Idaho, United States) — CSV verified
+  // Friedman Memorial Airport (Hailey, Idaho, United States) - CSV verified
   KSUN: [
     feed("KSUN", "atis", "ATIS", "", "ksun1_atis"),
     feed("KSUN", "combined", "Ground/Tower", "", "ksun1_gnd_twr"),
   ],
 
-  // Langley Air Force Base (Hampton, Virginia, United States) — CSV verified
+  // Langley Air Force Base (Hampton, Virginia, United States) - CSV verified
   KLFI: [
     feed("KLFI", "combined", "Del/Gnd/Twr", "", "klfi"),
   ],
 
-  // Boone County Airport (Harrison, Arkansas, United States) — CSV verified
+  // Boone County Airport (Harrison, Arkansas, United States) - CSV verified
   KHRO: [
     feed("KHRO", "center", "CTAF/ZME/Misc", "", "khro"),
   ],
 
-  // Hartford-Brainard Airport (Hartford, Connecticut, United States) — CSV verified
+  // Hartford-Brainard Airport (Hartford, Connecticut, United States) - CSV verified
   KHFD: [
     feed("KHFD", "combined", "Ground/Tower", "", "khfd"),
   ],
 
-  // Helena Regional Airport (Helena, Montana, United States) — CSV verified
+  // Helena Regional Airport (Helena, Montana, United States) - CSV verified
   KHLN: [
     feed("KHLN", "tower", "Tower", "", "khln2_twr"),
     feed("KHLN", "ground", "Ground", "", "khln2_gnd"),
@@ -3280,7 +3280,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHLN", "atis", "ATIS", "", "khln2_atis"),
   ],
 
-  // Hickory Regional Airport (Hickory, North Carolina, United States) — CSV verified
+  // Hickory Regional Airport (Hickory, North Carolina, United States) - CSV verified
   KHKY: [
     feed("KHKY", "tower", "Tower", "", "khky2_twr"),
     feed("KHKY", "ground", "Clearance Delivery (ZTL)", "", "khky2_del"),
@@ -3304,12 +3304,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Hilton Head Airport (Hilton Head Island, South Carolina, United States) — CSV verified
+  // Hilton Head Airport (Hilton Head Island, South Carolina, United States) - CSV verified
   KHXD: [
     feed("KHXD", "combined", "Ground/Tower", "", "khxd"),
   ],
 
-  // Lea County Regional Airport (Hobbs, New Mexico, United States) — CSV verified
+  // Lea County Regional Airport (Hobbs, New Mexico, United States) - CSV verified
   KHOB: [
     feed("KHOB", "tower", "Tower", "", "khob2_twr"),
     feed("KHOB", "ground", "Ground", "", "khob2_gnd"),
@@ -3317,7 +3317,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHOB", "center", "Area Emergency/Guard", "", "khob2_guard"),
   ],
 
-  // North Perry Airport (Hollywood, Florida, United States) — CSV verified
+  // North Perry Airport (Hollywood, Florida, United States) - CSV verified
   KHWO: [
     feed("KHWO", "tower", "Tower (Both) #1", "", "khwo2_twr"),
     feedN(
@@ -3340,18 +3340,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHWO", "atis", "ATIS", "", "khwo2_atis"),
   ],
 
-  // Kalaeloa Airport (John Rodgers Field) (Honolulu, Hawaii, United States) — CSV verified
+  // Kalaeloa Airport (John Rodgers Field) (Honolulu, Hawaii, United States) - CSV verified
   PHJR: [
     feed("PHJR", "atis", "ATIS", "", "phnl1_phjr_atis"),
   ],
 
-  // Houlton International Airport (Houlton, Maine, United States) — CSV verified
+  // Houlton International Airport (Houlton, Maine, United States) - CSV verified
   KHUL: [
     feed("KHUL", "atis", "ASOS", "", "khul_asos"),
     feed("KHUL", "combined", "KHUL/KPQI/ZBW01/15", "", "khul"),
   ],
 
-  // Huntsville International Airport-Carl T Jones Field (Huntsville, Alabama, United States) — CSV verified
+  // Huntsville International Airport-Carl T Jones Field (Huntsville, Alabama, United States) - CSV verified
   KHSV: [
     feed("KHSV", "tower", "Tower (VHF)", "", "khsv_twr2"),
     feed("KHSV", "ground", "Del/Gnd (VHF)", "", "khsv_del_gnd"),
@@ -3376,12 +3376,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHSV", "combined", "Gnd/Twr/App/Dep", "", "khsv3"),
   ],
 
-  // Hutchinson Municipal Airport (Hutchinson, Kansas, United States) — CSV verified
+  // Hutchinson Municipal Airport (Hutchinson, Kansas, United States) - CSV verified
   KHUT: [
     feed("KHUT", "combined", "Ground/Twr", "", "khut"),
   ],
 
-  // Cape Cod Gateway Airport (Hyannis, Massachusetts, United States) — CSV verified
+  // Cape Cod Gateway Airport (Hyannis, Massachusetts, United States) - CSV verified
   KHYA: [
     feed("KHYA", "tower", "Tower", "", "khya2_twr"),
     feed("KHYA", "ground", "Ground", "", "khya2_gnd"),
@@ -3407,7 +3407,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHYA", "combined", "Gnd/Twr", "", "khya2_gnd_twr"),
   ],
 
-  // Falls International Airport-Einarson Field (International Falls, Minnesota, United States) — CSV verified
+  // Falls International Airport-Einarson Field (International Falls, Minnesota, United States) - CSV verified
   KINL: [
     feed("KINL", "center", "CTAF/FSS/Center", "", "kinl1_all"),
     feedN(
@@ -3428,17 +3428,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Inverness Airport (Inverness, Florida, United States) — CSV verified
+  // Inverness Airport (Inverness, Florida, United States) - CSV verified
   KINF: [
     feed("KINF", "center", "CTAF", "", "kinf2"),
   ],
 
-  // Iowa City Municipal Airport (Iowa City, Iowa, United States) — CSV verified
+  // Iowa City Municipal Airport (Iowa City, Iowa, United States) - CSV verified
   KIOW: [
     feed("KIOW", "combined", "KCID Gnd/Twr/App/KIOW", "", "kcid"),
   ],
 
-  // Long Island Mac Arthur Airport (Islip, New York, United States) — CSV verified
+  // Long Island Mac Arthur Airport (Islip, New York, United States) - CSV verified
   KISP: [
     feed("KISP", "tower", "Tower", "", "kisp_gnd_twr"),
     feed("KISP", "approach", "(NY Approach)", "", "kisp2"),
@@ -3453,12 +3453,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KISP", "combined", "Tower/Approach", "", "kisp_s"),
   ],
 
-  // Jackson-Medgar Wiley Evers International Airport (Jackson, Mississippi, United States) — CSV verified
+  // Jackson-Medgar Wiley Evers International Airport (Jackson, Mississippi, United States) - CSV verified
   KJAN: [
     feed("KJAN", "combined", "Gnd/Twr/App/Dep", "", "kjan"),
   ],
 
-  // Westover Field / Amador County Airport (Jackson, California, United States) — CSV verified
+  // Westover Field / Amador County Airport (Jackson, California, United States) - CSV verified
   KJAQ: [
     feed("KJAQ", "atis", "AWOS", "", "kjaq2_awos"),
     feed("KJAQ", "center", "CTAF", "", "kjaq2_ctaf"),
@@ -3472,12 +3472,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Jackson County Airport-Reynolds Field (Jackson, Michigan, United States) — CSV verified
+  // Jackson County Airport-Reynolds Field (Jackson, Michigan, United States) - CSV verified
   KJXN: [
     feed("KJXN", "combined", "Gnd/Twr/UNICOM", "", "kjxn2_twrgnd"),
   ],
 
-  // Craig Municipal Airport (Jacksonville, Florida, United States) — CSV verified
+  // Craig Municipal Airport (Jacksonville, Florida, United States) - CSV verified
   KCRG: [
     feed("KCRG", "tower", "Tower", "", "kcrg1_twr"),
     feed("KCRG", "ground", "Ground", "", "kcrg1_gnd"),
@@ -3494,12 +3494,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KCRG", "combined", "Ground/Tower", "", "kcrg1_gnd_twr"),
   ],
 
-  // Jaffrey Airport-Silver Ranch (Jaffrey, New Hampshire, United States) — CSV verified
+  // Jaffrey Airport-Silver Ranch (Jaffrey, New Hampshire, United States) - CSV verified
   KAFN: [
     feed("KAFN", "center", "MA/NH CTAF 122.8", "", "kmht_murp_122800"),
   ],
 
-  // Southern Wisconsin Regional Airport (Janesville, Wisconsin, United States) — CSV verified
+  // Southern Wisconsin Regional Airport (Janesville, Wisconsin, United States) - CSV verified
   KJVL: [
     feed("KJVL", "tower", "Tower", "", "kjvl1_twr"),
     feed("KJVL", "ground", "Ground", "", "kjvl1_gnd"),
@@ -3509,7 +3509,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KJVL", "combined", "Ground/Tower", "", "kjvl1_gnd_twr"),
   ],
 
-  // Kahului Airport (Maui) (Kahului, Hawaii, United States) — CSV verified
+  // Kahului Airport (Maui) (Kahului, Hawaii, United States) - CSV verified
   PHOG: [
     feed("PHOG", "tower", "Tower", "", "phog3"),
     feed("PHOG", "ground", "Clearance Delivery", "", "phog2_del"),
@@ -3574,13 +3574,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Kona International Airport at Keahole (Kailua/Kona, Hawaii, United States) — CSV verified
+  // Kona International Airport at Keahole (Kailua/Kona, Hawaii, United States) - CSV verified
   PHKO: [
     feed("PHKO", "center", "HCF Center (Northeast/Hamakua)", "", "phko2_hcf"),
     feed("PHKO", "combined", "Kona Gnd/Twr", "", "phko"),
   ],
 
-  // Glacier Park International Airport (Kalispell, Montana, United States) — CSV verified
+  // Glacier Park International Airport (Kalispell, Montana, United States) - CSV verified
   KGPI: [
     feed("KGPI", "tower", "Tower", "", "kgpi2_twr"),
     feed("KGPI", "ground", "Ground", "", "kgpi2_gnd"),
@@ -3588,7 +3588,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KGPI", "center", "Great Falls Radio", "", "kgpi2_rdo"),
   ],
 
-  // Kansas City International Airport (Kansas City, Missouri, United States) — CSV verified
+  // Kansas City International Airport (Kansas City, Missouri, United States) - CSV verified
   KMCI: [
     feed("KMCI", "approach", "App/Dep", "", "kmci1_app"),
     feed("KMCI", "center", "ZKC Kansas City Center (26)", "", "zkc_mci"),
@@ -3603,14 +3603,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Charles B. Wheeler Downtown Airport (Kansas City, Missouri, United States) — CSV verified
+  // Charles B. Wheeler Downtown Airport (Kansas City, Missouri, United States) - CSV verified
   KMKC: [
     feed("KMKC", "tower", "Tower", "", "kmkc_twr"),
     feed("KMKC", "ground", "Ground", "", "kmkc_gnd"),
     feed("KMKC", "atis", "ATIS", "", "kmkc_atis"),
   ],
 
-  // Kearney Regional Airport (Kearney, Nebraska, United States) — CSV verified
+  // Kearney Regional Airport (Kearney, Nebraska, United States) - CSV verified
   KEAR: [
     feed("KEAR", "atis", "AWOS", "", "kear_awos"),
     feed("KEAR", "center", "Columbus Radio", "", "kear_olu"),
@@ -3625,39 +3625,39 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KEAR", "combined", "ZDV/ZMP Kearney NE", "", "kear_center"),
   ],
 
-  // Dillant-Hopkins Airport (Keene, New Hampshire, United States) — CSV verified
+  // Dillant-Hopkins Airport (Keene, New Hampshire, United States) - CSV verified
   KEEN: [
     feed("KEEN", "center", "CTAF", "", "kmht_murp_123000"),
   ],
 
-  // Kenai Municipal Airport (Kenai, Alaska, United States) — CSV verified
+  // Kenai Municipal Airport (Kenai, Alaska, United States) - CSV verified
   PAEN: [
     feed("PAEN", "tower", "Tower", "", "paen_twr"),
   ],
 
-  // Kenosha Regional Airport (Kenosha, Wisconsin, United States) — CSV verified
+  // Kenosha Regional Airport (Kenosha, Wisconsin, United States) - CSV verified
   KENW: [
     feed("KENW", "combined", "Ground/Tower", "", "kenw"),
   ],
 
-  // McGhee Tyson Airport (Knoxville, Tennessee, United States) — CSV verified
+  // McGhee Tyson Airport (Knoxville, Tennessee, United States) - CSV verified
   KTYS: [
     feed("KTYS", "combined", "Del/Gnd/Twr/App", "", "ktys"),
   ],
 
-  // Kodiak Airport (Kodiak, Alaska, United States) — CSV verified
+  // Kodiak Airport (Kodiak, Alaska, United States) - CSV verified
   PADQ: [
     feed("PADQ", "combined", "Gnd/Twr/ZAN", "", "padq"),
   ],
 
-  // La Crosse Municipal Airport (La Crosse, Wisconsin, United States) — CSV verified
+  // La Crosse Municipal Airport (La Crosse, Wisconsin, United States) - CSV verified
   KLSE: [
     feed("KLSE", "tower", "Tower", "", "klse2_twr"),
     feed("KLSE", "ground", "Ground", "", "klse2_gnd"),
     feed("KLSE", "center", "Minneapolis Center (Sector 05 LSE Area)", "", "klse2_zmp_128600"),
   ],
 
-  // Laconia Municipal Airport (Laconia, New Hampshire, United States) — CSV verified
+  // Laconia Municipal Airport (Laconia, New Hampshire, United States) - CSV verified
   KLCI: [
     feed("KLCI", "ground", "CTAF/Del", "", "klci_del_ctaf"),
     feed("KLCI", "atis", "AWOS", "", "klci_awos"),
@@ -3665,12 +3665,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KLCI", "combined", "Del", "", "klci_del"),
   ],
 
-  // Lakehurst Maxfield Field Joint Base McGuire (Lakehurst, New Jersey, United States) — CSV verified
+  // Lakehurst Maxfield Field Joint Base McGuire (Lakehurst, New Jersey, United States) - CSV verified
   KNEL: [
     feed("KNEL", "combined", "KNEL/KWRI/ZNY", "", "kblm1"),
   ],
 
-  // Lakeland Linder International Airport (Lakeland, Florida, United States) — CSV verified
+  // Lakeland Linder International Airport (Lakeland, Florida, United States) - CSV verified
   KLAL: [
     feed("KLAL", "tower", "Tower", "", "klal_twr"),
     feedN(
@@ -3720,18 +3720,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Capital Region International Airport (Lansing, Michigan, United States) — CSV verified
+  // Capital Region International Airport (Lansing, Michigan, United States) - CSV verified
   KLAN: [
     feed("KLAN", "combined", "Del/Gnd/Twr/App", "", "klan"),
   ],
 
-  // Henderson Executive Airport (Las Vegas, Nevada, United States) — CSV verified
+  // Henderson Executive Airport (Las Vegas, Nevada, United States) - CSV verified
   KHND: [
     feed("KHND", "atis", "ATIS", "", "khnd_atis"),
     feed("KHND", "combined", "Ground/Tower", "", "khnd"),
   ],
 
-  // Harry Reid International Airport (Las Vegas, Nevada, United States) — CSV verified
+  // Harry Reid International Airport (Las Vegas, Nevada, United States) - CSV verified
   KLAS: [
     feed("KLAS", "tower", "Tower (Both)", "", "klas4_twr"),
     feedN(
@@ -3861,12 +3861,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // North Las Vegas Airport (Las Vegas, Nevada, United States) — CSV verified
+  // North Las Vegas Airport (Las Vegas, Nevada, United States) - CSV verified
   KVGT: [
     feed("KVGT", "tower", "Tower", "", "klas4_kvgt_twr"),
   ],
 
-  // Lawrence Municipal Airport (Lawrence, Massachusetts, United States) — CSV verified
+  // Lawrence Municipal Airport (Lawrence, Massachusetts, United States) - CSV verified
   KLWM: [
     feed("KLWM", "tower", "Tower", "", "klwm_twr"),
     feed("KLWM", "ground", "Clearance Delivery (Night)", "", "klwm_del"),
@@ -3882,7 +3882,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KLWM", "combined", "Ground/Tower", "", "klwm"),
   ],
 
-  // Leesburg Executive Airport (Leesburg, Virginia, United States) — CSV verified
+  // Leesburg Executive Airport (Leesburg, Virginia, United States) - CSV verified
   KJYO: [
     feed("KJYO", "tower", "Tower", "", "kjyo3_twr"),
     feed("KJYO", "ground", "Ground", "", "kjyo3_gnd"),
@@ -3906,7 +3906,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Leesburg International Airport (Leesburg, Florida, United States) — CSV verified
+  // Leesburg International Airport (Leesburg, Florida, United States) - CSV verified
   KLEE: [
     feed("KLEE", "tower", "Tower", "", "klee1_twr"),
     feed("KLEE", "ground", "Ground", "", "klee1_gnd"),
@@ -3914,7 +3914,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KLEE", "atis", "ASOS", "", "klee1_asos"),
   ],
 
-  // Lincoln Airport (Lincoln, Nebraska, United States) — CSV verified
+  // Lincoln Airport (Lincoln, Nebraska, United States) - CSV verified
   KLNK: [
     feed("KLNK", "tower", "Tower", "", "klnk3_twr"),
     feed("KLNK", "ground", "Ground", "", "klnk3_gnd"),
@@ -3923,17 +3923,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KLNK", "combined", "Twr/App", "", "klnk3_twr_app"),
   ],
 
-  // Lincolnton-Lincoln County Regional Airport (Lincolnton, North Carolina, United States) — CSV verified
+  // Lincolnton-Lincoln County Regional Airport (Lincolnton, North Carolina, United States) - CSV verified
   KIPJ: [
     feed("KIPJ", "ground", "CTAF/Del", "", "kipj"),
   ],
 
-  // Mission Field Airport (Livingston, Montana, United States) — CSV verified
+  // Mission Field Airport (Livingston, Montana, United States) - CSV verified
   KLVM: [
     feed("KLVM", "center", "CTAF", "", "kbzn1_123000"),
   ],
 
-  // Long Beach Airport (Daugherty Field) (Long Beach, California, United States) — CSV verified
+  // Long Beach Airport (Daugherty Field) (Long Beach, California, United States) - CSV verified
   KLGB: [
     feed("KLGB", "tower", "Tower", "", "klgb_twr"),
     feed("KLGB", "ground", "Clearance Delivery", "", "klgb_del"),
@@ -3947,14 +3947,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Los Alamitos Army Airfield (Los Alamitos, California, United States) — CSV verified
+  // Los Alamitos Army Airfield (Los Alamitos, California, United States) - CSV verified
   KSLI: [
     feed("KSLI", "tower", "Tower", "", "klgb1_ksli_twr"),
     feed("KSLI", "ground", "Ground", "", "klgb1_ksli_gnd"),
     feed("KSLI", "atis", "ATIS", "", "klgb1_ksli_atis"),
   ],
 
-  // Louisa County Airport/Freeman Field (Louisa, Virginia, United States) — CSV verified
+  // Louisa County Airport/Freeman Field (Louisa, Virginia, United States) - CSV verified
   KLKU: [
     feed("KLKU", "center", "CTAF #1", "", "klku2"),
     feedN(
@@ -3968,24 +3968,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KLKU", "combined", "Air to Air", "", "klku2_a2a"),
   ],
 
-  // Triangle North Executive Airport (Louisburg, North Carolina, United States) — CSV verified
+  // Triangle North Executive Airport (Louisburg, North Carolina, United States) - CSV verified
   KLHZ: [
     feed("KLHZ", "center", "CTAF", "", "klhz"),
   ],
 
-  // Lynchburg Regional Airport/Preston Glenn Field (Lynchburg, Virginia, United States) — CSV verified
+  // Lynchburg Regional Airport/Preston Glenn Field (Lynchburg, Virginia, United States) - CSV verified
   KLYH: [
     feed("KLYH", "tower", "Tower", "", "klyh2_twr"),
     feed("KLYH", "ground", "Ground", "", "klyh2_gnd"),
     feed("KLYH", "approach", "Roanoke Approach", "", "klyh_roa_app"),
   ],
 
-  // Manassas Regional Airport/Harry P. Davis Field (Manassas, Virginia, United States) — CSV verified
+  // Manassas Regional Airport/Harry P. Davis Field (Manassas, Virginia, United States) - CSV verified
   KHEF: [
     feed("KHEF", "combined", "Del/Gnd/Twr", "", "khef"),
   ],
 
-  // Manchester Airport (Manchester, New Hampshire, United States) — CSV verified
+  // Manchester Airport (Manchester, New Hampshire, United States) - CSV verified
   KMHT: [
     feed("KMHT", "tower", "Tower #1", "", "kmht_murp_twr_both"),
     feed("KMHT", "ground", "Ground", "", "kmht_gnd"),
@@ -4034,7 +4034,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Marana Regional Airport (Marana, Arizona, United States) — CSV verified
+  // Marana Regional Airport (Marana, Arizona, United States) - CSV verified
   KAVQ: [
     feed("KAVQ", "center", "CTAF", "", "kavq2_ctaf"),
     feedN(
@@ -4047,12 +4047,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Marco Island Executive Airport (Marco Island, Florida, United States) — CSV verified
+  // Marco Island Executive Airport (Marco Island, Florida, United States) - CSV verified
   KMKY: [
     feed("KMKY", "center", "CTAF", "", "kmky2"),
   ],
 
-  // Eastern WV Regional Airport/Shepherd Field (Martinsburg, West Virginia, United States) — CSV verified
+  // Eastern WV Regional Airport/Shepherd Field (Martinsburg, West Virginia, United States) - CSV verified
   KMRB: [
     feed("KMRB", "tower", "Tower/CTAF", "", "kmrb1_twr"),
     feed("KMRB", "ground", "Del/Gnd", "", "kmrb1_gnd"),
@@ -4117,7 +4117,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Melbourne International Airport (Melbourne, Florida, United States) — CSV verified
+  // Melbourne International Airport (Melbourne, Florida, United States) - CSV verified
   KMLB: [
     feed("KMLB", "tower", "Tower", "", "kmlb1_twr"),
     feedN(
@@ -4183,12 +4183,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Memphis International Airport (Memphis, Tennessee, United States) — CSV verified
+  // Memphis International Airport (Memphis, Tennessee, United States) - CSV verified
   KMEM: [
     feed("KMEM", "combined", "Gnd/Twr/App/Dep", "", "kmem4_test"),
   ],
 
-  // Falcon Field Airport (Mesa, Arizona, United States) — CSV verified
+  // Falcon Field Airport (Mesa, Arizona, United States) - CSV verified
   KFFZ: [
     feed("KFFZ", "tower", "Twr (North)", "", "kffz_twr_n"),
     feedN(
@@ -4211,7 +4211,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KFFZ", "atis", "ATIS", "", "kffz_atis"),
   ],
 
-  // Opa Locka Airport (Miami, Florida, United States) — CSV verified
+  // Opa Locka Airport (Miami, Florida, United States) - CSV verified
   KOPF: [
     feed("KOPF", "tower", "Tower", "", "kopf5_twr"),
     feed("KOPF", "ground", "Ground", "", "kopf5_gnd"),
@@ -4220,7 +4220,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KOPF", "combined", "Ground/Tower", "", "kopf5_gnd_twr"),
   ],
 
-  // Kendall-Tamiami Executive Airport (Miami, Florida, United States) — CSV verified
+  // Kendall-Tamiami Executive Airport (Miami, Florida, United States) - CSV verified
   KTMB: [
     feed("KTMB", "tower", "Tower (Main)", "", "ktmb1_twr1"),
     feedN(
@@ -4235,18 +4235,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KTMB", "atis", "ATIS", "", "ktmb1_atis"),
   ],
 
-  // Anoka County-Blaine Airport (Janes Field) (Minneapolis, Minnesota, United States) — CSV verified
+  // Anoka County-Blaine Airport (Janes Field) (Minneapolis, Minnesota, United States) - CSV verified
   KANE: [
     feed("KANE", "tower", "Twr/CTAF", "", "kane"),
   ],
 
-  // Flying Cloud Airport (Minneapolis, Minnesota, United States) — CSV verified
+  // Flying Cloud Airport (Minneapolis, Minnesota, United States) - CSV verified
   KFCM: [
     feed("KFCM", "tower", "Tower", "", "kfcm2"),
     feed("KFCM", "approach", "KMSP Approach (FCM Satellite)", "", "kmsp4_app_134700"),
   ],
 
-  // Crystal Airport (Minneapolis, Minnesota, United States) — CSV verified
+  // Crystal Airport (Minneapolis, Minnesota, United States) - CSV verified
   KMIC: [
     feed("KMIC", "tower", "Tower/CTAF", "", "kmic2_twr"),
     feed("KMIC", "ground", "Ground", "", "kmic2_gnd"),
@@ -4255,27 +4255,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KMIC", "combined", "Ground/Tower", "", "kmic2_gnd_twr"),
   ],
 
-  // Missoula International Airport (Missoula, Montana, United States) — CSV verified
+  // Missoula International Airport (Missoula, Montana, United States) - CSV verified
   KMSO: [
     feed("KMSO", "combined", "Gnd/Twr/App/ZLC/ZSE", "", "kmso"),
   ],
 
-  // Canyonlands Regional Airport (Moab, Utah, United States) — CSV verified
+  // Canyonlands Regional Airport (Moab, Utah, United States) - CSV verified
   KCNY: [
     feed("KCNY", "center", "CTAF/Misc", "", "kcny2"),
   ],
 
-  // Mobile Downtown Airport (Mobile, Alabama, United States) — CSV verified
+  // Mobile Downtown Airport (Mobile, Alabama, United States) - CSV verified
   KBFM: [
     feed("KBFM", "tower", "Tower", "", "kbfm2"),
   ],
 
-  // Monroe Regional Airport (Monroe, North Carolina, United States) — CSV verified
+  // Monroe Regional Airport (Monroe, North Carolina, United States) - CSV verified
   KEQY: [
     feed("KEQY", "center", "CTAF", "", "keqy3"),
   ],
 
-  // Montgomery Regional Airport (Dannelly Field) (Montgomery, Alabama, United States) — CSV verified
+  // Montgomery Regional Airport (Dannelly Field) (Montgomery, Alabama, United States) - CSV verified
   KMGM: [
     feed("KMGM", "tower", "Tower", "", "kmgm1_twr"),
     feed("KMGM", "ground", "Ground", "", "kmgm1_gnd"),
@@ -4317,17 +4317,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Foothills Regional Airport (Morganton, North Carolina, United States) — CSV verified
+  // Foothills Regional Airport (Morganton, North Carolina, United States) - CSV verified
   KMRN: [
     feed("KMRN", "center", "CTAF", "", "khky2_kmrn"),
   ],
 
-  // Morgantown Municipal Airport (Morgantown, West Virginia, United States) — CSV verified
+  // Morgantown Municipal Airport (Morgantown, West Virginia, United States) - CSV verified
   KMGW: [
     feed("KMGW", "combined", "Ground/Tower", "", "kmgw2"),
   ],
 
-  // Morristown Municipal Airport (Morristown, New Jersey, United States) — CSV verified
+  // Morristown Municipal Airport (Morristown, New Jersey, United States) - CSV verified
   KMMU: [
     feed("KMMU", "tower", "Tower #1", "", "kmmu3"),
     feedN(
@@ -4342,29 +4342,29 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KMMU", "atis", "ATIS", "", "kmmu4_atis"),
   ],
 
-  // Moore-Murrell Airport (Morristown, Tennessee, United States) — CSV verified
+  // Moore-Murrell Airport (Morristown, Tennessee, United States) - CSV verified
   KMOR: [
     feed("KMOR", "center", "CTAF/App", "", "kmor2"),
   ],
 
-  // Selfridge Air National Guard Base (Mount Clemens, Michigan, United States) — CSV verified
+  // Selfridge Air National Guard Base (Mount Clemens, Michigan, United States) - CSV verified
   KMTC: [
     feed("KMTC", "approach", "App/Dep", "", "kmtc1_app"),
     feed("KMTC", "atis", "ATIS", "", "kmtc1_atis"),
     feed("KMTC", "combined", "Ground/Tower", "", "kmtc1_gnd_twr"),
   ],
 
-  // South Jersey Regional Airport (Mount Holly, New Jersey, United States) — CSV verified
+  // South Jersey Regional Airport (Mount Holly, New Jersey, United States) - CSV verified
   KVAY: [
     feed("KVAY", "center", "SNJ Area CTAF 122.8", "", "kpne1_122800"),
   ],
 
-  // Mount Pleasant Regional Airport-Faison Field (Mount Pleasant, South Carolina, United States) — CSV verified
+  // Mount Pleasant Regional Airport-Faison Field (Mount Pleasant, South Carolina, United States) - CSV verified
   KLRO: [
     feed("KLRO", "center", "CTAF", "", "klro2"),
   ],
 
-  // Myrtle Beach International Airport (Myrtle Beach, South Carolina, United States) — CSV verified
+  // Myrtle Beach International Airport (Myrtle Beach, South Carolina, United States) - CSV verified
   KMYR: [
     feed("KMYR", "atis", "ATIS", "", "kmyr_atis"),
     feed("KMYR", "combined", "Gnd/Twr/App", "", "kmyr"),
@@ -4378,12 +4378,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Nampa Municipal Airport (Nampa, Idaho, United States) — CSV verified
+  // Nampa Municipal Airport (Nampa, Idaho, United States) - CSV verified
   KMAN: [
     feed("KMAN", "center", "CTAF", "", "kman2_ctaf"),
   ],
 
-  // Nantucket Memorial Airport (Nantucket, Massachusetts, United States) — CSV verified
+  // Nantucket Memorial Airport (Nantucket, Massachusetts, United States) - CSV verified
   KACK: [
     feed("KACK", "tower", "Tower", "", "kack"),
     feed("KACK", "approach", "App/Dep", "", "kack_app"),
@@ -4391,7 +4391,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KACK", "combined", "Del/Gnd/Twr", "", "kack_del_gnd"),
   ],
 
-  // Naples Municipal Airport (Naples, Florida, United States) — CSV verified
+  // Naples Municipal Airport (Naples, Florida, United States) - CSV verified
   KAPF: [
     feed("KAPF", "tower", "Tower", "", "kapf1_twr"),
     feed("KAPF", "ground", "Del/Gnd", "", "kapf1_del_gnd"),
@@ -4400,7 +4400,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KAPF", "combined", "Del/Gnd/Twr", "", "kapf1_del_gnd_twr"),
   ],
 
-  // Boire Field Airport (Nashua, New Hampshire, United States) — CSV verified
+  // Boire Field Airport (Nashua, New Hampshire, United States) - CSV verified
   KASH: [
     feed("KASH", "tower", "Tower #1", "", "kash1_twr"),
     feedN(
@@ -4465,7 +4465,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Nashville International Airport (Nashville, Tennessee, United States) — CSV verified
+  // Nashville International Airport (Nashville, Tennessee, United States) - CSV verified
   KBNA: [
     feed("KBNA", "tower", "Tower", "", "kbna_twr"),
     feed("KBNA", "ground", "Ground", "", "kbna_gnd"),
@@ -4498,7 +4498,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBNA", "combined", "Ground/Tower", "", "kbna_gnd_twr"),
   ],
 
-  // John C Tune Airport (Nashville, Tennessee, United States) — CSV verified
+  // John C Tune Airport (Nashville, Tennessee, United States) - CSV verified
   KJWN: [
     feed("KJWN", "tower", "Tower", "", "kjwn1_twr"),
     feed("KJWN", "ground", "Ground", "", "kjwn1_gnd"),
@@ -4507,7 +4507,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KJWN", "combined", "Gnd/Twr", "", "kjwn1_gnd_twr"),
   ],
 
-  // Tweed-New Haven Airport (New Haven, Connecticut, United States) — CSV verified
+  // Tweed-New Haven Airport (New Haven, Connecticut, United States) - CSV verified
   KHVN: [
     feed("KHVN", "tower", "Tower", "", "khvn1_twr"),
     feed("KHVN", "ground", "Ground", "", "khvn1_gnd"),
@@ -4524,12 +4524,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // New Richmond Regional Airport (New Richmond, Wisconsin, United States) — CSV verified
+  // New Richmond Regional Airport (New Richmond, Wisconsin, United States) - CSV verified
   KRNH: [
     feed("KRNH", "center", "CTAF/Clearance", "", "krnh"),
   ],
 
-  // West 30th St. Heliport (New York, New York, United States) — CSV verified
+  // West 30th St. Heliport (New York, New York, United States) - CSV verified
   KJRA: [
     feed("KJRA", "center", "KJRA/KJRB CTAF #3", "", "jfk118_kjra"),
     feedN(
@@ -4542,22 +4542,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Newport State Airport (Newport, Rhode Island, United States) — CSV verified
+  // Newport State Airport (Newport, Rhode Island, United States) - CSV verified
   KUUU: [
     feed("KUUU", "ground", "CTAF/Del", "", "kuuu"),
   ],
 
-  // Newport News/Williamsburg International Airport (Newport News, Virginia, United States) — CSV verified
+  // Newport News/Williamsburg International Airport (Newport News, Virginia, United States) - CSV verified
   KPHF: [
     feed("KPHF", "combined", "Ground/Tower", "", "kphf"),
   ],
 
-  // Norfolk Naval Station (Chambers Field) (Norfolk, Virginia, United States) — CSV verified
+  // Norfolk Naval Station (Chambers Field) (Norfolk, Virginia, United States) - CSV verified
   KNGU: [
     feed("KNGU", "combined", "Del/Gnd/Twr", "", "kngu1"),
   ],
 
-  // Norfolk International Airport (Norfolk, Virginia, United States) — CSV verified
+  // Norfolk International Airport (Norfolk, Virginia, United States) - CSV verified
   KORF: [
     feed("KORF", "tower", "Tower #1", "", "korf1_twr"),
     feedN(
@@ -4615,46 +4615,46 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Grand Strand Airport (North Myrtle Beach, South Carolina, United States) — CSV verified
+  // Grand Strand Airport (North Myrtle Beach, South Carolina, United States) - CSV verified
   KCRE: [
     feed("KCRE", "atis", "ATIS", "", "kcre2_atis"),
     feed("KCRE", "center", "Guard", "", "kcre2_guard"),
     feed("KCRE", "combined", "Ground/Tower", "", "kcre2"),
   ],
 
-  // Norwood Municipal Airport (Norwood, Massachusetts, United States) — CSV verified
+  // Norwood Municipal Airport (Norwood, Massachusetts, United States) - CSV verified
   KOWD: [
     feed("KOWD", "combined", "Ground/Tower", "", "kowd2"),
   ],
 
-  // Ocean City Municipal Airport (Ocean City, Maryland, United States) — CSV verified
+  // Ocean City Municipal Airport (Ocean City, Maryland, United States) - CSV verified
   KOXB: [
     feed("KOXB", "center", "CTAF", "", "koxb_ctaf"),
   ],
 
-  // Ogden-Hinckley Airport (Ogden, Utah, United States) — CSV verified
+  // Ogden-Hinckley Airport (Ogden, Utah, United States) - CSV verified
   KOGD: [
     feed("KOGD", "combined", "Ogden Ground/Tower", "", "kogd"),
   ],
 
-  // Johnson County Executive Airport (Olathe, Kansas, United States) — CSV verified
+  // Johnson County Executive Airport (Olathe, Kansas, United States) - CSV verified
   KOJC: [
     feed("KOJC", "approach", "App/Dep", "", "kojc1_app"),
     feed("KOJC", "atis", "ATIS", "", "kojc1_atis"),
     feed("KOJC", "combined", "Gnd/Twr", "", "kojc1"),
   ],
 
-  // Offutt Air Force Base (Omaha, Nebraska, United States) — CSV verified
+  // Offutt Air Force Base (Omaha, Nebraska, United States) - CSV verified
   KOFF: [
     feed("KOFF", "combined", "Tower/Approach", "", "koff3_twr_app"),
   ],
 
-  // Orange Municipal Airport (Orange, Massachusetts, United States) — CSV verified
+  // Orange Municipal Airport (Orange, Massachusetts, United States) - CSV verified
   KORE: [
     feed("KORE", "center", "MA/NH CTAF 122.8", "", "kmht_murp_122800"),
   ],
 
-  // Kissimmee Gateway Airport (Orlando, Florida, United States) — CSV verified
+  // Kissimmee Gateway Airport (Orlando, Florida, United States) - CSV verified
   KISM: [
     feed("KISM", "tower", "Tower", "", "kjsm_twr"),
     feed("KISM", "ground", "Ground", "", "kjsm_gnd"),
@@ -4662,7 +4662,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KISM", "combined", "Ground/Tower", "", "kjsm_gnd_twr"),
   ],
 
-  // Orlando Executive Airport (Orlando, Florida, United States) — CSV verified
+  // Orlando Executive Airport (Orlando, Florida, United States) - CSV verified
   KORL: [
     feed("KORL", "tower", "Tower", "", "korl_twr"),
     feed("KORL", "ground", "Del/Gnd", "", "korl_gnd"),
@@ -4703,7 +4703,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KORL", "combined", "Del/Gnd/Twr", "", "korl_del_gnd_twr"),
   ],
 
-  // Orlando Sanford International Airport (Orlando, Florida, United States) — CSV verified
+  // Orlando Sanford International Airport (Orlando, Florida, United States) - CSV verified
   KSFB: [
     feed("KSFB", "tower", "Tower (Both)", "", "ksfb3_s"),
     feedN(
@@ -4743,7 +4743,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSFB", "atis", "ATIS", "", "ksfb3_atis"),
   ],
 
-  // Wittman Regional Airport (Oshkosh, Wisconsin, United States) — CSV verified
+  // Wittman Regional Airport (Oshkosh, Wisconsin, United States) - CSV verified
   KOSH: [
     feed("KOSH", "tower", "Air Show/Twr", "", "kosh_as_twr"),
     feedN(
@@ -4882,24 +4882,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Ottumwa Regional Airport (Ottumwa, Iowa, United States) — CSV verified
+  // Ottumwa Regional Airport (Ottumwa, Iowa, United States) - CSV verified
   KOTM: [
     feed("KOTM", "combined", "Del/Twr/App/Center", "", "kotm"),
   ],
 
-  // Waterbury-Oxford Airport (Oxford, Connecticut, United States) — CSV verified
+  // Waterbury-Oxford Airport (Oxford, Connecticut, United States) - CSV verified
   KOXC: [
     feed("KOXC", "atis", "ATIS", "", "koxc2_atis"),
     feed("KOXC", "combined", "Ground/Tower", "", "koxc2"),
   ],
 
-  // Tri-Cities Airport (Pasco, Washington, United States) — CSV verified
+  // Tri-Cities Airport (Pasco, Washington, United States) - CSV verified
   KPSC: [
     feed("KPSC", "tower", "Tower", "", "kpsc2_twr"),
     feed("KPSC", "ground", "Ground", "", "kpsc2_gnd"),
   ],
 
-  // North Central State Airport (Pawtucket, Rhode Island, United States) — CSV verified
+  // North Central State Airport (Pawtucket, Rhode Island, United States) - CSV verified
   KSFZ: [
     feed("KSFZ", "center", "Clearance/CTAF", "", "ksfz2_del_ctaf"),
     feedN(
@@ -4912,18 +4912,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Penn Yan Airport (Penn Yan, New York, United States) — CSV verified
+  // Penn Yan Airport (Penn Yan, New York, United States) - CSV verified
   KPEO: [
     feed("KPEO", "center", "CTAF", "", "kpeo2"),
   ],
 
-  // Pensacola International Airport (Pensacola, Florida, United States) — CSV verified
+  // Pensacola International Airport (Pensacola, Florida, United States) - CSV verified
   KPNS: [
     feed("KPNS", "tower", "Tower #3", "", "kpns2_twr3"),
     feed("KPNS", "approach", "App/Dep 127.35/278.8", "", "kpns2_app_127350"),
   ],
 
-  // Phoenix Deer Valley Airport (Phoenix, Arizona, United States) — CSV verified
+  // Phoenix Deer Valley Airport (Phoenix, Arizona, United States) - CSV verified
   KDVT: [
     feed("KDVT", "tower", "Tower (Both)", "", "kdvt3_twr"),
     feedN(
@@ -4962,7 +4962,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KDVT", "atis", "ATIS", "", "kdvt3_atis"),
   ],
 
-  // Phoenix-Mesa Gateway Airport (Phoenix, Arizona, United States) — CSV verified
+  // Phoenix-Mesa Gateway Airport (Phoenix, Arizona, United States) - CSV verified
   KIWA: [
     feed("KIWA", "tower", "Tower", "", "kiwa1_twr"),
     feed("KIWA", "ground", "Clearance Delivery", "", "kiwa1_del"),
@@ -4978,31 +4978,31 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KIWA", "atis", "ATIS", "", "kiwa1_atis"),
   ],
 
-  // Moore County Airport (Pinehurst/Southern Pines, North Carolina, United States) — CSV verified
+  // Moore County Airport (Pinehurst/Southern Pines, North Carolina, United States) - CSV verified
   KSOP: [
     feed("KSOP", "ground", "Clearance Delivery (RCO)", "", "ksop1_del"),
     feed("KSOP", "atis", "AWOS", "", "ksop1_awos"),
     feed("KSOP", "center", "CTAF", "", "ksop1_ctaf"),
   ],
 
-  // Plant City Airport (Plant City, Florida, United States) — CSV verified
+  // Plant City Airport (Plant City, Florida, United States) - CSV verified
   KPCM: [
     feed("KPCM", "center", "KPCM/KGIF CTAF", "", "klal8_ctaf_123050"),
   ],
 
-  // Platteville Municipal Airport (Platteville, Wisconsin, United States) — CSV verified
+  // Platteville Municipal Airport (Platteville, Wisconsin, United States) - CSV verified
   KPVB: [
     feed("KPVB", "atis", "AWOS", "", "kpvb1_awos"),
     feed("KPVB", "center", "KPVB/KSFY CTAF", "", "kpvb1_122700"),
   ],
 
-  // Pompano Beach Airpark (Pompano Beach, Florida, United States) — CSV verified
+  // Pompano Beach Airpark (Pompano Beach, Florida, United States) - CSV verified
   KPMP: [
     feed("KPMP", "tower", "Tower", "", "kpmp"),
     feed("KPMP", "ground", "Ground", "", "kpmp_gnd"),
   ],
 
-  // Mercedita Airport (Ponce, Puerto Rico, United States) — CSV verified
+  // Mercedita Airport (Ponce, Puerto Rico, United States) - CSV verified
   TJPS: [
     feed("TJPS", "ground", "Clearance Delivery", "", "tjps1_del"),
     feed("TJPS", "atis", "AWOS", "", "tjps1_awos"),
@@ -5017,7 +5017,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Oakland County International Airport (Pontiac, Michigan, United States) — CSV verified
+  // Oakland County International Airport (Pontiac, Michigan, United States) - CSV verified
   KPTK: [
     feed("KPTK", "tower", "Tower #1", "", "kptk1_twr"),
     feed("KPTK", "approach", "App/Dep", "", "kptk1_app"),
@@ -5033,12 +5033,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KPTK", "combined", "Del/Gnd/Twr/App", "", "kptk1_gnd_twr"),
   ],
 
-  // William R Fairchild International Airport (Port Angeles, Washington, United States) — CSV verified
+  // William R Fairchild International Airport (Port Angeles, Washington, United States) - CSV verified
   KCLM: [
     feed("KCLM", "approach", "Del/CTAF/App", "", "kclm"),
   ],
 
-  // Portland International Jetport (Portland, Maine, United States) — CSV verified
+  // Portland International Jetport (Portland, Maine, United States) - CSV verified
   KPWM: [
     feed("KPWM", "tower", "Tower #1", "", "kpwm2_twr"),
     feedN(
@@ -5080,12 +5080,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Dutchess County Airport (Poughkeepsie, New York, United States) — CSV verified
+  // Dutchess County Airport (Poughkeepsie, New York, United States) - CSV verified
   KPOU: [
     feed("KPOU", "combined", "Ground/Tower", "", "kpou1"),
   ],
 
-  // Ernest A. Love Field Airport (Prescott, Arizona, United States) — CSV verified
+  // Ernest A. Love Field Airport (Prescott, Arizona, United States) - CSV verified
   KPRC: [
     feed("KPRC", "tower", "Tower (1/2)", "", "kprc1_twr"),
     feedN(
@@ -5159,38 +5159,38 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Northern Maine Regional Airport at Presque Isle (Presque Isle, Maine, United States) — CSV verified
+  // Northern Maine Regional Airport at Presque Isle (Presque Isle, Maine, United States) - CSV verified
   KPQI: [
     feed("KPQI", "combined", "KHUL/KPQI/ZBW01/15", "", "khul"),
   ],
 
-  // Fillmore County Airport (Preston, Minnesota, United States) — CSV verified
+  // Fillmore County Airport (Preston, Minnesota, United States) - CSV verified
   KFKA: [
     feed("KFKA", "center", "CTAF", "", "kfka"),
   ],
 
-  // Provincetown Municipal Airport (Provincetown, Massachusetts, United States) — CSV verified
+  // Provincetown Municipal Airport (Provincetown, Massachusetts, United States) - CSV verified
   KPVC: [
     feed("KPVC", "center", "5B6/KCQX/KPVC CTAF", "", "khya2_122800"),
   ],
 
-  // Provo Municipal Airport (Provo, Utah, United States) — CSV verified
+  // Provo Municipal Airport (Provo, Utah, United States) - CSV verified
   KPVU: [
     feed("KPVU", "tower", "Tower", "", "kpvu2"),
   ],
 
-  // Charlotte County Airport (Punta Gorda, Florida, United States) — CSV verified
+  // Charlotte County Airport (Punta Gorda, Florida, United States) - CSV verified
   KPGD: [
     feed("KPGD", "tower", "Tower", "", "kpgd_twr"),
     feed("KPGD", "ground", "Ground", "", "kpgd_gnd"),
   ],
 
-  // Pierce County Airport - Thun Field (Puyallup, Washington, United States) — CSV verified
+  // Pierce County Airport - Thun Field (Puyallup, Washington, United States) - CSV verified
   KPLU: [
     feed("KPLU", "approach", "Del/CTAF/App", "", "kplu2"),
   ],
 
-  // Raleigh-Durham International Airport (Raleigh/Durham, North Carolina, United States) — CSV verified
+  // Raleigh-Durham International Airport (Raleigh/Durham, North Carolina, United States) - CSV verified
   KRDU: [
     feed("KRDU", "tower", "Tower", "", "krdu_twr"),
     feed("KRDU", "ground", "Ground", "", "krdu_gnd"),
@@ -5208,7 +5208,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KRDU", "combined", "Ground/Tower", "", "krdu_gnd_twr"),
   ],
 
-  // Reno/Tahoe International Airport (Reno, Nevada, United States) — CSV verified
+  // Reno/Tahoe International Airport (Reno, Nevada, United States) - CSV verified
   KRNO: [
     feed("KRNO", "tower", "Tower", "", "krno1_twr"),
     feed("KRNO", "ground", "Clearance Delivery", "", "krno1_del"),
@@ -5249,26 +5249,26 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Renton Municipal Airport (Renton, Washington, United States) — CSV verified
+  // Renton Municipal Airport (Renton, Washington, United States) - CSV verified
   KRNT: [
     feed("KRNT", "tower", "Tower", "", "ksea3_krnt_twr"),
     feed("KRNT", "ground", "Ground", "", "ksea3_krnt_gnd"),
     feed("KRNT", "combined", "Gnd/Twr/Unicom", "", "krnt"),
   ],
 
-  // Richmond International Airport (Richmond, Virginia, United States) — CSV verified
+  // Richmond International Airport (Richmond, Virginia, United States) - CSV verified
   KRIC: [
     feed("KRIC", "tower", "Tower", "", "kric2_twr"),
     feed("KRIC", "ground", "Ground", "", "kric2_gnd"),
     feed("KRIC", "center", "Area Guard", "", "kric2_guard"),
   ],
 
-  // Hanover County Municipal Airport (Richmond/Ashland, Virginia, United States) — CSV verified
+  // Hanover County Municipal Airport (Richmond/Ashland, Virginia, United States) - CSV verified
   KOFP: [
     feed("KOFP", "center", "CTAF", "", "kofp2_ctaf"),
   ],
 
-  // Roanoke Regional Airport/Woodrum Field (Roanoke, Virginia, United States) — CSV verified
+  // Roanoke Regional Airport/Woodrum Field (Roanoke, Virginia, United States) - CSV verified
   KROA: [
     feed("KROA", "tower", "Tower", "", "kroa_twr"),
     feed("KROA", "ground", "Clearance Delivery", "", "kroa_del"),
@@ -5349,23 +5349,23 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Skyhaven Airport (Rochester, New Hampshire, United States) — CSV verified
+  // Skyhaven Airport (Rochester, New Hampshire, United States) - CSV verified
   KDAW: [
     feed("KDAW", "center", "KCON/KDAW/KFIT CTAF", "", "kmht_murp_122700"),
   ],
 
-  // Greater Rochester International Airport (Rochester, New York, United States) — CSV verified
+  // Greater Rochester International Airport (Rochester, New York, United States) - CSV verified
   KROC: [
     feed("KROC", "approach", "Approach", "", "kroc"),
     feed("KROC", "combined", "Del/Gnd/Twr", "", "kroc_s"),
   ],
 
-  // Rogers Executive Airport - Carter Field (Rogers, Arkansas, United States) — CSV verified
+  // Rogers Executive Airport - Carter Field (Rogers, Arkansas, United States) - CSV verified
   KROG: [
     feed("KROG", "combined", "KROG/KXNA/KVBT/Misc", "", "krog"),
   ],
 
-  // Salina Regional Airport (Salina, Kansas, United States) — CSV verified
+  // Salina Regional Airport (Salina, Kansas, United States) - CSV verified
   KSLN: [
     feed("KSLN", "tower", "Tower", "", "ksln_twr"),
     feed("KSLN", "ground", "Ground", "", "ksln_gnd"),
@@ -5374,7 +5374,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSLN", "combined", "Ground/Tower", "", "ksln"),
   ],
 
-  // Salt Lake City International Airport (Salt Lake City, Utah, United States) — CSV verified
+  // Salt Lake City International Airport (Salt Lake City, Utah, United States) - CSV verified
   KSLC: [
     feed("KSLC", "tower", "Tower", "", "kslc1_twr"),
     feed("KSLC", "ground", "Del/Ground", "", "kslc1_del_gnd"),
@@ -5382,7 +5382,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSLC", "center", "ZLC Sectors 03/04/07/11/32", "", "kslc1_zlc"),
   ],
 
-  // Fernando Luis Ribas Dominicci Airport (San Juan, Puerto Rico, United States) — CSV verified
+  // Fernando Luis Ribas Dominicci Airport (San Juan, Puerto Rico, United States) - CSV verified
   TJIG: [
     feed("TJIG", "tower", "Tower", "", "tjig2_twr"),
     feed("TJIG", "ground", "Ground", "", "tjig2_gnd"),
@@ -5390,12 +5390,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("TJIG", "combined", "Ground/Tower", "", "tjig2_gnd_twr"),
   ],
 
-  // Luis Munoz Marin International Airport (San Juan, Puerto Rico, United States) — CSV verified
+  // Luis Munoz Marin International Airport (San Juan, Puerto Rico, United States) - CSV verified
   TJSJ: [
     feed("TJSJ", "center", "Center/Oceanic", "", "tjsj4_app_ctr"),
   ],
 
-  // Sandpoint Airport (Sandpoint, Idaho, United States) — CSV verified
+  // Sandpoint Airport (Sandpoint, Idaho, United States) - CSV verified
   KSZT: [
     feed("KSZT", "center", "CTAF #1", "", "kszt_ctaf"),
     feedN(
@@ -5408,18 +5408,18 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Sanford Seacoast Regional Airport (Sanford, Maine, United States) — CSV verified
+  // Sanford Seacoast Regional Airport (Sanford, Maine, United States) - CSV verified
   KSFM: [
     feed("KSFM", "center", "CTAF", "", "kmht_murp_123075"),
   ],
 
-  // Raleigh Executive Jetport at Sanford-Lee County Airport (Sanford, North Carolina, United States) — CSV verified
+  // Raleigh Executive Jetport at Sanford-Lee County Airport (Sanford, North Carolina, United States) - CSV verified
   KTTA: [
     feed("KTTA", "atis", "AWOS", "", "ktta_awos"),
     feed("KTTA", "center", "CTAF", "", "ktta"),
   ],
 
-  // John Wayne-Orange County Airport (Santa Ana, California, United States) — CSV verified
+  // John Wayne-Orange County Airport (Santa Ana, California, United States) - CSV verified
   KSNA: [
     feed("KSNA", "tower", "Tower (Backup/Discrete)", "", "ksna1_twr_128350"),
     feedN(
@@ -5509,12 +5509,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Santa Fe Municipal Airport (Santa Fe, New Mexico, United States) — CSV verified
+  // Santa Fe Municipal Airport (Santa Fe, New Mexico, United States) - CSV verified
   KSAF: [
     feed("KSAF", "tower", "Tower", "", "ksaf"),
   ],
 
-  // Sarasota/Bradenton International Airport (Sarasota/Bradenton, Florida, United States) — CSV verified
+  // Sarasota/Bradenton International Airport (Sarasota/Bradenton, Florida, United States) - CSV verified
   KSRQ: [
     feed("KSRQ", "tower", "Tower", "", "ksrq1_twr"),
     feed("KSRQ", "ground", "Del/Gnd", "", "ksrq1_del_gnd"),
@@ -5546,13 +5546,13 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Schenectady County Airport (Schenectady, New York, United States) — CSV verified
+  // Schenectady County Airport (Schenectady, New York, United States) - CSV verified
   KSCH: [
     feed("KSCH", "tower", "Tower", "", "kalb2_ksch_twr"),
     feed("KSCH", "ground", "Ground", "", "kalb2_ksch_gnd"),
   ],
 
-  // Scottsdale Airport (Scottsdale, Arizona, United States) — CSV verified
+  // Scottsdale Airport (Scottsdale, Arizona, United States) - CSV verified
   KSDL: [
     feed("KSDL", "tower", "Tower #2", "", "ksdl2_twr"),
     feed("KSDL", "ground", "Ground", "", "ksdl2_gnd"),
@@ -5561,7 +5561,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSDL", "center", "Emergency/Guard", "", "ksdl2_guard"),
   ],
 
-  // Sheboygan County Memorial Airport (Sheboygan, Wisconsin, United States) — CSV verified
+  // Sheboygan County Memorial Airport (Sheboygan, Wisconsin, United States) - CSV verified
   KSBM: [
     feed("KSBM", "approach", "Milwaukee Approach (SBM)", "", "ksbm1_app"),
     feed("KSBM", "center", "Area Guard (Emergency)", "", "ksbm1_guard"),
@@ -5575,23 +5575,23 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Sioux Gateway Airport/Col. Bud Day Field (Sioux City, Iowa, United States) — CSV verified
+  // Sioux Gateway Airport/Col. Bud Day Field (Sioux City, Iowa, United States) - CSV verified
   KSUX: [
     feed("KSUX", "combined", "Twr/App/ZMP", "", "ksux2"),
   ],
 
-  // Joe Foss Field Airport (Sioux Falls, South Dakota, United States) — CSV verified
+  // Joe Foss Field Airport (Sioux Falls, South Dakota, United States) - CSV verified
   KFSD: [
     feed("KFSD", "combined", "Twr/App/Dep/ZMP", "", "kfsd1"),
   ],
 
-  // Johnston Regional Airport (Smithfield, North Carolina, United States) — CSV verified
+  // Johnston Regional Airport (Smithfield, North Carolina, United States) - CSV verified
   KJNX: [
     feed("KJNX", "atis", "AWOS", "", "kjnx2"),
     feed("KJNX", "center", "CTAF", "", "kjnx"),
   ],
 
-  // Smyrna Airport (Smyrna, Tennessee, United States) — CSV verified
+  // Smyrna Airport (Smyrna, Tennessee, United States) - CSV verified
   KMQY: [
     feed("KMQY", "tower", "Tower", "", "kmqy1_twr"),
     feed("KMQY", "ground", "Clearance Delivery", "", "kmqy1_del"),
@@ -5607,27 +5607,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KMQY", "combined", "Ground/Tower", "", "kmqy1_gnd_twr"),
   ],
 
-  // Solon Springs Municipal Airport (Solon Springs, Wisconsin, United States) — CSV verified
+  // Solon Springs Municipal Airport (Solon Springs, Wisconsin, United States) - CSV verified
   KOLG: [
     feed("KOLG", "center", "CTAF", "", "3cu_kolg_ctaf"),
   ],
 
-  // Spanish Fork Municipal Airport/Woodhouse Field (Spanish Fork, Utah, United States) — CSV verified
+  // Spanish Fork Municipal Airport/Woodhouse Field (Spanish Fork, Utah, United States) - CSV verified
   KSPK: [
     feed("KSPK", "center", "CTAF", "", "kspk2"),
   ],
 
-  // Upper Cumberland Regional Airport (Sparta, Tennessee, United States) — CSV verified
+  // Upper Cumberland Regional Airport (Sparta, Tennessee, United States) - CSV verified
   KSRB: [
     feed("KSRB", "center", "CTAF", "", "ksrb2"),
   ],
 
-  // Spokane International Airport (Spokane, Washington, United States) — CSV verified
+  // Spokane International Airport (Spokane, Washington, United States) - CSV verified
   KGEG: [
     feed("KGEG", "combined", "Del/Gnd/Twr/App", "", "kgeg"),
   ],
 
-  // Felts Field Airport (Spokane, Washington, United States) — CSV verified
+  // Felts Field Airport (Spokane, Washington, United States) - CSV verified
   KSFF: [
     feed("KSFF", "tower", "Tower", "", "ksff2_twr"),
     feed("KSFF", "ground", "Ground", "", "ksff2_gnd"),
@@ -5635,12 +5635,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSFF", "atis", "ATIS", "", "ksff2_atis"),
   ],
 
-  // Fairchild Air Force Base (Spokane, Washington, United States) — CSV verified
+  // Fairchild Air Force Base (Spokane, Washington, United States) - CSV verified
   KSKA: [
     feed("KSKA", "tower", "Tower", "", "kska2"),
   ],
 
-  // Springdale Municipal Airport (Springdale, Arkansas, United States) — CSV verified
+  // Springdale Municipal Airport (Springdale, Arkansas, United States) - CSV verified
   KASG: [
     feed("KASG", "approach", "App/Dep", "", "kasg1_app"),
     feed("KASG", "combined", "Gnd/Twr", "", "kasg1_twr"),
@@ -5654,12 +5654,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Westover Air Reserve Base/Metropolitan Airport (Springfield/Chicopee, Massachusetts, United States) — CSV verified
+  // Westover Air Reserve Base/Metropolitan Airport (Springfield/Chicopee, Massachusetts, United States) - CSV verified
   KCEF: [
     feed("KCEF", "tower", "KBAF/KCEF Tower", "", "kbaf1_twr"),
   ],
 
-  // Rosecrans Memorial Airport (St Joseph, Missouri, United States) — CSV verified
+  // Rosecrans Memorial Airport (St Joseph, Missouri, United States) - CSV verified
   KSTJ: [
     feed("KSTJ", "tower", "Tower", "", "kstj2_twr"),
     feed("KSTJ", "ground", "Ground", "", "kstj2_gnd"),
@@ -5667,7 +5667,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KSTJ", "atis", "ATIS", "", "kstj2_atis"),
   ],
 
-  // St Petersburg-Clearwater International Airport (St Petersburg-Clearwater, Florida, United States) — CSV verified
+  // St Petersburg-Clearwater International Airport (St Petersburg-Clearwater, Florida, United States) - CSV verified
   KPIE: [
     feed("KPIE", "tower", "Tower", "", "kpie1_twr"),
     feed("KPIE", "ground", "Ground", "", "kpie1_gnd"),
@@ -5676,24 +5676,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KPIE", "combined", "Del/Gnd/Twr", "", "kpie1_del_gnd_twr"),
   ],
 
-  // Albert Whitted Airport (St. Petersburg, Florida, United States) — CSV verified
+  // Albert Whitted Airport (St. Petersburg, Florida, United States) - CSV verified
   KSPG: [
     feed("KSPG", "tower", "Tower", "", "kspg3_twr"),
     feed("KSPG", "ground", "Ground", "", "kspg3_gnd"),
     feed("KSPG", "combined", "Ground/Tower", "", "kspg3_gnd_twr"),
   ],
 
-  // Witham Field Airport (Stuart, Florida, United States) — CSV verified
+  // Witham Field Airport (Stuart, Florida, United States) - CSV verified
   KSUA: [
     feed("KSUA", "combined", "Ground/Tower", "", "ksua1"),
   ],
 
-  // Summerville Airport (Summerville, South Carolina, United States) — CSV verified
+  // Summerville Airport (Summerville, South Carolina, United States) - CSV verified
   KDYB: [
     feed("KDYB", "center", "CTAF", "", "kdyb2"),
   ],
 
-  // Syracuse Hancock International Airport (Syracuse, New York, United States) — CSV verified
+  // Syracuse Hancock International Airport (Syracuse, New York, United States) - CSV verified
   KSYR: [
     feed("KSYR", "tower", "Tower", "", "ksyr_twr"),
     feed("KSYR", "ground", "Clearance Delivery", "", "ksyr_del"),
@@ -5718,22 +5718,22 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Tacoma Narrows Airport (Tacoma, Washington, United States) — CSV verified
+  // Tacoma Narrows Airport (Tacoma, Washington, United States) - CSV verified
   KTIW: [
     feed("KTIW", "tower", "Tower", "", "ktiw3"),
   ],
 
-  // Tallahassee Regional Airport (Tallahassee, Florida, United States) — CSV verified
+  // Tallahassee Regional Airport (Tallahassee, Florida, United States) - CSV verified
   KTLH: [
     feed("KTLH", "combined", "Del/Gnd/Twr/App", "", "ktlh"),
   ],
 
-  // MacDill Air Force Base (Tampa, Florida, United States) — CSV verified
+  // MacDill Air Force Base (Tampa, Florida, United States) - CSV verified
   KMCF: [
     feed("KMCF", "tower", "Tower", "", "ktpa5_kmcf_twr"),
   ],
 
-  // Tampa International Airport (Tampa, Florida, United States) — CSV verified
+  // Tampa International Airport (Tampa, Florida, United States) - CSV verified
   KTPA: [
     feed("KTPA", "tower", "Tower #1", "", "ktpa2"),
     feedN(
@@ -5747,17 +5747,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KTPA", "approach", "Tampa Approach (West/High)", "", "kpie1_app_118800"),
   ],
 
-  // Peter O Knight Airport (Tampa, Florida, United States) — CSV verified
+  // Peter O Knight Airport (Tampa, Florida, United States) - CSV verified
   KTPF: [
     feed("KTPF", "center", "CTAF", "", "ktpa5_ktpf_ctaf"),
   ],
 
-  // Tampa Executive Airport (Tampa, Florida, United States) — CSV verified
+  // Tampa Executive Airport (Tampa, Florida, United States) - CSV verified
   KVDF: [
     feed("KVDF", "center", "CTAF", "", "ktpa5_kvdf_ctaf"),
   ],
 
-  // Teterboro Airport (Teterboro, New Jersey, United States) — CSV verified
+  // Teterboro Airport (Teterboro, New Jersey, United States) - CSV verified
   KTEB: [
     feed("KTEB", "tower", "Tower (Secondary)", "", "kteb_es_twr2"),
     feedN(
@@ -5829,27 +5829,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Ocean County Airport (Toms River, New Jersey, United States) — CSV verified
+  // Ocean County Airport (Toms River, New Jersey, United States) - CSV verified
   KMJX: [
     feed("KMJX", "combined", "KBLM/N12/3N6/KMJX", "", "kblm2"),
   ],
 
-  // Topeka Regional Airport (Topeka, Kansas, United States) — CSV verified
+  // Topeka Regional Airport (Topeka, Kansas, United States) - CSV verified
   KFOE: [
     feed("KFOE", "combined", "Gnd/Twr/CTAF", "", "ktop3"),
   ],
 
-  // Philip Billard Municipal Airport (Topeka, Kansas, United States) — CSV verified
+  // Philip Billard Municipal Airport (Topeka, Kansas, United States) - CSV verified
   KTOP: [
     feed("KTOP", "combined", "Ground/Tower", "", "ktop2_twrgnd"),
   ],
 
-  // Cherry Capital Airport (Traverse City, Michigan, United States) — CSV verified
+  // Cherry Capital Airport (Traverse City, Michigan, United States) - CSV verified
   KTVC: [
     feed("KTVC", "combined", "Ground/Tower/Center", "", "ktvc2_all"),
   ],
 
-  // Trenton Mercer Airport (Trenton, New Jersey, United States) — CSV verified
+  // Trenton Mercer Airport (Trenton, New Jersey, United States) - CSV verified
   KTTN: [
     feed("KTTN", "tower", "Tower", "", "kttn_twr"),
     feed("KTTN", "ground", "Ground", "", "kttn_gnd"),
@@ -5866,12 +5866,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Oakland/Troy Airport (Troy, Michigan, United States) — CSV verified
+  // Oakland/Troy Airport (Troy, Michigan, United States) - CSV verified
   KVLL: [
     feed("KVLL", "center", "KMTC Area CTAF", "", "kmtc1_area_ctaf"),
   ],
 
-  // Truckee-Tahoe Airport (Truckee, California, United States) — CSV verified
+  // Truckee-Tahoe Airport (Truckee, California, United States) - CSV verified
   KTRK: [
     feed("KTRK", "tower", "Tower/CTAF #1", "", "ktrk_twr1"),
     feedN(
@@ -5904,7 +5904,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KTRK", "combined", "Gnd/Twr/CTAF", "", "ktrk_gnd_twr"),
   ],
 
-  // Tucson International Airport (Tucson, Arizona, United States) — CSV verified
+  // Tucson International Airport (Tucson, Arizona, United States) - CSV verified
   KTUS: [
     feed("KTUS", "center", "ZAB Sector 46 (Tucson Low)", "", "zab46"),
     feedN(
@@ -5918,7 +5918,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KTUS", "combined", "Del/Gnd/Twr/App/KDMA", "", "ktus2"),
   ],
 
-  // Tyler Pounds Regional Airport (Tyler, Texas, United States) — CSV verified
+  // Tyler Pounds Regional Airport (Tyler, Texas, United States) - CSV verified
   KTYR: [
     feed("KTYR", "tower", "Tower", "", "ktyr2_twr"),
     feed("KTYR", "ground", "Ground", "", "ktyr2_gnd"),
@@ -5936,12 +5936,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KTYR", "combined", "Ground/Tower", "", "ktyr2_gnd_twr"),
   ],
 
-  // Pearson Field Airport (Vancouver, Washington, United States) — CSV verified
+  // Pearson Field Airport (Vancouver, Washington, United States) - CSV verified
   KVUO: [
     feed("KVUO", "center", "CTAF/Guard", "", "kpdx_pearson"),
   ],
 
-  // Venice Municipal Airport (Venice, Florida, United States) — CSV verified
+  // Venice Municipal Airport (Venice, Florida, United States) - CSV verified
   KVNC: [
     feed("KVNC", "center", "CTAF", "", "kvnc1"),
     feedN(
@@ -5954,7 +5954,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Vero Beach Municipal Airport (Vero Beach, Florida, United States) — CSV verified
+  // Vero Beach Municipal Airport (Vero Beach, Florida, United States) - CSV verified
   KVRB: [
     feed("KVRB", "tower", "Tower", "", "kvrb_twr"),
     feed("KVRB", "ground", "Ground", "", "kvrb_gnd"),
@@ -5971,12 +5971,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Martha\'s Vineyard Airport (Vineyard Haven, Massachusetts, United States) — CSV verified
+  // Martha\'s Vineyard Airport (Vineyard Haven, Massachusetts, United States) - CSV verified
   KMVY: [
     feed("KMVY", "combined", "Twr/App", "", "kmvy_twrapp"),
   ],
 
-  // Oceana Naval Air Station (Apollo Soucek Field) (Virginia Beach, Virginia, United States) — CSV verified
+  // Oceana Naval Air Station (Apollo Soucek Field) (Virginia Beach, Virginia, United States) - CSV verified
   KNTU: [
     feed("KNTU", "combined", "Giant Killer", "", "korf_gk"),
     feedN(
@@ -5997,12 +5997,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Walnut Ridge Regional Airport (Walnut Ridge, Arkansas, United States) — CSV verified
+  // Walnut Ridge Regional Airport (Walnut Ridge, Arkansas, United States) - CSV verified
   KARG: [
     feed("KARG", "center", "CTAF/Memphis Center", "", "karg1"),
   ],
 
-  // Ronald Reagan Washington National Airport (Washington, District of Columbia, United States) — CSV verified
+  // Ronald Reagan Washington National Airport (Washington, District of Columbia, United States) - CSV verified
   KDCA: [
     feed("KDCA", "tower", "Tower", "", "kdca1_twr"),
     feedN(
@@ -6051,7 +6051,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Pentagon Army Heliport (Washington, District of Columbia, United States) — CSV verified
+  // Pentagon Army Heliport (Washington, District of Columbia, United States) - CSV verified
   KJPN: [
     feed("KJPN", "tower", "KDCA Tower/KJPN Helicopter", "", "kdca4_heli"),
     feedN(
@@ -6064,17 +6064,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Waukesha County Airport (Waukesha, Wisconsin, United States) — CSV verified
+  // Waukesha County Airport (Waukesha, Wisconsin, United States) - CSV verified
   KUES: [
     feed("KUES", "combined", "Gnd/Twr", "", "kues4"),
   ],
 
-  // Waupaca Municipal Airport (Waupaca, Wisconsin, United States) — CSV verified
+  // Waupaca Municipal Airport (Waupaca, Wisconsin, United States) - CSV verified
   KPCZ: [
     feed("KPCZ", "center", "KPCZ/KCLI/Y50/W23/KEZS CTAF", "", "kpcz2"),
   ],
 
-  // Palm Beach County Park Airport (West Palm Beach, Florida, United States) — CSV verified
+  // Palm Beach County Park Airport (West Palm Beach, Florida, United States) - CSV verified
   KLNA: [
     feed("KLNA", "center", "CTAF", "", "kpbi2_klna"),
     feedN(
@@ -6087,7 +6087,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Palm Beach International Airport (West Palm Beach, Florida, United States) — CSV verified
+  // Palm Beach International Airport (West Palm Beach, Florida, United States) - CSV verified
   KPBI: [
     feed("KPBI", "tower", "Tower", "", "kpbi2_twr"),
     feed("KPBI", "ground", "Clearance Delivery", "", "kpbi2_del"),
@@ -6193,7 +6193,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Barnes Municipal Airport (Westfield/Springfield, Massachusetts, United States) — CSV verified
+  // Barnes Municipal Airport (Westfield/Springfield, Massachusetts, United States) - CSV verified
   KBAF: [
     feed("KBAF", "tower", "KBAF/KCEF Tower", "", "kbaf1_twr"),
     feed("KBAF", "ground", "Ground", "", "kbaf1_gnd"),
@@ -6201,7 +6201,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBAF", "combined", "Ground/Tower", "", "kbaf1_gnd_twr"),
   ],
 
-  // Carroll County Regional Airport/Jack B Poage Field (Westminster, Maryland, United States) — CSV verified
+  // Carroll County Regional Airport/Jack B Poage Field (Westminster, Maryland, United States) - CSV verified
   KDMW: [
     feed("KDMW", "atis", "AWOS #2", "", "kdmw2_awos"),
     feed("KDMW", "center", "CTAF #2", "", "kdmw2_122700"),
@@ -6215,7 +6215,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Westchester County Airport (White Plains, New York, United States) — CSV verified
+  // Westchester County Airport (White Plains, New York, United States) - CSV verified
   KHPN: [
     feed("KHPN", "tower", "Tower", "", "khpn_twr"),
     feed("KHPN", "ground", "Delivery/Ground", "", "khpn_del_gnd"),
@@ -6224,7 +6224,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KHPN", "combined", "Del/Gnd/Tower #1", "", "khpn2_del_gnd_twr"),
   ],
 
-  // Colonel James Jabara Airport (Wichita, Kansas, United States) — CSV verified
+  // Colonel James Jabara Airport (Wichita, Kansas, United States) - CSV verified
   KAAO: [
     feed("KAAO", "approach", "Wichita Approach (Both)", "", "kaao3_app_both"),
     feedN(
@@ -6263,27 +6263,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KAAO", "center", "CTAF", "", "kaao3_122700"),
   ],
 
-  // Beech Factory Airport (Wichita, Kansas, United States) — CSV verified
+  // Beech Factory Airport (Wichita, Kansas, United States) - CSV verified
   KBEC: [
     feed("KBEC", "tower", "Tower", "", "kaao3_kbec_twr"),
   ],
 
-  // Cessna Aircraft Field Airport (Wichita, Kansas, United States) — CSV verified
+  // Cessna Aircraft Field Airport (Wichita, Kansas, United States) - CSV verified
   KCEA: [
     feed("KCEA", "center", "CTAF", "", "kaao3_122900"),
   ],
 
-  // Mc Connell Air Force Base (Wichita, Kansas, United States) — CSV verified
+  // Mc Connell Air Force Base (Wichita, Kansas, United States) - CSV verified
   KIAB: [
     feed("KIAB", "tower", "Tower", "", "kaao3_kiab_twr"),
   ],
 
-  // Wichita Falls Municipal Airport / Sheppard Air Force Base (Wichita Falls, Texas, United States) — CSV verified
+  // Wichita Falls Municipal Airport / Sheppard Air Force Base (Wichita Falls, Texas, United States) - CSV verified
   KSPS: [
     feed("KSPS", "center", "ZFW Sector 75", "", "zfw_ksps_127950"),
   ],
 
-  // Williston Basin International Airport (Williston, North Dakota, United States) — CSV verified
+  // Williston Basin International Airport (Williston, North Dakota, United States) - CSV verified
   KXWA: [
     feed("KXWA", "center", "Area Guard", "", "kxwa2_guard"),
     feedN(
@@ -6296,7 +6296,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Wilmington International Airport (Wilmington, North Carolina, United States) — CSV verified
+  // Wilmington International Airport (Wilmington, North Carolina, United States) - CSV verified
   KILM: [
     feed("KILM", "center", "ZDC Sector 35 Wilmington", "", "zdc_kilm2"),
     feedN(
@@ -6318,7 +6318,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Bradley International Airport (Windsor Locks, Connecticut, United States) — CSV verified
+  // Bradley International Airport (Windsor Locks, Connecticut, United States) - CSV verified
   KBDL: [
     feed("KBDL", "tower", "Tower", "", "kbdl2_twr"),
     feed("KBDL", "ground", "Del/Gnd", "", "kbdl2_del_gnd"),
@@ -6327,7 +6327,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KBDL", "combined", "Twr/App", "", "kbdl2_twr_app"),
   ],
 
-  // Winter Haven&#039;s Gilbert Airport (Winter Haven, Florida, United States) — CSV verified
+  // Winter Haven&#039;s Gilbert Airport (Winter Haven, Florida, United States) - CSV verified
   KGIF: [
     feed("KGIF", "atis", "ASOS", "", "kgif_awos"),
     feed("KGIF", "center", "CTAF/GCO/Guard", "", "kgif_s"),
@@ -6357,19 +6357,19 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Worcester Regional Airport (Worcester, Massachusetts, United States) — CSV verified
+  // Worcester Regional Airport (Worcester, Massachusetts, United States) - CSV verified
   KORH: [
     feed("KORH", "tower", "Tower", "", "korh_murp_twr"),
     feed("KORH", "approach", "Bradley App/Dep", "", "korh_murp_app"),
     feed("KORH", "atis", "ATIS", "", "korh_murp_atis"),
   ],
 
-  // McGuire Field (Joint Base Mc Guire Dix Lakehurst) Airport (Wrightstown, New Jersey, United States) — CSV verified
+  // McGuire Field (Joint Base Mc Guire Dix Lakehurst) Airport (Wrightstown, New Jersey, United States) - CSV verified
   KWRI: [
     feed("KWRI", "combined", "KNEL/KWRI/ZNY", "", "kblm1"),
   ],
 
-  // Yakima Air Terminal/McAllister Field (Yakima, Washington, United States) — CSV verified
+  // Yakima Air Terminal/McAllister Field (Yakima, Washington, United States) - CSV verified
   KYKM: [
     feed("KYKM", "tower", "Tower", "", "kykm1_twr"),
     feed("KYKM", "ground", "Ground", "", "kykm1_gnd"),
@@ -6377,12 +6377,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("KYKM", "combined", "App/Dep", "", "kykm1_app"),
   ],
 
-  // Yuma MCAS/International Airport (Yuma, Arizona, United States) — CSV verified
+  // Yuma MCAS/International Airport (Yuma, Arizona, United States) - CSV verified
   KNYL: [
     feed("KNYL", "combined", "Del/Gnd/Twr/App/ZLA", "", "knyl1_local"),
   ],
 
-  // Zelienople Municipal Airport (Zelienople, Pennsylvania, United States) — CSV verified
+  // Zelienople Municipal Airport (Zelienople, Pennsylvania, United States) - CSV verified
   KPJC: [
     feed("KPJC", "center", "Area Emergency/Guard", "", "kpjc3_guard"),
     feedN(
@@ -6395,7 +6395,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Zephyrhills Municipal Airport (Zephyrhills, Florida, United States) — CSV verified
+  // Zephyrhills Municipal Airport (Zephyrhills, Florida, United States) - CSV verified
   KZPH: [
     feed("KZPH", "center", "CTAF #1", "", "kzph2"),
   ],
@@ -6405,62 +6405,62 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Bulgaria --
-  // Burgas International Airport (Burgas, Bulgaria) — CSV verified
+  // Burgas International Airport (Burgas, Bulgaria) - CSV verified
   LBBG: [
     feed("LBBG", "combined", "Twr/App", "", "lbbg2"),
   ],
 
-  // Plovdiv International Airport (Plovdiv, Bulgaria) — CSV verified
+  // Plovdiv International Airport (Plovdiv, Bulgaria) - CSV verified
   LBPD: [
     feed("LBPD", "tower", "Tower", "", "lbsf2_lbpd_twr"),
   ],
 
-  // Sofia International Airport (Sofia, Bulgaria) — CSV verified
+  // Sofia International Airport (Sofia, Bulgaria) - CSV verified
   LBSF: [
     feed("LBSF", "combined", "Tower/Approach #2", "", "lbsf1"),
   ],
 
 
   // -- Estonia --
-  // Tallinn Airport (Tallinn, Estonia) — CSV verified
+  // Tallinn Airport (Tallinn, Estonia) - CSV verified
   EETN: [
     feed("EETN", "combined", "Tower/Approach", "", "eetn2_twr"),
   ],
 
 
   // -- Finland --
-  // Helsinki-Vantaa Airport (Helsinki, Finland) — CSV verified
+  // Helsinki-Vantaa Airport (Helsinki, Finland) - CSV verified
   EFHK: [
     feed("EFHK", "tower", "Tower (22L/04R 15/33)", "", "efhk2_twr1"),
   ],
 
 
   // -- Greece --
-  // Skiathos International Airport (Skiathos, Greece) — CSV verified
+  // Skiathos International Airport (Skiathos, Greece) - CSV verified
   LGSK: [
     feed("LGSK", "combined", "Twr/App/ACC", "", "lgav2"),
   ],
 
 
   // -- Hungary --
-  // Debrecen Airport (Debrecen, Hungary) — CSV verified
+  // Debrecen Airport (Debrecen, Hungary) - CSV verified
   LHDC: [
     feed("LHDC", "tower", "Info/Tower", "", "lhdc"),
   ],
 
 
   // -- Ireland --
-  // Ireland West Airport Knock (Charlestown, Ireland) — CSV verified
+  // Ireland West Airport Knock (Charlestown, Ireland) - CSV verified
   EIKN: [
     feed("EIKN", "combined", "Gnd/Twr/App", "", "eikn2"),
   ],
 
-  // Cork Airport (Cork, Ireland) — CSV verified
+  // Cork Airport (Cork, Ireland) - CSV verified
   EICK: [
     feed("EICK", "combined", "Gnd/Twr/App/Dep", "", "eick4_gta"),
   ],
 
-  // Shannon Airport (Shannon, Ireland) — CSV verified
+  // Shannon Airport (Shannon, Ireland) - CSV verified
   EINN: [
     feed("EINN", "center", "Shannon Control High (East)", "", "einn2_high1"),
     feedN(
@@ -6484,7 +6484,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Latvia --
-  // Riga International Airport (Riga, Latvia) — CSV verified
+  // Riga International Airport (Riga, Latvia) - CSV verified
   EVRA: [
     feed("EVRA", "tower", "Tower/Guard", "", "evra1"),
     feed("EVRA", "approach", "Approach", "", "evra2"),
@@ -6501,20 +6501,20 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Lithuania --
-  // Vilnius International Airport (Vilnius, Lithuania) — CSV verified
+  // Vilnius International Airport (Vilnius, Lithuania) - CSV verified
   EYVI: [
     feed("EYVI", "combined", "Tower/Approach/Misc", "", "eyvi"),
   ],
 
 
   // -- Netherlands --
-  // Gilze-Rijen Air Base (Breda, Netherlands) — CSV verified
+  // Gilze-Rijen Air Base (Breda, Netherlands) - CSV verified
   EHGR: [
     feed("EHGR", "tower", "Tower", "", "ehgr4_twr"),
     feed("EHGR", "combined", "Area Gliders", "", "ehgr4_gliders"),
   ],
 
-  // Eindhoven Airport (Eindhoven, Netherlands) — CSV verified
+  // Eindhoven Airport (Eindhoven, Netherlands) - CSV verified
   EHEH: [
     feed("EHEH", "tower", "Tower #1", "", "eheh3_twr"),
     feedN(
@@ -6537,7 +6537,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("EHEH", "approach", "Approach #1", "", "eheh3_app"),
   ],
 
-  // Groningen Airport Eelde (Groningen, Netherlands) — CSV verified
+  // Groningen Airport Eelde (Groningen, Netherlands) - CSV verified
   EHGG: [
     feed("EHGG", "tower", "Tower", "", "ehgg1_twr"),
     feed("EHGG", "ground", "Ground", "", "ehgg1_gnd"),
@@ -6555,7 +6555,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("EHGG", "combined", "Twr/App (Secondary)", "", "ehgg1_bu"),
   ],
 
-  // Lelystad Airport (Lelystad, Netherlands) — CSV verified
+  // Lelystad Airport (Lelystad, Netherlands) - CSV verified
   EHLE: [
     feed("EHLE", "tower", "Tower", "", "ehle_twr"),
     feed("EHLE", "ground", "Clearance Delivery", "", "ehle_del"),
@@ -6571,7 +6571,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("EHLE", "center", "FIC", "", "ehle_fic"),
   ],
 
-  // Rotterdam The Hague Airport (Rotterdam, Netherlands) — CSV verified
+  // Rotterdam The Hague Airport (Rotterdam, Netherlands) - CSV verified
   EHRD: [
     feed("EHRD", "tower", "Tower", "", "ehrd1_twr"),
     feedN(
@@ -6605,7 +6605,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- North Macedonia, Republic of --
-  // Skopje Airport (Petrovec, North Macedonia, Republic of) — CSV verified
+  // Skopje Airport (Petrovec, North Macedonia, Republic of) - CSV verified
   LWSK: [
     feed("LWSK", "tower", "Tower", "", "lwsk2_2"),
     feed("LWSK", "approach", "Approach", "", "lwsk2_3"),
@@ -6623,35 +6623,35 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Norway --
-  // Alesund Airport, Vigra (Alesund, Norway) — CSV verified
+  // Alesund Airport, Vigra (Alesund, Norway) - CSV verified
   ENAL: [
     feed("ENAL", "tower", "Tower", "", "enal4"),
   ],
 
-  // Alta Airport (Alta, Norway) — CSV verified
+  // Alta Airport (Alta, Norway) - CSV verified
   ENAT: [
     feed("ENAT", "combined", "Twr/App/Control", "", "enat2"),
   ],
 
-  // Bergen Airport - Flesland (Bergen, Norway) — CSV verified
+  // Bergen Airport - Flesland (Bergen, Norway) - CSV verified
   ENBR: [
     feed("ENBR", "tower", "Tower", "", "enbr4_twr"),
     feed("ENBR", "approach", "Approach", "", "enbr4_app"),
     feed("ENBR", "center", "Area Emergency/Guard", "", "enbr4_guard"),
   ],
 
-  // Bodo Airport (Bodo, Norway) — CSV verified
+  // Bodo Airport (Bodo, Norway) - CSV verified
   ENBO: [
     feed("ENBO", "tower", "Tower", "", "enbo_twr"),
     feed("ENBO", "approach", "Approach", "", "enbo_app"),
   ],
 
-  // Harstad/Narvik Airport (Evenes, Norway) — CSV verified
+  // Harstad/Narvik Airport (Evenes, Norway) - CSV verified
   ENEV: [
     feed("ENEV", "combined", "Twr/App/ACC", "", "enev"),
   ],
 
-  // Farsund Airport, Lista (Farsund, Norway) — CSV verified
+  // Farsund Airport, Lista (Farsund, Norway) - CSV verified
   ENLI: [
     feed("ENLI", "center", "CTAF", "", "enli3_ctaf"),
     feedN(
@@ -6673,28 +6673,28 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("ENLI", "combined", "GA", "", "enli3_ga"),
   ],
 
-  // Kirkenes Airport (Kirkenes, Norway) — CSV verified
+  // Kirkenes Airport (Kirkenes, Norway) - CSV verified
   ENKR: [
     feed("ENKR", "combined", "ENKR/ENVD Twr/App", "", "enkr2"),
   ],
 
-  // Kristiansand Airport - Kjevik (Kristiansand, Norway) — CSV verified
+  // Kristiansand Airport - Kjevik (Kristiansand, Norway) - CSV verified
   ENCN: [
     feed("ENCN", "combined", "Tower/Approach", "", "encn"),
   ],
 
-  // Tromso Airport (Langnes, Norway) — CSV verified
+  // Tromso Airport (Langnes, Norway) - CSV verified
   ENTC: [
     feed("ENTC", "combined", "Tower/Approach", "", "entc"),
   ],
 
-  // Moss Airport - Rygge (Moss, Norway) — CSV verified
+  // Moss Airport - Rygge (Moss, Norway) - CSV verified
   ENRY: [
     feed("ENRY", "tower", "Tower", "", "enry_twr"),
     feed("ENRY", "center", "ENOR Sector 8", "", "enor_sector8"),
   ],
 
-  // Sandefjord Airport - Torp (Sandefjord, Norway) — CSV verified
+  // Sandefjord Airport - Torp (Sandefjord, Norway) - CSV verified
   ENTO: [
     feed("ENTO", "tower", "Tower", "", "ento_twr"),
     feed("ENTO", "approach", "App/Dep", "", "ento_tma"),
@@ -6710,30 +6710,30 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Stavanger Sola Airport (Stavanger, Norway) — CSV verified
+  // Stavanger Sola Airport (Stavanger, Norway) - CSV verified
   ENZV: [
     feed("ENZV", "combined", "Gnd/Twr/App", "", "enzv2"),
   ],
 
-  // Vaernes Airport (Trondheim, Norway) — CSV verified
+  // Vaernes Airport (Trondheim, Norway) - CSV verified
   ENVA: [
     feed("ENVA", "combined", "Ground/Tower/Approach", "", "enva"),
   ],
 
-  // Vadso Airport (Vadso, Norway) — CSV verified
+  // Vadso Airport (Vadso, Norway) - CSV verified
   ENVD: [
     feed("ENVD", "combined", "ENKR/ENVD Twr/App", "", "enkr2"),
   ],
 
 
   // -- Poland --
-  // Bydgoszcz Ignacy Jan Paderewski Airport (Bydgoszcz, Poland) — CSV verified
+  // Bydgoszcz Ignacy Jan Paderewski Airport (Bydgoszcz, Poland) - CSV verified
   EPBY: [
     feed("EPBY", "tower", "Tower", "", "epby3_twr"),
     feed("EPBY", "atis", "ATIS", "", "epby3_atis"),
   ],
 
-  // Katowice International Airport (Katowice, Poland) — CSV verified
+  // Katowice International Airport (Katowice, Poland) - CSV verified
   EPKT: [
     feed("EPKT", "approach", "Delivery/Approach", "", "epkt_gnd"),
     feed("EPKT", "combined", "Del/Twr/App", "", "epkt"),
@@ -6747,27 +6747,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // John Paul II Balice International Airport (Krakow, Poland) — CSV verified
+  // John Paul II Balice International Airport (Krakow, Poland) - CSV verified
   EPKK: [
     feed("EPKK", "combined", "Tower/Approach", "", "epkk_app"),
   ],
 
-  // Lublinek Airport (Lodz, Poland) — CSV verified
+  // Lublinek Airport (Lodz, Poland) - CSV verified
   EPLL: [
     feed("EPLL", "tower", "Tower", "", "epll"),
   ],
 
-  // Lublin Airport (Lublin, Poland) — CSV verified
+  // Lublin Airport (Lublin, Poland) - CSV verified
   EPLB: [
     feed("EPLB", "tower", "Tower/Misc", "", "eplb2"),
   ],
 
-  // Poznan-Lawica Henryk Wieniawski Airport (Poznan, Poland) — CSV verified
+  // Poznan-Lawica Henryk Wieniawski Airport (Poznan, Poland) - CSV verified
   EPPO: [
     feed("EPPO", "combined", "Twr/App/FIS", "", "eppo2"),
   ],
 
-  // Fredric Chopin Warsaw Airport (Warsaw, Poland) — CSV verified
+  // Fredric Chopin Warsaw Airport (Warsaw, Poland) - CSV verified
   EPWA: [
     feed("EPWA", "tower", "Tower", "", "epwa_twr2"),
     feed("EPWA", "ground", "Ground", "", "epwa_gnd"),
@@ -6782,7 +6782,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Strachowice Airport (Wroclaw, Poland) — CSV verified
+  // Strachowice Airport (Wroclaw, Poland) - CSV verified
   EPWR: [
     feed("EPWR", "tower", "Tower", "", "epwr4_twr"),
     feed("EPWR", "ground", "Clearance Delivery", "", "epwr4_del"),
@@ -6800,20 +6800,20 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Portugal --
-  // Beja Airport (Beja, Portugal) — CSV verified
+  // Beja Airport (Beja, Portugal) - CSV verified
   LPBJ: [
     feed("LPBJ", "tower", "Tower", "", "lpbj2_twr"),
     feed("LPBJ", "approach", "App/Dep", "", "lpbj2_app"),
   ],
 
-  // Faro Airport (Faro, Portugal) — CSV verified
+  // Faro Airport (Faro, Portugal) - CSV verified
   LPFR: [
     feed("LPFR", "tower", "Tower", "", "lpfr_twr"),
     feed("LPFR", "ground", "Ground", "", "lpfr_gnd"),
     feed("LPFR", "approach", "Approach", "", "lpfr_app"),
   ],
 
-  // Madeira International Airport (Madeira, Portugal) — CSV verified
+  // Madeira International Airport (Madeira, Portugal) - CSV verified
   LPMA: [
     feed("LPMA", "approach", "Approach", "", "lpma2"),
     feedN(
@@ -6826,19 +6826,19 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Porto Airport (Porto, Portugal) — CSV verified
+  // Porto Airport (Porto, Portugal) - CSV verified
   LPPR: [
     feed("LPPR", "approach", "Approach #1", "", "lppr2"),
   ],
 
 
   // -- Romania --
-  // Brasov-Ghimbav International Airport (Brasov, Romania) — CSV verified
+  // Brasov-Ghimbav International Airport (Brasov, Romania) - CSV verified
   LRBV: [
     feed("LRBV", "tower", "Tower", "", "lrbv2"),
   ],
 
-  // Otopeni International Airport (Bucharest, Romania) — CSV verified
+  // Otopeni International Airport (Bucharest, Romania) - CSV verified
   LROP: [
     feed("LROP", "ground", "Ground", "", "lrop2"),
     feed("LROP", "approach", "Radar", "", "lrop_rdr"),
@@ -6853,143 +6853,143 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Cluj-Napoca International Airport (Cluj-Napoca, Romania) — CSV verified
+  // Cluj-Napoca International Airport (Cluj-Napoca, Romania) - CSV verified
   LRCL: [
     feed("LRCL", "combined", "Twr/App #1", "", "lrcl"),
   ],
 
-  // Sibiu International Airport (Sibiu, Romania) — CSV verified
+  // Sibiu International Airport (Sibiu, Romania) - CSV verified
   LRSB: [
     feed("LRSB", "tower", "Tower/CTAF", "", "lrsb2"),
   ],
 
-  // Traian Vuia International Airport (Timisoara, Romania) — CSV verified
+  // Traian Vuia International Airport (Timisoara, Romania) - CSV verified
   LRTR: [
     feed("LRTR", "tower", "Tower", "", "lrtr"),
   ],
 
 
   // -- Russia --
-  // Salekhard Airport (Salekhard, Russia) — CSV verified
+  // Salekhard Airport (Salekhard, Russia) - CSV verified
   USDD: [
     feed("USDD", "combined", "Gnd/Twr/App/Control", "", "usdd1"),
   ],
 
-  // Sochi International Airport (Sochi, Russia) — CSV verified
+  // Sochi International Airport (Sochi, Russia) - CSV verified
   URSS: [
     feed("URSS", "combined", "Gnd/Twr/App", "", "urss"),
   ],
 
 
   // -- Serbia --
-  // Belgrade Nikola Tesla Airport (Belgrade, Serbia) — CSV verified
+  // Belgrade Nikola Tesla Airport (Belgrade, Serbia) - CSV verified
   LYBE: [
     feed("LYBE", "tower", "Tower", "", "lybe2_twr_118100"),
   ],
 
-  // Constantine the Great Airport (Nis, Serbia) — CSV verified
+  // Constantine the Great Airport (Nis, Serbia) - CSV verified
   LYNI: [
     feed("LYNI", "combined", "Twr/App", "", "lyni2"),
   ],
 
 
   // -- Slovakia --
-  // Milan Rastislav Stefanik Airport (Bratislava, Slovakia) — CSV verified
+  // Milan Rastislav Stefanik Airport (Bratislava, Slovakia) - CSV verified
   LZIB: [
     feed("LZIB", "combined", "Ground/Tower/Approach", "", "lzib2"),
   ],
 
-  // Kosice International Airport (Kosice, Slovakia) — CSV verified
+  // Kosice International Airport (Kosice, Slovakia) - CSV verified
   LZKZ: [
     feed("LZKZ", "combined", "Gnd/Twr/App", "", "lzkz"),
   ],
 
-  // Piestany Airport (Piestany, Slovakia) — CSV verified
+  // Piestany Airport (Piestany, Slovakia) - CSV verified
   LZPP: [
     feed("LZPP", "combined", "Ground/Tower", "", "lzpp2"),
   ],
 
-  // Poprad-Tatry Airport (Poprad, Slovakia) — CSV verified
+  // Poprad-Tatry Airport (Poprad, Slovakia) - CSV verified
   LZTT: [
     feed("LZTT", "tower", "Tower", "", "lztt2_twr"),
   ],
 
 
   // -- Slovenia --
-  // Ljubljana Joze Pucnik Airport (Ljubljana, Slovenia) — CSV verified
+  // Ljubljana Joze Pucnik Airport (Ljubljana, Slovenia) - CSV verified
   LJLJ: [
     feed("LJLJ", "tower", "Tower", "", "ljlj_twr"),
     feed("LJLJ", "approach", "Radar", "", "ljlj_app"),
     feed("LJLJ", "atis", "Info", "", "ljlj_info"),
   ],
 
-  // Maribor Edvard Rusjan Airport (Maribor, Slovenia) — CSV verified
+  // Maribor Edvard Rusjan Airport (Maribor, Slovenia) - CSV verified
   LJMB: [
     feed("LJMB", "tower", "Tower", "", "ljmb3"),
   ],
 
 
   // -- Sweden --
-  // Dala Airport (Borlange, Sweden) — CSV verified
+  // Dala Airport (Borlange, Sweden) - CSV verified
   ESSD: [
     feed("ESSD", "tower", "Tower/Control", "", "essd2"),
   ],
 
-  // Landvetter Airport (Gothenburg, Sweden) — CSV verified
+  // Landvetter Airport (Gothenburg, Sweden) - CSV verified
   ESGG: [
     feed("ESGG", "tower", "Tower", "", "esgg2_twr"),
     feed("ESGG", "approach", "Approach", "", "esgg2_app"),
     feed("ESGG", "combined", "Twr/App", "", "esgg2_twr_app"),
   ],
 
-  // Kalmar Airport (Kalmar, Sweden) — CSV verified
+  // Kalmar Airport (Kalmar, Sweden) - CSV verified
   ESMQ: [
     feed("ESMQ", "tower", "Tower", "", "esmq2"),
   ],
 
-  // Linkoping City (Saab) Airport (Linkoping, Sweden) — CSV verified
+  // Linkoping City (Saab) Airport (Linkoping, Sweden) - CSV verified
   ESSL: [
     feed("ESSL", "combined", "Twr/App/Control", "", "essl"),
   ],
 
-  // Lulea Airport (Lulea, Sweden) — CSV verified
+  // Lulea Airport (Lulea, Sweden) - CSV verified
   ESPA: [
     feed("ESPA", "tower", "Tower/Control", "", "espa"),
   ],
 
-  // Kungsangen Airport (Norrkoping, Sweden) — CSV verified
+  // Kungsangen Airport (Norrkoping, Sweden) - CSV verified
   ESSP: [
     feed("ESSP", "combined", "Twr/App/Control", "", "essp2_twr_app_ctrl"),
   ],
 
-  // Orebro Airport (Orebro, Sweden) — CSV verified
+  // Orebro Airport (Orebro, Sweden) - CSV verified
   ESOE: [
     feed("ESOE", "tower", "Tower/Control", "", "esoe2"),
   ],
 
-  // Stockholm-Bromma Airport (Stockholm, Sweden) — CSV verified
+  // Stockholm-Bromma Airport (Stockholm, Sweden) - CSV verified
   ESSB: [
     feed("ESSB", "tower", "Tower", "", "essb4"),
   ],
 
-  // Malmo Airport (Svedala, Sweden) — CSV verified
+  // Malmo Airport (Svedala, Sweden) - CSV verified
   ESMS: [
     feed("ESMS", "approach", "Radar", "", "esms3_app"),
   ],
 
 
   // -- Switzerland --
-  // Lugano Airport (Agno, Switzerland) — CSV verified
+  // Lugano Airport (Agno, Switzerland) - CSV verified
   LSZA: [
     feed("LSZA", "tower", "Tower", "", "lsza"),
   ],
 
-  // St. Gallen-Altenrhein Airport (Altenrhein, Switzerland) — CSV verified
+  // St. Gallen-Altenrhein Airport (Altenrhein, Switzerland) - CSV verified
   LSZR: [
     feed("LSZR", "tower", "Tower", "", "lszr"),
   ],
 
-  // Bern-Belp Airport (Bern, Switzerland) — CSV verified
+  // Bern-Belp Airport (Bern, Switzerland) - CSV verified
   LSZB: [
     feed("LSZB", "tower", "Tower", "", "lszb2_twr"),
     feed("LSZB", "ground", "Clearance Delivery", "", "lszb2_del"),
@@ -7006,24 +7006,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Mollis Airfield (Glarus, Switzerland) — CSV verified
+  // Mollis Airfield (Glarus, Switzerland) - CSV verified
   LSZM: [
     feed("LSZM", "center", "AFIS", "", "lszm_afis"),
   ],
 
-  // Grenchen Airport (Grenchen, Switzerland) — CSV verified
+  // Grenchen Airport (Grenchen, Switzerland) - CSV verified
   LSZG: [
     feed("LSZG", "tower", "Tower", "", "lszg"),
   ],
 
-  // Sion International Airport (Sion, Switzerland) — CSV verified
+  // Sion International Airport (Sion, Switzerland) - CSV verified
   LSGS: [
     feed("LSGS", "combined", "Gnd/Twr/App", "", "lsgs"),
   ],
 
 
   // -- Turkey --
-  // Ataturk Airport (Istanbul, Turkey) — CSV verified
+  // Ataturk Airport (Istanbul, Turkey) - CSV verified
   LTBA: [
     feed("LTBA", "combined", "Gnd/Twr/App", "", "ltba_s"),
   ],
@@ -7033,7 +7033,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Japan --
-  // Fukuoka Airport (Fukuoka, Japan) — CSV verified
+  // Fukuoka Airport (Fukuoka, Japan) - CSV verified
   RJFF: [
     feed("RJFF", "tower", "Tower", "", "rjff3_twr"),
     feed("RJFF", "ground", "Del/Gnd/TCA", "", "rjff3_app2"),
@@ -7042,23 +7042,23 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("RJFF", "center", "Control (Misc)", "", "rjff3_ctl"),
   ],
 
-  // Osaka International Airport (Osaka, Japan) — CSV verified
+  // Osaka International Airport (Osaka, Japan) - CSV verified
   RJOO: [
     feed("RJOO", "tower", "Tower", "", "rjoo1"),
   ],
 
-  // Sapporo Okadama Airport (Sapporo, Japan) — CSV verified
+  // Sapporo Okadama Airport (Sapporo, Japan) - CSV verified
   RJCO: [
     feed("RJCO", "tower", "Tower", "", "rjco2_twr"),
     feed("RJCO", "approach", "Approach", "", "rjco2_app"),
   ],
 
-  // Fukushima Airport (Sukagawa, Japan) — CSV verified
+  // Fukushima Airport (Sukagawa, Japan) - CSV verified
   RJSF: [
     feed("RJSF", "combined", "RDO", "", "rjsf"),
   ],
 
-  // Yokota Air Base (Tokyo, Japan) — CSV verified
+  // Yokota Air Base (Tokyo, Japan) - CSV verified
   RJTY: [
     feed("RJTY", "tower", "Tower", "", "rjty1_twr"),
     feed("RJTY", "ground", "Ground", "", "rjty1_gnd"),
@@ -7069,26 +7069,26 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Kuwait --
-  // Kuwait International Airport (Kuwait City, Kuwait) — CSV verified
+  // Kuwait International Airport (Kuwait City, Kuwait) - CSV verified
   OKKK: [
     feed("OKKK", "combined", "Gnd/Twr/App/Radar", "", "okbk2"),
   ],
 
 
   // -- Malaysia --
-  // Kota Kinabalu International Airport (Kota Kinabalu, Malaysia) — CSV verified
+  // Kota Kinabalu International Airport (Kota Kinabalu, Malaysia) - CSV verified
   WBKK: [
     feed("WBKK", "combined", "Ground/Tower/Radar/Control", "", "wbkk2"),
   ],
 
-  // Butterworth Airport (Panang, Malaysia) — CSV verified
+  // Butterworth Airport (Panang, Malaysia) - CSV verified
   WMKB: [
     feed("WMKB", "tower", "Tower", "", "wmkb"),
   ],
 
 
   // -- Pakistan --
-  // Allama Iqbal International Airport (Lahore, Pakistan) — CSV verified
+  // Allama Iqbal International Airport (Lahore, Pakistan) - CSV verified
   OPLA: [
     feed("OPLA", "atis", "ATIS", "", "opla_atis"),
     feed("OPLA", "combined", "OPLA/OPLH Gnd/Twr/App", "", "opla"),
@@ -7096,24 +7096,24 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Russia --
-  // Khabarovsk Novy Airport (Khabarovsk, Russia) — CSV verified
+  // Khabarovsk Novy Airport (Khabarovsk, Russia) - CSV verified
   UHHH: [
     feed("UHHH", "combined", "Gnd/Twr/App/Radar/Control", "", "uhhh2"),
   ],
 
-  // Tolmachevo Airport (Novosibirsk, Russia) — CSV verified
+  // Tolmachevo Airport (Novosibirsk, Russia) - CSV verified
   UNNT: [
     feed("UNNT", "combined", "Ground/Tower/Approach/Radar/Misc", "", "unnt"),
   ],
 
-  // Roshchino International Airport (Tyumen, Russia) — CSV verified
+  // Roshchino International Airport (Tyumen, Russia) - CSV verified
   USTR: [
     feed("USTR", "combined", "Gnd/Twr/App", "", "ustr"),
   ],
 
 
   // -- Taiwan --
-  // Taipei Songshan Airport (Taipei, Taiwan) — CSV verified
+  // Taipei Songshan Airport (Taipei, Taiwan) - CSV verified
   RCSS: [
     feed("RCSS", "combined", "Tower/Approach/Departure", "", "rcss2"),
   ],
@@ -7123,7 +7123,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Australia --
-  // Adelaide International Airport (Adelaide, South Australia, Australia) — CSV verified
+  // Adelaide International Airport (Adelaide, South Australia, Australia) - CSV verified
   YPAD: [
     feed("YPAD", "combined", "Del/Gnd/Twr/App", "", "ypad_misc"),
     feedN(
@@ -7136,29 +7136,29 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Alice Springs Airport (Alice Springs, Northern Territory, Australia) — CSV verified
+  // Alice Springs Airport (Alice Springs, Northern Territory, Australia) - CSV verified
   YBAS: [
     feed("YBAS", "tower", "Tower/Center", "", "ybas"),
   ],
 
-  // Avalon Airport (Avalon, Victoria, Australia) — CSV verified
+  // Avalon Airport (Avalon, Victoria, Australia) - CSV verified
   YMAV: [
     feed("YMAV", "approach", "Del/App", "", "ymav2"),
   ],
 
-  // Sydney Bankstown Airport (Bankstown, New South Wales, Australia) — CSV verified
+  // Sydney Bankstown Airport (Bankstown, New South Wales, Australia) - CSV verified
   YSBK: [
     feed("YSBK", "tower", "Tower", "", "ysbk_atis"),
     feed("YSBK", "atis", "ATIS", "", "ysbk_twr"),
   ],
 
-  // Brisbane International Airport (Brisbane, Queensland, Australia) — CSV verified
+  // Brisbane International Airport (Brisbane, Queensland, Australia) - CSV verified
   YBBN: [
     feed("YBBN", "tower", "Tower (North/South)", "", "ybbn7_twr"),
     feed("YBBN", "center", "Brisbane Center (129.000)", "129.000", "ybbn9_ctr"),
   ],
 
-  // Cairns International Airport (Cairns, Queensland, Australia) — CSV verified
+  // Cairns International Airport (Cairns, Queensland, Australia) - CSV verified
   YBCS: [
     feed("YBCS", "tower", "Tower", "", "ybcs_twr"),
     feed("YBCS", "ground", "Ground", "", "ybcs_gnd"),
@@ -7191,17 +7191,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("YBCS", "combined", "Ground/Tower", "", "ybcs_gnd_twr"),
   ],
 
-  // Hobart International Airport (Cambridge, Tasmania, Australia) — CSV verified
+  // Hobart International Airport (Cambridge, Tasmania, Australia) - CSV verified
   YMHB: [
     feed("YMHB", "tower", "Twr/Centre/Misc", "", "ymhb2"),
   ],
 
-  // Camden General Airport (Camden, New South Wales, Australia) — CSV verified
+  // Camden General Airport (Camden, New South Wales, Australia) - CSV verified
   YSCN: [
     feed("YSCN", "tower", "Tower/CTAF", "", "yscn3"),
   ],
 
-  // Canberra International Airport (Canberra, Australian Capital Territory, Australia) — CSV verified
+  // Canberra International Airport (Canberra, Australian Capital Territory, Australia) - CSV verified
   YSCB: [
     feed("YSCB", "tower", "Tower", "", "yscb2_twr"),
     feed("YSCB", "approach", "App/Dep", "", "yscb2_app"),
@@ -7234,17 +7234,17 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("YSCB", "combined", "Twr/App/Dep", "", "yscb2_all"),
   ],
 
-  // Charleville Airport (Charleville, Queensland, Australia) — CSV verified
+  // Charleville Airport (Charleville, Queensland, Australia) - CSV verified
   YBCV: [
     feed("YBCV", "center", "CTAF/Brisbane Center", "", "ybcv"),
   ],
 
-  // Darwin International Airport (Darwin, Northern Territory, Australia) — CSV verified
+  // Darwin International Airport (Darwin, Northern Territory, Australia) - CSV verified
   YPDN: [
     feed("YPDN", "combined", "Gnd/Twr/App/Dep", "", "ypdn"),
   ],
 
-  // Gold Coast Airport (Gold Coast City, Queensland, Australia) — CSV verified
+  // Gold Coast Airport (Gold Coast City, Queensland, Australia) - CSV verified
   YBCG: [
     feed("YBCG", "tower", "Tower #1", "", "ybcg3_twr"),
     feed("YBCG", "ground", "Ground", "", "ybcg3_gnd"),
@@ -7261,12 +7261,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("YBCG", "combined", "Ground/Tower", "", "ybcg3_gnd_twr"),
   ],
 
-  // Oakey Airport (Oakey, Queensland, Australia) — CSV verified
+  // Oakey Airport (Oakey, Queensland, Australia) - CSV verified
   YBOK: [
     feed("YBOK", "combined", "Del/Gnd/Twr/App", "", "ybok"),
   ],
 
-  // Perth Jandakot Airport (Perth, Western Australia, Australia) — CSV verified
+  // Perth Jandakot Airport (Perth, Western Australia, Australia) - CSV verified
   YPJT: [
     feed("YPJT", "tower", "Tower", "", "ypjt3_twr"),
     feed("YPJT", "ground", "Ground", "", "ypjt3_gnd"),
@@ -7282,27 +7282,27 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("YPJT", "combined", "Gnd/Twr", "", "ypjt2_misc"),
   ],
 
-  // Port Macquarie Airport (Port Macquarie, New South Wales, Australia) — CSV verified
+  // Port Macquarie Airport (Port Macquarie, New South Wales, Australia) - CSV verified
   YPMQ: [
     feed("YPMQ", "center", "CTAF", "", "ypmq2"),
   ],
 
-  // RAAF Base Richmond (Richmond, New South Wales, Australia) — CSV verified
+  // RAAF Base Richmond (Richmond, New South Wales, Australia) - CSV verified
   YSRI: [
     feed("YSRI", "tower", "Tower", "", "ysri2_twr"),
   ],
 
-  // Southport Airfield (Southport, Queensland, Australia) — CSV verified
+  // Southport Airfield (Southport, Queensland, Australia) - CSV verified
   YSPT: [
     feed("YSPT", "center", "CTAF", "", "yspt2"),
   ],
 
-  // Tamworth Regional Airport (Tamworth, New South Wales, Australia) — CSV verified
+  // Tamworth Regional Airport (Tamworth, New South Wales, Australia) - CSV verified
   YSTW: [
     feed("YSTW", "combined", "Gnd/Twr/Center", "", "ystw3"),
   ],
 
-  // Townsville Airport (Townsville, Queensland, Australia) — CSV verified
+  // Townsville Airport (Townsville, Queensland, Australia) - CSV verified
   YBTL: [
     feed("YBTL", "tower", "Tower", "", "ybtl1_twr"),
     feed("YBTL", "ground", "Clearance Delivery", "", "ybtl1_del"),
@@ -7319,7 +7319,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("YBTL", "center", "Brisbane Center", "", "ybtl1_ctr"),
   ],
 
-  // Toowoomba Wellcamp Airport (Wellcamp, Queensland, Australia) — CSV verified
+  // Toowoomba Wellcamp Airport (Wellcamp, Queensland, Australia) - CSV verified
   YBWW: [
     feed("YBWW", "center", "CTAF", "", "ybww_ctaf"),
   ],
@@ -7329,7 +7329,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Argentina --
-  // Ing A L V Tarravella International Airport (Cordoba, Argentina) — CSV verified
+  // Ing A L V Tarravella International Airport (Cordoba, Argentina) - CSV verified
   SACO: [
     feed("SACO", "tower", "Tower", "", "saco2_twr"),
     feedN(
@@ -7351,41 +7351,41 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     feed("SACO", "combined", "TMA", "", "saco2_tma"),
   ],
 
-  // La Plata Airport (La Plata, Argentina) — CSV verified
+  // La Plata Airport (La Plata, Argentina) - CSV verified
   SADL: [
     feed("SADL", "combined", "Misc", "", "sadl2"),
   ],
 
-  // Presidente Peron International Airport (Neuquen, Argentina) — CSV verified
+  // Presidente Peron International Airport (Neuquen, Argentina) - CSV verified
   SAZN: [
     feed("SAZN", "tower", "Tower", "", "sazn_twr"),
   ],
 
-  // San Carlos de Bariloche Airport (Rio Negro, Argentina) — CSV verified
+  // San Carlos de Bariloche Airport (Rio Negro, Argentina) - CSV verified
   SAZS: [
     feed("SAZS", "combined", "Gnd/Twr/App", "", "sazs"),
   ],
 
-  // Martin Miguel de Guemes International Airport (Salta, Argentina) — CSV verified
+  // Martin Miguel de Guemes International Airport (Salta, Argentina) - CSV verified
   SASA: [
     feed("SASA", "combined", "Twr/App", "", "sasa"),
   ],
 
-  // Teniente Benjamin Matienzo Airport (Tucuman, Argentina) — CSV verified
+  // Teniente Benjamin Matienzo Airport (Tucuman, Argentina) - CSV verified
   SANT: [
     feed("SANT", "combined", "Tower/Apps", "", "sant"),
   ],
 
 
   // -- Aruba --
-  // Queen Beatrix International Airport (Oranjestad, Aruba) — CSV verified
+  // Queen Beatrix International Airport (Oranjestad, Aruba) - CSV verified
   TNCA: [
     feed("TNCA", "combined", "Tower/Approach/Ground", "", "tnca"),
   ],
 
 
   // -- Bonaire --
-  // Flamingo International Airport (Kralendijk, Bonaire) — CSV verified
+  // Flamingo International Airport (Kralendijk, Bonaire) - CSV verified
   TNCB: [
     feed("TNCB", "tower", "Tower", "", "tncb"),
     feed("TNCB", "atis", "ATIS", "", "tncb_atis"),
@@ -7393,42 +7393,42 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Brazil --
-  // Santa Maria Airport (Aracaju, Brazil) — CSV verified
+  // Santa Maria Airport (Aracaju, Brazil) - CSV verified
   SBAR: [
     feed("SBAR", "combined", "Twr/App", "", "sbar2"),
   ],
 
-  // Val de Cans International Airport (Belem, Brazil) — CSV verified
+  // Val de Cans International Airport (Belem, Brazil) - CSV verified
   SBBE: [
     feed("SBBE", "combined", "Twr/App/SBAZ", "", "sbbe"),
   ],
 
-  // Boa Vista International Airport (Boa Vista, Brazil) — CSV verified
+  // Boa Vista International Airport (Boa Vista, Brazil) - CSV verified
   SBBV: [
     feed("SBBV", "combined", "Tower/Approach", "", "sbbv3"),
   ],
 
-  // Presidente Juscelino Kubitschek International Airport (Brasilia, Brazil) — CSV verified
+  // Presidente Juscelino Kubitschek International Airport (Brasilia, Brazil) - CSV verified
   SBBR: [
     feed("SBBR", "approach", "Approach", "", "sbbr3_app"),
   ],
 
-  // Campina Grande/Presidente Joao Suassuna Airport (Campina Grande, Brazil) — CSV verified
+  // Campina Grande/Presidente Joao Suassuna Airport (Campina Grande, Brazil) - CSV verified
   SBKG: [
     feed("SBKG", "tower", "Tower", "", "sbkg3"),
   ],
 
-  // Viracopos International Airport (Campinas, Brazil) — CSV verified
+  // Viracopos International Airport (Campinas, Brazil) - CSV verified
   SBKP: [
     feed("SBKP", "tower", "Tower #2", "", "sbkp3_twr"),
   ],
 
-  // Afonso Pena Airport (Curitiba, Brazil) — CSV verified
+  // Afonso Pena Airport (Curitiba, Brazil) - CSV verified
   SBCT: [
     feed("SBCT", "combined", "Gnd/Twr/App", "", "sbct2"),
   ],
 
-  // Pinto Martins International Airport (Fortaleza, Brazil) — CSV verified
+  // Pinto Martins International Airport (Fortaleza, Brazil) - CSV verified
   SBFZ: [
     feed("SBFZ", "combined", "Gnd/Twr/App", "", "sbfz4"),
     feedN(
@@ -7441,7 +7441,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Jorge Amado Airport (Ilheus, Brazil) — CSV verified
+  // Jorge Amado Airport (Ilheus, Brazil) - CSV verified
   SBIL: [
     feed("SBIL", "center", "Ilheus Control/Misc", "", "sbil2"),
     feedN(
@@ -7454,37 +7454,37 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Presidente Castro Pinto International Airport (Joao Pessoa, Brazil) — CSV verified
+  // Presidente Castro Pinto International Airport (Joao Pessoa, Brazil) - CSV verified
   SBJP: [
     feed("SBJP", "tower", "Tower", "", "sbjp2"),
   ],
 
-  // Juazeiro do Norte Airport (Juazeiro do Norte, Brazil) — CSV verified
+  // Juazeiro do Norte Airport (Juazeiro do Norte, Brazil) - CSV verified
   SBJU: [
     feed("SBJU", "tower", "Tower/Center", "", "sbju"),
   ],
 
-  // Londrina Airport (Londrina, Brazil) — CSV verified
+  // Londrina Airport (Londrina, Brazil) - CSV verified
   SBLO: [
     feed("SBLO", "combined", "Twr/App/Center", "", "sblo"),
   ],
 
-  // Regional de Maringa Silvio Name Junior Airport (Maringa, Brazil) — CSV verified
+  // Regional de Maringa Silvio Name Junior Airport (Maringa, Brazil) - CSV verified
   SBMG: [
     feed("SBMG", "combined", "Twr/App", "", "sbmg"),
   ],
 
-  // Montes Claros Airport (Montes Claros, Brazil) — CSV verified
+  // Montes Claros Airport (Montes Claros, Brazil) - CSV verified
   SBMK: [
     feed("SBMK", "center", "RDO/Center", "", "sbmk"),
   ],
 
-  // Joao Silva Filho International Airport (Parnaiba, Brazil) — CSV verified
+  // Joao Silva Filho International Airport (Parnaiba, Brazil) - CSV verified
   SBPB: [
     feed("SBPB", "atis", "Info", "", "sbpb2"),
   ],
 
-  // Paulo Afonso Airport (Paulo Afonso, Brazil) — CSV verified
+  // Paulo Afonso Airport (Paulo Afonso, Brazil) - CSV verified
   SBUF: [
     feed("SBUF", "center", "SBRE Recife ACC", "", "sbre1"),
     feedN(
@@ -7497,12 +7497,12 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Petrolina Airport (Petrolina, Brazil) — CSV verified
+  // Petrolina Airport (Petrolina, Brazil) - CSV verified
   SBPL: [
     feed("SBPL", "center", "RDO/ACC", "", "sbpl"),
   ],
 
-  // Guararapes International (Gilberto Freyre International) (Recife, Brazil) — CSV verified
+  // Guararapes International (Gilberto Freyre International) (Recife, Brazil) - CSV verified
   SBRF: [
     feed("SBRF", "tower", "Tower", "", "sbrf_11835"),
     feed("SBRF", "ground", "Ground", "", "sbrf_gnd"),
@@ -7526,48 +7526,48 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Santarem-Maestro Wilson Fonseca Airport (Santarem, Brazil) — CSV verified
+  // Santarem-Maestro Wilson Fonseca Airport (Santarem, Brazil) - CSV verified
   SBSN: [
     feed("SBSN", "combined", "Twr/App/ACC", "", "sbsn"),
   ],
 
-  // Greater Natal International Airport (Sao Goncalo do Amarante, Brazil) — CSV verified
+  // Greater Natal International Airport (Sao Goncalo do Amarante, Brazil) - CSV verified
   SBSG: [
     feed("SBSG", "combined", "Gnd/Twr/App", "", "sbsg3"),
   ],
 
-  // Sao Jose do Rio Preto Airport (Sao Jose do Rio Preto, Brazil) — CSV verified
+  // Sao Jose do Rio Preto Airport (Sao Jose do Rio Preto, Brazil) - CSV verified
   SBSR: [
     feed("SBSR", "center", "AFIS/App/Center", "", "sbsr"),
   ],
 
-  // Teresina-Senador Petronio Portella Airport (Teresina, Brazil) — CSV verified
+  // Teresina-Senador Petronio Portella Airport (Teresina, Brazil) - CSV verified
   SBTE: [
     feed("SBTE", "combined", "Tower/Approach", "", "sbte2"),
   ],
 
-  // Torres Airport (Torres, Brazil) — CSV verified
+  // Torres Airport (Torres, Brazil) - CSV verified
   SSTE: [
     feed("SSTE", "combined", "FCA/Air to Air", "", "sste2"),
   ],
 
 
   // -- Chile --
-  // Arturo Merino Benitez International Airport (Santiago, Chile) — CSV verified
+  // Arturo Merino Benitez International Airport (Santiago, Chile) - CSV verified
   SCEL: [
     feed("SCEL", "combined", "Ground/Tower/Radar", "", "scel"),
   ],
 
 
   // -- Costa Rica --
-  // Juan Santamaria International Airport (San Jose, Costa Rica) — CSV verified
+  // Juan Santamaria International Airport (San Jose, Costa Rica) - CSV verified
   MROC: [
     feed("MROC", "combined", "Delivery/Ground/Tower/Approach/Center/Misc", "", "mroc"),
   ],
 
 
   // -- Curacao --
-  // Aeropuerto Hato (Willemstad, Curacao) — CSV verified
+  // Aeropuerto Hato (Willemstad, Curacao) - CSV verified
   TNCC: [
     feed("TNCC", "tower", "Tower", "", "tncc3_twr"),
     feed("TNCC", "center", "Control", "", "tncc"),
@@ -7575,7 +7575,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Ecuador --
-  // Jose Joaquin de Olmedo International Airport (Guayaquil, Ecuador) — CSV verified
+  // Jose Joaquin de Olmedo International Airport (Guayaquil, Ecuador) - CSV verified
   SEGU: [
     feed("SEGU", "approach", "App/Dep/Info", "", "segu1_app"),
     feed("SEGU", "center", "Guayaquil Center", "", "segu1_acc"),
@@ -7592,14 +7592,14 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- El Salvador --
-  // Ilopango International Airport (San Salvador, El Salvador) — CSV verified
+  // Ilopango International Airport (San Salvador, El Salvador) - CSV verified
   MSSS: [
     feed("MSSS", "combined", "Ground/Tower/Approach", "", "msss4"),
   ],
 
 
   // -- Peru --
-  // Rodriguez Ballon International Airport (Arequipa, Peru) — CSV verified
+  // Rodriguez Ballon International Airport (Arequipa, Peru) - CSV verified
   SPQU: [
     feed("SPQU", "combined", "Ground/Tower", "", "spqu2_gta"),
     feedN(
@@ -7612,84 +7612,84 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
     ),
   ],
 
-  // Alejandro Velasco Astete International Airport (Cusco, Peru) — CSV verified
+  // Alejandro Velasco Astete International Airport (Cusco, Peru) - CSV verified
   SPZO: [
     feed("SPZO", "tower", "Tower", "", "spzo2_twr"),
     feed("SPZO", "ground", "Ground", "", "spzo2_gnd"),
     feed("SPZO", "combined", "Misc", "", "spzo2_misc"),
   ],
 
-  // Jorge Chavez International Airport (Lima, Peru) — CSV verified
+  // Jorge Chavez International Airport (Lima, Peru) - CSV verified
   SPJC: [
     feed("SPJC", "tower", "Tower", "", "spjc1_twr"),
     feed("SPJC", "ground", "Ground", "", "spjc1_gnd"),
     feed("SPJC", "approach", "Approach", "", "spjc1_app"),
   ],
 
-  // Capitan FAP Renan Elias Olivera Airport (Pisco, Peru) — CSV verified
+  // Capitan FAP Renan Elias Olivera Airport (Pisco, Peru) - CSV verified
   SPSO: [
     feed("SPSO", "tower", "Tower", "", "spso2_twr"),
     feed("SPSO", "ground", "Ground", "", "spso2_gnd"),
     feed("SPSO", "combined", "Misc", "", "spso2_misc"),
   ],
 
-  // Cadete FAP Guillermo del Castillo Paredes Airport (Tarapoto, Peru) — CSV verified
+  // Cadete FAP Guillermo del Castillo Paredes Airport (Tarapoto, Peru) - CSV verified
   SPST: [
     feed("SPST", "tower", "Tower", "", "spst2"),
   ],
 
 
   // -- Suriname --
-  // Zorg en Hoop Airport (Paramaribo, Suriname) — CSV verified
+  // Zorg en Hoop Airport (Paramaribo, Suriname) - CSV verified
   SMZO: [
     feed("SMZO", "tower", "Tower", "", "smzo2"),
   ],
 
 
   // -- Trinidad and Tobago --
-  // Piarco International Airport (Port of Spain, Trinidad and Tobago) — CSV verified
+  // Piarco International Airport (Port of Spain, Trinidad and Tobago) - CSV verified
   TTPP: [
     feed("TTPP", "approach", "Approach/Center", "", "ttpp_app"),
     feed("TTPP", "combined", "Ground/Tower", "", "ttpp_twr"),
   ],
 
-  // A. N. R. Robinson International Airport (Scarborough, Trinidad and Tobago) — CSV verified
+  // A. N. R. Robinson International Airport (Scarborough, Trinidad and Tobago) - CSV verified
   TTCP: [
     feed("TTCP", "combined", "Gnd/Twr/App", "", "ttcp2"),
   ],
 
 
   // -- Uruguay --
-  // Santa Bernardina International Airport (Durazno, Uruguay) — CSV verified
+  // Santa Bernardina International Airport (Durazno, Uruguay) - CSV verified
   SUDU: [
     feed("SUDU", "combined", "Twr/App/FIR", "", "sudu1_twr_app"),
   ],
 
-  // Carrasco General Cesareo L. Berisso International Airport (Montevideo, Uruguay) — CSV verified
+  // Carrasco General Cesareo L. Berisso International Airport (Montevideo, Uruguay) - CSV verified
   SUMU: [
     feed("SUMU", "tower", "Twr/Info", "", "sumu_twr_info"),
     feed("SUMU", "approach", "App/Dep", "", "sumu_app_ctr"),
     feed("SUMU", "center", "Montevideo Control (Antena Este)", "", "sumu3_ctl"),
   ],
 
-  // Paysandu Airport (Paysandu, Uruguay) — CSV verified
+  // Paysandu Airport (Paysandu, Uruguay) - CSV verified
   SUPU: [
     feed("SUPU", "center", "AFIS", "", "supu1_afis"),
   ],
 
-  // Capitan Corbeta C A Curbelo International Airport (Punta del Este, Uruguay) — CSV verified
+  // Capitan Corbeta C A Curbelo International Airport (Punta del Este, Uruguay) - CSV verified
   SULS: [
     feed("SULS", "tower", "Tower", "", "suls2_twr"),
   ],
 
-  // Nueva Hesperides International Airport (Salto, Uruguay) — CSV verified
+  // Nueva Hesperides International Airport (Salto, Uruguay) - CSV verified
   SUSO: [
     feed("SUSO", "combined", "Tower/Ramp", "", "suso1"),
   ],
 
 
   // -- Venezuela --
-  // Manuel Carlos Piar Guayana Airport (Ciudad Guayana, Venezuela) — CSV verified
+  // Manuel Carlos Piar Guayana Airport (Ciudad Guayana, Venezuela) - CSV verified
   SVPR: [
     feed("SVPR", "combined", "Twr/App/FIR", "", "svpr2"),
   ],
@@ -7699,7 +7699,7 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Ethiopia --
-  // Bole International Airport (Addis Ababa, Ethiopia) — CSV verified
+  // Bole International Airport (Addis Ababa, Ethiopia) - CSV verified
   HAAB: [
     feed("HAAB", "tower", "Tower", "", "haab2_twr"),
     feed("HAAB", "approach", "Approach", "", "haab2_app"),
@@ -7707,21 +7707,21 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 
   // -- Madagascar --
-  // Ivato International Airport (Antananarivo, Madagascar) — CSV verified
+  // Ivato International Airport (Antananarivo, Madagascar) - CSV verified
   FMMI: [
     feed("FMMI", "combined", "Twr/App/Center", "", "fmmi"),
   ],
 
 
   // -- Reunion --
-  // Rolland Garros Airport (Sainte-Marie, Reunion) — CSV verified
+  // Rolland Garros Airport (Sainte-Marie, Reunion) - CSV verified
   FMEE: [
     feed("FMEE", "approach", "Approach/Departure", "", "fmee3"),
   ],
 
 
   // -- Zambia --
-  // Kenneth Kaunda International Airport (Lusaka, Zambia) — CSV verified
+  // Kenneth Kaunda International Airport (Lusaka, Zambia) - CSV verified
   FLKK: [
     feed("FLKK", "combined", "Twr/App", "", "flkk2"),
   ],

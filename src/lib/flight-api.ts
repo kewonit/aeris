@@ -1,5 +1,5 @@
 /**
- * Flight API client — barrel re-export.
+ * Flight API client - barrel re-export.
  *
  * Default 2-tier fallback chain:
  *   Tier 1: adsb.lol       (via proxy, no CORS)

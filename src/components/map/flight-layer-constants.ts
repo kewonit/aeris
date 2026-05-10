@@ -26,7 +26,7 @@ export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 export const STARTUP_TRAIL_POLLS = 3;
 export const STARTUP_TRAIL_STEP_SEC = 12;
 export const TRACK_DAMPING = 0.18;
-/** EMA alpha for MLAT position smoothing. MLAT accuracy (~100m) is 10×
+/** EMA alpha for MLAT position smoothing. MLAT accuracy (~100m) is 10x
  *  worse than ADS-B (~10m), so we blend toward the previous position to
  *  suppress jitter. 0.65 retains responsiveness while cutting noise. */
 export const MLAT_POSITION_ALPHA = 0.65;

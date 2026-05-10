@@ -169,7 +169,7 @@ const TRACE_DEPARTURE_CERTAIN_ALT_M = 500;
  *   - Above 1500m → not a departure
  *
  * This works for any flight with trace data, regardless of whether the
- * callsign exists in any route database. Zero API cost — uses data
+ * callsign exists in any route database. Zero API cost - uses data
  * already fetched by the trace endpoint.
  */
 export function departureFromTrace(

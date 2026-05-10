@@ -20,16 +20,16 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Primary — server proxy" },
+  { id: "adsb", label: "adsb.lol", description: "Primary - server proxy" },
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Fallback — limited credits",
+    description: "Fallback - limited credits",
   },
   {
     id: "airplanes",
     label: "Airplanes.live",
-    description: "Direct — CORS restricted",
+    description: "Direct - CORS restricted",
   },
 ];
 
@@ -257,7 +257,7 @@ export function ProviderDropdown({
                       style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
                     >
                       {!isAvailable
-                        ? "CORS restricted — dev only"
+                        ? "CORS restricted - dev only"
                         : provider.description}
                     </span>
                   </div>

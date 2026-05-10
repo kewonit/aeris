@@ -181,7 +181,7 @@ export function useTrailSystem(params: {
         // resolveHistory / failHistory guards against stale results,
         // so we only need to bail on scheduling here.
         if (!active) {
-          // Still resolve if the generation matches — avoids silently
+          // Still resolve if the generation matches - avoids silently
           // discarding a valid response that would fix the trail.
           const staleCheck = trailStore.getSnapshot().history;
           if (
@@ -277,7 +277,7 @@ export function useTrailSystem(params: {
     return () => {
       active = false;
       clearTimer();
-      // Don't abort in-flight fetches — let them complete naturally.
+      // Don't abort in-flight fetches - let them complete naturally.
       // resolveHistory/failHistory guard against stale results via
       // selectionGeneration, and completing the fetch avoids the
       // "cancelled request → lost response" race that prevented

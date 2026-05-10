@@ -333,7 +333,7 @@ export function MobileFlightToast({
               <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2 shadow-sm">
                 {genericLogoFailed ? (
                   <span className="text-[16px] font-semibold text-background/25">
-                    —
+                    -
                   </span>
                 ) : (
                   <Image
@@ -426,11 +426,11 @@ export function MobileFlightToast({
           <div className="mt-2 flex items-center gap-1.5">
             <Navigation className="h-3 w-3 shrink-0 text-foreground/20" />
             <p className="truncate text-[11px] font-semibold text-foreground/50">
-              {routeInfo.origin ? formatAirportCode(routeInfo.origin) : "—"}
+              {routeInfo.origin ? formatAirportCode(routeInfo.origin) : "-"}
               <span className="mx-1 text-foreground/20">→</span>
               {routeInfo.destination
                 ? formatAirportCode(routeInfo.destination)
-                : "—"}
+                : "-"}
             </p>
           </div>
         )}
@@ -472,7 +472,7 @@ export function MobileFlightToast({
           value={
             heading !== null && Number.isFinite(heading)
               ? `${Math.round(heading)}° ${cardinal}`
-              : "—"
+              : "-"
           }
         />
         <MiniMetric

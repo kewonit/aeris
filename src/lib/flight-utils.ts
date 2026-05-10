@@ -86,7 +86,7 @@ export function formatCallsign(callsign: string | null): string {
 }
 
 export function headingToCardinal(degrees: number | null): string {
-  if (degrees === null || !Number.isFinite(degrees)) return "—";
+  if (degrees === null || !Number.isFinite(degrees)) return "-";
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   const index = ((Math.round(degrees / 45) % 8) + 8) % 8;
   return directions[index];

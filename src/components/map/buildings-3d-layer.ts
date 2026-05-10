@@ -76,7 +76,7 @@ function buildPaint(dark: boolean): Record<string, unknown> {
  * Add the 3D-buildings fill-extrusion layer to the map.
  *
  * Idempotent: if the layer already exists, this is a no-op. Safe to call on
- * every `style.load` — which is what `map.tsx` does to re-attach overlays
+ * every `style.load` - which is what `map.tsx` does to re-attach overlays
  * after the user swaps styles.
  *
  * Silently skips when:
@@ -111,7 +111,7 @@ export function addBuildings3DLayer(
     source,
     "source-layer": BUILDINGS_3D_SOURCE_LAYER,
     minzoom: BUILDINGS_3D_MIN_ZOOM,
-    // Only render polygon building footprints — guards against rare point
+    // Only render polygon building footprints - guards against rare point
     // features tagged as "building" in some vendor tilesets.
     filter: ["==", ["geometry-type"], "Polygon"],
     paint: buildPaint(
@@ -123,7 +123,7 @@ export function addBuildings3DLayer(
     map.addLayer(layerSpec, beforeId);
   } catch {
     // Tileset lacks a "building" source-layer, or the style is in an
-    // intermediate state. Fail silently — the map should still render.
+    // intermediate state. Fail silently - the map should still render.
   }
 }
 
@@ -141,7 +141,7 @@ export function setBuildings3DTheme(map: maplibregl.Map, dark: boolean): void {
       paint["fill-extrusion-color"],
     );
   } catch {
-    // setPaintProperty can throw during style transitions — ignore.
+    // setPaintProperty can throw during style transitions - ignore.
   }
 }
 

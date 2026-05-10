@@ -186,7 +186,7 @@ async function fetchPhotos(
 
     return { aircraft, photos };
   } catch (err) {
-    // Don't throw on intentional aborts — return empty result
+    // Don't throw on intentional aborts - return empty result
     if (err instanceof DOMException && err.name === "AbortError") {
       return { aircraft: null, photos: [] };
     }
@@ -248,7 +248,7 @@ export function useAircraftPhotos(
               setResolvedKey(cacheKey);
             },
             () => {
-              // JetAPI failed — keep fast results
+              // JetAPI failed - keep fast results
               if (!cancelled) {
                 putCache(cacheKey, fastResult.aircraft, fastResult.photos);
                 setResolvedKey(cacheKey);
@@ -263,7 +263,7 @@ export function useAircraftPhotos(
         },
       );
     } else if (reg && hexCached) {
-      // Already showing hex-only cache — just fetch JetAPI enhancement
+      // Already showing hex-only cache - just fetch JetAPI enhancement
       fetchPhotos(normalized, reg, controller.signal).then(
         (fullResult) => {
           if (cancelled) return;
@@ -272,7 +272,7 @@ export function useAircraftPhotos(
           setResolvedKey(cacheKey);
         },
         () => {
-          // JetAPI failed — keep cached results
+          // JetAPI failed - keep cached results
           if (!cancelled) {
             putCache(cacheKey, hexCached.aircraft, hexCached.photos);
             setResolvedKey(cacheKey);
@@ -280,7 +280,7 @@ export function useAircraftPhotos(
         },
       );
     } else {
-      // No registration — fast sources only
+      // No registration - fast sources only
       fetchPhotos(normalized, null, controller.signal).then(
         (result) => {
           if (cancelled) return;

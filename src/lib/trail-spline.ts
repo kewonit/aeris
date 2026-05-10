@@ -17,7 +17,7 @@ function crKnot(ti: number, pi: ElevatedPoint, pj: ElevatedPoint): number {
   const dy = pj[1] - pi[1];
   const dz = pj[2] - pi[2];
   const d2 = dx * dx + dy * dy + dz * dz;
-  // Guard: NaN inputs produce NaN distances — clamp to epsilon.
+  // Guard: NaN inputs produce NaN distances - clamp to epsilon.
   if (!Number.isFinite(d2)) return ti + 1e-6;
   // d^alpha where alpha = 0.5 → sqrt(d) → (d^2)^0.25
   return ti + Math.pow(Math.max(d2, 1e-12), CR_ALPHA * 0.5);
@@ -54,7 +54,7 @@ function crSegmentPoint(
     const B1 = safeLerp(A1, A2, t0, t2, t);
     const B2 = safeLerp(A2, A3, t1, t3, t);
     const val = safeLerp(B1, B2, t1, t2, t);
-    // Guard against NaN from degenerate knot intervals — fall back to
+    // Guard against NaN from degenerate knot intervals - fall back to
     // linear interpolation between the two segment endpoints.
     out[dim] = Number.isFinite(val) ? val : P1[dim] + t01 * (P2[dim] - P1[dim]);
   }
@@ -90,7 +90,7 @@ function reflectEndpoint(
 
   // Clamp reflection distance to 1° (~111km) to prevent the virtual
   // control point from swinging the spline too far on sparse paths.
-  // Only scale lat/lng — altitude (meters) is independent of geographic clamping.
+  // Only scale lat/lng - altitude (meters) is independent of geographic clamping.
   const MAX_REFLECT_DEG = 1.0;
   const scale = dist > MAX_REFLECT_DEG ? MAX_REFLECT_DEG / dist : 1.0;
 

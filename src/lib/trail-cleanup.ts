@@ -129,7 +129,7 @@ function perpendicularDistance(
   return Math.sqrt(ex * ex + ey * ey);
 }
 
-/** Uniform sampling — picks evenly-spaced points, always including first and last. */
+/** Uniform sampling - picks evenly-spaced points, always including first and last. */
 function uniformSample(
   points: ElevatedPoint[],
   count: number,

@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 //
 // One API call to Wikipedia's REST search endpoint returns a small thumbnail
 // plus the canonical page title. We upscale the thumbnail URL path from the
-// returned variant to a card-appropriate 500px variant — Wikimedia's thumb
+// returned variant to a card-appropriate 500px variant - Wikimedia's thumb
 // server only accepts a fixed set of widths (20/40/60/120/250/330/500/960/
 // 1280/1920/3840), and anything else returns a 429. See:
 // https://www.mediawiki.org/wiki/Common_thumbnail_sizes
@@ -26,12 +26,12 @@ const MIN_PAGE_SCORE = 50;
 const EARLY_RETURN_SCORE = 110;
 
 /**
- * Permissive but safe query validator — allows Unicode letters/marks/digits
+ * Permissive but safe query validator - allows Unicode letters/marks/digits
  * (so airports named "São Paulo", "Zürich", "Köln", "Kraków" etc. work) plus
  * a few punctuation chars common in airport names. Caps length to prevent
  * oversized upstream calls.
  */
-const SAFE_QUERY = /^[\p{L}\p{M}\p{N}\s.\-&()/,'"–—’]{1,128}$/u;
+const SAFE_QUERY = /^[\p{L}\p{M}\p{N}\s.\-&()/,'"–-’]{1,128}$/u;
 const SAFE_CODE = /^[A-Z0-9]{3,4}$/;
 
 type AirportPhotoLookup = {

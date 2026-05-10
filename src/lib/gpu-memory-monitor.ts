@@ -345,7 +345,7 @@ export function installGpuMemoryMonitor(): void {
     return origDeleteRenderbuffer.call(this, rb);
   };
 
-  console.log("[gpu-monitor] Installed — tracking WebGL resource allocations");
+  console.log("[gpu-monitor] Installed - tracking WebGL resource allocations");
 }
 
 // ── Reporting ──────────────────────────────────────────────────────────

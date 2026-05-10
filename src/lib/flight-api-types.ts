@@ -162,7 +162,7 @@ export interface RawAircraft {
 
 /**
  * Top-level response from any readsb endpoint.
- * @see https://api.adsb.lol/api/openapi.json — V2Response_Model
+ * @see https://api.adsb.lol/api/openapi.json - V2Response_Model
  */
 export interface ReadsbApiResponse {
   ac: RawAircraft[];

@@ -168,7 +168,7 @@ export function CameraController({
 
       // Stop any in-progress flyTo/easeTo (e.g. city transition, follow
       // init) so this RAF setBearing() loop won't fight a parallel
-      // camera animation — which causes visible oscillation.
+      // camera animation - which causes visible oscillation.
       m.stop();
 
       const startBearing = m.getBearing();

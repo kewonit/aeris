@@ -5,7 +5,7 @@ import type { FlightState } from "@/lib/opensky";
 import { fetchFlightsByPoint } from "@/lib/flight-api";
 import type { City } from "@/lib/cities";
 
-/** Normal polling interval — readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
+/** Normal polling interval - readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
 const POLL_INTERVAL_MS = 5_000;
 
 /** Backoff on rate limit (429) or repeated errors. */
@@ -14,13 +14,13 @@ const RATE_LIMIT_BACKOFF_MS = 15_000;
 /** If tab was hidden longer than this, fetch immediately on resume. */
 const VISIBILITY_RESUME_STALE_MS = 15_000;
 
-/** Radius (degrees) for FPV point queries — ~120 nautical miles. */
+/** Radius (degrees) for FPV point queries - ~120 nautical miles. */
 const FPV_POINT_RADIUS = 2;
 
 /**
  * Number of consecutive empty API responses before we accept that the area
  * genuinely has zero flights. Protects against transient API failures that
- * return valid JSON with an empty aircraft list — without this guard,
+ * return valid JSON with an empty aircraft list - without this guard,
  * a single empty response would wipe all flights and trigger mass-teleport
  * artifacts when data returns on the next poll.
  */
@@ -177,7 +177,7 @@ export function useFlights(
         setRateLimited(false);
         clearCountdown();
 
-        // All circuits open — preserve last-known flights
+        // All circuits open - preserve last-known flights
         if (result.source === "none" && result.flights.length === 0) {
           scheduleNext(target, POLL_INTERVAL_MS);
           return;
@@ -192,7 +192,7 @@ export function useFlights(
           // After MAX_EMPTY_STREAK consecutive empties, accept it as
           // genuinely empty (e.g. user panned to an empty ocean area).
           if (emptyStreakRef.current < MAX_EMPTY_STREAK) {
-            // Preserve existing flights — schedule next poll normally.
+            // Preserve existing flights - schedule next poll normally.
             lastFetchRef.current = Date.now();
             scheduleNext(target, POLL_INTERVAL_MS);
             return;

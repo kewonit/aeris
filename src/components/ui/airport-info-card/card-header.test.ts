@@ -35,5 +35,5 @@ test("CardHeader omits the flight category badge when category data is missing",
   assert.match(html, /SFO/);
   assert.match(html, /KSFO/);
   assert.doesNotMatch(html, /ring-foreground\/6/);
-  assert.doesNotMatch(html, />—</);
+  assert.doesNotMatch(html, />-</);
 });

@@ -85,7 +85,7 @@ export function projectLngLatElevationPixelDelta(
         return { dx: screenPt.x - cx, dy: screenPt.y - cy };
       }
     } catch {
-      // Point may be behind the globe horizon — fall through to public API
+      // Point may be behind the globe horizon - fall through to public API
     }
   }
 

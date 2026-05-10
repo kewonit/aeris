@@ -383,7 +383,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Validate registration — skip JetAPI if invalid
+  // Validate registration - skip JetAPI if invalid
   const validReg = reg && REG_REGEX.test(reg) ? reg : null;
 
   const [psResult, adbResult, apdResult, jpResult] = await Promise.allSettled([

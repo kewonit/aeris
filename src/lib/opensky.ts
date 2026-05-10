@@ -1,5 +1,5 @@
 /**
- * OpenSky Network API client — barrel re-export.
+ * OpenSky Network API client - barrel re-export.
  *
  * All implementation has been split into focused sub-modules.
  * This file re-exports everything for backward compatibility.

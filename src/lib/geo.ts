@@ -82,7 +82,7 @@ export function greatCircleIntermediate(
 
   const d = haversineDistanceRad(lng1, lat1, lng2, lat2);
 
-  // Very short distance — linear interpolation is fine and avoids division by ~0
+  // Very short distance - linear interpolation is fine and avoids division by ~0
   if (d < 1e-9) {
     return [lng1 + (lng2 - lng1) * t, lat1 + (lat2 - lat1) * t];
   }

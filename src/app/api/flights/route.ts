@@ -68,9 +68,9 @@ async function enforceRateLimit(provider: ProviderKey): Promise<void> {
 
 /**
  * Only allow known readsb endpoint patterns.
- * - /point/{lat}/{lon}/{radius}  — lat/lon can be negative decimals, radius is integer
- * - /hex/{hex}                   — 6-char lowercase hex ICAO address
- * - /callsign/{callsign}        — alphanumeric callsign
+ * - /point/{lat}/{lon}/{radius}  - lat/lon can be negative decimals, radius is integer
+ * - /hex/{hex}                   - 6-char lowercase hex ICAO address
+ * - /callsign/{callsign}        - alphanumeric callsign
  */
 const VALID_PATH =
   /^\/(?:point\/-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?\/\d{1,3}|hex\/[0-9a-f]{6}|callsign\/[A-Z0-9-]{1,8})$/i;

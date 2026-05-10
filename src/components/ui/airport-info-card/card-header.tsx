@@ -32,7 +32,7 @@ export function CardHeader({
   onToggleCollapse,
 }: Props) {
   const fltCat = decodeFltCat(metar?.fltcat);
-  const hasFltCat = fltCat.label !== "—";
+  const hasFltCat = fltCat.label !== "-";
   const reduceMotion = useReducedMotion();
 
   return (
@@ -70,7 +70,7 @@ export function CardHeader({
         </p>
       </div>
 
-      {/* Collapse chevron — lives inside the header button, so clicks anywhere on header toggle */}
+      {/* Collapse chevron - lives inside the header button, so clicks anywhere on header toggle */}
       <motion.span
         animate={{ rotate: collapsed ? 0 : 180 }}
         transition={

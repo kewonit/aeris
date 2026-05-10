@@ -41,7 +41,7 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      // Deferred dialog check — only query DOM when we actually need it
+      // Deferred dialog check - only query DOM when we actually need it
       // (most keydowns short-circuit above, avoiding unnecessary DOM traversal)
       const dialogOpen = !!document.querySelector(
         '[role="dialog"][aria-modal="true"]',

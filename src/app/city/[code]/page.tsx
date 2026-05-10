@@ -11,7 +11,7 @@ import {
 
 const siteUrl = "https://aeris.edbn.me";
 
-/** IATA codes shown in the UI's city switcher — pre-rendered at build time. */
+/** IATA codes shown in the UI's city switcher - pre-rendered at build time. */
 const PRESET_IATAS = CITIES.map((c) => c.iata.toLowerCase());
 
 export async function generateStaticParams() {
@@ -37,8 +37,8 @@ export async function generateMetadata({
 
   const iataUpper = city.iata.toUpperCase();
   const canonicalPath = buildCanonicalCityPath(city);
-  const title = `Live Flights over ${city.name} (${iataUpper}) — 3D Flight Tracker`;
-  const description = `Track flights above ${city.name} in real-time 3D. See live ADS-B aircraft around ${iataUpper} with altitude-aware rendering — low altitudes glow cyan, high altitudes shift to gold. Free and open source.`;
+  const title = `Live Flights over ${city.name} (${iataUpper}) - 3D Flight Tracker`;
+  const description = `Track flights above ${city.name} in real-time 3D. See live ADS-B aircraft around ${iataUpper} with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.`;
 
   return {
     title,
@@ -116,7 +116,7 @@ export default async function CityPage({
       "@type": "WebPage",
       "@id": `${canonicalUrl}#page`,
       url: canonicalUrl,
-      name: `Live Flights over ${city.name} (${iataUpper}) — Aeris`,
+      name: `Live Flights over ${city.name} (${iataUpper}) - Aeris`,
       description: `Real-time 3D flight tracking above ${city.name} (${iataUpper}).`,
       isPartOf: { "@id": `${siteUrl}/#website` },
       about: { "@id": `${canonicalUrl}#place` },

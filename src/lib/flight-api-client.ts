@@ -27,7 +27,7 @@ export interface FlightApiFetchResult {
 // ── Circuit Breaker ────────────────────────────────────────────────────
 //
 // Prevents hammering a dead provider. After 3 consecutive non-abort,
-// non-rate-limit failures the circuit OPENS — the tier is skipped for a
+// non-rate-limit failures the circuit OPENS - the tier is skipped for a
 // cooldown window. After the window elapses the state transitions to
 // HALF-OPEN and a single probe request is allowed through:
 //   • probe succeeds → CLOSED (reset)
@@ -58,7 +58,7 @@ function shouldSkipTier(tierId: string): boolean {
   const c = circuits.get(tierId);
   if (!c || c.state === "closed") return false;
   if (c.state === "open" && Date.now() >= c.openUntil) {
-    // Cooldown expired — allow one probe
+    // Cooldown expired - allow one probe
     c.state = "half-open";
     return false;
   }
@@ -91,9 +91,9 @@ function recordFailure(tierId: string): void {
 
 /** Returns true if this error should NOT trip the circuit breaker. */
 function isNonCircuitError(err: unknown): boolean {
-  // Abort = tab switch / navigation — not a provider failure
+  // Abort = tab switch / navigation - not a provider failure
   if (err instanceof DOMException && err.name === "AbortError") return true;
-  // 429 = server is alive, just rate-limiting — already handled via rateLimited flag
+  // 429 = server is alive, just rate-limiting - already handled via rateLimited flag
   const msg =
     err instanceof Error
       ? err.message.toLowerCase()
@@ -335,7 +335,7 @@ export async function fetchFlightsByPoint(
   const tiers: NamedTier[] = [];
 
   if (override === "adsb" || override === "auto") {
-    // adsb.lol via proxy — primary data source
+    // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
       fn: async () => {
@@ -346,7 +346,7 @@ export async function fetchFlightsByPoint(
   }
 
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy — secondary fallback
+    // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {
@@ -357,7 +357,7 @@ export async function fetchFlightsByPoint(
   }
 
   if (override === "auto") {
-    // OpenSky — last resort
+    // OpenSky - last resort
     tiers.push({
       id: "opensky",
       fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
@@ -396,7 +396,7 @@ export async function fetchFlightByHex(
   const tiers: NamedTier[] = [];
 
   if (override === "adsb" || override === "auto") {
-    // adsb.lol via proxy — primary data source
+    // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
       fn: async () => {
@@ -407,7 +407,7 @@ export async function fetchFlightByHex(
   }
 
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy — secondary fallback
+    // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {
@@ -418,7 +418,7 @@ export async function fetchFlightByHex(
   }
 
   if (override === "auto") {
-    // OpenSky — last resort
+    // OpenSky - last resort
     tiers.push({
       id: "opensky",
       fn: async () => {
@@ -466,7 +466,7 @@ export async function fetchFlightByCallsign(
   const tiers: NamedTier[] = [];
 
   if (override === "adsb" || override === "auto") {
-    // adsb.lol via proxy — primary data source
+    // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
       fn: async () => {
@@ -477,7 +477,7 @@ export async function fetchFlightByCallsign(
   }
 
   if (override === "airplanes" || override === "auto") {
-    // airplanes.live via proxy — secondary fallback
+    // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
       fn: async () => {

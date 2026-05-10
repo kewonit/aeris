@@ -55,7 +55,7 @@ export function resolveInitialCity(): City {
     _cachedInitialCityKey = locationKey;
     return DEFAULT_CITY;
   } catch {
-    // Not in a browser environment (SSR) — fall back to default city
+    // Not in a browser environment (SSR) - fall back to default city
     _cachedInitialCity = DEFAULT_CITY;
     _cachedInitialCityKey = null;
     return DEFAULT_CITY;
@@ -73,7 +73,7 @@ export function syncCityToUrl(city: City): void {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    // Legacy ?city=… must go — canonical is now the pathname.
+    // Legacy ?city=… must go - canonical is now the pathname.
     url.searchParams.delete("city");
     url.searchParams.delete("from");
     url.searchParams.delete("to");

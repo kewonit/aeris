@@ -25,26 +25,26 @@ export type AirspaceTitleInput = {
 /**
  * Formats a single altitude limit.
  *   { 0, ft, GND } → "GND"
- *   { 0, ft, SFC } → "SFC" (surface — used by some ICAO datasets)
+ *   { 0, ft, SFC } → "SFC" (surface - used by some ICAO datasets)
  *   { 245, ft, STD } → "FL245"
  *   { 2500, ft, AMSL } → "2500 ft AMSL"
- *   null / invalid → "—"
+ *   null / invalid → "-"
  */
 export function formatAirspaceLimit(
   limit: AirspaceLimit | null | undefined,
 ): string {
-  if (!limit) return "—";
+  if (!limit) return "-";
   const { value, unit, referenceDatum } = limit;
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
   if (referenceDatum === "GND" && value === 0) return "GND";
   if (referenceDatum === "SFC" && value === 0) return "SFC";
   if (referenceDatum === "STD") return `FL${value}`;
-  if (!unit || !referenceDatum) return "—";
+  if (!unit || !referenceDatum) return "-";
   return `${value} ${unit} ${referenceDatum}`;
 }
 
 /**
- * Formats the popup title: "<CLASS> — <Name>" or "<TYPE> — <Name>".
+ * Formats the popup title: "<CLASS> - <Name>" or "<TYPE> - <Name>".
  * Omits the em-dash and name if `name` is empty or whitespace.
  */
 export function formatAirspaceTitle(input: AirspaceTitleInput): string {
@@ -55,5 +55,5 @@ export function formatAirspaceTitle(input: AirspaceTitleInput): string {
     cls && cls.toLowerCase() !== "unclassified"
       ? cls.toUpperCase()
       : type.toUpperCase();
-  return name ? `${prefix} — ${name}` : prefix;
+  return name ? `${prefix} - ${name}` : prefix;
 }

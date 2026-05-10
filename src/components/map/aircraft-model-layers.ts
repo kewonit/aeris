@@ -5,7 +5,7 @@
 //
 // Performance strategy:
 // 1. Bucket raw flights by model key (cached between polls via
-//    bucketFlightsByModel — only recomputes when flightsRef changes).
+//    bucketFlightsByModel - only recomputes when flightsRef changes).
 // 2. Pass STABLE data arrays to each ScenegraphLayer (same reference
 //    between animation frames) so deck.gl skips full attribute rebuild.
 // 3. Use updateTriggers to selectively recompute only position & orientation
@@ -34,7 +34,7 @@ import {
 } from "./aircraft-model-size";
 import { offsetPositionByTrack } from "./flight-math";
 
-// Stable empty array — same reference every frame so deck.gl skips buffer work
+// Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
 
 // Track when each model type was last seen in flight data.
@@ -47,13 +47,13 @@ const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface AircraftLayerParams {
-  /** Raw flights (flightsRef.current) — stable between polls. Used for bucketing. */
+  /** Raw flights (flightsRef.current) - stable between polls. Used for bucketing. */
   rawFlights: FlightState[];
   /** Interpolated flight map (icao24 → interpolated FlightState). Updated every frame. */
   interpolatedMap: Map<string, FlightState>;
-  /** Animation frame counter — increments every rAF. Drives position/orientation updates. */
+  /** Animation frame counter - increments every rAF. Drives position/orientation updates. */
   frameCounter: number;
-  /** Data version — increments on new poll data. Triggers color/scale recomputation. */
+  /** Data version - increments on new poll data. Triggers color/scale recomputation. */
   dataVersion: number;
   layersVisible: boolean;
   globeFade: number;
@@ -71,7 +71,7 @@ export interface AircraftLayerParams {
 // ── Builder ────────────────────────────────────────────────────────────
 
 /**
- * Returns an array of ScenegraphLayers — one per model key.
+ * Returns an array of ScenegraphLayers - one per model key.
  *
  * Key optimization: `data` uses the CACHED bucket arrays (stable reference
  * between animation frames). Accessors look up interpolated positions from
@@ -103,7 +103,7 @@ export function buildAircraftModelLayers(
     handleClick,
   } = params;
 
-  // Cached bucketing — only recomputes when rawFlights reference changes
+  // Cached bucketing - only recomputes when rawFlights reference changes
   const buckets = bucketFlightsByModel(rawFlights);
   const now = performance.now();
 

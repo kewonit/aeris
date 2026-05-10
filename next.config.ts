@@ -11,7 +11,7 @@ const directTraceConnectSrc = Array.from(
   ),
 ).join(" ");
 
-// Content Security Policy — allows only the external resources Aeris actually uses.
+// Content Security Policy - allows only the external resources Aeris actually uses.
 // https://nextjs.org/docs/app/guides/content-security-policy
 //
 // NOTE: planespotters.net, airport-data.com, and jetapi.dev are

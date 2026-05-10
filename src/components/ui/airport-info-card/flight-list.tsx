@@ -51,11 +51,11 @@ function statusStyle(status: string): {
 function VRate({ rate }: { rate: number | null }) {
   const { settings } = useSettings();
   if (rate === null || !Number.isFinite(rate)) {
-    return <span className="text-[11px] text-foreground/15">—</span>;
+    return <span className="text-[11px] text-foreground/15">-</span>;
   }
   const vSpeed = formatVerticalSpeedValue(rate, settings.unitSystem);
   if (vSpeed.value === null) {
-    return <span className="text-[11px] text-foreground/15">—</span>;
+    return <span className="text-[11px] text-foreground/15">-</span>;
   }
   const isMetric = settings.unitSystem === "metric";
   const levelThreshold = isMetric ? 0.5 : 100;
@@ -109,7 +109,7 @@ function FlightRow({
       className={`group flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left [transition-property:background-color,scale] [transition-duration:180ms] active:scale-[0.96] ${
         isSelected ? "bg-foreground/8" : "hover:bg-foreground/4"
       }`}
-      aria-label={`${flight.callsign} — ${flight.status}, ${flight.altitude}, ${flight.distanceFormatted}`}
+      aria-label={`${flight.callsign} - ${flight.status}, ${flight.altitude}, ${flight.distanceFormatted}`}
       aria-pressed={isSelected}
     >
       <span

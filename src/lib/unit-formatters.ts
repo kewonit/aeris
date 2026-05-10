@@ -51,7 +51,7 @@ export function formatAltitude(
   meters: number | null,
   unitSystem: UnitSystem,
 ): string {
-  if (meters === null || !Number.isFinite(meters)) return "—";
+  if (meters === null || !Number.isFinite(meters)) return "-";
   if (unitSystem === "metric") {
     return `${Math.round(meters).toLocaleString()} m`;
   }
@@ -62,7 +62,7 @@ export function formatSpeed(
   ms: number | null,
   unitSystem: UnitSystem,
 ): string {
-  if (ms === null || !Number.isFinite(ms)) return "—";
+  if (ms === null || !Number.isFinite(ms)) return "-";
   if (unitSystem === "metric") {
     return `${Math.round(ms * KMH_PER_MS).toLocaleString()} km/h`;
   }
@@ -76,7 +76,7 @@ export function formatVerticalSpeed(
   ms: number | null,
   unitSystem: UnitSystem,
 ): string {
-  if (ms === null || !Number.isFinite(ms)) return "—";
+  if (ms === null || !Number.isFinite(ms)) return "-";
   if (unitSystem === "metric") {
     return `${ms > 0 ? "+" : ""}${ms.toFixed(1)} m/s`;
   }
@@ -92,7 +92,7 @@ export function formatVerticalSpeedValue(
     return {
       value: null,
       unitLabel: unitSystem === "metric" ? "m/s" : "fpm",
-      text: "—",
+      text: "-",
     };
   }
 
@@ -117,7 +117,7 @@ export function formatDistanceNm(
   nm: number,
   unitSystem: UnitSystem,
 ): string {
-  if (!Number.isFinite(nm)) return "—";
+  if (!Number.isFinite(nm)) return "-";
   if (unitSystem === "metric") {
     const km = nm * KM_PER_NM;
     if (km < 0.1) return "<0.1 km";
@@ -139,7 +139,7 @@ export function formatDistanceAxisNm(
   nm: number,
   unitSystem: UnitSystem,
 ): string {
-  if (!Number.isFinite(nm)) return "—";
+  if (!Number.isFinite(nm)) return "-";
   if (unitSystem === "metric") return `${Math.round(nm * KM_PER_NM)} km`;
   if (unitSystem === "imperial") return `${Math.round(nm * MI_PER_NM)} mi`;
   return `${Math.round(nm)} nm`;
@@ -149,7 +149,7 @@ export function formatTemperatureC(
   celsius: number | null | undefined,
   unitSystem: UnitSystem,
 ): string {
-  if (celsius == null || !Number.isFinite(celsius)) return "—";
+  if (celsius == null || !Number.isFinite(celsius)) return "-";
   if (unitSystem === "imperial") {
     return `${Math.round((celsius * 9) / 5 + 32)}°F`;
   }
@@ -160,7 +160,7 @@ export function formatPressureHpa(
   hpa: number | null | undefined,
   unitSystem: UnitSystem,
 ): string {
-  if (hpa == null || !Number.isFinite(hpa)) return "—";
+  if (hpa == null || !Number.isFinite(hpa)) return "-";
   if (unitSystem === "imperial") {
     return `${(hpa * INHG_PER_HPA).toFixed(2)} inHg`;
   }
@@ -171,7 +171,7 @@ export function formatVisibility(
   vis: number | string | undefined,
   unitSystem: UnitSystem,
 ): string {
-  if (vis === undefined || vis === null) return "—";
+  if (vis === undefined || vis === null) return "-";
   if (typeof vis === "string") return vis;
   if (unitSystem === "metric") {
     if (vis >= 9999) return "16+ km";

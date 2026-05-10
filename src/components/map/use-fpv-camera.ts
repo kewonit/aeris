@@ -156,7 +156,7 @@ export function useFpvCamera(
         return;
       }
 
-      // Skip camera updates when tab is hidden — saves CPU and
+      // Skip camera updates when tab is hidden - saves CPU and
       // prevents jarring camera jumps from stale alpha lerps on resume.
       if (document.hidden) {
         frameId = requestAnimationFrame(keepInFrame);
@@ -254,7 +254,7 @@ export function useFpvCamera(
         fpvOffsetX = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetX));
         fpvOffsetY = Math.max(-maxOffset, Math.min(maxOffset, fpvOffsetY));
 
-        // Single-level bearing interpolation — lerp map bearing directly
+        // Single-level bearing interpolation - lerp map bearing directly
         // toward the live heading.  Avoids the double-smoothing oscillation
         // that occurred when prevBearing was intermediated separately.
         const currentBearing = map.getBearing();

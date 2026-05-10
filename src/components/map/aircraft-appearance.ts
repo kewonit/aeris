@@ -79,7 +79,7 @@ const TYPE_WINGSPAN_OVERRIDE: Readonly<Record<string, number>> = {
   A346: 64,
   A359: 65,
   A35K: 65,
-  // ── Regional jets — CRJ vs Embraer ───────────────────────────────
+  // ── Regional jets - CRJ vs Embraer ───────────────────────────────
   CRJ1: 21,
   CRJ2: 21,
   CRJ7: 23,
@@ -213,7 +213,7 @@ export function createHaloAtlas(): HTMLCanvasElement {
     const norm = r / c;
     let alpha = 0;
     if (norm < 0.4) {
-      // Large clear center — no glow within ~40% of radius so it never
+      // Large clear center - no glow within ~40% of radius so it never
       // overlaps the aircraft icon even at the largest category size.
       alpha = 0;
     } else if (norm < 0.55) {

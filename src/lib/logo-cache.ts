@@ -9,7 +9,7 @@ export function trackAirlineLogoLoaded(url: string): void {
   if (!url) return;
   loadedAirlineLogoUrls.add(url);
   if (loadedAirlineLogoUrls.size > MAX_LOADED_URLS) {
-    // Set iterates in insertion order — first entry is oldest
+    // Set iterates in insertion order - first entry is oldest
     const oldest = loadedAirlineLogoUrls.values().next().value;
     if (oldest) loadedAirlineLogoUrls.delete(oldest);
   }
@@ -42,7 +42,7 @@ export function markAirlineLogoFailed(url: string): void {
     }
   }
 
-  // Evict oldest if over limit — Map iterates in insertion order
+  // Evict oldest if over limit - Map iterates in insertion order
   if (failedAirlineLogoTimestamps.size > MAX_FAILED_ENTRIES) {
     const oldest = failedAirlineLogoTimestamps.keys().next().value;
     if (oldest) failedAirlineLogoTimestamps.delete(oldest);

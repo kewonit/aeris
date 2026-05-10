@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, X, MapPin, ChevronRight } from "lucide-react";
+import { Search, X, ChevronRight } from "lucide-react";
 import { CITIES, type City } from "@/lib/cities";
 import { searchAirports, type Airport } from "@/lib/airports";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CountryFlag } from "@/components/ui/country-flag";
 
 type AirportSearchInputProps = {
   placeholder?: string;
@@ -31,7 +32,8 @@ export function AirportSearchInput({
 
   useEffect(() => {
     if (autoFocus) {
-      requestAnimationFrame(() => inputRef.current?.focus());
+      const id = requestAnimationFrame(() => inputRef.current?.focus());
+      return () => cancelAnimationFrame(id);
     }
   }, [autoFocus]);
 
@@ -105,24 +107,28 @@ export function AirportSearchInput({
   return (
     <div ref={containerRef} className="relative">
       {selected && !isOpen ? (
-        <button
-          onClick={() => {
-            setIsOpen(true);
-            requestAnimationFrame(() => inputRef.current?.focus());
-          }}
-          className="flex w-full items-center gap-2 rounded-xl border border-foreground/8 bg-foreground/4 px-3 py-2.5 text-left transition-colors hover:bg-foreground/6"
-        >
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground/8">
-            <MapPin className="h-3 w-3 text-foreground/50" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-[13px] font-semibold text-foreground/80">
-              {selected.iata}
-            </span>
-            <span className="ml-1.5 text-[11px] text-foreground/30">
-              {selected.city}
-            </span>
-          </div>
+        <div className="flex w-full items-center gap-2 rounded-xl border border-foreground/8 bg-foreground/4 px-3 py-2.5 text-left">
+          <button
+            onClick={() => {
+              setIsOpen(true);
+              requestAnimationFrame(() => inputRef.current?.focus());
+            }}
+            className="flex flex-1 items-center gap-2 text-left transition-colors hover:opacity-80"
+          >
+            <CountryFlag
+              code={selected.country}
+              size={14}
+              className="shrink-0 rounded-[2px]"
+            />
+            <div className="flex-1 min-w-0">
+              <span className="text-[13px] font-semibold text-foreground/80">
+                {selected.iata}
+              </span>
+              <span className="ml-1.5 text-[11px] text-foreground/30">
+                {selected.city}
+              </span>
+            </div>
+          </button>
           {onClear && (
             <button
               onClick={(e) => {
@@ -135,7 +141,7 @@ export function AirportSearchInput({
               <X className="h-3 w-3" />
             </button>
           )}
-        </button>
+        </div>
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-foreground/8 bg-foreground/4 px-3 py-2">
           <Search className="h-3.5 w-3.5 shrink-0 text-foreground/25" />
@@ -191,7 +197,8 @@ export function AirportSearchInput({
                       <DropdownRow
                         key={city.id}
                         name={city.name}
-                        detail={`${city.iata} · ${city.country}`}
+                        detail={city.iata}
+                        flagCode={city.country}
                         isActive={selected?.iata === city.iata}
                         onClick={() => handleSelectCity(city)}
                       />
@@ -212,7 +219,8 @@ export function AirportSearchInput({
                       <DropdownRow
                         key={airport.iata}
                         name={airport.name}
-                        detail={`${airport.iata} · ${airport.city}, ${airport.country}`}
+                        detail={`${airport.iata} · ${airport.city}`}
+                        flagCode={airport.country}
                         isActive={selected?.iata === airport.iata}
                         onClick={() => handleSelect(airport)}
                       />
@@ -231,11 +239,13 @@ export function AirportSearchInput({
 const DropdownRow = memo(function DropdownRow({
   name,
   detail,
+  flagCode,
   isActive,
   onClick,
 }: {
   name: string;
   detail: string;
+  flagCode?: string;
   isActive: boolean;
   onClick: () => void;
 }) {
@@ -246,14 +256,31 @@ const DropdownRow = memo(function DropdownRow({
         isActive ? "bg-foreground/6" : ""
       }`}
     >
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/4">
-        <MapPin className="h-3 w-3 text-foreground/35" />
-      </div>
+      {flagCode ? (
+        <CountryFlag
+          code={flagCode}
+          size={14}
+          className="shrink-0 rounded-[2px]"
+        />
+      ) : (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/4">
+          <Search className="h-3 w-3 text-foreground/35" />
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <p className="truncate text-[12px] font-medium text-foreground/75">
           {name}
         </p>
-        <p className="text-[10px] text-foreground/25">{detail}</p>
+        <p className="flex items-center gap-1 text-[10px] text-foreground/25">
+          {detail}
+          {flagCode && (
+            <CountryFlag
+              code={flagCode}
+              size={10}
+              className="inline-block rounded-[1px]"
+            />
+          )}
+        </p>
       </div>
       <ChevronRight className="h-3 w-3 shrink-0 text-foreground/10 group-hover:text-foreground/20" />
     </button>

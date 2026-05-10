@@ -34,9 +34,9 @@ export type FlightState = {
   spiFlag: boolean;
   positionSource: number;
   category: number | null;
-  /** ICAO type designator (e.g. "A320", "B738") — available from readsb */
+  /** ICAO type designator (e.g. "A320", "B738") - available from readsb */
   typeCode?: string | null;
-  /** Aircraft registration (e.g. "N12345", "G-KELS") — available from readsb */
+  /** Aircraft registration (e.g. "N12345", "G-KELS") - available from readsb */
   registration?: string | null;
 
   // ── Avionics Data (readsb only, omitted by OpenSky) ──────────────
@@ -82,7 +82,7 @@ export type FlightState = {
   dbFlags?: number | null;
   /** ADS-B emergency/priority status: "none"|"general"|"lifeguard"|"minfuel"|"nordo"|"unlawful"|"downed" */
   emergencyStatus?: string | null;
-  /** Aircraft type description (e.g. "AIRBUS A-320") — Airplanes.live only */
+  /** Aircraft type description (e.g. "AIRBUS A-320") - Airplanes.live only */
   typeDescription?: string | null;
 };
 

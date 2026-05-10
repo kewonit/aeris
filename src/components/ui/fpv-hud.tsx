@@ -257,7 +257,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             <CompassRibbon heading={heading} />
           </div>
           <p className="mt-0 text-center text-[10px] font-bold tabular-nums text-sky-400/70">
-            {heading !== null ? `${Math.round(heading)}° ${cardinal}` : "—"}
+            {heading !== null ? `${Math.round(heading)}° ${cardinal}` : "-"}
           </p>
         </div>
 
@@ -306,7 +306,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white/95 ring-1 ring-foreground/15">
                   {genericLogoFailed ? (
                     <span className="text-[12px] font-semibold text-background/25">
-                      —
+                      -
                     </span>
                   ) : (
                     <Image
@@ -359,7 +359,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             </div>
             <p className="text-[13px] font-bold tabular-nums text-foreground/90">
-               {altDisplay !== null ? altDisplay.toLocaleString() : "—"}
+               {altDisplay !== null ? altDisplay.toLocaleString() : "-"}
              </p>
             <p className="text-[8px] font-medium text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</p>
           </div>
@@ -372,7 +372,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             </div>
             <p className="text-[13px] font-bold tabular-nums text-foreground/90">
-               {speedDisplay ?? "—"}
+               {speedDisplay ?? "-"}
              </p>
             <p className="text-[8px] font-medium text-foreground/25">{speedUnitLabel(settings.unitSystem)}</p>
           </div>
@@ -393,7 +393,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                     : "text-foreground/90"
               }`}
             >
-               {vsDisplay.text ?? "—"}
+               {vsDisplay.text ?? "-"}
              </p>
             <p className="text-[8px] font-medium text-foreground/25">{verticalSpeedUnitLabel(settings.unitSystem)}</p>
           </div>

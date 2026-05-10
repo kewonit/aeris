@@ -338,7 +338,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
           />
         )}
 
-        {/* Feed name + frequency (stacked, center) — clickable to open selector */}
+        {/* Feed name + frequency (stacked, center) - clickable to open selector */}
         <button
           type="button"
           onClick={isBlocked ? () => atc.resume() : onOpenFeedSelector}

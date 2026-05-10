@@ -9,7 +9,7 @@ const METAR_TTL_MS = 10 * 60 * 1000;
 const TAF_TTL_MS = 30 * 60 * 1000;
 const PHOTO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Persistent cache (localStorage) — survives reloads.
+// Persistent cache (localStorage) - survives reloads.
 // Version bump invalidates all previously stored entries.
 const PHOTO_LS_KEY = "aeris:photo-cache:v1";
 const PHOTO_LS_MAX_ENTRIES = 200;
@@ -36,7 +36,7 @@ function safeLocalStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
     const ls = window.localStorage;
-    // Cheap probe — some browsers throw on access in private mode.
+    // Cheap probe - some browsers throw on access in private mode.
     const probe = "__aeris_probe__";
     ls.setItem(probe, "1");
     ls.removeItem(probe);
@@ -80,7 +80,7 @@ function persistPhotoCache(): void {
   const ls = safeLocalStorage();
   if (!ls) return;
   try {
-    // Cap entries — evict oldest first.
+    // Cap entries - evict oldest first.
     const entries = [...photoCache.entries()];
     if (entries.length > PHOTO_LS_MAX_ENTRIES) {
       entries.sort((a, b) => b[1].fetchedAt - a[1].fetchedAt);
@@ -92,7 +92,7 @@ function persistPhotoCache(): void {
     for (const [k, v] of photoCache) snapshot[k] = v;
     ls.setItem(PHOTO_LS_KEY, JSON.stringify(snapshot));
   } catch {
-    // Quota exceeded or other — drop persistence silently.
+    // Quota exceeded or other - drop persistence silently.
     try {
       ls.removeItem(PHOTO_LS_KEY);
     } catch {

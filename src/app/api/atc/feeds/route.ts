@@ -10,10 +10,10 @@ import {
  * GET /api/atc/feeds
  *
  * Feed lookup endpoint. Accepts:
- *   ?icao=KJFK          — feeds for a specific ICAO code
- *   ?iata=JFK           — feeds for a specific IATA code
- *   ?lat=40.6&lng=-73.8 — nearby feeds by coordinates
- *   ?lat=...&lng=...&radius=30 — with custom radius (nm)
+ *   ?icao=KJFK          - feeds for a specific ICAO code
+ *   ?iata=JFK           - feeds for a specific IATA code
+ *   ?lat=40.6&lng=-73.8 - nearby feeds by coordinates
+ *   ?lat=...&lng=...&radius=30 - with custom radius (nm)
  *
  * Returns static data from the feed database (no upstream calls).
  */
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results });
   }
 
-  // No parameters — return list of available ICAO codes
+  // No parameters - return list of available ICAO codes
   const available = getIcaoCodesWithFeeds();
   return NextResponse.json({
     message:

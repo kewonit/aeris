@@ -68,7 +68,7 @@ export function filterPositionSpikes(
       const bc = Math.sqrt(bcDx * bcDx + bcDy * bcDy);
       const ac = Math.sqrt(acDx * acDx + acDy * acDy);
 
-      // Skip degenerate cases (A ≈ C means a loop — don't remove)
+      // Skip degenerate cases (A ≈ C means a loop - don't remove)
       if (ac < 1e-10) continue;
 
       const detourRatio = (ab + bc) / ac;

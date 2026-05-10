@@ -18,7 +18,7 @@ function getServerSnapshot(): boolean {
 
 /**
  * Returns true when viewport width is below the sm breakpoint (640px).
- * SSR-safe — returns false on server.
+ * SSR-safe - returns false on server.
  */
 export function useIsMobile(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);

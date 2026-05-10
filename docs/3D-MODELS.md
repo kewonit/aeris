@@ -4,7 +4,7 @@
 
 Aeris uses 14 distinct 3D aircraft silhouettes to represent different aircraft types on the globe. Models are assigned based on ICAO type code (when available) or ADS-B emitter category.
 
-Two iconic aircraft types — the **Airbus A380** and **Boeing 737** — have dedicated models for visual distinction. All other aircraft are mapped to generic silhouette categories.
+Two iconic aircraft types - the **Airbus A380** and **Boeing 737** - have dedicated models for visual distinction. All other aircraft are mapped to generic silhouette categories.
 
 ## Model Inventory
 
@@ -37,9 +37,9 @@ Two iconic aircraft types — the **Airbus A380** and **Boeing 737** — have de
 
 All models are optimized for web delivery using `@gltf-transform/cli`:
 
-1. **Texture stripping** — Materials set to neutral unlit gray
-2. **Mesh simplification** — Triangle count reduced to ~30% of original
-3. **B737 format conversion** — Converted from glTF 1.0 → 2.0 via `gltf-pipeline`
+1. **Texture stripping** - Materials set to neutral unlit gray
+2. **Mesh simplification** - Triangle count reduced to ~30% of original
+3. **B737 format conversion** - Converted from glTF 1.0 → 2.0 via `gltf-pipeline`
 
 > Note: Draco compression is **not** used for these models, to avoid
 > introducing an external WASM decoder dependency.

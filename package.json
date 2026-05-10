@@ -1,7 +1,7 @@
 {
   "name": "aeris",
   "version": "0.8.3",
-  "description": "Real-time 3D flight tracking — altitude-aware, visually stunning.",
+  "description": "Real-time 3D flight tracking - altitude-aware, visually stunning.",
   "author": "kewonit",
   "license": "AGPL-3.0",
   "private": true,
@@ -30,6 +30,7 @@
     "@wrksz/themes": "^0.9.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "country-flag-icons": "^1.6.17",
     "lucide-react": "^0.564.0",
     "maplibre-gl": "^5.18.0",
     "motion": "^12.34.0",

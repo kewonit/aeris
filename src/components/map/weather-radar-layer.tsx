@@ -92,7 +92,7 @@ function addSourceAndLayer(
       firstSymbol?.id,
     );
   } catch {
-    /* style swap raced with add — bail */
+    /* style swap raced with add - bail */
   }
 }
 
@@ -181,7 +181,7 @@ export function WeatherRadarLayer({
           return;
         }
 
-        // No source — add it. Wait for `idle` if the style is
+        // No source - add it. Wait for `idle` if the style is
         // transiently busy (common right after a city tap fly-to).
         const doAdd = () => {
           if (cancelled?.current) return;
