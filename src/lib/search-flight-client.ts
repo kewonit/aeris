@@ -15,6 +15,7 @@
 import type { FlightState } from "./opensky-types";
 import type { ReadsbApiResponse } from "./flight-api-types";
 import { parseAircraftList, type ParseOptions } from "./flight-api-parsing";
+import { expandFlightQuery } from "./airlines";
 
 const SEARCH_TIMEOUT_MS = 10_000;
 const DEFAULT_PARSE_OPTS: ParseOptions = {
@@ -30,7 +31,8 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 8_000; // 8 seconds - flights move fast
+const CACHE_TTL_MS = 8_000; // 8 seconds for hits - flights move fast
+const CACHE_EMPTY_TTL_MS = 2_000; // 2 seconds for misses - don't block long
 const CACHE_MAX_ENTRIES = 30;
 
 function cacheKey(query: string): string {
@@ -41,7 +43,8 @@ function getCached(query: string): FlightState[] | undefined {
   const key = cacheKey(query);
   const entry = cache.get(key);
   if (!entry) return undefined;
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+  const ttl = entry.flights.length === 0 ? CACHE_EMPTY_TTL_MS : CACHE_TTL_MS;
+  if (Date.now() - entry.ts > ttl) {
     cache.delete(key);
     return undefined;
   }
@@ -67,25 +70,10 @@ function setCached(query: string, flights: FlightState[]): void {
  * @param query  Callsign (e.g. "UAL123") or ICAO24 hex (e.g. "a1b2c3")
  * @param signal AbortSignal for cancellation
  */
-export async function searchFlightsGlobal(
-  query: string,
+async function fetchFlightsByPath(
+  path: string,
   signal?: AbortSignal,
 ): Promise<FlightState[]> {
-  const normalized = query.trim();
-  if (!normalized) return [];
-
-  // Check cache first
-  const cached = getCached(normalized);
-  if (cached) return cached;
-
-  const compact = normalized.toLowerCase().replace(/\s+/g, "");
-
-  // Determine if hex or callsign
-  const isHex = /^[0-9a-f]{6}$/i.test(compact);
-  const path = isHex
-    ? `/hex/${compact.toLowerCase()}`
-    : `/callsign/${compact.toUpperCase()}`;
-
   if (signal?.aborted) return [];
 
   const controller = new AbortController();
@@ -116,9 +104,7 @@ export async function searchFlightsGlobal(
       return [];
     }
 
-    const flights = parseAircraftList(response.ac, DEFAULT_PARSE_OPTS);
-    setCached(normalized, flights);
-    return flights;
+    return parseAircraftList(response.ac, DEFAULT_PARSE_OPTS);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") return [];
     return [];
@@ -126,6 +112,93 @@ export async function searchFlightsGlobal(
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
   }
+}
+
+export async function searchFlightsGlobal(
+  query: string,
+  signal?: AbortSignal,
+): Promise<FlightState[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+
+  // Check cache first
+  const cached = getCached(normalized);
+  if (cached) return cached;
+
+  const compact = normalized.toLowerCase().replace(/\s+/g, "");
+
+  const allFlights: FlightState[] = [];
+  const seenIcao24 = new Set<string>();
+  function addUnique(flights: FlightState[]) {
+    for (const f of flights) {
+      if (!seenIcao24.has(f.icao24)) {
+        seenIcao24.add(f.icao24);
+        allFlights.push(f);
+      }
+    }
+  }
+
+  // ── Phase 1: Generate all query variants (IATA ↔ ICAO translations) ──
+  //
+  // ADS-B transponders broadcast ICAO callsigns (e.g. AXB2680) but users
+  // search by IATA flight numbers (e.g. IX2680).  We must try every variant.
+  //
+  // Also: some 6-char queries look like hex but are actually callsigns
+  // (e.g. "IX2680", "AA1234").  We cannot short-circuit to hex lookup.
+  const variants = expandFlightQuery(normalized);
+  const rawCompact = compact.toUpperCase();
+  if (!variants.includes(rawCompact)) {
+    variants.unshift(rawCompact);
+  }
+
+  for (const variant of variants) {
+    if (signal?.aborted) break;
+    const vCompact = variant.toLowerCase();
+    const vHex = /^[0-9a-f]{6}$/i.test(vCompact);
+
+    if (vHex) {
+      const hexResults = await fetchFlightsByPath(
+        `/hex/${vCompact}`,
+        signal,
+      );
+      addUnique(hexResults);
+    } else {
+      const csResults = await fetchFlightsByPath(
+        `/callsign/${variant.toUpperCase()}`,
+        signal,
+      );
+      addUnique(csResults);
+    }
+
+    // Stop early once we have results
+    if (allFlights.length > 0) break;
+  }
+
+  // ── Phase 2: Fallbacks for truly ambiguous 6-char queries ────────────
+  //
+  // If the original compact query is 6 hex chars and we still have no
+  // results, try the opposite endpoint of what we already attempted.
+  if (allFlights.length === 0 && !signal?.aborted) {
+    const isHex = /^[0-9a-f]{6}$/i.test(compact);
+    if (isHex) {
+      // Already tried hex above (if variant matched); try callsign as last resort
+      const csResults = await fetchFlightsByPath(
+        `/callsign/${compact.toUpperCase()}`,
+        signal,
+      );
+      addUnique(csResults);
+    } else {
+      // Try hex fallback for non-hex queries
+      const hexResults = await fetchFlightsByPath(
+        `/hex/${compact.toLowerCase()}`,
+        signal,
+      );
+      addUnique(hexResults);
+    }
+  }
+
+  setCached(normalized, allFlights);
+  return allFlights;
 }
 
 /**

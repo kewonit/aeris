@@ -421,3 +421,122 @@ export function parseFlightNumber(callsign: string | null): string | null {
   if (!digits || !/^\d+[A-Z]?$/.test(digits)) return null;
   return digits;
 }
+
+// ── IATA ↔ ICAO Translation ────────────────────────────────────────────
+//
+// ADS-B transponders broadcast ICAO callsigns (e.g. AXB2680).
+// Users search by IATA flight numbers (e.g. IX2680).
+// These utilities translate between the two so search works both ways.
+
+/** IATA code → ICAO code (3-letter). Built from ICAO_AIRLINES reverse. */
+const IATA_TO_ICAO: Readonly<Record<string, string>> = (() => {
+  const map: Record<string, string> = {};
+  for (const [icao, info] of Object.entries(ICAO_AIRLINES)) {
+    if (info.iata) {
+      // Handle duplicate IATA codes: keep the first one we encounter (the
+      // main carrier is usually listed before its subsidiaries).
+      if (!map[info.iata]) {
+        map[info.iata] = icao;
+      }
+    }
+  }
+  return map;
+})();
+
+/** Extract airline prefix and flight number suffix from a query. */
+function splitFlightQuery(query: string): {
+  prefix: string;
+  suffix: string;
+} | null {
+  const trimmed = query.trim().toUpperCase().replace(/\s+/g, "");
+  if (trimmed.length < 3) return null;
+
+  // A flight query is an optional airline prefix (2-3 letters/digits)
+  // followed by a flight number (digits, optionally ending in a letter).
+  // e.g. "IX2680", "AXB2680", "UA123", "AAL1234", "4O123"
+  const m = trimmed.match(/^([A-Z0-9]{2,3})(\d+[A-Z]?)$/);
+  if (!m) return null;
+
+  // The regex is greedy, so a 5-char query like "IX2680" can match as
+  // prefix="IX2" suffix="680" or prefix="IX" suffix="2680".
+  // We need to prefer the split that yields a known airline code.
+  const try2 = { prefix: trimmed.slice(0, 2), suffix: trimmed.slice(2) };
+  const try3 = { prefix: trimmed.slice(0, 3), suffix: trimmed.slice(3) };
+
+  // Prefer 2-char prefix if it's a known IATA code
+  if (IATA_TO_ICAO[try2.prefix] && /^\d+[A-Z]?$/.test(try2.suffix)) {
+    return try2;
+  }
+  // Otherwise prefer 3-char prefix if it's a known ICAO code
+  if (ICAO_AIRLINES[try3.prefix] && /^\d+[A-Z]?$/.test(try3.suffix)) {
+    return try3;
+  }
+  // Fallback: use the regex match (usually 2-char for shorter queries,
+  // 3-char for longer ones when the first 2 chars aren't known).
+  return { prefix: m[1], suffix: m[2] };
+}
+
+/**
+ * Generate all query variants for a flight search string.
+ *
+ * Examples:
+ *   "IX2680"   → ["IX2680", "AXB2680"]   (IATA → ICAO)
+ *   "AXB2680"  → ["AXB2680", "IX2680"]   (ICAO → IATA)
+ *   "UA123"    → ["UA123", "UAL123"]    (IATA → ICAO)
+ *   "UAL123"   → ["UAL123", "UA123"]    (ICAO → IATA)
+ *   "2680"     → ["2680"]               (no airline code)
+ *   "N/A"      → []                     (invalid)
+ */
+export function expandFlightQuery(query: string): string[] {
+  const split = splitFlightQuery(query);
+  if (!split) {
+    // No discernible airline prefix; try the raw query as a single variant
+    const raw = query.trim().toUpperCase().replace(/\s+/g, "");
+    return raw ? [raw] : [];
+  }
+
+  const { prefix, suffix } = split;
+  const variants = new Set<string>();
+
+  // Always include the original query
+  variants.add(`${prefix}${suffix}`);
+
+  // If prefix is an IATA code → translate to ICAO
+  const icaoFromIata = IATA_TO_ICAO[prefix];
+  if (icaoFromIata && icaoFromIata !== prefix) {
+    variants.add(`${icaoFromIata}${suffix}`);
+  }
+
+  // If prefix is an ICAO code → translate to IATA
+  const iataFromIcao = ICAO_AIRLINES[prefix]?.iata;
+  if (iataFromIcao && iataFromIcao !== prefix) {
+    variants.add(`${iataFromIcao}${suffix}`);
+  }
+
+  return Array.from(variants);
+}
+
+/**
+ * Check whether a flight query matches a given callsign, accounting for
+ * IATA ↔ ICAO translation.
+ */
+export function flightQueryMatches(
+  query: string,
+  callsign: string | null,
+): boolean {
+  if (!callsign) return false;
+  const compactQuery = query.trim().toLowerCase().replace(/\s+/g, "");
+  const compactCallsign = callsign.trim().toLowerCase().replace(/\s+/g, "");
+  if (!compactQuery || !compactCallsign) return false;
+
+  // Direct match
+  if (compactCallsign.includes(compactQuery)) return true;
+
+  // Try translated variants
+  for (const variant of expandFlightQuery(query)) {
+    const v = variant.toLowerCase();
+    if (v !== compactQuery && compactCallsign.includes(v)) return true;
+  }
+
+  return false;
+}

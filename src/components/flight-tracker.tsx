@@ -55,7 +55,7 @@ import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
-import { formatCallsign } from "@/lib/flight-utils";
+import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
 import { processDepartures } from "@/lib/route-detection";
 import { findNearestAirport, airportToCity } from "@/lib/airports";
 import {
@@ -68,7 +68,6 @@ import type { PickingInfo } from "@deck.gl/core";
 import {
   DEFAULT_CITY,
   DEFAULT_STYLE,
-  ICAO24_REGEX,
   subscribeNoop,
   resolveInitialCity,
   syncCityToUrl,
@@ -446,38 +445,52 @@ function FlightTrackerInner({
     }
   }, [fpvIcao24, selectedIcao24, handleToggleFpv]);
 
+  // Helper: select flight and optionally enter FPV
+  const selectFlight = useCallback(
+    (f: FlightState, enterFpv = false) => {
+      setSelectedIcao24(f.icao24);
+      setFollowIcao24(null);
+      if (
+        enterFpv &&
+        !f.onGround &&
+        f.longitude != null &&
+        f.latitude != null
+      ) {
+        setFpvSeedCenter({ lng: f.longitude, lat: f.latitude });
+        setFpvIcao24(f.icao24);
+      }
+    },
+    [],
+  );
+
+  const handleSelectFlight = useCallback(
+    (flight: FlightState) => {
+      const focusCity = cityFromFlight(flight);
+      if (focusCity) {
+        setCityOverride(focusCity);
+        syncCityToUrl(focusCity);
+      }
+      selectFlight(flight);
+    },
+    [selectFlight],
+  );
+
   const handleLookupFlight = useCallback(
     async (rawQuery: string, enterFpv = false): Promise<boolean> => {
       const compactQuery = rawQuery.trim().toLowerCase().replace(/\s+/g, "");
       if (!compactQuery) return false;
 
+      // Local match: try direct hex lookup first, then callsign match with
+      // IATA ↔ ICAO translation support.
       const localMatch =
         displayFlightMap.get(compactQuery) ??
         displayFlights.find((f) =>
-          formatCallsign(f.callsign)
-            .toLowerCase()
-            .replace(/\s+/g, "")
-            .includes(compactQuery),
+          flightQueryMatches(rawQuery, f.callsign),
         ) ??
         null;
 
-      // Helper: select flight and optionally enter FPV
-      const selectFlight = (f: FlightState) => {
-        setSelectedIcao24(f.icao24);
-        setFollowIcao24(null);
-        if (
-          enterFpv &&
-          !f.onGround &&
-          f.longitude != null &&
-          f.latitude != null
-        ) {
-          setFpvSeedCenter({ lng: f.longitude, lat: f.latitude });
-          setFpvIcao24(f.icao24);
-        }
-      };
-
       if (localMatch) {
-        selectFlight(localMatch);
+        selectFlight(localMatch, enterFpv);
         return true;
       }
 
@@ -487,9 +500,45 @@ function FlightTrackerInner({
       lookupAbortRef.current = controller;
 
       try {
-        const result = ICAO24_REGEX.test(compactQuery)
-          ? await fetchFlightByHex(compactQuery, controller.signal)
-          : await fetchFlightByCallsign(compactQuery, controller.signal);
+        // Phase 1: Always try expanded query variants first (IATA ↔ ICAO).
+        // This handles the common case where a user searches "IX2680" but
+        // the transponder broadcasts "AXB2680".
+        let result: { flight: FlightState | null } = { flight: null };
+
+        const variants = expandFlightQuery(rawQuery);
+        // Ensure the raw compact query is included as a fallback variant
+        if (!variants.includes(compactQuery.toUpperCase())) {
+          variants.unshift(compactQuery.toUpperCase());
+        }
+
+        for (const variant of variants) {
+          if (controller.signal.aborted) break;
+          const vCompact = variant.toLowerCase();
+          const vHex = /^[0-9a-f]{6}$/i.test(vCompact);
+
+          if (vHex) {
+            result = await fetchFlightByHex(vCompact, controller.signal);
+          } else {
+            result = await fetchFlightByCallsign(variant, controller.signal);
+          }
+          if (result.flight) break;
+        }
+
+        // Phase 2: For 6-char hex-like queries, also try the opposite endpoint
+        // of what the variants already attempted.
+        if (!result.flight && !controller.signal.aborted) {
+          const isHex = /^[0-9a-f]{6}$/i.test(compactQuery);
+          if (isHex) {
+            // Variants already tried hex; try raw callsign as last resort
+            result = await fetchFlightByCallsign(
+              compactQuery.toUpperCase(),
+              controller.signal,
+            );
+          } else {
+            // Variants already tried callsign; try raw hex as last resort
+            result = await fetchFlightByHex(compactQuery, controller.signal);
+          }
+        }
 
         if (controller.signal.aborted) return false;
         if (!result.flight) return false;
@@ -500,14 +549,14 @@ function FlightTrackerInner({
           syncCityToUrl(focusCity);
         }
 
-        selectFlight(result.flight);
+        selectFlight(result.flight, enterFpv);
         return true;
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return false;
         return false;
       }
     },
-    [displayFlights, displayFlightMap],
+    [displayFlights, displayFlightMap, selectFlight],
   );
 
   useKeyboardShortcuts({
@@ -646,6 +695,7 @@ function FlightTrackerInner({
               flights={displayFlights}
               activeFlightIcao24={selectedIcao24}
               onLookupFlight={handleLookupFlight}
+              onSelectFlight={handleSelectFlight}
             />
           </div>
         )}

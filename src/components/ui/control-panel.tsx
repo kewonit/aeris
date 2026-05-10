@@ -67,6 +67,7 @@ type ControlPanelProps = {
   flights: FlightState[];
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
+  onSelectFlight?: (flight: FlightState) => void;
 };
 
 export function ControlPanel({
@@ -78,6 +79,7 @@ export function ControlPanel({
   flights,
   activeFlightIcao24,
   onLookupFlight,
+  onSelectFlight,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<TabId | null>(null);
   const portalMounted = useSyncExternalStore(
@@ -160,6 +162,7 @@ export function ControlPanel({
                 flights={flights}
                 activeFlightIcao24={activeFlightIcao24}
                 onLookupFlight={onLookupFlight}
+                onSelectFlight={onSelectFlight}
               />
             )}
           </AnimatePresence>,
@@ -181,6 +184,7 @@ function PanelDialog({
   flights,
   activeFlightIcao24,
   onLookupFlight,
+  onSelectFlight,
 }: {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
@@ -193,6 +197,7 @@ function PanelDialog({
   flights: FlightState[];
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
+  onSelectFlight?: (flight: FlightState) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -371,6 +376,10 @@ function PanelDialog({
                         const found = await onLookupFlight(query, enterFpv);
                         if (found) onClose();
                         return found;
+                      }}
+                      onSelectFlight={(flight) => {
+                        onSelectFlight?.(flight);
+                        onClose();
                       }}
                     />
                   </TabContent>

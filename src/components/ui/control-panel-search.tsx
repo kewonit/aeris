@@ -22,7 +22,7 @@ import {
 } from "@/lib/flight-utils";
 import { useSettings } from "@/hooks/use-settings";
 import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
-import { lookupAirline } from "@/lib/airlines";
+import { lookupAirline, flightQueryMatches } from "@/lib/airlines";
 import { CountryFlag } from "@/components/ui/country-flag";
 import { AirlineLogo } from "@/components/ui/airline-logo";
 import { searchFlightsGlobal } from "@/lib/search-flight-client";
@@ -128,12 +128,14 @@ export function SearchContent({
   flights,
   activeFlightIcao24,
   onLookupFlight,
+  onSelectFlight,
 }: {
   activeCity: City;
   onSelect: (city: City) => void;
   flights: FlightState[];
   activeFlightIcao24: string | null;
   onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
+  onSelectFlight?: (flight: FlightState) => void;
 }) {
   const { settings } = useSettings();
   const [mode, setMode] = useState<SearchMode>("locations");
@@ -226,21 +228,22 @@ export function SearchContent({
   );
 
   const compactQuery = query.trim().toLowerCase().replace(/\s+/g, "");
-  const isIcao24Query = /^[0-9a-f]{6}$/.test(compactQuery);
+  const isPureHexQuery = /^[0-9a-f]{6}$/.test(compactQuery);
+  const looksLikeFlightNumber = /^[a-z0-9]{2,3}\d+[a-z]?$/i.test(query.trim());
 
   const localFlightMatches = useMemo(() => {
     if (!compactQuery || mode !== "flights") return [] as FlightState[];
     return flights
       .filter((flight) => {
         const icao = flight.icao24.toLowerCase();
-        const callsign = (flight.callsign ?? "")
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, "");
-        return icao.includes(compactQuery) || callsign.includes(compactQuery);
+        // Direct hex or callsign match
+        if (icao.includes(compactQuery)) return true;
+        // IATA ↔ ICAO translated match
+        if (flightQueryMatches(query, flight.callsign)) return true;
+        return false;
       })
       .slice(0, 10);
-  }, [flights, compactQuery, mode]);
+  }, [flights, compactQuery, mode, query]);
 
   // Total result count for screen reader
   const totalResults =
@@ -257,22 +260,53 @@ export function SearchContent({
     setLookupBusy(true);
     setLookupError(null);
     try {
-      const found = await onLookupFlight(query);
+      // Prefer using an already-found ICAO24 so we avoid re-querying with a
+      // raw string that might be misclassified (e.g. "IX2680" looks like hex).
+      const target =
+        globalFlights[0]?.icao24 ?? localFlightMatches[0]?.icao24 ?? query;
+      const found = await onLookupFlight(target);
       if (!found) {
-        setLookupError(
-          isIcao24Query
-            ? "Flight not found for this ICAO24 right now"
-            : 'No live flight match found — try a callsign like "UAL123"',
-        );
+        if (isPureHexQuery) {
+          setLookupError(
+            `No flight found for ICAO24 ${query.trim().toUpperCase()} right now`,
+          );
+        } else if (looksLikeFlightNumber) {
+          setLookupError(
+            `No live flight match found for ${query.trim().toUpperCase()} right now. The aircraft may be on the ground or out of coverage.`,
+          );
+        } else {
+          setLookupError(
+            'No live flight match found — try a callsign like "UAL123" or hex like "a1b2c3"',
+          );
+        }
       }
     } finally {
       setLookupBusy(false);
     }
-  }, [query, lookupBusy, onLookupFlight, isIcao24Query]);
+  }, [
+    query,
+    lookupBusy,
+    onLookupFlight,
+    isPureHexQuery,
+    looksLikeFlightNumber,
+    globalFlights,
+    localFlightMatches,
+  ]);
 
   const openFlight = useCallback(
     async (icao24: string) => {
       if (lookupBusy) return;
+
+      // If we already have the flight data from global or local search,
+      // select it directly without re-querying the API.
+      const known =
+        globalFlights.find((f) => f.icao24 === icao24) ??
+        localFlightMatches.find((f) => f.icao24 === icao24);
+      if (known && onSelectFlight) {
+        onSelectFlight(known);
+        return;
+      }
+
       setLookupBusy(true);
       setLookupError(null);
       try {
@@ -282,7 +316,7 @@ export function SearchContent({
         setLookupBusy(false);
       }
     },
-    [lookupBusy, onLookupFlight],
+    [lookupBusy, onLookupFlight, onSelectFlight, globalFlights, localFlightMatches],
   );
 
   const handleModeChange = useCallback((newMode: SearchMode) => {
@@ -444,12 +478,7 @@ export function SearchContent({
                 setGlobalLoading(false);
               }
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void runLookup();
-              }
-            }}
+
             placeholder={
               mode === "locations"
                 ? "Search airports, cities, places…"
@@ -656,35 +685,38 @@ export function SearchContent({
         ) : (
           <>
             {/* ── Actions ─────────────────────────────────────── */}
-            {compactQuery && (
-              <Command.Group heading="Actions">
-                <Command.Item
-                  value={`lookup:${query}`}
-                  keywords={[query]}
-                  onSelect={() => void runLookup()}
-                  disabled={lookupBusy}
-                  className="search-item"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.05]">
-                    {lookupBusy ? (
-                      <Loader2 className="h-[18px] w-[18px] animate-spin text-foreground/30" />
-                    ) : (
-                      <Search className="h-[18px] w-[18px] text-foreground/30" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-[14px] font-normal text-foreground/70">
-                      Search worldwide for &quot;{query.trim()}&quot;
-                    </p>
-                    <p className="text-[12px] text-foreground/25 mt-0.5">
-                      {isIcao24Query
-                        ? "ICAO24 hex lookup"
-                        : "Callsign / flight number lookup"}
-                    </p>
-                  </div>
-                </Command.Item>
-              </Command.Group>
-            )}
+            {compactQuery &&
+              !globalLoading &&
+              globalFlights.length === 0 &&
+              localFlightMatches.length === 0 && (
+                <Command.Group heading="Actions">
+                  <Command.Item
+                    value={`lookup:${query}`}
+                    keywords={[query]}
+                    onSelect={() => void runLookup()}
+                    disabled={lookupBusy}
+                    className="search-item"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.05]">
+                      {lookupBusy ? (
+                        <Loader2 className="h-[18px] w-[18px] animate-spin text-foreground/30" />
+                      ) : (
+                        <Search className="h-[18px] w-[18px] text-foreground/30" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-[14px] font-normal text-foreground/70">
+                        Search worldwide for &quot;{query.trim()}&quot;
+                      </p>
+                      <p className="text-[12px] text-foreground/25 mt-0.5">
+                        {isPureHexQuery
+                          ? "ICAO24 hex lookup"
+                          : "Callsign / flight number lookup"}
+                      </p>
+                    </div>
+                  </Command.Item>
+                </Command.Group>
+              )}
 
             {/* ── Global flight results ───────────────────────── */}
             {globalLoading && (
