@@ -52,7 +52,14 @@ export function findCityByCode(code: string): City | null {
 }
 
 export function buildCanonicalCityPath(city: City): string {
-  return `/city/${city.iata.toLowerCase()}`;
+  // Only use canonical /city/<iata> paths for known 3-letter airport/city codes.
+  // Synthetic cities (flight lookups, Nominatim places) use the root path
+  // to avoid 404s on refresh since the city/[code] page only recognizes
+  // real airport/city codes.
+  if (/^[A-Za-z]{3}$/.test(city.iata)) {
+    return `/city/${city.iata.toLowerCase()}`;
+  }
+  return "/";
 }
 
 export function buildLegacyCityRedirectTarget(

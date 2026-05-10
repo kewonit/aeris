@@ -158,12 +158,11 @@ body {
 }
 
 .aeris-cmdk [cmdk-group-heading] {
-  padding: 6px 12px 4px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgb(var(--ui-fg) / 0.15);
+  padding: 14px 16px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgb(var(--ui-fg) / 0.35);
   user-select: none;
 }
 
@@ -172,7 +171,7 @@ body {
 }
 
 .aeris-cmdk [cmdk-group] + [cmdk-group] {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .aeris-cmdk [cmdk-empty] {
@@ -183,17 +182,18 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-radius: 12px;
-  padding: 8px 12px;
+  gap: 14px;
+  border-radius: 14px;
+  padding: 11px 14px;
+  margin: 0 6px;
   cursor: pointer;
-  transition: background-color 0.12s ease;
+  transition: background-color 0.15s ease, transform 0.08s ease;
   outline: none;
   user-select: none;
 }
 
 .aeris-cmdk .search-item[data-selected="true"] {
-  background: rgb(var(--ui-fg) / 0.05);
+  background: rgb(var(--ui-fg) / 0.055);
 }
 
 .aeris-cmdk
@@ -203,10 +203,11 @@ body {
 }
 
 .aeris-cmdk .search-item[data-disabled="true"] {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .aeris-cmdk .search-item:active:not([data-disabled="true"]) {
-  background: rgb(var(--ui-fg) / 0.07);
+  background: rgb(var(--ui-fg) / 0.075);
+  transform: scale(0.995);
 }
