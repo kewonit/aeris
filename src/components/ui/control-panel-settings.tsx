@@ -31,6 +31,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
+import { Balancer } from "react-wrap-balancer";
 
 const ORBIT_SPEED_PRESETS = [
   { label: "Slow", value: 0.06 },
@@ -207,19 +208,19 @@ export function SettingsContent({
           badge="BETA"
         />
 
-        <div className="mx-3 my-2 h-px bg-foreground/5" />
+        <div className="mx-3 my-2 h-px bg-foreground/8" />
 
         <div className="px-3 pt-2">
           <button
             type="button"
             onClick={reset}
-            className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-[12px] font-medium text-foreground/65 ring-1 ring-foreground/10 transition-colors hover:bg-foreground/5 hover:text-foreground/85"
+            className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-[12px] font-medium text-foreground/75 ring-1 ring-foreground/12 transition-colors hover:bg-foreground/5 hover:text-foreground/90"
           >
             Reset to defaults
           </button>
         </div>
 
-        <div className="mx-3 my-2 h-px bg-foreground/5" />
+        <div className="mx-3 my-2 h-px bg-foreground/8" />
       </div>
     </ScrollArea>
   );
@@ -235,10 +236,10 @@ export function ShortcutsContent() {
               key={key}
               className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-foreground/4"
             >
-              <span className="text-[13px] font-medium text-foreground/68">
+              <span className="text-[13px] font-medium text-foreground/75">
                 {description}
               </span>
-              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-md bg-foreground/6 px-2 font-mono text-[11px] font-semibold text-foreground/74 ring-1 ring-foreground/8">
+              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-md bg-foreground/6 px-2 font-mono text-[11px] font-semibold text-foreground/80 ring-1 ring-foreground/10">
                 {key}
               </kbd>
             </div>
@@ -274,15 +275,15 @@ function OrbitSpeedSlider({
 
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         <RotateCw className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/80">
+          <p className="text-[13px] font-medium text-foreground/85">
             Orbit speed
           </p>
-          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
             {activeLabel}
           </span>
         </div>
@@ -307,7 +308,7 @@ function OrbitSpeedSlider({
                 <span
                   key={preset.label}
                   className={`absolute h-1.5 w-1.5 rounded-full -translate-x-1/2 -translate-y-1/2 transition-colors ${
-                    isActive ? "bg-foreground/50" : "bg-foreground/15"
+                    isActive ? "bg-foreground/55" : "bg-foreground/20"
                   }`}
                   style={{ left: `${pct}%` }}
                 />
@@ -329,15 +330,15 @@ function TrailThicknessSlider({
 }) {
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         <Layers className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/80">
+          <p className="text-[13px] font-medium text-foreground/85">
             Trail thickness
           </p>
-          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
             {value.toFixed(1)} px
           </span>
         </div>
@@ -363,15 +364,15 @@ function TrailDistanceSlider({
 }) {
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         <Route className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/80">
+          <p className="text-[13px] font-medium text-foreground/85">
             Trail distance
           </p>
-          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
             {value} pts
           </span>
         </div>
@@ -397,15 +398,15 @@ function AirspaceOpacitySlider({
 }) {
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         <Eye className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/80">
+          <p className="text-[13px] font-medium text-foreground/85">
             Airspace opacity
           </p>
-          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -431,15 +432,15 @@ function WeatherRadarOpacitySlider({
 }) {
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         <CloudRain className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/80">
+          <p className="text-[13px] font-medium text-foreground/85">
             Radar opacity
           </p>
-          <span className="text-[11px] font-semibold text-foreground/40 tabular-nums">
+          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -459,10 +460,10 @@ function WeatherRadarOpacitySlider({
 function SectionHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-      <span className="text-[10px] font-bold tracking-widest text-foreground/25 uppercase">
+      <span className="text-[10px] font-bold tracking-widest text-foreground/45 uppercase">
         {title}
       </span>
-      <div className="h-px flex-1 bg-foreground/4" />
+      <div className="h-px flex-1 bg-foreground/8" />
     </div>
   );
 }
@@ -499,19 +500,19 @@ function SettingRow({
           : "hover:bg-foreground/4 active:bg-foreground/6"
       }`}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-[13px] font-medium text-foreground/80">{title}</p>
+          <p className="text-[13px] font-medium text-foreground/85">{title}</p>
           {badge && (
             <span className="inline-flex items-center rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-indigo-300 ring-1 ring-indigo-400/20">
               {badge}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-foreground/22">
+        <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-foreground/40">
           {description}
         </p>
       </div>
@@ -535,16 +536,16 @@ function SegmentRow<T extends string | number>({
 }) {
   return (
     <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/35 ring-1 ring-foreground/6">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
         {icon}
       </div>
-      <p className="flex-1 min-w-0 text-[13px] font-medium text-foreground/80">
+      <p className="flex-1 min-w-0 text-[13px] font-medium text-foreground/85">
         {title}
       </p>
       <div
         role="radiogroup"
         aria-label={title}
-        className="flex shrink-0 rounded-md bg-foreground/4 p-0.5 ring-1 ring-foreground/6"
+        className="flex shrink-0 rounded-md bg-foreground/4 p-0.5 ring-1 ring-foreground/8"
       >
         {options.map((opt) => {
           const isActive = opt.value === value;
@@ -557,7 +558,7 @@ function SegmentRow<T extends string | number>({
               className={`relative rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
                 isActive
                   ? "text-foreground/90"
-                  : "text-foreground/30 hover:text-foreground/50"
+                  : "text-foreground/45 hover:text-foreground/65"
               }`}
             >
               {isActive && (
@@ -584,14 +585,14 @@ function Toggle({ checked }: { checked: boolean }) {
   return (
     <div
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
-        checked ? "bg-foreground/20" : "bg-foreground/6"
+        checked ? "bg-foreground/25" : "bg-foreground/8"
       }`}
     >
       <motion.div
         animate={{ x: checked ? 17 : 2 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
         className={`absolute top-0.75 h-3.5 w-3.5 rounded-full shadow-sm transition-colors duration-200 ${
-          checked ? "bg-foreground" : "bg-foreground/25"
+          checked ? "bg-foreground" : "bg-foreground/35"
         }`}
       />
     </div>
@@ -603,6 +604,37 @@ const CHANGELOG: {
   date: string;
   entries: { title: string; description: string }[];
 }[] = [
+  {
+    version: "0.8.4",
+    date: "May 12, 2026",
+    entries: [
+      {
+        title: "Global flight & location search",
+        description:
+          "New client-side search modules: `searchFlightsGlobal` searches live flights by callsign or ICAO24 hex with caching and AbortController support; `searchLocationClient` unifies local airport, featured city, and Nominatim geocode searches into a single interface. IATA↔ICAO flight query translation with lazy-loaded full-database fallback for over 8,000 airports.",
+      },
+      {
+        title: "Route lookup & resolver with caching",
+        description:
+          "Server-side route resolver fetches origin/destination from flight-plan databases with caching and transient-failure handling. Legacy city query proxy for backward-compatible deep links. Security headers tests ensure proper cache-control directives.",
+      },
+      {
+        title: "Trail settings migration & aircraft model interpolation",
+        description:
+          "Enhanced trail settings with new defaults and migration logic. Improved aircraft model handling and interpolation for more stable rendering across frame updates.",
+      },
+      {
+        title: "Light Annotated map style",
+        description:
+          "Added new 'Light Annotated' basemap using CARTO Voyager with full label layers — a light-themed alternative to the label-less Voyager style. Perfect for users who want readable place names on a clean, bright background.",
+      },
+      {
+        title: "Control panel contrast & readability",
+        description:
+          "Systematically increased text contrast ratios across all control panel tabs. Sidebar now has a subtle `bg-card/60` shade to differentiate it from the main content area. Dark mode popover background lightened from oklch(0.055) to oklch(0.07) for improved readability.",
+      },
+    ],
+  },
   {
     version: "0.8.3",
     date: "Apr 21, 2026",
@@ -647,7 +679,7 @@ const CHANGELOG: {
   },
   {
     version: "0.8.1",
-    date: "Jun 25, 2025",
+    date: "Apr 13, 2026",
     entries: [
       {
         title: "Geolocation & fullscreen controls",
@@ -837,64 +869,55 @@ export function AboutContent() {
           Aeris
         </h3>
 
-        <div className="space-y-3 text-[13px] leading-relaxed text-foreground/40">
-          <p>
-            Live flight tracking in 3D. The planes you see are real - position
+        <div className="space-y-3 text-[13px] leading-relaxed text-foreground/55">
+          <Balancer>
+            Live flight tracking in 3D. The planes you see are real — position
             data comes from ADS-B Exchange, adsb.lol, and OpenSky Network,
             updated every few seconds via ADS-B receivers people run on their
             roofs worldwide.
-          </p>
-          <p>
+          </Balancer>
+          <Balancer>
             You can search through 9,000+ airports, jump into first-person view
             to ride along with any plane, or just leave it on a screen and watch
             things move. Trails change color with altitude so you can tell
             who&apos;s cruising at 35,000ft and who&apos;s on approach.
-          </p>
+          </Balancer>
         </div>
 
-        <div className="h-px w-full bg-foreground/6" />
+        <div className="h-px w-full bg-foreground/10" />
 
-        <p className="text-[12px] leading-relaxed text-foreground/30">
+        <p className="text-[12px] leading-relaxed text-foreground/40">
           Built by a human, not just LLMs.{" "}
           <a
             href="https://github.com/kewonit"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"
+            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
           >
             kewonit
           </a>
-          {" · "}
-          <a
-            href="https://x.com/kewonit"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"
-          >
-            @kewonit
-          </a>
-          . Open to internships -{" "}
+          . Open to internships —{" "}
           <a
             href="mailto:kew@edbn.me"
-            className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"
+            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
           >
             kew@edbn.me
           </a>
         </p>
-        <p className="text-[12px] leading-relaxed text-foreground/30">
+        <p className="text-[12px] leading-relaxed text-foreground/40">
           Source is on{" "}
           <a
             href="https://github.com/kewonit/aeris"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"
+            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
           >
             GitHub
           </a>
           . Got a question or just wanna say hi?{" "}
           <a
             href="mailto:aeris@edbn.me"
-            className="text-foreground/55 underline decoration-foreground/15 underline-offset-2 hover:text-foreground/70 transition-colors"
+            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
           >
             aeris@edbn.me
           </a>
@@ -907,26 +930,26 @@ export function AboutContent() {
 export function ChangelogContent() {
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-5 p-5 pt-3">
+      <div className="flex flex-col gap-5 py-5 pl-5 pr-10 pt-3">
         {CHANGELOG.map((release, i) => (
           <div key={release.version}>
-            {i > 0 && <div className="mb-5 h-px w-full bg-foreground/6" />}
+            {i > 0 && <div className="mb-5 h-px w-full bg-foreground/10" />}
             <div className="mb-3 flex items-baseline gap-2">
-              <span className="text-[13px] font-semibold tabular-nums text-foreground/60">
+              <span className="text-[13px] font-semibold tabular-nums text-foreground/85">
                 v{release.version}
               </span>
-              <span className="text-[11px] text-foreground/20">
+              <span className="text-[11px] text-foreground/35">
                 {release.date}
               </span>
             </div>
             <div className="flex flex-col gap-3 pl-0.5">
               {release.entries.map((entry, j) => (
                 <div key={j} className="min-w-0">
-                  <p className="text-[13px] font-medium text-foreground/50">
+                  <p className="text-[13px] font-medium text-foreground/80">
                     {entry.title}
                   </p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/30">
-                    {entry.description}
+                  <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/55 text-justify">
+                    <Balancer ratio={0.6}>{entry.description}</Balancer>
                   </p>
                 </div>
               ))}

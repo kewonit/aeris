@@ -28,7 +28,7 @@ export function StyleContent({
         ))}
       </div>
       <div className="border-t border-foreground/5 px-5 py-3">
-        <p className="text-[11px] font-medium text-foreground/15">
+        <p className="text-[11px] font-medium text-foreground/25">
           Satellite © Esri · Terrain © AWS/Mapzen Terrain Tiles · Base maps ©
           CARTO
         </p>
@@ -108,14 +108,14 @@ function StyleTile({
         <span
           className={`text-[12px] font-semibold tracking-tight transition-colors ${
             isActive
-              ? "text-foreground/90"
-              : "text-foreground/40 group-hover:text-foreground/60"
+              ? "text-foreground/95"
+              : "text-foreground/55 group-hover:text-foreground/75"
           }`}
         >
           {style.name}
         </span>
         {style.dark && (
-          <span className="h-0.5 w-0.5 rounded-full bg-foreground/20" />
+          <span className="h-0.5 w-0.5 rounded-full bg-foreground/25" />
         )}
       </div>
     </motion.button>

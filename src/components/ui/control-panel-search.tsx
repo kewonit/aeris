@@ -93,8 +93,8 @@ function SegmentedControl({
             onClick={() => onChange(opt.value)}
             className={`relative z-10 flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-[13px] font-medium transition-colors duration-200 ${
               active
-                ? "text-foreground/85"
-                : "text-foreground/30 hover:text-foreground/50"
+                ? "text-foreground/90"
+                : "text-foreground/50 hover:text-foreground/70"
             }`}
             aria-pressed={active}
           >
@@ -377,7 +377,7 @@ export function SearchContent({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="truncate text-[14px] font-medium text-foreground/85">
+            <p className="truncate text-[14px] font-medium text-foreground/90">
               <HighlightMatch text={cs} query={query} />
             </p>
             {activeFlightIcao24 === flight.icao24 && (
@@ -391,14 +391,14 @@ export function SearchContent({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-[12px] text-foreground/30 mt-0.5">
+          <div className="flex items-center gap-2 text-[12px] text-foreground/50 mt-0.5">
             <span className="font-mono tracking-wide">
               <HighlightMatch
                 text={flight.icao24.toUpperCase()}
                 query={query}
               />
             </span>
-            <span className="text-foreground/10">·</span>
+            <span className="text-foreground/25">·</span>
             <CountryFlag
               country={flight.originCountry}
               size={11}
@@ -411,21 +411,21 @@ export function SearchContent({
         {/* Flight info chips */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
           {flight.baroAltitude != null && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/35">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/50">
               <AltitudeDot altitude={flight.baroAltitude} />
               {formatAltitude(flight.baroAltitude, settings.unitSystem)}
             </span>
           )}
           {flight.velocity != null && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/35">
-              <Gauge className="h-3 w-3 text-foreground/20" />
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/50">
+              <Gauge className="h-3 w-3 text-foreground/35" />
               {formatSpeed(flight.velocity, settings.unitSystem)}
             </span>
           )}
           {flight.trueTrack != null && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/35">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1 text-[11px] font-medium text-foreground/50">
               <ArrowUpRight
-                className="h-3 w-3 text-foreground/20"
+                className="h-3 w-3 text-foreground/35"
                 style={{
                   transform: `rotate(${flight.trueTrack - 45}deg)`,
                 }}
@@ -516,13 +516,13 @@ export function SearchContent({
       <Command.List className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none px-3 pb-4">
         <Command.Empty className="flex flex-col items-center justify-center py-16 gap-5">
           <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-foreground/[0.04]">
-            <Globe2 className="h-6 w-6 text-foreground/12" />
+            <Globe2 className="h-6 w-6 text-foreground/25" />
           </div>
           <div className="text-center space-y-2">
-            <p className="text-[15px] font-medium text-foreground/25">
+            <p className="text-[15px] font-medium text-foreground/55">
               No results found
             </p>
-            <p className="text-[13px] text-foreground/15 max-w-[220px] leading-relaxed">
+            <p className="text-[13px] text-foreground/35 max-w-[220px] leading-relaxed">
               {mode === "locations"
                 ? "Try an airport code, city name, or landmark"
                 : "Try a callsign like UAL123 or hex like a1b2c3"}
@@ -541,9 +541,9 @@ export function SearchContent({
                   className="search-item opacity-50"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-foreground/25" />
+                    <Loader2 className="h-4 w-4 animate-spin text-foreground/35" />
                   </div>
-                  <span className="text-[14px] font-normal text-foreground/35">
+                  <span className="text-[14px] font-normal text-foreground/55">
                     Searching places worldwide…
                   </span>
                 </Command.Item>
@@ -571,12 +571,12 @@ export function SearchContent({
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-[14px] font-normal text-foreground/80">
+                      <p className="truncate text-[14px] font-normal text-foreground/85">
                         <HighlightMatch text={loc.name} query={query} />
                       </p>
-                      <p className="flex items-center gap-2 text-[12px] text-foreground/30 mt-0.5">
+                      <p className="flex items-center gap-2 text-[12px] text-foreground/40 mt-0.5">
                         <HighlightMatch text={loc.code} query={query} />
-                        <span className="text-foreground/10">·</span>
+                        <span className="text-foreground/20">·</span>
                         <CountryFlag
                           code={loc.countryCode}
                           size={11}
@@ -585,7 +585,7 @@ export function SearchContent({
                       </p>
                     </div>
                     {activeCity?.id === loc.id && (
-                      <span className="shrink-0 rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-[10px] font-semibold text-foreground/30">
+                      <span className="shrink-0 rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-[10px] font-semibold text-foreground/35">
                         Current
                       </span>
                     )}
@@ -618,12 +618,12 @@ export function SearchContent({
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-[14px] font-normal text-foreground/80">
+                      <p className="truncate text-[14px] font-normal text-foreground/85">
                         <HighlightMatch text={loc.name} query={query} />
                       </p>
-                      <p className="flex items-center gap-2 text-[12px] text-foreground/30 mt-0.5">
+                      <p className="flex items-center gap-2 text-[12px] text-foreground/40 mt-0.5">
                         <HighlightMatch text={loc.code} query={query} />
-                        <span className="text-foreground/10">·</span>
+                        <span className="text-foreground/20">·</span>
                         <span className="truncate">
                           <HighlightMatch
                             text={loc.displayName
@@ -635,7 +635,7 @@ export function SearchContent({
                       </p>
                     </div>
                     {activeCity?.iata === loc.code && (
-                      <span className="shrink-0 rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-[10px] font-semibold text-foreground/30">
+                      <span className="shrink-0 rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-[10px] font-semibold text-foreground/35">
                         Current
                       </span>
                     )}
@@ -660,13 +660,13 @@ export function SearchContent({
                     className="search-item"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.04]">
-                      <Globe2 className="h-[18px] w-[18px] text-foreground/25" />
+                      <Globe2 className="h-[18px] w-[18px] text-foreground/35" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-[14px] font-normal text-foreground/80">
+                      <p className="truncate text-[14px] font-normal text-foreground/85">
                         <HighlightMatch text={loc.name} query={query} />
                       </p>
-                      <p className="truncate text-[12px] text-foreground/30 mt-0.5">
+                      <p className="truncate text-[12px] text-foreground/40 mt-0.5">
                         {loc.displayName}
                       </p>
                     </div>
@@ -699,16 +699,16 @@ export function SearchContent({
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.05]">
                       {lookupBusy ? (
-                        <Loader2 className="h-[18px] w-[18px] animate-spin text-foreground/30" />
+                        <Loader2 className="h-[18px] w-[18px] animate-spin text-foreground/35" />
                       ) : (
-                        <Search className="h-[18px] w-[18px] text-foreground/30" />
+                        <Search className="h-[18px] w-[18px] text-foreground/35" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-[14px] font-normal text-foreground/70">
+                      <p className="truncate text-[14px] font-normal text-foreground/85">
                         Search worldwide for &quot;{query.trim()}&quot;
                       </p>
-                      <p className="text-[12px] text-foreground/25 mt-0.5">
+                      <p className="text-[12px] text-foreground/40 mt-0.5">
                         {isPureHexQuery
                           ? "ICAO24 hex lookup"
                           : "Callsign / flight number lookup"}
@@ -727,9 +727,9 @@ export function SearchContent({
                   className="search-item opacity-50"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-foreground/25" />
+                    <Loader2 className="h-4 w-4 animate-spin text-foreground/35" />
                   </div>
-                  <span className="text-[14px] font-normal text-foreground/35">
+                  <span className="text-[14px] font-normal text-foreground/55">
                     Searching live flights worldwide…
                   </span>
                 </Command.Item>
@@ -767,7 +767,7 @@ export function SearchContent({
         {/* ── Footer hint ───────────────────────────────────────── */}
         {!query && (
           <div className="flex items-center justify-center py-8">
-            <p className="text-[12px] text-foreground/12 font-normal">
+            <p className="text-[12px] text-foreground/25 font-normal">
               {mode === "locations"
                 ? "Search 9,000+ airports and places worldwide"
                 : "Search live flights globally by callsign or hex"}

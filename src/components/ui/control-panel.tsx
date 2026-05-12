@@ -275,8 +275,8 @@ function PanelDialog({
       >
         <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-border bg-popover shadow-[0_40px_100px_rgba(0,0,0,0.25)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}
-          <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-border py-5 px-3">
-            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+          <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-border bg-card/60 py-5 px-3">
+            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/40">
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
@@ -289,7 +289,7 @@ function PanelDialog({
                     className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
                       active
                         ? "text-foreground/90"
-                        : "text-foreground/35 hover:text-foreground/55 hover:bg-foreground/4"
+                        : "text-foreground/40 hover:text-foreground/55 hover:bg-foreground/4"
                     }`}
                   >
                     {active && (
@@ -318,7 +318,7 @@ function PanelDialog({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub (opens in new tab)"
-                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-foreground/35 hover:text-foreground/55 hover:bg-foreground/4"
+                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-foreground/40 hover:text-foreground/55 hover:bg-foreground/4"
               >
                 <Github
                   className="relative h-4 w-4 shrink-0"
@@ -327,7 +327,7 @@ function PanelDialog({
                 <span className="relative text-[14px] font-medium">GitHub</span>
               </a>
               <div className="border-t border-foreground/5 pt-2 px-2.5">
-                <p className="text-[10px] font-medium text-foreground/15 tracking-wide">
+                <p className="text-[10px] font-medium text-foreground/25 tracking-wide">
                   Data from ADS-B Exchange, adsb.lol &amp; OpenSky
                 </p>
               </div>
@@ -359,7 +359,7 @@ function PanelDialog({
                 whileTap={{ scale: 0.9 }}
                 aria-label="Close"
               >
-                <X className="h-3.5 w-3.5 text-foreground/40" />
+                <X className="h-3.5 w-3.5 text-foreground/35" />
               </motion.button>
             </div>
 
@@ -428,7 +428,7 @@ function PanelDialog({
                     className={`relative flex flex-1 items-center justify-center rounded-lg py-2.5 transition-colors ${
                       active
                         ? "text-foreground/90"
-                        : "text-foreground/35 active:bg-foreground/6"
+                        : "text-foreground/40 active:bg-foreground/6"
                     }`}
                     aria-label={label}
                   >

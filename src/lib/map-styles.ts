@@ -145,6 +145,15 @@ export const MAP_STYLES: MapStyle[] = [
     dark: false,
   },
   {
+    id: "voyager-labels",
+    name: "Light Annotated",
+    style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+    preview: "linear-gradient(135deg, #e8e4dc 0%, #ccc7bc 50%, #e8e4dc 100%)",
+    previewUrl:
+      "https://a.basemaps.cartocdn.com/rastertiles/voyager/3/4/2@2x.png",
+    dark: false,
+  },
+  {
     id: "satellite",
     name: "Satellite",
     style: SATELLITE_STYLE,
@@ -183,6 +192,7 @@ export function getAttributions(
     case "dark-labels":
     case "dark-terrain":
     case "voyager":
+    case "voyager-labels":
       base.push(
         {
           label: "OpenStreetMap",
