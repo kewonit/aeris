@@ -5,7 +5,7 @@
 // Works identically for Airplanes.live and adsb.lol responses.
 // ────────────────────────────────────────────────────────────────────────
 
-import type { FlightState } from "./opensky-types";
+import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
 
@@ -131,13 +131,29 @@ function readsbCategoryToNumber(cat: string | undefined): number | null {
 
 // ── Position Source Mapping ─────────────────────────────────────────────
 
-/** Maps readsb `type` field to OpenSky positionSource: 0=ADS-B, 1=MLAT, 2=TIS-B */
+/**
+ * Maps readsb `type` field to unified PositionSource.
+ *
+ * readsb `type` values (per airplanes.live docs):
+ *   adsb_icao, adsb_icao_nt, adsb_other  → "adsb"
+ *   adsr_icao, adsr_other                 → "adsb" (ADS-R rebroadcast)
+ *   mlat                                  → "mlat"
+ *   tisb_icao, tisb_other, tisb_trackfile → "tisb"
+ *   adsc                                  → "adsc"
+ *   other, mode_s                         → "other"
+ */
+function readsbTypeToPositionSource(
+  type: string | undefined,
+): PositionSource {
+  if (!type) return null;
+  const t = type.toLowerCase();
 
-function readsbTypeToPositionSource(type: string | undefined): number {
-  if (!type) return 0;
-  if (type === "mlat") return 1;
-  if (type.startsWith("tisb")) return 2;
-  return 0;
+  if (t.startsWith("adsb") || t.startsWith("adsr")) return "adsb";
+  if (t === "mlat") return "mlat";
+  if (t.startsWith("tisb")) return "tisb";
+  if (t === "adsc") return "adsc";
+
+  return "other";
 }
 
 // ── Altitude Parser ────────────────────────────────────────────────────

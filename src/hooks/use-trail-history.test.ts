@@ -23,7 +23,7 @@ const TEST_FLIGHT: FlightState = {
   geoAltitude: 11_100,
   squawk: null,
   spiFlag: false,
-  positionSource: 0,
+  positionSource: "adsb",
   category: null,
 };
 

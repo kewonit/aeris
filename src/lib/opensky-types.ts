@@ -18,6 +18,26 @@ export const SEGMENT_DELAY_MS = 200;
 
 // ── Exported Types ─────────────────────────────────────────────────────
 
+/**
+ * Unified position source across all upstream providers.
+ *
+ * OpenSky encodes this as numbers (0=ADS-B, 1=ASTERIX, 2=MLAT, 3=FLARM).
+ * readsb/airplanes.live encode this as the `type` string
+ * (adsb_icao, mlat, tisb_icao, etc.).
+ *
+ * We normalize both into a single string union so the UI doesn't need
+ * to know which provider produced the data.
+ */
+export type PositionSource =
+  | "adsb"      // ADS-B (incl. ADS-R rebroadcasts, non-transponder)
+  | "asterix"   // ASTERIX (OpenSky only)
+  | "mlat"      // MLAT
+  | "flarm"     // FLARM (OpenSky only)
+  | "tisb"      // TIS-B traffic info
+  | "adsc"      // ADS-C (satellite downlinks)
+  | "other"     // Unknown / miscellaneous
+  | null;
+
 export type FlightState = {
   icao24: string;
   callsign: string | null;
@@ -32,7 +52,7 @@ export type FlightState = {
   geoAltitude: number | null;
   squawk: string | null;
   spiFlag: boolean;
-  positionSource: number;
+  positionSource: PositionSource;
   category: number | null;
   /** ICAO type designator (e.g. "A320", "B738") - available from readsb */
   typeCode?: string | null;

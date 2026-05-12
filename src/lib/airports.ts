@@ -90615,6 +90615,9 @@ const AIRPORT_SEARCH_INDEX: SearchAirportEntry[] = AIRPORTS.map((airport) => ({
 }));
 
 const IATA_LOOKUP = new Map(AIRPORTS.map((airport) => [airport.iata, airport]));
+const ICAO_LOOKUP = new Map(
+  AIRPORTS.filter((a) => a.icao).map((airport) => [airport.icao, airport]),
+);
 
 const SEARCH_CACHE_LIMIT = 80;
 const SEARCH_CACHE = new Map<string, Airport[]>();
@@ -90681,6 +90684,11 @@ export function searchAirports(query: string, limit = 20): Airport[] {
 export function findByIata(iata: string): Airport | undefined {
   const code = iata.toUpperCase();
   return IATA_LOOKUP.get(code);
+}
+
+export function findAirportByIcao(icao: string): Airport | undefined {
+  const code = icao.toUpperCase();
+  return ICAO_LOOKUP.get(code);
 }
 
 export function airportToCity(airport: Airport): City {

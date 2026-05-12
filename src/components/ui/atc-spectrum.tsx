@@ -48,7 +48,7 @@ function accent(intensity: number, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// -- Segmented Control (Apple-style) ------------------------------------
+// -- Segmented Control ------------------------------------
 
 function SegmentedControl({
   mode,

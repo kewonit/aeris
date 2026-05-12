@@ -9,12 +9,10 @@ import {
   Compass,
   Eye,
   X,
-  Building2,
   Globe,
   Navigation,
   Camera,
   ImageOff,
-  Plane,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import { useRouteInfo } from "@/hooks/use-route-info";
@@ -25,7 +23,6 @@ import {
   headingToCardinal,
 } from "@/lib/flight-utils";
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
-import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import { formatAirportCode } from "@/lib/route-lookup";
 import {
@@ -40,6 +37,12 @@ import {
   formatSpeed,
   formatVerticalSpeedValue,
 } from "@/lib/unit-formatters";
+import {
+  PositionSourceBadge,
+  OnGroundBadge,
+  AircraftTypeLine,
+  AircraftOperatorLine,
+} from "@/components/ui/flight-badges";
 
 type MobileFlightToastProps = {
   flight: FlightState;
@@ -122,7 +125,7 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
   const showPhotos = !loading && hasPhotos;
 
   return (
-    <div className="relative h-36 w-full overflow-hidden bg-foreground/5">
+    <div className="relative h-36 w-full shrink-0 overflow-hidden bg-foreground/5">
       {loading && !hasPhotos && (
         <span
           aria-hidden
@@ -227,15 +230,13 @@ export function MobileFlightToast({
 }: MobileFlightToastProps) {
   const { settings } = useSettings();
   const airline = lookupAirline(flight.callsign);
-  const flightNum = parseFlightNumber(flight.callsign);
   const company = airline ?? `${flight.originCountry} operator`;
-  const model = aircraftTypeHint(flight.category);
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
     flight.longitude != null && flight.latitude != null && !flight.onGround;
 
-  const routeInfo = useRouteInfo(flight, track);
+  const routeInfo = useRouteInfo(flight);
 
   // Airline logo fallback chain.
   const logoCandidates = airlineLogoCandidates(airline, flight.callsign);
@@ -277,315 +278,286 @@ export function MobileFlightToast({
   const photoKey = photos.map((p) => p.id).join(",");
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-foreground/8 bg-background/80 shadow-2xl shadow-background/50 backdrop-blur-2xl">
+    <div className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl border border-foreground/8 bg-background/80 shadow-2xl shadow-background/50 backdrop-blur-2xl">
       <PhotoCarouselHero
         key={photoKey}
         photos={photos}
         loading={photosLoading}
       />
 
-      <div className="p-3.5 pt-3">
-        {/* Header row: logo + callsign + close */}
-        <div className="flex items-center gap-3">
-          {/* Airline logo */}
-          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-foreground/14 bg-foreground/10 shadow-md shadow-background/25">
-            {showLogo ? (
-              <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2 shadow-sm">
-                {!logoLoaded && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
-                  />
-                )}
-                <Image
-                  src={logoUrl ?? undefined}
-                  alt={company ? `${company} logo` : "Airline logo"}
-                  width={40}
-                  height={40}
-                  className={`relative h-8 w-8 object-contain transition-opacity duration-200 ${
-                    logoLoaded ? "opacity-100" : "opacity-0"
-                  }`}
-                  unoptimized
-                  onLoad={() => {
-                    if (logoUrl) trackAirlineLogoLoaded(logoUrl);
-                    setLogoLoadedByKey((current) => ({
-                      ...current,
-                      [logoLoadKey]: true,
-                    }));
-                  }}
-                  onError={() => {
-                    if (logoUrl) markAirlineLogoFailed(logoUrl);
-                    if (resolvedLogoIndex + 1 < logoCandidates.length) {
-                      setLogoIndexByAirline((current) => ({
-                        ...current,
-                        [airlineKey]: resolvedLogoIndex + 1,
-                      }));
-                      return;
-                    }
-                    setLogoIndexByAirline((current) => ({
-                      ...current,
-                      [airlineKey]: logoCandidates.length,
-                    }));
-                  }}
-                />
-              </span>
-            ) : (
-              <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2 shadow-sm">
-                {genericLogoFailed ? (
-                  <span className="text-[16px] font-semibold text-background/25">
-                    -
-                  </span>
-                ) : (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* ── Header ── */}
+        <div className="shrink-0 p-3.5 pb-2">
+          <div className="flex items-start gap-3">
+            {/* Airline logo */}
+            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/[0.06] shadow-md shadow-background/20">
+              {showLogo ? (
+                <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-background/10 bg-white/95 p-2 shadow-sm">
+                  {!logoLoaded && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
+                    />
+                  )}
                   <Image
-                    src={genericLogoUrl}
-                    alt="Generic airline logo"
+                    src={logoUrl ?? undefined}
+                    alt={company ? `${company} logo` : "Airline logo"}
                     width={40}
                     height={40}
-                    className="h-8 w-8 object-contain grayscale opacity-80"
+                    className={`relative h-8 w-8 object-contain transition-opacity duration-200 ${
+                      logoLoaded ? "opacity-100" : "opacity-0"
+                    }`}
                     unoptimized
-                    onError={() => setGenericLogoFailed(true)}
+                    onLoad={() => {
+                      if (logoUrl) trackAirlineLogoLoaded(logoUrl);
+                      setLogoLoadedByKey((current) => ({
+                        ...current,
+                        [logoLoadKey]: true,
+                      }));
+                    }}
+                    onError={() => {
+                      if (logoUrl) markAirlineLogoFailed(logoUrl);
+                      if (resolvedLogoIndex + 1 < logoCandidates.length) {
+                        setLogoIndexByAirline((current) => ({
+                          ...current,
+                          [airlineKey]: resolvedLogoIndex + 1,
+                        }));
+                        return;
+                      }
+                      setLogoIndexByAirline((current) => ({
+                        ...current,
+                        [airlineKey]: logoCandidates.length,
+                      }));
+                    }}
                   />
-                )}
-              </span>
-            )}
-          </div>
-
-          {/* Callsign + identifiers */}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold leading-tight text-foreground">
-              {formatCallsign(flight.callsign)}
-            </p>
-            <p className="mt-0.5 truncate text-[10px] font-medium tracking-widest text-foreground/30 uppercase">
-              {flight.icao24}
-              {flightNum ? ` · #${flightNum}` : ""}
-            </p>
-          </div>
-
-          {/* Close button */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/5 transition-colors active:bg-foreground/10"
-            aria-label="Close flight details"
-          >
-            <X className="h-3.5 w-3.5 text-foreground/40" />
-          </button>
-        </div>
-        {/* Airline / model */}
-        {company && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <Building2 className="h-3 w-3 shrink-0 text-foreground/20" />
-            <p className="truncate text-[11px] font-medium text-foreground/45">
-              {company}
-              {flight?.typeDescription ? (
-                <span className="text-foreground/25">
-                  {" "}
-                  · {flight.typeDescription}
                 </span>
-              ) : model ? (
-                <span className="text-foreground/25"> · {model}</span>
-              ) : null}
-            </p>
+              ) : (
+                <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2 shadow-sm">
+                  {genericLogoFailed ? (
+                    <span className="text-[16px] font-semibold text-background/25">
+                      -
+                    </span>
+                  ) : (
+                    <Image
+                      src={genericLogoUrl}
+                      alt="Generic airline logo"
+                      width={40}
+                      height={40}
+                      className="h-8 w-8 object-contain grayscale opacity-80"
+                      unoptimized
+                      onError={() => setGenericLogoFailed(true)}
+                    />
+                  )}
+                </span>
+              )}
+            </div>
+
+            {/* Text block */}
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-[15px] font-bold leading-tight text-foreground">
+                  {formatCallsign(flight.callsign)}
+                </p>
+                <PositionSourceBadge source={flight.positionSource} />
+                <OnGroundBadge onGround={flight.onGround} />
+              </div>
+              {company && (
+                <p className="mt-0.5 truncate text-[13px] font-medium text-foreground/50">
+                  {company}
+                </p>
+              )}
+              <AircraftTypeLine
+                typeCode={flight.typeCode}
+                typeDescription={flight.typeDescription}
+                registration={flight.registration}
+              />
+              <AircraftOperatorLine
+                manufacturer={aircraftDetails?.manufacturer}
+                owner={aircraftDetails?.owner}
+                airlineName={company}
+              />
+            </div>
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/5 transition-colors active:bg-foreground/10"
+              aria-label="Close flight details"
+            >
+              <X className="h-3.5 w-3.5 text-foreground/40" />
+            </button>
           </div>
-        )}
-        {/* Aircraft details (registration, type, owner) */}
-        {aircraftDetails &&
-          (aircraftDetails.registration ||
-            aircraftDetails.type ||
-            aircraftDetails.typeCode ||
-            aircraftDetails.owner) && (
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <Plane className="h-3 w-3 shrink-0 text-foreground/20" />
-              <p className="truncate text-[11px] text-foreground/35">
-                {[
-                  aircraftDetails.registration,
-                  aircraftDetails.type ?? aircraftDetails.typeCode,
-                  aircraftDetails.owner,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+        </div>
+
+        {/* ── Body ── */}
+        <div className="space-y-2 px-3.5 pb-3.5">
+          {/* Route info */}
+          {routeInfo.available && (
+            <div className="flex items-center gap-1.5">
+              <Navigation className="h-3 w-3 shrink-0 text-foreground/20" />
+              <p className="truncate text-[11px] font-semibold text-foreground/50">
+                {formatAirportCode(routeInfo.origin)}
+                <span className="mx-1 text-foreground/20">→</span>
+                {formatAirportCode(routeInfo.destination)}
               </p>
             </div>
           )}
-        {/* Registration fallback from flight data */}
-        {!aircraftDetails?.registration && flight?.registration && (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <Plane className="h-3 w-3 shrink-0 text-foreground/20" />
-            <p className="truncate font-mono text-[11px] text-foreground/35">
-              {flight.registration}
-              {flight.typeCode && !flight.typeDescription ? (
-                <span className="ml-1 text-foreground/20">
-                  [{flight.typeCode}]
-                </span>
-              ) : null}
-            </p>
-          </div>
-        )}
-        {/* Route info */}
-        {(routeInfo.origin || routeInfo.destination) && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <Navigation className="h-3 w-3 shrink-0 text-foreground/20" />
-            <p className="truncate text-[11px] font-semibold text-foreground/50">
-              {routeInfo.origin ? formatAirportCode(routeInfo.origin) : "-"}
-              <span className="mx-1 text-foreground/20">→</span>
-              {routeInfo.destination
-                ? formatAirportCode(routeInfo.destination)
-                : "-"}
-            </p>
-          </div>
-        )}
-        {/* Military / Emergency indicators */}
-        {(isMilitary(flight.dbFlags) ||
-          isEmergencyStatus(flight.emergencyStatus)) && (
-          <div className="mt-2 flex items-center gap-3">
-            {isMilitary(flight.dbFlags) && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-amber-400/70">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
-                Military
-              </span>
-            )}
-            {isEmergencyStatus(flight.emergencyStatus) && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-red-400/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                {flight.emergencyStatus}
-              </span>
-            )}
-          </div>
-        )}{" "}
-      </div>
 
-      {/* Metrics 4-column grid */}
-      <div className="grid grid-cols-4 gap-px border-t border-foreground/5 bg-foreground/2">
-        <MiniMetric
-          icon={<ArrowUp className="h-2.5 w-2.5" />}
-          label="ALT"
-          value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
-        />
-        <MiniMetric
-          icon={<Gauge className="h-2.5 w-2.5" />}
-          label="SPD"
-          value={formatSpeed(flight.velocity, settings.unitSystem)}
-        />
-        <MiniMetric
-          icon={<Compass className="h-2.5 w-2.5" />}
-          label="HDG"
-          value={
-            heading !== null && Number.isFinite(heading)
-              ? `${Math.round(heading)}° ${cardinal}`
-              : "-"
-          }
-        />
-        <MiniMetric
-          icon={<ArrowDown className="h-2.5 w-2.5" />}
-          label="V/S"
-          value={formatVerticalSpeedValue(
-            flight.verticalRate,
-            settings.unitSystem,
-          ).text}
-        />
-      </div>
-
-      {/* Info section: origin, heading + coords, squawk */}
-      <div className="flex flex-col gap-1.5 border-t border-foreground/5 px-3.5 py-2.5">
-        {/* Origin country */}
-        <div className="flex items-center gap-1.5">
-          <Globe className="h-3 w-3 text-foreground/25" />
-          <p className="text-[11px] text-foreground/40">
-            {flight.originCountry}
-          </p>
-        </div>
-
-        {/* Heading direction + coordinates */}
-        {cardinal && (
-          <div className="flex items-center gap-1.5">
-            <Navigation
-              className="h-3 w-3 text-foreground/25"
-              style={{
-                transform:
-                  heading !== null && Number.isFinite(heading)
-                    ? `rotate(${heading}deg)`
-                    : undefined,
-              }}
-            />
-            <p className="text-[11px] text-foreground/40">
-              Heading {cardinal}
-              {flight.latitude !== null &&
-                flight.longitude !== null &&
-                Number.isFinite(flight.latitude) &&
-                Number.isFinite(flight.longitude) && (
-                  <span className="text-foreground/20">
-                    {" "}
-                    · {Math.abs(flight.latitude).toFixed(2)}°
-                    {flight.latitude >= 0 ? "N" : "S"},{" "}
-                    {Math.abs(flight.longitude).toFixed(2)}°
-                    {flight.longitude >= 0 ? "E" : "W"}
-                  </span>
-                )}
-            </p>
-          </div>
-        )}
-
-        {/* Squawk code */}
-        {flight.squawk && (
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`h-3 w-3 text-center text-[8px] font-bold leading-3 ${
-                isEmergencySquawk(flight.squawk)
-                  ? "text-red-400"
-                  : "text-foreground/25"
-              }`}
-            >
-              SQ
-            </span>
-            <p
-              className={`font-mono text-[11px] tabular-nums ${
-                isEmergencySquawk(flight.squawk)
-                  ? "text-red-400"
-                  : "text-foreground/40"
-              }`}
-            >
-              {flight.squawk}
-              {isEmergencySquawk(flight.squawk) && (
-                <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
-                  {squawkLabel(flight.squawk)}
+          {/* Military / Emergency indicators */}
+          {(isMilitary(flight.dbFlags) ||
+            isEmergencyStatus(flight.emergencyStatus)) && (
+            <div className="flex items-center gap-3">
+              {isMilitary(flight.dbFlags) && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/8 px-2 py-0.5 text-[10px] font-medium tracking-wide text-amber-400/70">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
+                  Military
                 </span>
               )}
-            </p>
-          </div>
-        )}
-      </div>
+              {isEmergencyStatus(flight.emergencyStatus) && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/8 px-2 py-0.5 text-[10px] font-medium tracking-wide text-red-400/80">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                  {flight.emergencyStatus}
+                </span>
+              )}
+            </div>
+          )}
 
-      {/* FPV button */}
-      {onToggleFpv && (
-        <div className="border-t border-foreground/5">
-          <button
-            type="button"
-            onClick={() =>
-              (isFpvActive || canEnterFpv) && onToggleFpv(flight.icao24)
-            }
-            disabled={!isFpvActive && !canEnterFpv}
-            className={`flex w-full items-center justify-center gap-1.5 py-2.5 transition-colors active:bg-foreground/5 ${
-              !isFpvActive && !canEnterFpv
-                ? "cursor-not-allowed opacity-30"
-                : ""
-            }`}
-            aria-label={
-              isFpvActive ? "Exit first person view" : "Enter first person view"
-            }
-          >
-            <Eye
-              className={`h-3 w-3 ${isFpvActive ? "text-emerald-400" : "text-foreground/30"}`}
+          {/* Metrics 4-column grid */}
+          <div className="grid grid-cols-4 gap-px rounded-xl border border-foreground/5 bg-foreground/2 overflow-hidden">
+            <MiniMetric
+              icon={<ArrowUp className="h-2.5 w-2.5" />}
+              label="ALT"
+              value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
             />
-            <span
-              className={`text-[10px] font-semibold tracking-wider uppercase ${
-                isFpvActive ? "text-emerald-400/70" : "text-foreground/35"
+            <MiniMetric
+              icon={<Gauge className="h-2.5 w-2.5" />}
+              label="SPD"
+              value={formatSpeed(flight.velocity, settings.unitSystem)}
+            />
+            <MiniMetric
+              icon={<Compass className="h-2.5 w-2.5" />}
+              label="HDG"
+              value={
+                heading !== null && Number.isFinite(heading)
+                  ? `${Math.round(heading)}° ${cardinal}`
+                  : "-"
+              }
+            />
+            <MiniMetric
+              icon={<ArrowDown className="h-2.5 w-2.5" />}
+              label="V/S"
+              value={formatVerticalSpeedValue(
+                flight.verticalRate,
+                settings.unitSystem,
+              ).text}
+            />
+          </div>
+
+          {/* Info section: origin, heading + coords, squawk */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <Globe className="h-3 w-3 text-foreground/25" />
+              <p className="text-[11px] text-foreground/40">
+                {flight.originCountry}
+              </p>
+            </div>
+
+            {cardinal && (
+              <div className="flex items-center gap-1.5">
+                <Navigation
+                  className="h-3 w-3 text-foreground/25"
+                  style={{
+                    transform:
+                      heading !== null && Number.isFinite(heading)
+                        ? `rotate(${heading}deg)`
+                        : undefined,
+                  }}
+                />
+                <p className="text-[11px] text-foreground/40">
+                  {cardinal}
+                  {flight.latitude !== null &&
+                    flight.longitude !== null &&
+                    Number.isFinite(flight.latitude) &&
+                    Number.isFinite(flight.longitude) && (
+                      <span className="text-foreground/20">
+                        {" "}
+                        · {Math.abs(flight.latitude).toFixed(2)}°
+                        {flight.latitude >= 0 ? "N" : "S"},{" "}
+                        {Math.abs(flight.longitude).toFixed(2)}°
+                        {flight.longitude >= 0 ? "E" : "W"}
+                      </span>
+                    )}
+                </p>
+              </div>
+            )}
+
+            {flight.squawk && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`inline-flex h-3.5 items-center justify-center rounded px-1 text-[7px] font-bold uppercase tracking-wider ${
+                    isEmergencySquawk(flight.squawk)
+                      ? "bg-red-500/15 text-red-400"
+                      : "bg-foreground/[0.04] text-foreground/25"
+                  }`}
+                >
+                  SQ
+                </span>
+                <p
+                  className={`font-mono text-[11px] tabular-nums ${
+                    isEmergencySquawk(flight.squawk)
+                      ? "text-red-400"
+                      : "text-foreground/40"
+                  }`}
+                >
+                  {flight.squawk}
+                  {isEmergencySquawk(flight.squawk) && (
+                    <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
+                      {squawkLabel(flight.squawk)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* FPV button */}
+          {onToggleFpv && (
+            <button
+              type="button"
+              onClick={() =>
+                (isFpvActive || canEnterFpv) && onToggleFpv(flight.icao24)
+              }
+              disabled={!isFpvActive && !canEnterFpv}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-colors ${
+                isFpvActive
+                  ? "border-emerald-500/20 bg-emerald-500/10"
+                  : "border-foreground/6 bg-foreground/[0.03]"
+              } ${
+                !isFpvActive && !canEnterFpv
+                  ? "cursor-not-allowed opacity-40"
+                  : "active:bg-foreground/5"
               }`}
+              aria-label={
+                isFpvActive ? "Exit first person view" : "Enter first person view"
+              }
             >
-              {isFpvActive ? "Exit FPV" : "First Person View"}
-            </span>
-          </button>
+              <Eye
+                className={`h-3.5 w-3.5 ${
+                  isFpvActive ? "text-emerald-400" : "text-foreground/30"
+                }`}
+              />
+              <span
+                className={`text-[11px] font-medium tracking-wide ${
+                  isFpvActive ? "text-emerald-400/80" : "text-foreground/40"
+                }`}
+              >
+                {isFpvActive ? "Exit FPV" : "First Person View"}
+              </span>
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

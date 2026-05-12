@@ -71,7 +71,7 @@ function AltitudeDot({ altitude }: { altitude: number | null }) {
   );
 }
 
-// ── Segmented Control (Apple-style) ────────────────────────────────────
+// ── Segmented Control ────────────────────────────────────
 
 function SegmentedControl({
   value,
@@ -398,6 +398,14 @@ export function SearchContent({
                 query={query}
               />
             </span>
+            {(flight.typeCode || flight.typeDescription) && (
+              <>
+                <span className="text-foreground/25">·</span>
+                <span className="truncate">
+                  {flight.typeCode ?? flight.typeDescription}
+                </span>
+              </>
+            )}
             <span className="text-foreground/25">·</span>
             <CountryFlag
               country={flight.originCountry}

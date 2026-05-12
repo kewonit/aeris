@@ -32,7 +32,6 @@ import {
   headingToCardinal,
 } from "@/lib/flight-utils";
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
-import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
   loadedAirlineLogoUrls,
@@ -42,6 +41,12 @@ import {
 } from "@/lib/logo-cache";
 import { useRouteInfo } from "@/hooks/use-route-info";
 import { formatAirportCode } from "@/lib/route-lookup";
+import {
+  PositionSourceBadge,
+  OnGroundBadge,
+  AircraftTypeLine,
+  AircraftOperatorLine,
+} from "@/components/ui/flight-badges";
 import {
   formatAltitude,
   formatSpeed,
@@ -66,12 +71,12 @@ export function FlightCard({
   isFpvActive = false,
 }: FlightCardProps) {
   const { settings } = useSettings();
-  const routeInfo = useRouteInfo(flight, track);
+  const routeInfo = useRouteInfo(flight);
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
     airline ?? (flight ? `${flight.originCountry} operator` : null);
-  const model = flight ? aircraftTypeHint(flight.category) : null;
+  // Type display uses typeCode/typeDescription from API; aircraftTypeHint is fallback
   const logoCandidates = airlineLogoCandidates(airline, flight?.callsign);
   const heading = flight?.trueTrack ?? null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
@@ -139,343 +144,348 @@ export function FlightCard({
           <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
             <HeroBanner photo={heroPhoto} loading={photosLoading} />
 
-            <div className="p-4">
-              <div className="flex items-center gap-3.5">
-                <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-foreground/14 bg-foreground/10 shadow-lg shadow-background/25">
-                  {showLogo ? (
-                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-background/10 bg-white/95 p-3.5 shadow-sm">
-                      {!logoLoaded && (
-                        <span
-                          aria-hidden="true"
-                          className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
-                        />
-                      )}
-                      <Image
-                        src={logoUrl ?? undefined}
-                        alt={company ? `${company} logo` : "Airline logo"}
-                        width={68}
-                        height={68}
-                        className={`relative h-13 w-13 object-contain transition-opacity duration-200 ${
-                          logoLoaded ? "opacity-100" : "opacity-0"
-                        }`}
-                        unoptimized
-                        onLoad={() => {
-                          if (logoUrl) trackAirlineLogoLoaded(logoUrl);
-                          setLogoLoadedByKey((current) => ({
-                            ...current,
-                            [logoLoadKey]: true,
-                          }));
-                        }}
-                        onError={() => {
-                          if (logoUrl) markAirlineLogoFailed(logoUrl);
-                          if (resolvedLogoIndex + 1 < logoCandidates.length) {
+            <div className="flex max-h-[calc(100vh-140px)] flex-col">
+              {/* ── Fixed Header ── */}
+              <div className="shrink-0 p-4 pb-3">
+                <div className="flex items-start gap-3">
+                  {/* Logo */}
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/[0.06] shadow-md shadow-background/20">
+                    {showLogo ? (
+                      <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-background/10 bg-white/95 p-2.5 shadow-sm">
+                        {!logoLoaded && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
+                          />
+                        )}
+                        <Image
+                          src={logoUrl ?? undefined}
+                          alt={company ? `${company} logo` : "Airline logo"}
+                          width={48}
+                          height={48}
+                          className={`relative h-9 w-9 object-contain transition-opacity duration-200 ${
+                            logoLoaded ? "opacity-100" : "opacity-0"
+                          }`}
+                          unoptimized
+                          onLoad={() => {
+                            if (logoUrl) trackAirlineLogoLoaded(logoUrl);
+                            setLogoLoadedByKey((current) => ({
+                              ...current,
+                              [logoLoadKey]: true,
+                            }));
+                          }}
+                          onError={() => {
+                            if (logoUrl) markAirlineLogoFailed(logoUrl);
+                            if (resolvedLogoIndex + 1 < logoCandidates.length) {
+                              setLogoIndexByAirline((current) => ({
+                                ...current,
+                                [airlineKey]: resolvedLogoIndex + 1,
+                              }));
+                              return;
+                            }
                             setLogoIndexByAirline((current) => ({
                               ...current,
-                              [airlineKey]: resolvedLogoIndex + 1,
+                              [airlineKey]: logoCandidates.length,
                             }));
-                            return;
-                          }
-                          setLogoIndexByAirline((current) => ({
-                            ...current,
-                            [airlineKey]: logoCandidates.length,
-                          }));
-                        }}
-                      />
-                    </span>
-                  ) : (
-                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-foreground/10 bg-white/95 p-3.5 shadow-sm">
-                      {genericLogoFailed ? (
-                        <span className="text-[22px] font-semibold text-background/25">
-                          -
-                        </span>
-                      ) : (
-                        <Image
-                          src={genericLogoUrl}
-                          alt="Generic airline logo"
-                          width={68}
-                          height={68}
-                          className="h-13 w-13 object-contain grayscale opacity-80"
-                          unoptimized
-                          onError={() => setGenericLogoFailed(true)}
+                          }}
                         />
-                      )}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <p className="text-base font-bold leading-tight text-foreground">
-                    {formatCallsign(flight.callsign)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] font-medium tracking-widest text-foreground/35 uppercase">
-                    {flight.icao24}
-                    {flightNum ? ` · #${flightNum}` : ""}
-                  </p>
-                </div>
-              </div>
-
-              {company && (
-                <div className="mt-2.5 flex items-center gap-1.5">
-                  <Building2 className="h-3 w-3 text-foreground/25" />
-                  <p className="text-xs font-medium text-foreground/50">
-                    {company}
-                    {flight?.typeDescription ? (
-                      <span className="text-foreground/30">
-                        {" "}
-                        · {flight.typeDescription}
                       </span>
-                    ) : model ? (
-                      <span className="text-foreground/30"> · {model}</span>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-
-              {flight?.registration && (
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <Plane className="h-3 w-3 text-foreground/25" />
-                  <p className="text-[11px] font-mono font-medium text-foreground/40">
-                    {flight.registration}
-                    {flight.typeCode && !flight.typeDescription ? (
-                      <span className="ml-1 text-foreground/25">
-                        [{flight.typeCode}]
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-
-              {/* Route information banner */}
-              <RouteBanner routeInfo={routeInfo} />
-
-              {/* Military / Emergency indicators */}
-              {(isMilitary(flight.dbFlags) ||
-                isEmergencyStatus(flight.emergencyStatus)) && (
-                <div className="mt-2 flex items-center gap-3">
-                  {isMilitary(flight.dbFlags) && (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-amber-400/70">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
-                      Military
-                    </span>
-                  )}
-                  {isEmergencyStatus(flight.emergencyStatus) && (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-red-400/80">
-                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                      {flight.emergencyStatus}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-3 h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Metric
-                  icon={<ArrowUp className="h-3 w-3" />}
-                  label="Altitude"
-                  value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
-                />
-                <Metric
-                  icon={<Gauge className="h-3 w-3" />}
-                  label="Speed"
-                  value={formatSpeed(flight.velocity, settings.unitSystem)}
-                />
-                <Metric
-                  icon={<Compass className="h-3 w-3" />}
-                  label="Heading"
-                  value={
-                    heading !== null && Number.isFinite(heading)
-                      ? `${Math.round(heading)}° ${cardinal}`
-                      : "-"
-                  }
-                />
-                <Metric
-                  icon={<ArrowDown className="h-3 w-3" />}
-                  label="V/S"
-                  value={formatVerticalSpeed(
-                    flight.verticalRate,
-                    settings.unitSystem,
-                  )}
-                />
-              </div>
-
-              <div className="mt-3 h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Globe className="h-3 w-3 text-foreground/25" />
-                  <p className="text-[11px] text-foreground/40">
-                    {flight.originCountry}
-                  </p>
-                </div>
-                {cardinal && (
-                  <div className="flex items-center gap-1.5">
-                    <Navigation
-                      className="h-3 w-3 text-foreground/25"
-                      style={{
-                        transform:
-                          heading !== null && Number.isFinite(heading)
-                            ? `rotate(${heading}deg)`
-                            : undefined,
-                      }}
-                    />
-                    <p className="text-[11px] text-foreground/40">
-                      Heading {cardinal}
-                      {flight.latitude !== null &&
-                        flight.longitude !== null &&
-                        Number.isFinite(flight.latitude) &&
-                        Number.isFinite(flight.longitude) && (
-                          <span className="text-foreground/20">
-                            {" "}
-                            · {Math.abs(flight.latitude).toFixed(2)}°
-                            {flight.latitude >= 0 ? "N" : "S"},{" "}
-                            {Math.abs(flight.longitude).toFixed(2)}°
-                            {flight.longitude >= 0 ? "E" : "W"}
+                    ) : (
+                      <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-foreground/10 bg-white/95 p-2.5 shadow-sm">
+                        {genericLogoFailed ? (
+                          <span className="text-[18px] font-semibold text-background/25">
+                            -
                           </span>
+                        ) : (
+                          <Image
+                            src={genericLogoUrl}
+                            alt="Generic airline logo"
+                            width={48}
+                            height={48}
+                            className="h-9 w-9 object-contain grayscale opacity-80"
+                            unoptimized
+                            onError={() => setGenericLogoFailed(true)}
+                          />
                         )}
-                    </p>
+                      </span>
+                    )}
                   </div>
-                )}
-                {flight.squawk && (
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-3 w-3 text-center text-[8px] font-bold leading-3 ${
-                        isEmergencySquawk(flight.squawk)
-                          ? "text-red-400"
-                          : "text-foreground/25"
-                      }`}
-                    >
-                      SQ
-                    </span>
-                    <p
-                      className={`font-mono text-[11px] tabular-nums ${
-                        isEmergencySquawk(flight.squawk)
-                          ? "text-red-400"
-                          : "text-foreground/40"
-                      }`}
-                    >
-                      {flight.squawk}
-                      {isEmergencySquawk(flight.squawk) && (
-                        <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
-                          {squawkLabel(flight.squawk)}
-                        </span>
-                      )}
-                    </p>
+
+                  {/* Text */}
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[17px] font-bold leading-tight tracking-tight text-foreground">
+                        {formatCallsign(flight.callsign)}
+                      </p>
+                      <PositionSourceBadge source={flight.positionSource} />
+                      <OnGroundBadge onGround={flight.onGround} />
+                    </div>
+                    {company && (
+                      <p className="mt-0.5 truncate text-[13px] font-medium text-foreground/50">
+                        {company}
+                      </p>
+                    )}
+                    <AircraftTypeLine
+                      typeCode={flight.typeCode}
+                      typeDescription={flight.typeDescription}
+                      registration={flight.registration}
+                    />
+                    <AircraftOperatorLine
+                      manufacturer={photoAircraft?.manufacturer}
+                      owner={photoAircraft?.owner}
+                      airlineName={company}
+                    />
                   </div>
-                )}
+                </div>
               </div>
 
-              {onToggleFpv && (
-                <div className="mt-3">
-                  <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      (isFpvActive || canEnterFpv) &&
-                      flight &&
-                      onToggleFpv(flight.icao24)
-                    }
-                    disabled={!isFpvActive && !canEnterFpv}
-                    className={`mt-2 flex w-full items-center gap-1.5 text-left transition-colors ${
-                      !isFpvActive && !canEnterFpv
-                        ? "opacity-35 cursor-not-allowed"
-                        : ""
-                    }`}
-                    aria-label={
-                      isFpvActive
-                        ? "Exit first person view"
-                        : canEnterFpv
-                          ? "First person view"
-                          : "First person view unavailable"
-                    }
-                    title={
-                      isFpvActive
-                        ? "Exit FPV (F)"
-                        : canEnterFpv
-                          ? "First Person View (F)"
-                          : flight?.onGround
-                            ? "FPV unavailable (aircraft on ground)"
-                            : "FPV unavailable (no position data)"
-                    }
-                  >
-                    <Eye
-                      className={`h-3 w-3 ${isFpvActive ? "text-emerald-400" : "text-foreground/25"}`}
-                    />
-                    <span
-                      className={`text-[11px] font-medium tracking-wide uppercase ${isFpvActive ? "text-emerald-400/70" : "text-foreground/30"}`}
-                    >
-                      {isFpvActive
-                        ? "Exit First Person View"
-                        : "First Person View"}
-                    </span>
-                    <ChevronRight
-                      className={`ml-auto h-2.5 w-2.5 ${isFpvActive ? "text-emerald-400/40" : "text-foreground/20"}`}
-                    />
-                  </button>
-                </div>
-              )}
+              {/* ── Scrollable Body ── */}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+                <div className="space-y-3">
+                  {/* Route */}
+                  <RouteBanner routeInfo={routeInfo} />
 
-              <AircraftPhotos
-                photos={photos}
-                loading={photosLoading}
-                aircraft={photoAircraft}
-                error={photosError}
-              />
+                  {/* Emergency / Military */}
+                  {(isMilitary(flight.dbFlags) ||
+                    isEmergencyStatus(flight.emergencyStatus)) && (
+                    <div className="flex items-center gap-3">
+                      {isMilitary(flight.dbFlags) && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/8 px-2 py-0.5 text-[10px] font-medium tracking-wide text-amber-400/70">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
+                          Military
+                        </span>
+                      )}
+                      {isEmergencyStatus(flight.emergencyStatus) && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/8 px-2 py-0.5 text-[10px] font-medium tracking-wide text-red-400/80">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                          {flight.emergencyStatus}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
-              {trail && trail.path.length >= 3 && (
-                <div className="mt-3">
-                  <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-                  <button
-                    type="button"
-                    onClick={() => setVpOpen((o) => !o)}
-                    className="mt-2 flex w-full items-center gap-1.5 text-left transition-colors hover:opacity-70"
-                    aria-expanded={vpOpen}
-                    aria-label={
-                      vpOpen
-                        ? "Collapse vertical profile"
-                        : "Expand vertical profile"
-                    }
-                  >
-                    <TrendingUp className="h-3 w-3 text-foreground/25" />
-                    <span className="text-[11px] font-medium tracking-wide text-foreground/30 uppercase">
-                      Vertical Profile
-                    </span>
-                    <ChevronDown
-                      className={`ml-auto h-3 w-3 text-foreground/20 transition-transform duration-200 ${vpOpen ? "rotate-180" : ""}`}
+                  {/* Metrics */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Metric
+                      icon={<ArrowUp className="h-3 w-3" />}
+                      label="Altitude"
+                      value={formatAltitude(
+                        flight.baroAltitude,
+                        settings.unitSystem,
+                      )}
                     />
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {vpOpen && (
-                      <motion.div
-                        key="vp"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
-                        className="overflow-hidden"
-                      >
-                        <VerticalProfile
-                          trail={trail}
-                          navAltitudeMcp={flight.navAltitudeMcp}
+                    <Metric
+                      icon={<Gauge className="h-3 w-3" />}
+                      label="Speed"
+                      value={formatSpeed(
+                        flight.velocity,
+                        settings.unitSystem,
+                      )}
+                    />
+                    <Metric
+                      icon={<Compass className="h-3 w-3" />}
+                      label="Heading"
+                      value={
+                        heading !== null && Number.isFinite(heading)
+                          ? `${Math.round(heading)}° ${cardinal}`
+                          : "-"
+                      }
+                    />
+                    <Metric
+                      icon={<ArrowDown className="h-3 w-3" />}
+                      label="V/S"
+                      value={formatVerticalSpeed(
+                        flight.verticalRate,
+                        settings.unitSystem,
+                      )}
+                    />
+                  </div>
+
+                  {/* Info rows */}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="h-3 w-3 text-foreground/25" />
+                      <p className="text-[11px] text-foreground/40">
+                        {flight.originCountry}
+                      </p>
+                    </div>
+                    {cardinal && (
+                      <div className="flex items-center gap-1.5">
+                        <Navigation
+                          className="h-3 w-3 text-foreground/25"
+                          style={{
+                            transform:
+                              heading !== null && Number.isFinite(heading)
+                                ? `rotate(${heading}deg)`
+                                : undefined,
+                          }}
                         />
-                      </motion.div>
+                        <p className="text-[11px] text-foreground/40">
+                          {cardinal}
+                          {flight.latitude !== null &&
+                            flight.longitude !== null &&
+                            Number.isFinite(flight.latitude) &&
+                            Number.isFinite(flight.longitude) && (
+                              <span className="text-foreground/20">
+                                {" "}
+                                · {Math.abs(flight.latitude).toFixed(2)}°
+                                {flight.latitude >= 0 ? "N" : "S"},{" "}
+                                {Math.abs(flight.longitude).toFixed(2)}°
+                                {flight.longitude >= 0 ? "E" : "W"}
+                              </span>
+                            )}
+                        </p>
+                      </div>
                     )}
-                  </AnimatePresence>
-                </div>
-              )}
+                    {flight.squawk && (
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex h-3.5 items-center justify-center rounded px-1 text-[7px] font-bold uppercase tracking-wider ${
+                            isEmergencySquawk(flight.squawk)
+                              ? "bg-red-500/15 text-red-400"
+                              : "bg-foreground/[0.04] text-foreground/25"
+                          }`}
+                        >
+                          SQ
+                        </span>
+                        <p
+                          className={`font-mono text-[11px] tabular-nums ${
+                            isEmergencySquawk(flight.squawk)
+                              ? "text-red-400"
+                              : "text-foreground/40"
+                          }`}
+                        >
+                          {flight.squawk}
+                          {isEmergencySquawk(flight.squawk) && (
+                            <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
+                              {squawkLabel(flight.squawk)}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
-              <div className="mt-3">
-                <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="mt-2 flex w-full items-center gap-1.5 text-left transition-colors hover:opacity-70"
-                  aria-label="Deselect flight"
-                >
-                  <X className="h-3 w-3 text-foreground/25" />
-                  <span className="text-[11px] font-medium tracking-wide text-foreground/30 uppercase">
-                    Close
-                  </span>
-                </button>
+                  {/* FPV */}
+                  {onToggleFpv && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        (isFpvActive || canEnterFpv) &&
+                        flight &&
+                        onToggleFpv(flight.icao24)
+                      }
+                      disabled={!isFpvActive && !canEnterFpv}
+                      className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 transition-colors ${
+                        isFpvActive
+                          ? "border-emerald-500/20 bg-emerald-500/10"
+                          : "border-foreground/6 bg-foreground/[0.03]"
+                      } ${
+                        !isFpvActive && !canEnterFpv
+                          ? "opacity-40 cursor-not-allowed"
+                          : "hover:bg-foreground/[0.05]"
+                      }`}
+                      aria-label={
+                        isFpvActive
+                          ? "Exit first person view"
+                          : canEnterFpv
+                            ? "First person view"
+                            : "First person view unavailable"
+                      }
+                    >
+                      <Eye
+                        className={`h-3.5 w-3.5 ${
+                          isFpvActive
+                            ? "text-emerald-400"
+                            : "text-foreground/25"
+                        }`}
+                      />
+                      <span
+                        className={`text-[11px] font-medium tracking-wide ${
+                          isFpvActive
+                            ? "text-emerald-400/80"
+                            : "text-foreground/40"
+                        }`}
+                      >
+                        {isFpvActive
+                          ? "Exit First Person View"
+                          : "First Person View"}
+                      </span>
+                      <ChevronRight
+                        className={`ml-auto h-3 w-3 ${
+                          isFpvActive
+                            ? "text-emerald-400/40"
+                            : "text-foreground/20"
+                        }`}
+                      />
+                    </button>
+                  )}
+
+                  {/* Photos */}
+                  <AircraftPhotos
+                    photos={photos}
+                    loading={photosLoading}
+                    aircraft={photoAircraft}
+                    error={photosError}
+                  />
+
+                  {/* Vertical Profile */}
+                  {trail && trail.path.length >= 3 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setVpOpen((o) => !o)}
+                        className="flex w-full items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.05]"
+                        aria-expanded={vpOpen}
+                        aria-label={
+                          vpOpen
+                            ? "Collapse vertical profile"
+                            : "Expand vertical profile"
+                        }
+                      >
+                        <TrendingUp className="h-3.5 w-3.5 text-foreground/25" />
+                        <span className="text-[11px] font-medium tracking-wide text-foreground/40">
+                          Vertical Profile
+                        </span>
+                        <ChevronDown
+                          className={`ml-auto h-3 w-3 text-foreground/20 transition-transform duration-200 ${vpOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {vpOpen && (
+                          <motion.div
+                            key="vp"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pt-2">
+                              <VerticalProfile
+                                trail={trail}
+                                navAltitudeMcp={flight.navAltitudeMcp}
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  {/* Close */}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex w-full items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.05]"
+                    aria-label="Deselect flight"
+                  >
+                    <X className="h-3.5 w-3.5 text-foreground/25" />
+                    <span className="text-[11px] font-medium tracking-wide text-foreground/40">
+                      Close
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -541,7 +551,7 @@ function Metric({
 
 function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
   // Loading state
-  if (routeInfo.loading && !routeInfo.origin && !routeInfo.destination) {
+  if (routeInfo.loading) {
     return (
       <div className="mt-3 flex items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-2.5">
         <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/25" />
@@ -552,8 +562,10 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
     );
   }
 
-  // No route data at all
-  if (!routeInfo.origin && !routeInfo.destination) return null;
+  // No verified route available — silently omit the banner
+  if (!routeInfo.available) {
+    return null;
+  }
 
   const originCode = routeInfo.origin
     ? formatAirportCode(routeInfo.origin)

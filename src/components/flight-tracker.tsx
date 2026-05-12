@@ -56,7 +56,6 @@ import type { FlightState } from "@/lib/opensky";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
-import { processDepartures } from "@/lib/route-detection";
 import { findNearestAirport, airportToCity } from "@/lib/airports";
 import {
   computeAirspaceBounds,
@@ -235,11 +234,6 @@ function FlightTrackerInner({
   });
   const mergedTrails = trailState.trails;
   const selectedTrack = trailState.selectedTrack;
-
-  // Feed flights into departure detection for route estimation
-  useEffect(() => {
-    if (displayFlights.length > 0) processDepartures(displayFlights);
-  }, [displayFlights]);
 
   // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
   const displayFlightMap = useMemo(() => {

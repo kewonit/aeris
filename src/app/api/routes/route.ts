@@ -8,6 +8,8 @@ const ROUTE_HIT_CACHE_CONTROL =
   "public, max-age=300, s-maxage=900, stale-while-revalidate=1800";
 const ROUTE_MISS_CACHE_CONTROL = "public, max-age=60, s-maxage=120";
 
+const SOURCES = ["adsbdb", "hexdb", "opensky"];
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const callsign = normalizeRouteCallsign(
     request.nextUrl.searchParams.get("callsign"),
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           error: "Route lookup temporarily unavailable",
           callsign,
-          sources: ["adsbdb", "hexdb"],
+          sources: SOURCES,
         },
         { status: 503, headers: { "Cache-Control": "no-store" } },
       );
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       {
         error: "Route unavailable",
         callsign,
-        sources: ["adsbdb", "hexdb"],
+        sources: SOURCES,
       },
       {
         status: 404,

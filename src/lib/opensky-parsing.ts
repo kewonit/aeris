@@ -45,6 +45,35 @@ export function normalizeBounds(
   return lo <= hi ? [lo, hi] : [hi, lo];
 }
 
+// ── Position Source Mapping ────────────────────────────────────────────
+
+/**
+ * Map OpenSky numeric position_source to unified PositionSource.
+ *
+ * OpenSky docs:
+ *   0 = ADS-B
+ *   1 = ASTERIX
+ *   2 = MLAT
+ *   3 = FLARM
+ */
+function openskyPositionSource(
+  value: unknown,
+): import("./opensky-types").PositionSource {
+  if (!isFiniteNumber(value)) return null;
+  switch (value) {
+    case 0:
+      return "adsb";
+    case 1:
+      return "asterix";
+    case 2:
+      return "mlat";
+    case 3:
+      return "flarm";
+    default:
+      return "other";
+  }
+}
+
 // ── State Row Parsing ──────────────────────────────────────────────────
 
 export function parseStateRow(
@@ -79,7 +108,7 @@ export function parseStateRow(
     geoAltitude: isFiniteNumber(rawState[13]) ? rawState[13] : null,
     squawk: typeof rawState[14] === "string" ? rawState[14] : null,
     spiFlag: rawState[15] === true,
-    positionSource: isFiniteNumber(rawState[16]) ? rawState[16] : 0,
+    positionSource: openskyPositionSource(rawState[16]),
     category: isFiniteNumber(rawState[17]) ? rawState[17] : null,
   };
 }
