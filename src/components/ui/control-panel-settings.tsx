@@ -13,6 +13,7 @@ import {
   Shield,
   Eye,
   CloudRain,
+  Cpu,
 } from "lucide-react";
 import {
   useSettings,
@@ -206,6 +207,17 @@ export function SettingsContent({
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
           badge="BETA"
+        />
+
+        {/* ── Advanced ── */}
+        <SectionHeader title="Advanced" />
+
+        <SettingRow
+          icon={<Cpu className="h-4 w-4" />}
+          title="Show debug data"
+          description="Display raw receiver metrics and route source"
+          checked={settings.showDebugData}
+          onChange={(v) => update("showDebugData", v)}
         />
 
         <div className="mx-3 my-2 h-px bg-foreground/8" />

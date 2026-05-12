@@ -222,6 +222,10 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
       typeof raw.baro_rate === "number" && Number.isFinite(raw.baro_rate)
         ? raw.baro_rate * FTPM_TO_MS
         : null,
+    geomRate:
+      typeof raw.geom_rate === "number" && Number.isFinite(raw.geom_rate)
+        ? raw.geom_rate * FTPM_TO_MS
+        : null,
     geoAltitude:
       typeof raw.alt_geom === "number" && Number.isFinite(raw.alt_geom)
         ? raw.alt_geom * FT_TO_M
@@ -258,6 +262,28 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     emergencyStatus:
       raw.emergency && raw.emergency !== "none" ? raw.emergency : null,
     typeDescription: raw.desc?.trim() || null,
+
+    // ── Debug / Raw Data (readsb only) ───────────────────────────────
+    debugData: {
+      nic: optionalFinite(raw.nic),
+      nacP: optionalFinite(raw.nac_p),
+      nacV: optionalFinite(raw.nac_v),
+      sil: optionalFinite(raw.sil),
+      version: optionalFinite(raw.version),
+      alert: optionalFinite(raw.alert),
+      messages:
+        typeof raw.messages === "number" && Number.isFinite(raw.messages)
+          ? raw.messages
+          : null,
+      seen:
+        typeof raw.seen === "number" && Number.isFinite(raw.seen)
+          ? raw.seen
+          : null,
+      rssi:
+        typeof raw.rssi === "number" && Number.isFinite(raw.rssi)
+          ? raw.rssi
+          : null,
+    },
   };
 }
 

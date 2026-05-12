@@ -10,6 +10,7 @@
 // ── Types ──────────────────────────────────────────────────────────────
 export type {
   FlightState,
+  FlightDebugData,
   FetchResult,
   TrackWaypoint,
   FlightTrack,

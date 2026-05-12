@@ -14,6 +14,7 @@ import {
   Shield,
   AlertTriangle,
   Target,
+  Navigation,
 } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
@@ -30,6 +31,7 @@ import {
   altitudeValueFromFeet,
   altitudeValueFromMeters,
   altitudeUnitLabel,
+  formatPressureHpa,
   formatTemperatureC,
   formatVerticalSpeedValue,
   speedValueFromKnots,
@@ -161,7 +163,12 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
       ? flight.trueTrack
       : null;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
-  const vs = flight.verticalRate;
+  const vs =
+    flight.verticalRate != null && Number.isFinite(flight.verticalRate)
+      ? flight.verticalRate
+      : flight.geomRate != null && Number.isFinite(flight.geomRate)
+        ? flight.geomRate
+        : null;
   const vsDisplay = formatVerticalSpeedValue(vs, settings.unitSystem);
 
   // ── Avionics data (readsb only) ────────────────────────────────────
@@ -170,12 +177,22 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
   const windDir = flight.windDirection ?? null;
   const windSpd = speedValueFromKnots(flight.windSpeed, settings.unitSystem);
   const oatC = flight.oat ?? null;
+  const qnhValue = flight.navQnh ?? null;
   const selAlt = altitudeValueFromFeet(
     flight.navAltitudeMcp,
     settings.unitSystem,
   );
+  const fmsAlt = altitudeValueFromFeet(
+    flight.navAltitudeFms,
+    settings.unitSystem,
+  );
+  const selHdg =
+    flight.navHeading != null && Number.isFinite(flight.navHeading)
+      ? Math.round(flight.navHeading)
+      : null;
   const navModes = flight.navModes ?? null;
   const rollDeg = flight.roll ?? null;
+  const trackRateVal = flight.trackRate ?? null;
   const isMilitary = (flight.dbFlags ?? 0) & 1;
   const emergencyStatus = flight.emergencyStatus ?? null;
 
@@ -183,9 +200,15 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
     iasDisplay !== null ||
     machNum !== null ||
     (windDir !== null && windSpd !== null) ||
-    oatC !== null;
+    oatC !== null ||
+    qnhValue !== null ||
+    (rollDeg !== null && Math.abs(rollDeg) > 1) ||
+    (trackRateVal !== null && Math.abs(trackRateVal) >= 0.1);
   const hasAutopilotRow =
-    (navModes !== null && navModes.length > 0) || selAlt !== null;
+    (navModes !== null && navModes.length > 0) ||
+    selAlt !== null ||
+    (fmsAlt !== null && fmsAlt !== selAlt) ||
+    selHdg !== null;
 
   const airline = useMemo(
     () => lookupAirline(flight.callsign),
@@ -453,14 +476,33 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 </span>
               </span>
             )}
-            {rollDeg !== null && Math.abs(rollDeg) > 1 && (
+            {(rollDeg !== null && Math.abs(rollDeg) > 1) ||
+            (trackRateVal !== null && Math.abs(trackRateVal) >= 0.1) ? (
               <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
                 <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
                   BANK
                 </span>
                 <span className="font-bold text-foreground/70">
-                  {rollDeg > 0 ? "R" : "L"}
-                  {Math.round(Math.abs(rollDeg))}°
+                  {rollDeg !== null && Math.abs(rollDeg) > 1
+                    ? `${rollDeg > 0 ? "R" : "L"}${Math.round(Math.abs(rollDeg))}°`
+                    : "—"}
+                  {trackRateVal !== null &&
+                    Math.abs(trackRateVal) >= 0.1 && (
+                      <span className="ml-1 text-foreground/50">
+                        {trackRateVal > 0 ? "R" : "L"}
+                        {Math.abs(trackRateVal).toFixed(1)}°/s
+                      </span>
+                    )}
+                </span>
+              </span>
+            ) : null}
+            {qnhValue !== null && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  QNH
+                </span>
+                <span className="font-bold text-foreground/70">
+                  {formatPressureHpa(qnhValue, settings.unitSystem)}
                 </span>
               </span>
             )}
@@ -491,12 +533,35 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
                 <Target className="h-2.5 w-2.5 text-cyan-400/50" />
                 <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
-                  SEL
+                  MCP
                 </span>
                 <span className="font-bold text-cyan-400/70">
                   {selAlt.toLocaleString()}
                 </span>
                 <span className="text-[8px] text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</span>
+              </span>
+            )}
+            {fmsAlt !== null && fmsAlt !== selAlt && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <Target className="h-2.5 w-2.5 text-cyan-400/50" />
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  FMS
+                </span>
+                <span className="font-bold text-cyan-400/70">
+                  {fmsAlt.toLocaleString()}
+                </span>
+                <span className="text-[8px] text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</span>
+              </span>
+            )}
+            {selHdg !== null && (
+              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
+                <Navigation className="h-2.5 w-2.5 text-cyan-400/50" />
+                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+                  HDG
+                </span>
+                <span className="font-bold text-cyan-400/70">
+                  {selHdg}°
+                </span>
               </span>
             )}
           </div>

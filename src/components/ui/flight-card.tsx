@@ -11,7 +11,6 @@ import {
   Globe,
   X,
   Navigation,
-  Building2,
   Eye,
   ChevronRight,
   ChevronDown,
@@ -50,8 +49,12 @@ import {
 import {
   formatAltitude,
   formatSpeed,
+  formatSpeedFromKnots,
   formatVerticalSpeed,
 } from "@/lib/unit-formatters";
+import { AvionicsSection } from "@/components/ui/avionics-section";
+import { FlightWeatherSection } from "@/components/ui/flight-weather-section";
+import { DebugDataSection } from "@/components/ui/debug-data-section";
 
 type FlightCardProps = {
   flight: FlightState | null;
@@ -243,7 +246,10 @@ export function FlightCard({
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
                 <div className="space-y-3">
                   {/* Route */}
-                  <RouteBanner routeInfo={routeInfo} />
+                  <RouteBanner
+                    routeInfo={routeInfo}
+                    showSource={settings.showDebugData}
+                  />
 
                   {/* Emergency / Military */}
                   {(isMilitary(flight.dbFlags) ||
@@ -264,6 +270,12 @@ export function FlightCard({
                     </div>
                   )}
 
+                  {/* Weather */}
+                  <FlightWeatherSection
+                    routeInfo={routeInfo}
+                    unitSystem={settings.unitSystem}
+                  />
+
                   {/* Metrics */}
                   <div className="grid grid-cols-2 gap-2">
                     <Metric
@@ -273,6 +285,11 @@ export function FlightCard({
                         flight.baroAltitude,
                         settings.unitSystem,
                       )}
+                      secondary={
+                        flight.geoAltitude !== null
+                          ? `GPS ${formatAltitude(flight.geoAltitude, settings.unitSystem)}`
+                          : null
+                      }
                     />
                     <Metric
                       icon={<Gauge className="h-3 w-3" />}
@@ -281,6 +298,11 @@ export function FlightCard({
                         flight.velocity,
                         settings.unitSystem,
                       )}
+                      secondary={
+                        flight.tas !== null && Number.isFinite(flight.tas)
+                          ? `TAS ${formatSpeedFromKnots(flight.tas, settings.unitSystem)}`
+                          : null
+                      }
                     />
                     <Metric
                       icon={<Compass className="h-3 w-3" />}
@@ -300,6 +322,12 @@ export function FlightCard({
                       )}
                     />
                   </div>
+
+                  {/* Avionics & Autopilot */}
+                  <AvionicsSection
+                    flight={flight}
+                    unitSystem={settings.unitSystem}
+                  />
 
                   {/* Info rows */}
                   <div className="flex flex-col gap-1">
@@ -365,6 +393,11 @@ export function FlightCard({
                       </div>
                     )}
                   </div>
+
+                  {/* Debug Data */}
+                  {settings.showDebugData && (
+                    <DebugDataSection data={flight.debugData} />
+                  )}
 
                   {/* FPV */}
                   {onToggleFpv && (
@@ -527,10 +560,12 @@ function Metric({
   icon,
   label,
   value,
+  secondary,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  secondary?: string | null;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -543,13 +578,22 @@ function Metric({
       <p className="text-sm font-semibold tabular-nums text-foreground/90">
         {value}
       </p>
+      {secondary ? (
+        <p className="text-[11px] text-foreground/40">{secondary}</p>
+      ) : null}
     </div>
   );
 }
 
 // ── Route Banner ───────────────────────────────────────────────────────
 
-function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
+function RouteBanner({
+  routeInfo,
+  showSource = false,
+}: {
+  routeInfo: FlightRouteInfo;
+  showSource?: boolean;
+}) {
   // Loading state
   if (routeInfo.loading) {
     return (
@@ -620,6 +664,13 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
           )}
         </div>
       </div>
+      {showSource && routeInfo.source && (
+        <div className="mt-2 flex justify-center">
+          <span className="rounded border border-foreground/5 bg-foreground/[0.02] px-1.5 py-px text-[8px] font-semibold uppercase tracking-wider text-foreground/25">
+            {routeInfo.source}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

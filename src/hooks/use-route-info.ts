@@ -42,6 +42,8 @@ export type FlightRouteInfo = {
   unavailable: boolean;
   /** Short display string, e.g. "LHR → JFK" */
   routeDisplay: string | null;
+  /** Data source that resolved this route */
+  source: "adsbdb" | "hexdb" | "opensky" | null;
 };
 
 const EMPTY_ROUTE: FlightRouteInfo = {
@@ -51,6 +53,7 @@ const EMPTY_ROUTE: FlightRouteInfo = {
   available: false,
   unavailable: false,
   routeDisplay: null,
+  source: null,
 };
 
 /** Max time to wait for a route lookup before forcing timeout. */
@@ -141,6 +144,7 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
     available,
     unavailable: isUnavailable,
     routeDisplay,
+    source: apiRoute?.source ?? null,
   };
 }
 

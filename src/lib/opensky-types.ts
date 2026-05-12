@@ -49,6 +49,8 @@ export type FlightState = {
   velocity: number | null;
   trueTrack: number | null;
   verticalRate: number | null;
+  /** Geometric (GNSS) vertical rate in m/s — readsb only */
+  geomRate?: number | null;
   geoAltitude: number | null;
   squawk: string | null;
   spiFlag: boolean;
@@ -104,6 +106,32 @@ export type FlightState = {
   emergencyStatus?: string | null;
   /** Aircraft type description (e.g. "AIRBUS A-320") - Airplanes.live only */
   typeDescription?: string | null;
+
+  // ── Debug / Raw Data (readsb only, hidden by default) ──────────────
+
+  /** Integrity, accuracy, and receiver metadata for advanced users */
+  debugData?: FlightDebugData | null;
+};
+
+export type FlightDebugData = {
+  /** Navigation Integrity Category (0–11) */
+  nic: number | null;
+  /** Navigation Accuracy for Position (0–11) */
+  nacP: number | null;
+  /** Navigation Accuracy for Velocity (0–4) */
+  nacV: number | null;
+  /** Source Integrity Level (0–3) */
+  sil: number | null;
+  /** ADS-B Version (0, 1, 2) */
+  version: number | null;
+  /** Flight status alert bit (0/1) */
+  alert: number | null;
+  /** Total Mode S messages received */
+  messages: number | null;
+  /** Seconds since last message */
+  seen: number | null;
+  /** Signal strength in dBFS (negative) */
+  rssi: number | null;
 };
 
 export type FetchResult = {

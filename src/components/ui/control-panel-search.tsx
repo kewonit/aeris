@@ -25,6 +25,7 @@ import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
 import { lookupAirline, flightQueryMatches } from "@/lib/airlines";
 import { CountryFlag } from "@/components/ui/country-flag";
 import { AirlineLogo } from "@/components/ui/airline-logo";
+import { PositionSourceBadge } from "@/components/ui/flight-badges";
 import { searchFlightsGlobal } from "@/lib/search-flight-client";
 import {
   searchLocalLocations,
@@ -390,6 +391,7 @@ export function SearchContent({
                 Global
               </span>
             )}
+            <PositionSourceBadge source={flight.positionSource} />
           </div>
           <div className="flex items-center gap-2 text-[12px] text-foreground/50 mt-0.5">
             <span className="font-mono tracking-wide">
@@ -403,6 +405,14 @@ export function SearchContent({
                 <span className="text-foreground/25">·</span>
                 <span className="truncate">
                   {flight.typeCode ?? flight.typeDescription}
+                </span>
+              </>
+            )}
+            {flight.registration && (
+              <>
+                <span className="text-foreground/25">·</span>
+                <span className="font-mono truncate">
+                  {flight.registration}
                 </span>
               </>
             )}
