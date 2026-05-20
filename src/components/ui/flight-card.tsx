@@ -22,7 +22,7 @@ import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import { HeroBanner } from "@/components/ui/hero-banner";
-import type { FlightState, FlightTrack } from "@/lib/opensky";
+import type { FlightState } from "@/lib/opensky";
 import { VerticalProfile } from "@/components/ui/vertical-profile";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import { useSettings } from "@/hooks/use-settings";
@@ -30,7 +30,7 @@ import {
   formatCallsign,
   headingToCardinal,
 } from "@/lib/flight-utils";
-import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
+import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
   loadedAirlineLogoUrls,
@@ -55,11 +55,11 @@ import {
 import { AvionicsSection } from "@/components/ui/avionics-section";
 import { FlightWeatherSection } from "@/components/ui/flight-weather-section";
 import { DebugDataSection } from "@/components/ui/debug-data-section";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type FlightCardProps = {
   flight: FlightState | null;
   trail?: TrailEntry | null;
-  track?: FlightTrack | null;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
@@ -68,7 +68,6 @@ type FlightCardProps = {
 export function FlightCard({
   flight,
   trail,
-  track,
   onClose,
   onToggleFpv,
   isFpvActive = false,
@@ -76,7 +75,6 @@ export function FlightCard({
   const { settings } = useSettings();
   const routeInfo = useRouteInfo(flight);
   const airline = flight ? lookupAirline(flight.callsign) : null;
-  const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
     airline ?? (flight ? `${flight.originCountry} operator` : null);
   // Type display uses typeCode/typeDescription from API; aircraftTypeHint is fallback
@@ -122,7 +120,6 @@ export function FlightCard({
     loading: photosLoading,
     error: photosError,
   } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
-  const heroPhoto = photos[0] ?? null;
   const [vpOpen, setVpOpen] = useState(false);
 
   return (
@@ -139,15 +136,15 @@ export function FlightCard({
             damping: 28,
             mass: 0.8,
           }}
-          className="w-72 sm:w-80"
+          className="h-[calc(100dvh-9rem)] max-h-full w-72 sm:w-80"
           role="complementary"
           aria-label="Selected flight details"
           aria-live="polite"
         >
-          <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
-            <HeroBanner photo={heroPhoto} loading={photosLoading} />
+          <div className="flex h-full max-h-full flex-col overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
+            <HeroBanner photos={photos} loading={photosLoading} />
 
-            <div className="flex max-h-[calc(100vh-140px)] flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               {/* ── Fixed Header ── */}
               <div className="shrink-0 p-4 pb-3">
                 <div className="flex items-start gap-3">
@@ -243,8 +240,12 @@ export function FlightCard({
               </div>
 
               {/* ── Scrollable Body ── */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-                <div className="space-y-3">
+              <ScrollArea
+                type="always"
+                className="min-h-0 flex-1"
+                viewportClassName="absolute inset-0"
+              >
+                <div className="space-y-3 px-4 pr-5 pb-4">
                   {/* Route */}
                   <RouteBanner
                     routeInfo={routeInfo}
@@ -519,7 +520,7 @@ export function FlightCard({
                     </span>
                   </button>
                 </div>
-              </div>
+              </ScrollArea>
             </div>
           </div>
         </motion.div>

@@ -1,96 +1,66 @@
 "use client";
 
-import {
-  forwardRef,
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  type HTMLAttributes,
-} from "react";
+import * as React from "react";
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
+
 import { cn } from "@/lib/utils";
 
-type ScrollAreaProps = HTMLAttributes<HTMLDivElement>;
+type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  viewportClassName?: string;
+};
 
-export const ScrollArea = forwardRef<HTMLDivElement, ScrollAreaProps>(
-  ({ className, children, ...props }, ref) => {
-    const viewportRef = useRef<HTMLDivElement>(null);
-    const thumbRef = useRef<HTMLDivElement>(null);
-    const [thumbHeight, setThumbHeight] = useState(0);
-    const [thumbTop, setThumbTop] = useState(0);
-    const [visible, setVisible] = useState(false);
-    const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
-
-    const updateThumb = useCallback(() => {
-      const vp = viewportRef.current;
-      if (!vp) return;
-
-      const ratio = vp.clientHeight / vp.scrollHeight;
-      if (ratio >= 1) {
-        setVisible(false);
-        return;
-      }
-
-      setThumbHeight(Math.max(ratio * vp.clientHeight, 24));
-      setThumbTop(
-        (vp.scrollTop / (vp.scrollHeight - vp.clientHeight)) *
-          (vp.clientHeight - Math.max(ratio * vp.clientHeight, 24)),
-      );
-      setVisible(true);
-
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-      hideTimer.current = setTimeout(() => setVisible(false), 1200);
-    }, []);
-
-    useEffect(() => {
-      const vp = viewportRef.current;
-      if (!vp) return;
-
-      const onScroll = () => updateThumb();
-      vp.addEventListener("scroll", onScroll, { passive: true });
-
-      const observer = new ResizeObserver(() => updateThumb());
-      observer.observe(vp);
-
-      return () => {
-        vp.removeEventListener("scroll", onScroll);
-        observer.disconnect();
-        if (hideTimer.current) clearTimeout(hideTimer.current);
-      };
-    }, [updateThumb]);
-
-    return (
-      <div
-        ref={ref}
-        className={cn("relative overflow-hidden", className)}
-        {...props}
+function ScrollArea({
+  className,
+  viewportClassName,
+  children,
+  ...props
+}: ScrollAreaProps) {
+  return (
+    <ScrollAreaPrimitive.Root
+      data-slot="scroll-area"
+      className={cn("relative overflow-hidden", className)}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Viewport
+        data-slot="scroll-area-viewport"
+        className={cn(
+          "h-full w-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          viewportClassName,
+        )}
       >
-        <div
-          ref={viewportRef}
-          className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-none"
-          style={{ scrollbarWidth: "none" }}
-          onMouseEnter={updateThumb}
-        >
-          {children}
-        </div>
-        <div
-          className={cn(
-            "absolute right-0.5 top-0 bottom-0 w-1.5 transition-opacity duration-300",
-            visible ? "opacity-100" : "opacity-0",
-          )}
-        >
-          <div
-            ref={thumbRef}
-            className="absolute w-full rounded-full bg-foreground/15 transition-[background-color] duration-150 hover:bg-foreground/25"
-            style={{
-              height: thumbHeight,
-              transform: `translateY(${thumbTop}px)`,
-            }}
-          />
-        </div>
-      </div>
-    );
-  },
-);
+        {children}
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
+  );
+}
 
-ScrollArea.displayName = "ScrollArea";
+function ScrollBar({
+  className,
+  orientation = "vertical",
+  ...props
+}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
+  return (
+    <ScrollAreaPrimitive.ScrollAreaScrollbar
+      data-slot="scroll-area-scrollbar"
+      orientation={orientation}
+      className={cn(
+        "flex touch-none p-px select-none transition-colors",
+        orientation === "vertical" &&
+          "h-full w-2.5 border-l border-l-transparent",
+        orientation === "horizontal" &&
+          "h-2.5 flex-col border-t border-t-transparent",
+        className,
+      )}
+      {...props}
+    >
+      <ScrollAreaPrimitive.ScrollAreaThumb
+        data-slot="scroll-area-thumb"
+        className="relative flex-1 rounded-full bg-foreground/20 transition-colors hover:bg-foreground/32"
+      />
+    </ScrollAreaPrimitive.ScrollAreaScrollbar>
+  );
+}
+
+export { ScrollArea, ScrollBar };

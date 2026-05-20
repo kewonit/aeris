@@ -1,31 +1,45 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Camera, ImageOff } from "lucide-react";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
 
 type HeroBannerProps = {
-  photo: NormalizedPhoto | null;
+  photos: NormalizedPhoto[];
   loading: boolean;
 };
 
-export function HeroBanner({ photo, loading }: HeroBannerProps) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+export function HeroBanner({ photos, loading }: HeroBannerProps) {
+  const photoKey = photos.map((p) => p.id).join(",");
 
-  useEffect(() => {
-    // Reset load state when photo changes
-    const reset = () => {
-      setLoaded(false);
-      setFailed(false);
-    };
-    reset();
-  }, [photo?.id]);
+  return <HeroBannerInner key={photoKey} photos={photos} loading={loading} />;
+}
 
-  const hasPhoto = photo != null && !failed;
+function HeroBannerInner({ photos, loading }: HeroBannerProps) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [failedIds, setFailedIds] = useState<Set<string>>(() => new Set());
+  const [loadedPhotoId, setLoadedPhotoId] = useState<string | null>(null);
+  const photo = photos[activeIndex] ?? null;
+  const loaded = photo != null && loadedPhotoId === photo.id;
+
+  function handleImageError() {
+    if (!photo) return;
+    const nextFailedIds = new Set(failedIds);
+    nextFailedIds.add(photo.id);
+    setFailedIds(nextFailedIds);
+    setLoadedPhotoId(null);
+
+    const nextIndex = photos.findIndex(
+      (candidate, index) =>
+        index > activeIndex && !nextFailedIds.has(candidate.id),
+    );
+    setActiveIndex(nextIndex === -1 ? photos.length : nextIndex);
+  }
+
+  const hasPhoto = photo != null;
 
   return (
-    <div className="relative h-36 w-full overflow-hidden bg-foreground/5">
+    <div className="relative h-36 w-full shrink-0 overflow-hidden bg-foreground/5">
       {/* Skeleton while loading */}
       {loading && !hasPhoto && (
         <span
@@ -43,7 +57,7 @@ export function HeroBanner({ photo, loading }: HeroBannerProps) {
       )}
 
       {/* Actual image */}
-      {photo && !failed && (
+      {photo && (
         <>
           {!loaded && (
             <span
@@ -51,11 +65,12 @@ export function HeroBanner({ photo, loading }: HeroBannerProps) {
               className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-white/5"
             />
           )}
+          {/* eslint-disable-next-line @next/next/no-img-element -- Provider URLs are already sanitized and not configured for Next image optimization. */}
           <img
             src={photo.url}
             alt="Aircraft"
-            onLoad={() => setLoaded(true)}
-            onError={() => setFailed(true)}
+            onLoad={() => setLoadedPhotoId(photo.id)}
+            onError={handleImageError}
             className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
             draggable={false}
           />

@@ -635,7 +635,7 @@ function FlightTrackerInner({
         )}
 
         {!fpvIcao24 && !isMobile && (
-          <div className="pointer-events-auto absolute left-3 top-14 sm:left-4 sm:top-16">
+          <div className="pointer-events-auto absolute left-3 top-14 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:left-4 sm:top-16 sm:bottom-20">
             <AnimatePresence mode="wait">
               {airportBoard.isActive && !displayFlight ? (
                 <motion.div
@@ -664,7 +664,6 @@ function FlightTrackerInner({
                   <FlightCard
                     flight={displayFlight}
                     trail={selectedTrail}
-                    track={selectedTrack}
                     onClose={handleDeselectFlight}
                     onToggleFpv={handleToggleFpv}
                     isFpvActive={
