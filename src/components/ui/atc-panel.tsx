@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useCallback, useRef, useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Radio,
@@ -13,7 +14,6 @@ import {
   ChevronUp,
   AudioLines,
 } from "lucide-react";
-import { AtcSpectrum } from "@/components/ui/atc-spectrum";
 import type { AtcFeed, AtcFeedType } from "@/lib/atc-types";
 import { FEED_TYPE_PRIORITY } from "@/lib/atc-types";
 import { lookupAtcFeeds, findNearbyAtcFeeds } from "@/lib/atc-lookup";
@@ -21,6 +21,12 @@ import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+const AtcSpectrum = dynamic(
+  () =>
+    import("@/components/ui/atc-spectrum").then((mod) => mod.AtcSpectrum),
+  { ssr: false },
+);
 
 // ── Feed helpers ───────────────────────────────────────────────────────
 

@@ -83,32 +83,32 @@ function DataCard({
 }) {
   return (
     <div
-      className={`relative flex flex-col gap-0.5 rounded-xl border px-3 py-2.5 transition-colors ${
+      className={`relative flex min-h-[70px] flex-col justify-between rounded-[17px] border px-3 py-2.5 transition-colors ${
         highlight
-          ? "border-cyan-500/15 bg-cyan-500/[0.04]"
-          : "border-foreground/5 bg-foreground/[0.02] hover:bg-foreground/[0.04]"
+          ? "border-cyan-400/18 bg-cyan-400/[0.07]"
+          : "border-foreground/[0.055] bg-background/35 hover:bg-foreground/[0.04]"
       }`}
     >
-      <div className="flex items-center gap-1.5 text-foreground/25">
+      <div className="flex items-center gap-1.5 text-foreground/38">
         {icon}
-        <span className="text-[8px] font-semibold uppercase tracking-wider">
+        <span className="text-[9px] font-semibold uppercase tracking-wide">
           {label}
         </span>
       </div>
       <p
-        className={`text-[14px] font-semibold tabular-nums ${
-          highlight ? "text-cyan-400/80" : "text-foreground/85"
+        className={`mt-1 text-[14px] font-semibold tabular-nums ${
+          highlight ? "text-cyan-300/90" : "text-foreground/88"
         }`}
       >
         {value}
         {unit ? (
-          <span className="ml-0.5 text-[9px] font-medium text-foreground/30">
+          <span className="ml-0.5 text-[9px] font-medium text-foreground/38">
             {unit}
           </span>
         ) : null}
       </p>
       {subvalue ? (
-        <p className="text-[9px] text-foreground/30">{subvalue}</p>
+        <p className="mt-0.5 text-[10px] text-foreground/38">{subvalue}</p>
       ) : null}
     </div>
   );
@@ -117,7 +117,7 @@ function DataCard({
 function ModeBadge({ mode }: { mode: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${navModeStyle(mode)}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${navModeStyle(mode)}`}
     >
       {navModeIcon(mode)}
       {navModeLabel(mode)}
@@ -204,16 +204,16 @@ export function AvionicsSection({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.05]"
+        className="flex min-h-11 w-full items-center gap-3 rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] px-3.5 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition-colors hover:bg-foreground/[0.045] active:bg-foreground/[0.07]"
         aria-expanded={open}
         aria-label={open ? "Collapse avionics panel" : "Expand avionics panel"}
       >
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-foreground/8 bg-foreground/[0.04]">
-          <Gauge className="h-3 w-3 text-foreground/30" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+          <Gauge className="h-3.5 w-3.5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium tracking-wide text-foreground/40">
+            <span className="text-[13px] font-medium text-foreground/72">
               Avionics & Autopilot
             </span>
             {navModes && navModes.length > 0 && (
@@ -221,13 +221,13 @@ export function AvionicsSection({
                 {navModes.slice(0, 2).map((mode) => (
                   <span
                     key={mode}
-                    className={`inline-flex h-4 items-center rounded border px-1 text-[7px] font-bold uppercase tracking-wider ${navModeStyle(mode)}`}
+                    className={`inline-flex h-4 items-center rounded-full border px-1.5 text-[8px] font-semibold uppercase tracking-wide ${navModeStyle(mode)}`}
                   >
                     {navModeLabel(mode)}
                   </span>
                 ))}
                 {navModes.length > 2 && (
-                  <span className="text-[8px] text-foreground/25">
+                  <span className="text-[9px] text-foreground/35">
                     +{navModes.length - 2}
                   </span>
                 )}
@@ -236,7 +236,7 @@ export function AvionicsSection({
           </div>
         </div>
         <ChevronDown
-          className={`ml-auto h-3.5 w-3.5 text-foreground/20 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`ml-auto h-4 w-4 text-foreground/24 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -250,13 +250,13 @@ export function AvionicsSection({
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="space-y-4 pt-3">
+            <div className="space-y-4 rounded-b-[22px] border-x border-b border-foreground/[0.07] bg-foreground/[0.025] px-3 pb-3 pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
               {/* ── Flight Instruments ── */}
               {hasFlightData && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 px-0.5">
                     <div className="h-px w-3 bg-foreground/10" />
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-foreground/25">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-foreground/35">
                       Flight Instruments
                     </span>
                     <div className="h-px flex-1 bg-foreground/10" />
@@ -315,7 +315,7 @@ export function AvionicsSection({
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 px-0.5">
                     <div className="h-px w-3 bg-foreground/10" />
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-foreground/25">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-foreground/35">
                       Autopilot
                     </span>
                     <div className="h-px flex-1 bg-foreground/10" />
