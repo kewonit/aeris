@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
-import { Github, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
@@ -11,7 +11,6 @@ import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarProvider,
 } from "@/components/ui/sidebar";
@@ -181,21 +180,6 @@ export function AerisLeftSidebar({
           </AnimatePresence>
         </SidebarContent>
 
-        <SidebarFooter className="border-0 px-5 py-4 shadow-none">
-          <a
-            href="https://github.com/kewonit/aeris"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="GitHub (opens in new tab)"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] font-medium text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/70"
-          >
-            <Github className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>GitHub</span>
-          </a>
-          <p className="px-2 text-[10px] font-medium leading-relaxed text-sidebar-foreground/25">
-            Data from ADS-B Exchange, adsb.lol &amp; OpenSky
-          </p>
-        </SidebarFooter>
       </Sidebar>
     </SidebarProvider>
   );

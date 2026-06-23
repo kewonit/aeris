@@ -54,7 +54,7 @@ const Thumbnail = memo(function Thumbnail({
       ref={ref}
       type="button"
       onClick={() => onClick(index)}
-      className="group relative h-20 w-32 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-foreground/8 bg-foreground/5 transition-all hover:border-foreground/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
+      className="group relative h-28 w-36 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-foreground/8 bg-foreground/5 transition-all hover:border-foreground/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
       aria-label={`View photo ${index + 1}${photo.photographer ? ` by ${photo.photographer}` : ""}`}
     >
       {!loaded && (
@@ -206,53 +206,6 @@ export function Lightbox({
         </>
       )}
 
-      {(photo.photographer ||
-        photo.location ||
-        photo.dateTaken ||
-        photo.link) && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.15 }}
-          className="absolute bottom-3 left-1/2 z-10 w-[92vw] max-w-lg -translate-x-1/2 sm:bottom-8"
-        >
-          <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl bg-background/60 px-5 py-3 text-sm text-foreground/70 backdrop-blur-sm sm:text-base">
-            {photo.photographer && (
-              <span className="font-medium text-foreground/85">
-                {photo.photographer}
-              </span>
-            )}
-            {photo.photographer && photo.location && (
-              <span className="text-foreground/25">|</span>
-            )}
-            {photo.location && (
-              <span className="text-foreground/55">{photo.location}</span>
-            )}
-            {(photo.photographer || photo.location) && photo.dateTaken && (
-              <span className="text-foreground/25">|</span>
-            )}
-            {photo.dateTaken && (
-              <span className="text-foreground/45">{photo.dateTaken}</span>
-            )}
-            {photo.link && (
-              <>
-                {(photo.photographer || photo.location || photo.dateTaken) && (
-                  <span className="text-foreground/25">|</span>
-                )}
-                <a
-                  href={photo.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground/40 underline decoration-foreground/20 underline-offset-2 transition-colors hover:text-foreground/60"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Source
-                </a>
-              </>
-            )}
-          </span>
-        </motion.div>
-      )}
     </motion.div>
   );
 }
@@ -371,7 +324,7 @@ export function AircraftPhotos({
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className="h-20 w-32 shrink-0 animate-pulse rounded-lg bg-foreground/5"
+                      className="h-28 w-36 shrink-0 animate-pulse rounded-lg bg-foreground/5"
                     />
                   ))}
                 </div>
@@ -395,7 +348,7 @@ export function AircraftPhotos({
                     <button
                       type="button"
                       onClick={() => setShowAllPhotos(true)}
-                      className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-foreground/8 bg-foreground/5 text-foreground/40 transition-all hover:border-foreground/20 hover:bg-foreground/8 hover:text-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
+                      className="flex h-28 w-24 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-foreground/8 bg-foreground/5 text-foreground/40 transition-all hover:border-foreground/20 hover:bg-foreground/8 hover:text-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
                       aria-label={`Show ${hiddenCount} more photo${hiddenCount === 1 ? "" : "s"}`}
                     >
                       <Plus className="h-3.5 w-3.5" />

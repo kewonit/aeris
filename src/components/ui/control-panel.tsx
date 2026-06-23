@@ -16,7 +16,6 @@ import {
   Settings,
   Keyboard,
   X,
-  Github,
   Info,
   Clock,
 } from "lucide-react";
@@ -315,27 +314,6 @@ function PanelDialog({
                 );
               })}
             </nav>
-
-            <div className="mt-auto pt-4 px-1 flex flex-col gap-3">
-              <a
-                href="https://github.com/kewonit/aeris"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="GitHub (opens in new tab)"
-                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-foreground/40 hover:text-foreground/55 hover:bg-foreground/4"
-              >
-                <Github
-                  className="relative h-4 w-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="relative text-[14px] font-medium">GitHub</span>
-              </a>
-              <div className="border-t border-foreground/5 pt-2 px-2.5">
-                <p className="text-[10px] font-medium text-foreground/25 tracking-wide">
-                  Data from ADS-B Exchange, adsb.lol &amp; OpenSky
-                </p>
-              </div>
-            </div>
           </div>
 
           <div className="flex flex-1 flex-col min-h-0 sm:h-120">
