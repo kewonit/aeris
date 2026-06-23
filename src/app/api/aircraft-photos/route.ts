@@ -4,7 +4,9 @@ const FETCH_TIMEOUT_MS = 5_000;
 const AIRPORT_DATA_TIMEOUT_MS = 5_000;
 const JETAPI_TIMEOUT_MS = 5_000;
 const HEX_REGEX = /^[0-9a-f]{6}$/;
-const REG_REGEX = /^[A-Z0-9][-A-Z0-9]{1,6}$/;
+const REG_REGEX = /^[A-Z0-9][A-Z0-9-]{1,9}$/;
+const UPSTREAM_USER_AGENT =
+  "AerisFlightTracker/0.8 (+https://github.com/kewonit/aeris)";
 
 // ── Upstream types ──────────────────────────────────────────────────────────
 
@@ -42,6 +44,14 @@ type AdsbdbResponse = {
   response?: {
     aircraft?: AdsbdbAircraft | null;
   };
+};
+
+type HexdbAircraft = {
+  Registration?: string;
+  Manufacturer?: string;
+  ICAOTypeCode?: string;
+  Type?: string;
+  RegisteredOwners?: string;
 };
 
 // ── Output types ────────────────────────────────────────────────────────────
@@ -86,6 +96,18 @@ function extractSrc(value: unknown): string | null {
   return null;
 }
 
+function normalizeRegistration(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "") ?? "";
+  return normalized && REG_REGEX.test(normalized) ? normalized : null;
+}
+
+function fulfilledOr<T>(
+  result: PromiseSettledResult<T>,
+  fallback: T,
+): T {
+  return result.status === "fulfilled" ? result.value : fallback;
+}
+
 async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
@@ -96,7 +118,10 @@ async function fetchWithTimeout(
   try {
     return await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": UPSTREAM_USER_AGENT,
+      },
     });
   } finally {
     clearTimeout(timer);
@@ -127,10 +152,13 @@ function sanitizePhoto(photo: NormalizedPhoto): NormalizedPhoto | null {
 
 // ── Planespotters.net ───────────────────────────────────────────────────────
 
-async function fetchPlanespotters(hex: string): Promise<NormalizedPhoto[]> {
+async function fetchPlanespotters(
+  identifier: string,
+  lookup: "hex" | "reg" = "hex",
+): Promise<NormalizedPhoto[]> {
   try {
     const res = await fetchWithTimeout(
-      `https://api.planespotters.net/pub/photos/hex/${encodeURIComponent(hex)}`,
+      `https://api.planespotters.net/pub/photos/${lookup}/${encodeURIComponent(identifier)}`,
       FETCH_TIMEOUT_MS,
     );
     if (!res.ok) return [];
@@ -152,7 +180,7 @@ async function fetchPlanespotters(hex: string): Promise<NormalizedPhoto[]> {
       seenUrls.add(fullUrl);
 
       photos.push({
-        id: `ps-${typeof p.id === "string" || typeof p.id === "number" ? p.id : photos.length}`,
+        id: `ps-${lookup}-${typeof p.id === "string" || typeof p.id === "number" ? p.id : photos.length}`,
         url: fullUrl,
         thumbnail: thumbSrc ?? largeSrc ?? src,
         photographer:
@@ -188,26 +216,25 @@ async function fetchAdsbdb(hex: string): Promise<{
     const ac = data?.response?.aircraft;
     if (!ac) return { aircraft: null, photo: null };
 
-    const registration =
-      typeof ac.registration === "string" && ac.registration
-        ? ac.registration
-        : null;
-    if (!registration) return { aircraft: null, photo: null };
-
-    const aircraft: AircraftDetails = {
-      registration,
-      manufacturer:
-        typeof ac.manufacturer === "string" && ac.manufacturer
-          ? ac.manufacturer
-          : null,
-      type: typeof ac.type === "string" && ac.type ? ac.type : null,
-      typeCode:
-        typeof ac.icao_type === "string" && ac.icao_type ? ac.icao_type : null,
-      owner:
-        typeof ac.registered_owner === "string" && ac.registered_owner
-          ? ac.registered_owner
-          : null,
-    };
+    const registration = normalizeRegistration(ac.registration);
+    const aircraft: AircraftDetails | null = registration
+      ? {
+          registration,
+          manufacturer:
+            typeof ac.manufacturer === "string" && ac.manufacturer
+              ? ac.manufacturer
+              : null,
+          type: typeof ac.type === "string" && ac.type ? ac.type : null,
+          typeCode:
+            typeof ac.icao_type === "string" && ac.icao_type
+              ? ac.icao_type
+              : null,
+          owner:
+            typeof ac.registered_owner === "string" && ac.registered_owner
+              ? ac.registered_owner
+              : null,
+        }
+      : null;
 
     let photo: NormalizedPhoto | null = null;
     if (typeof ac.url_photo === "string" && ac.url_photo) {
@@ -231,6 +258,41 @@ async function fetchAdsbdb(hex: string): Promise<{
   }
 }
 
+// ── hexdb.io (metadata fallback) ─────────────────────────────────────────────
+
+async function fetchHexdbAircraft(hex: string): Promise<AircraftDetails | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://hexdb.io/api/v1/aircraft/${encodeURIComponent(hex)}`,
+      FETCH_TIMEOUT_MS,
+    );
+    if (!res.ok) return null;
+
+    const ac = (await res.json()) as HexdbAircraft;
+    const registration = normalizeRegistration(ac.Registration);
+    if (!registration) return null;
+
+    return {
+      registration,
+      manufacturer:
+        typeof ac.Manufacturer === "string" && ac.Manufacturer
+          ? ac.Manufacturer
+          : null,
+      type: typeof ac.Type === "string" && ac.Type ? ac.Type : null,
+      typeCode:
+        typeof ac.ICAOTypeCode === "string" && ac.ICAOTypeCode
+          ? ac.ICAOTypeCode
+          : null,
+      owner:
+        typeof ac.RegisteredOwners === "string" && ac.RegisteredOwners
+          ? ac.RegisteredOwners
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── airport-data.com (additional photos) ────────────────────────────────────
 
 type AirportDataEntry = {
@@ -240,10 +302,10 @@ type AirportDataEntry = {
   photographer?: string;
 };
 
-async function fetchAirportData(hex: string): Promise<NormalizedPhoto[]> {
+async function fetchAirportData(identifier: string): Promise<NormalizedPhoto[]> {
   try {
     const res = await fetchWithTimeout(
-      `https://www.airport-data.com/api/ac_thumb.json?m=${encodeURIComponent(hex)}&n=5`,
+      `https://www.airport-data.com/api/ac_thumb.json?m=${encodeURIComponent(identifier)}&n=5`,
       AIRPORT_DATA_TIMEOUT_MS,
     );
     if (!res.ok) return [];
@@ -274,7 +336,7 @@ async function fetchAirportData(hex: string): Promise<NormalizedPhoto[]> {
       seenUrls.add(imageUrl);
 
       photos.push({
-        id: `apd-${photos.length}-${hex}`,
+        id: `apd-${photos.length}-${identifier}`,
         url: imageUrl,
         thumbnail:
           typeof entry.thumbnail === "string" && entry.thumbnail
@@ -312,6 +374,8 @@ type JetApiImage = {
 };
 
 type JetApiResponse = {
+  Reg?: string;
+  Images?: JetApiImage[];
   JetPhotos?: {
     Reg?: string;
     Images?: JetApiImage[];
@@ -327,7 +391,8 @@ async function fetchJetApi(reg: string): Promise<NormalizedPhoto[]> {
     if (!res.ok) return [];
 
     const data = (await res.json()) as JetApiResponse;
-    const images = data?.JetPhotos?.Images;
+    const payload = data.JetPhotos ?? data;
+    const images = payload?.Images;
     if (!images || !Array.isArray(images)) return [];
 
     const photos: NormalizedPhoto[] = [];
@@ -373,8 +438,9 @@ async function fetchJetApi(reg: string): Promise<NormalizedPhoto[]> {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const hex = request.nextUrl.searchParams.get("hex")?.trim().toLowerCase();
-  const reg =
-    request.nextUrl.searchParams.get("reg")?.trim().toUpperCase() || null;
+  const validReg = normalizeRegistration(
+    request.nextUrl.searchParams.get("reg"),
+  );
 
   if (!hex || !HEX_REGEX.test(hex)) {
     return NextResponse.json(
@@ -383,28 +449,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Validate registration - skip JetAPI if invalid
-  const validReg = reg && REG_REGEX.test(reg) ? reg : null;
-
-  const [psResult, adbResult, apdResult, jpResult] = await Promise.allSettled([
-    fetchPlanespotters(hex),
+  const [
+    psResult,
+    adbResult,
+    hexdbResult,
+    apdInitialResult,
+    jpInitialResult,
+  ] = await Promise.allSettled([
+    fetchPlanespotters(hex, "hex"),
     fetchAdsbdb(hex),
-    fetchAirportData(hex),
+    validReg ? Promise.resolve(null) : fetchHexdbAircraft(hex),
+    validReg
+      ? fetchAirportData(validReg)
+      : Promise.resolve([] as NormalizedPhoto[]),
     validReg ? fetchJetApi(validReg) : Promise.resolve([] as NormalizedPhoto[]),
   ]);
 
-  const planespottersPhotos =
-    psResult.status === "fulfilled" ? psResult.value : [];
-  const adsbdb =
-    adbResult.status === "fulfilled"
-      ? adbResult.value
-      : { aircraft: null, photo: null };
-  const airportDataPhotos =
-    apdResult.status === "fulfilled" ? apdResult.value : [];
-  const jetApiPhotos = jpResult.status === "fulfilled" ? jpResult.value : [];
+  let planespottersPhotos = fulfilledOr(psResult, []);
+  const adsbdb = fulfilledOr(adbResult, { aircraft: null, photo: null });
+  const hexdbAircraft = fulfilledOr(hexdbResult, null);
+  let airportDataPhotos = fulfilledOr(apdInitialResult, []);
+  let jetApiPhotos = fulfilledOr(jpInitialResult, []);
 
-  // Priority: JetAPI (full-res, multiple) → adsbdb (full-res) →
-  // airport-data (full-res) → planespotters (low-res fallback).
+  const aircraft = adsbdb.aircraft ?? hexdbAircraft;
+  const lookupReg = validReg ?? aircraft?.registration ?? null;
+
+  if (!validReg && lookupReg) {
+    const [apdDerivedResult, jpDerivedResult] = await Promise.allSettled([
+      fetchAirportData(lookupReg),
+      fetchJetApi(lookupReg),
+    ]);
+    airportDataPhotos = fulfilledOr(apdDerivedResult, []);
+    jetApiPhotos = fulfilledOr(jpDerivedResult, []);
+  }
+
+  if (lookupReg && planespottersPhotos.length === 0) {
+    const [regPlanespottersResult] = await Promise.allSettled([
+      fetchPlanespotters(lookupReg, "reg"),
+    ]);
+    planespottersPhotos = fulfilledOr(regPlanespottersResult, []);
+  }
+
+  // Priority: JetAPI (current full-res JetPhotos) -> Planespotters
+  // thumbnails -> adsbdb/airport-data direct URLs. adsbdb currently sources
+  // many photos from airport-data, whose historical direct URLs can go stale.
   // All photos are sanitized to strip dangerous URI schemes (XSS).
   const seenUrls = new Set<string>();
   const photos: NormalizedPhoto[] = [];
@@ -418,13 +506,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   for (const p of jetApiPhotos) addPhoto(p);
+  for (const p of planespottersPhotos) addPhoto(p);
   if (adsbdb.photo) addPhoto(adsbdb.photo);
   for (const p of airportDataPhotos) addPhoto(p);
-  for (const p of planespottersPhotos) addPhoto(p);
 
   const response: AircraftPhotosResponse = {
     photos,
-    aircraft: adsbdb.aircraft,
+    aircraft,
   };
 
   return NextResponse.json(response, {

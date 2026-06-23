@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -31,7 +32,7 @@ import {
   ChangelogContent,
 } from "@/components/ui/control-panel-settings";
 
-type TabId =
+export type ControlPanelTabId =
   | "search"
   | "style"
   | "settings"
@@ -40,7 +41,7 @@ type TabId =
   | "about";
 
 const MAIN_TABS: {
-  id: TabId;
+  id: ControlPanelTabId;
   icon: typeof Search;
   label: string;
 }[] = [
@@ -48,12 +49,12 @@ const MAIN_TABS: {
   { id: "style", icon: MapIcon, label: "Map Style" },
 ];
 
-const PANEL_TABS = [
+export const CONTROL_PANEL_TABS = [
   ...MAIN_TABS,
-  { id: "settings" as TabId, icon: Settings, label: "Settings" },
-  { id: "shortcuts" as TabId, icon: Keyboard, label: "Shortcuts" },
-  { id: "changelog" as TabId, icon: Clock, label: "Changelog" },
-  { id: "about" as TabId, icon: Info, label: "About" },
+  { id: "settings" as ControlPanelTabId, icon: Settings, label: "Settings" },
+  { id: "shortcuts" as ControlPanelTabId, icon: Keyboard, label: "Shortcuts" },
+  { id: "changelog" as ControlPanelTabId, icon: Clock, label: "Changelog" },
+  { id: "about" as ControlPanelTabId, icon: Info, label: "About" },
 ];
 
 const subscribePortalMount = () => () => {};
@@ -81,19 +82,23 @@ export function ControlPanel({
   onLookupFlight,
   onSelectFlight,
 }: ControlPanelProps) {
-  const [openTab, setOpenTab] = useState<TabId | null>(null);
+  const [openTab, setOpenTab] = useState<ControlPanelTabId | null>(null);
   const portalMounted = useSyncExternalStore(
     subscribePortalMount,
     () => true,
     () => false,
   );
 
+  const open = useCallback((tab: ControlPanelTabId) => {
+    setOpenTab(tab);
+  }, []);
+
   useEffect(() => {
     function handleOpenSearch() {
-      setOpenTab("search");
+      open("search");
     }
     function handleOpenShortcuts() {
-      setOpenTab("shortcuts");
+      open("shortcuts");
     }
     window.addEventListener("aeris:open-search", handleOpenSearch);
     window.addEventListener("aeris:open-shortcuts", handleOpenShortcuts);
@@ -101,9 +106,8 @@ export function ControlPanel({
       window.removeEventListener("aeris:open-search", handleOpenSearch);
       window.removeEventListener("aeris:open-shortcuts", handleOpenShortcuts);
     };
-  }, []);
+  }, [open]);
 
-  const open = (tab: TabId) => setOpenTab(tab);
   const close = () => setOpenTab(null);
 
   return (
@@ -186,8 +190,8 @@ function PanelDialog({
   onLookupFlight,
   onSelectFlight,
 }: {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
+  activeTab: ControlPanelTabId;
+  onTabChange: (tab: ControlPanelTabId) => void;
   onClose: () => void;
   airspaceAvailable: boolean;
   activeCity: City;
@@ -280,7 +284,7 @@ function PanelDialog({
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
-              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
+              {CONTROL_PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button
@@ -341,7 +345,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[14px] font-semibold tracking-tight text-foreground/90"
               >
-                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
+                {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
             </div>
             {/* Desktop header */}
@@ -350,7 +354,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[15px] font-semibold tracking-tight text-foreground/90"
               >
-                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
+                {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
               <motion.button
                 onClick={onClose}
@@ -419,7 +423,7 @@ function PanelDialog({
           {/* Mobile tab bar */}
           <div className="flex sm:hidden items-center gap-0.5 border-t border-border px-2 pt-2 pb-3">
             <nav className="flex flex-1 gap-0.5">
-              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
+              {CONTROL_PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button

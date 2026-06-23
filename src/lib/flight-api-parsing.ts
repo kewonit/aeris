@@ -5,7 +5,7 @@
 // Works identically for Airplanes.live and adsb.lol responses.
 // ────────────────────────────────────────────────────────────────────────
 
-import type { FlightState } from "./opensky-types";
+import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
 
@@ -131,13 +131,26 @@ function readsbCategoryToNumber(cat: string | undefined): number | null {
 
 // ── Position Source Mapping ─────────────────────────────────────────────
 
-/** Maps readsb `type` field to OpenSky positionSource: 0=ADS-B, 1=MLAT, 2=TIS-B */
+/**
+ * Maps readsb `type` field to unified PositionSource.
+ *
+ * readsb `type` values include adsb_icao, adsr_icao, mlat,
+ * tisb_icao, adsc, mode_s, and other provider-specific variants.
+ */
+function readsbTypeToPositionSource(
+  type: string | undefined,
+): PositionSource {
+  if (!type) return null;
+  const normalized = type.toLowerCase();
 
-function readsbTypeToPositionSource(type: string | undefined): number {
-  if (!type) return 0;
-  if (type === "mlat") return 1;
-  if (type.startsWith("tisb")) return 2;
-  return 0;
+  if (normalized.startsWith("adsb") || normalized.startsWith("adsr")) {
+    return "adsb";
+  }
+  if (normalized === "mlat") return "mlat";
+  if (normalized.startsWith("tisb")) return "tisb";
+  if (normalized === "adsc") return "adsc";
+
+  return "other";
 }
 
 // ── Altitude Parser ────────────────────────────────────────────────────
@@ -206,6 +219,10 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
       typeof raw.baro_rate === "number" && Number.isFinite(raw.baro_rate)
         ? raw.baro_rate * FTPM_TO_MS
         : null,
+    geomRate:
+      typeof raw.geom_rate === "number" && Number.isFinite(raw.geom_rate)
+        ? raw.geom_rate * FTPM_TO_MS
+        : null,
     geoAltitude:
       typeof raw.alt_geom === "number" && Number.isFinite(raw.alt_geom)
         ? raw.alt_geom * FT_TO_M
@@ -242,6 +259,28 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     emergencyStatus:
       raw.emergency && raw.emergency !== "none" ? raw.emergency : null,
     typeDescription: raw.desc?.trim() || null,
+
+    // ── Debug / Raw Data (readsb only) ───────────────────────────────
+    debugData: {
+      nic: optionalFinite(raw.nic),
+      nacP: optionalFinite(raw.nac_p),
+      nacV: optionalFinite(raw.nac_v),
+      sil: optionalFinite(raw.sil),
+      version: optionalFinite(raw.version),
+      alert: optionalFinite(raw.alert),
+      messages:
+        typeof raw.messages === "number" && Number.isFinite(raw.messages)
+          ? raw.messages
+          : null,
+      seen:
+        typeof raw.seen === "number" && Number.isFinite(raw.seen)
+          ? raw.seen
+          : null,
+      rssi:
+        typeof raw.rssi === "number" && Number.isFinite(raw.rssi)
+          ? raw.rssi
+          : null,
+    },
   };
 }
 

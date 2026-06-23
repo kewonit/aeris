@@ -1,3 +1,4 @@
+import Script from "next/script";
 import { FlightTracker } from "@/components/flight-tracker";
 import { isAirspaceConfigured } from "@/lib/airspace-config";
 
@@ -39,7 +40,7 @@ const jsonLd = [
     ],
     screenshot:
       "https://github.com/user-attachments/assets/9d1f50ed-be4e-4ef5-95ac-257e9129f8c8",
-    softwareVersion: "0.5.0",
+    softwareVersion: "0.8.4",
     isAccessibleForFree: true,
     inLanguage: "en",
   },
@@ -80,17 +81,24 @@ const jsonLd = [
   },
 ];
 
+function serializeJsonLd(data: unknown) {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 export default function Home() {
   const airspaceAvailable = isAirspaceConfigured();
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      {jsonLd.map((entry, index) => (
+        <Script
+          key={`home-jsonld-${index}`}
+          id={`home-jsonld-${index}`}
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
+        />
+      ))}
       <FlightTracker airspaceAvailable={airspaceAvailable} />
     </>
   );

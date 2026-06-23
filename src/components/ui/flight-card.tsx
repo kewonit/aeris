@@ -16,13 +16,17 @@ import {
   ChevronRight,
   ChevronDown,
   Plane,
-  Loader2,
   TrendingUp,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import { HeroBanner } from "@/components/ui/hero-banner";
+import {
+  OnGroundBadge,
+  AircraftOperatorLine,
+  AircraftTypeLine,
+  PositionSourceBadge,
+} from "@/components/ui/flight-badges";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import { VerticalProfile } from "@/components/ui/vertical-profile";
 import type { TrailEntry } from "@/hooks/use-trail-history";
@@ -40,11 +44,16 @@ import {
   markAirlineLogoFailed,
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
+import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { useRouteInfo } from "@/hooks/use-route-info";
 import { formatAirportCode } from "@/lib/route-lookup";
+import { AvionicsSection } from "@/components/ui/avionics-section";
+import { DebugDataSection } from "@/components/ui/debug-data-section";
+import { FlightWeatherSection } from "@/components/ui/flight-weather-section";
 import {
   formatAltitude,
   formatSpeed,
+  formatSpeedFromKnots,
   formatVerticalSpeed,
 } from "@/lib/unit-formatters";
 
@@ -55,18 +64,19 @@ type FlightCardProps = {
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
+  variant?: "floating" | "sidebar";
 };
 
 export function FlightCard({
   flight,
   trail,
-  track,
   onClose,
   onToggleFpv,
   isFpvActive = false,
+  variant = "floating",
 }: FlightCardProps) {
   const { settings } = useSettings();
-  const routeInfo = useRouteInfo(flight, track);
+  const routeInfo = useRouteInfo(flight);
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
@@ -116,6 +126,15 @@ export function FlightCard({
   } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
   const heroPhoto = photos[0] ?? null;
   const [vpOpen, setVpOpen] = useState(false);
+  const isSidebar = variant === "sidebar";
+  const verticalRate =
+    flight?.verticalRate != null && Number.isFinite(flight.verticalRate)
+      ? flight.verticalRate
+      : flight?.geomRate != null && Number.isFinite(flight.geomRate)
+        ? flight.geomRate
+        : null;
+  const showDebugData =
+    settings.showDebugData && hasDebugData(flight?.debugData);
 
   return (
     <AnimatePresence mode="wait">
@@ -131,15 +150,24 @@ export function FlightCard({
             damping: 28,
             mass: 0.8,
           }}
-          className="w-72 sm:w-80"
+          className={isSidebar ? "h-full w-full" : "w-72 sm:w-80"}
           role="complementary"
           aria-label="Selected flight details"
           aria-live="polite"
         >
-          <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
-            <HeroBanner photo={heroPhoto} loading={photosLoading} />
+          <div
+            className={
+              isSidebar
+                ? "h-full overflow-y-auto overscroll-contain bg-transparent [scrollbar-width:thin]"
+                : "overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl"
+            }
+          >
+            <HeroBanner
+              photo={heroPhoto}
+              loading={photosLoading}
+            />
 
-            <div className="p-4">
+            <div className={isSidebar ? "px-5 py-4 pb-6" : "p-4"}>
               <div className="flex items-center gap-3.5">
                 <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-foreground/14 bg-foreground/10 shadow-lg shadow-background/25">
                   {showLogo ? (
@@ -202,10 +230,14 @@ export function FlightCard({
                     </span>
                   )}
                 </div>
-                <div>
-                  <p className="text-base font-bold leading-tight text-foreground">
-                    {formatCallsign(flight.callsign)}
-                  </p>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <p className="truncate text-base font-bold leading-tight text-foreground">
+                      {formatCallsign(flight.callsign)}
+                    </p>
+                    <PositionSourceBadge source={flight.positionSource} />
+                    <OnGroundBadge onGround={flight.onGround} />
+                  </div>
                   <p className="mt-0.5 text-[11px] font-medium tracking-widest text-foreground/35 uppercase">
                     {flight.icao24}
                     {flightNum ? ` · #${flightNum}` : ""}
@@ -216,36 +248,24 @@ export function FlightCard({
               {company && (
                 <div className="mt-2.5 flex items-center gap-1.5">
                   <Building2 className="h-3 w-3 text-foreground/25" />
-                  <p className="text-xs font-medium text-foreground/50">
+                  <p className="min-w-0 truncate text-xs font-medium text-foreground/50">
                     {company}
-                    {flight?.typeDescription ? (
-                      <span className="text-foreground/30">
-                        {" "}
-                        · {flight.typeDescription}
-                      </span>
-                    ) : model ? (
-                      <span className="text-foreground/30"> · {model}</span>
-                    ) : null}
                   </p>
                 </div>
               )}
 
-              {flight?.registration && (
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <Plane className="h-3 w-3 text-foreground/25" />
-                  <p className="text-[11px] font-mono font-medium text-foreground/40">
-                    {flight.registration}
-                    {flight.typeCode && !flight.typeDescription ? (
-                      <span className="ml-1 text-foreground/25">
-                        [{flight.typeCode}]
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-
-              {/* Route information banner */}
-              <RouteBanner routeInfo={routeInfo} />
+              <div className="mt-1.5 space-y-0.5 pl-0.5">
+                <AircraftTypeLine
+                  typeCode={flight.typeCode}
+                  typeDescription={flight.typeDescription ?? model}
+                  registration={flight.registration}
+                />
+                <AircraftOperatorLine
+                  manufacturer={photoAircraft?.manufacturer}
+                  owner={photoAircraft?.owner}
+                  airlineName={company}
+                />
+              </div>
 
               {/* Military / Emergency indicators */}
               {(isMilitary(flight.dbFlags) ||
@@ -266,18 +286,52 @@ export function FlightCard({
                 </div>
               )}
 
+              <RouteBanner
+                routeInfo={routeInfo}
+                showSource={settings.showDebugData}
+              />
+
+              {routeInfo.available &&
+                (routeInfo.origin?.icao || routeInfo.destination?.icao) && (
+                  <div className="mt-3">
+                    <FlightWeatherSection
+                      routeInfo={routeInfo}
+                      unitSystem={settings.unitSystem}
+                    />
+                  </div>
+                )}
+
               <div className="mt-3 h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
 
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <Metric
                   icon={<ArrowUp className="h-3 w-3" />}
                   label="Altitude"
-                  value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
+                  value={formatAltitude(
+                    flight.baroAltitude,
+                    settings.unitSystem,
+                  )}
+                  secondary={
+                    flight.geoAltitude !== null
+                      ? `GPS ${formatAltitude(
+                          flight.geoAltitude,
+                          settings.unitSystem,
+                        )}`
+                      : null
+                  }
                 />
                 <Metric
                   icon={<Gauge className="h-3 w-3" />}
                   label="Speed"
                   value={formatSpeed(flight.velocity, settings.unitSystem)}
+                  secondary={
+                    flight.tas != null && Number.isFinite(flight.tas)
+                      ? `TAS ${formatSpeedFromKnots(
+                          flight.tas,
+                          settings.unitSystem,
+                        )}`
+                      : null
+                  }
                 />
                 <Metric
                   icon={<Compass className="h-3 w-3" />}
@@ -292,9 +346,16 @@ export function FlightCard({
                   icon={<ArrowDown className="h-3 w-3" />}
                   label="V/S"
                   value={formatVerticalSpeed(
-                    flight.verticalRate,
+                    verticalRate,
                     settings.unitSystem,
                   )}
+                />
+              </div>
+
+              <div className="mt-3">
+                <AvionicsSection
+                  flight={flight}
+                  unitSystem={settings.unitSystem}
                 />
               </div>
 
@@ -363,6 +424,15 @@ export function FlightCard({
                   </div>
                 )}
               </div>
+
+              {showDebugData && (
+                <div className="mt-3">
+                  <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+                  <div className="pt-3">
+                    <DebugDataSection data={flight.debugData} />
+                  </div>
+                </div>
+              )}
 
               {onToggleFpv && (
                 <div className="mt-3">
@@ -513,14 +583,31 @@ function isEmergencyStatus(status?: string | null): boolean {
   return !!status && status !== "none";
 }
 
+function hasDebugData(data: FlightState["debugData"]): boolean {
+  return !!(
+    data &&
+    (data.nic != null ||
+      data.nacP != null ||
+      data.nacV != null ||
+      data.sil != null ||
+      data.version != null ||
+      (data.alert != null && data.alert !== 0) ||
+      data.messages != null ||
+      data.seen != null ||
+      data.rssi != null)
+  );
+}
+
 function Metric({
   icon,
   label,
   value,
+  secondary,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  secondary?: string | null;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -533,27 +620,21 @@ function Metric({
       <p className="text-sm font-semibold tabular-nums text-foreground/90">
         {value}
       </p>
+      {secondary ? (
+        <p className="text-[11px] text-foreground/40">{secondary}</p>
+      ) : null}
     </div>
   );
 }
 
-// ── Route Banner ───────────────────────────────────────────────────────
-
-function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
-  // Loading state
-  if (routeInfo.loading && !routeInfo.origin && !routeInfo.destination) {
-    return (
-      <div className="mt-3 flex items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-2.5">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/25" />
-        <span className="text-[11px] text-foreground/30">
-          Looking up route…
-        </span>
-      </div>
-    );
-  }
-
-  // No route data at all
-  if (!routeInfo.origin && !routeInfo.destination) return null;
+function RouteBanner({
+  routeInfo,
+  showSource = false,
+}: {
+  routeInfo: FlightRouteInfo;
+  showSource?: boolean;
+}) {
+  if (!routeInfo.available) return null;
 
   const originCode = routeInfo.origin
     ? formatAirportCode(routeInfo.origin)
@@ -562,10 +643,11 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
     ? formatAirportCode(routeInfo.destination)
     : null;
 
+  if (!originCode && !destCode) return null;
+
   return (
-    <div className="mt-3 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-3">
+    <div className="mt-3 rounded-xl border border-foreground/6 bg-foreground/[0.025] px-3.5 py-3">
       <div className="flex items-center">
-        {/* Origin */}
         <div className="flex min-w-0 flex-1 flex-col">
           {originCode ? (
             <>
@@ -583,14 +665,12 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
           )}
         </div>
 
-        {/* Flight path indicator */}
         <div className="mx-2 flex items-center gap-1.5">
           <div className="h-px w-5 bg-foreground/10" />
           <Plane className="h-3.5 w-3.5 shrink-0 text-foreground/25" />
           <div className="h-px w-5 bg-foreground/10" />
         </div>
 
-        {/* Destination */}
         <div className="flex min-w-0 flex-1 flex-col items-end text-right">
           {destCode ? (
             <>
@@ -608,6 +688,14 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
           )}
         </div>
       </div>
+
+      {showSource && routeInfo.source && (
+        <div className="mt-2 flex justify-center">
+          <span className="rounded border border-foreground/5 bg-foreground/[0.02] px-1.5 py-px text-[8px] font-semibold uppercase tracking-wider text-foreground/25">
+            {routeInfo.source}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

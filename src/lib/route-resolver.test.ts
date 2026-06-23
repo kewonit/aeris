@@ -27,6 +27,10 @@ test("resolveRouteFromOpenDatabases uses direct hexdb fallback after adsbdb miss
       return jsonResponse({ response: "unknown callsign" }, { status: 404 });
     }
 
+    if (url.includes("opensky-network.org")) {
+      return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
+    }
+
     if (url === "https://hexdb.io/api/v1/route/icao/UAL123") {
       return jsonResponse({ flight: "UAL123", route: "KSFO-EGLL" });
     }
@@ -70,7 +74,7 @@ test("resolveRouteFromOpenDatabases uses direct hexdb fallback after adsbdb miss
   }
 });
 
-test("resolveRouteFromOpenDatabases returns null when both open route databases miss", async () => {
+test("resolveRouteFromOpenDatabases returns null when all route databases miss", async () => {
   clearRouteResolverCache();
   const originalFetch = globalThis.fetch;
   const urls: string[] = [];
@@ -81,6 +85,10 @@ test("resolveRouteFromOpenDatabases returns null when both open route databases 
 
     if (url.includes("api.adsbdb.com")) {
       return jsonResponse({ response: "unknown callsign" }, { status: 404 });
+    }
+
+    if (url.includes("opensky-network.org")) {
+      return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
     }
 
     if (url === "https://hexdb.io/api/v1/route/icao/UAL456") {
@@ -118,6 +126,10 @@ test("resolveRouteFromOpenDatabases caches provider 404 misses", async () => {
       return jsonResponse({ response: "unknown callsign" }, { status: 404 });
     }
 
+    if (url.includes("opensky-network.org")) {
+      return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
+    }
+
     if (url === "https://hexdb.io/api/v1/route/icao/UAL457") {
       return jsonResponse(
         { status: "404", error: "Route not found." },
@@ -134,7 +146,7 @@ test("resolveRouteFromOpenDatabases caches provider 404 misses", async () => {
 
     assert.equal(first, null);
     assert.equal(second, null);
-    assert.equal(requestCount, 2);
+    assert.equal(requestCount, 3);
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();
@@ -157,7 +169,45 @@ test("resolveRouteFromOpenDatabases does not cache transient provider failures",
 
     assert.equal(first, null);
     assert.equal(second, null);
-    assert.equal(requestCount, 4);
+    assert.equal(requestCount, 6);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRouteResolverCache();
+  }
+});
+
+test("resolveRouteFromOpenDatabases prefers opensky when it returns first", async () => {
+  clearRouteResolverCache();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.includes("api.adsbdb.com")) {
+      return jsonResponse({ response: "unknown callsign" }, { status: 404 });
+    }
+
+    if (url.includes("opensky-network.org")) {
+      return jsonResponse({
+        callsign: "BAW123",
+        route: ["EGLL", "KSFO"],
+        updateTime: 1234567890,
+      });
+    }
+
+    if (url.includes("hexdb.io")) {
+      return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
+    }
+
+    return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const route = await resolveRouteFromOpenDatabases("BAW123");
+
+    assert.equal(route?.source, "opensky");
+    assert.equal(route?.origin?.icao, "EGLL");
+    assert.equal(route?.destination?.icao, "KSFO");
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();

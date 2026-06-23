@@ -17,7 +17,10 @@ import {
   Plane,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import { useRouteInfo } from "@/hooks/use-route-info";
+import {
+  OnGroundBadge,
+  PositionSourceBadge,
+} from "@/components/ui/flight-badges";
 import { useSettings } from "@/hooks/use-settings";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import {
@@ -27,7 +30,6 @@ import {
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
 import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
-import { formatAirportCode } from "@/lib/route-lookup";
 import {
   loadedAirlineLogoUrls,
   trackAirlineLogoLoaded,
@@ -220,7 +222,6 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
 
 export function MobileFlightToast({
   flight,
-  track,
   onClose,
   onToggleFpv,
   isFpvActive = false,
@@ -234,8 +235,6 @@ export function MobileFlightToast({
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
     flight.longitude != null && flight.latitude != null && !flight.onGround;
-
-  const routeInfo = useRouteInfo(flight, track);
 
   // Airline logo fallback chain.
   const logoCandidates = airlineLogoCandidates(airline, flight.callsign);
@@ -352,9 +351,13 @@ export function MobileFlightToast({
 
           {/* Callsign + identifiers */}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold leading-tight text-foreground">
-              {formatCallsign(flight.callsign)}
-            </p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-[15px] font-bold leading-tight text-foreground">
+                {formatCallsign(flight.callsign)}
+              </p>
+              <PositionSourceBadge source={flight.positionSource} />
+              <OnGroundBadge onGround={flight.onGround} />
+            </div>
             <p className="mt-0.5 truncate text-[10px] font-medium tracking-widest text-foreground/30 uppercase">
               {flight.icao24}
               {flightNum ? ` · #${flightNum}` : ""}
@@ -418,19 +421,6 @@ export function MobileFlightToast({
                   [{flight.typeCode}]
                 </span>
               ) : null}
-            </p>
-          </div>
-        )}
-        {/* Route info */}
-        {(routeInfo.origin || routeInfo.destination) && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <Navigation className="h-3 w-3 shrink-0 text-foreground/20" />
-            <p className="truncate text-[11px] font-semibold text-foreground/50">
-              {routeInfo.origin ? formatAirportCode(routeInfo.origin) : "-"}
-              <span className="mx-1 text-foreground/20">→</span>
-              {routeInfo.destination
-                ? formatAirportCode(routeInfo.destination)
-                : "-"}
             </p>
           </div>
         )}

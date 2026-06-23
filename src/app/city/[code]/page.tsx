@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
+import Script from "next/script";
 import { FlightTracker } from "@/components/flight-tracker";
 import { isAirspaceConfigured } from "@/lib/airspace-config";
 import { CITIES } from "@/lib/cities";
@@ -20,6 +21,10 @@ export async function generateStaticParams() {
 
 /** Opt arbitrary (non-preset) IATAs into dynamic rendering on first request. */
 export const dynamicParams = true;
+
+function serializeJsonLd(data: unknown) {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
 
 export async function generateMetadata({
   params,
@@ -159,12 +164,15 @@ export default async function CityPage({
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      {jsonLd.map((entry) => (
+        <Script
+          key={entry["@id"] ?? entry["@type"]}
+          id={`city-jsonld-${String(entry["@type"]).toLowerCase()}`}
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
+        />
+      ))}
       <FlightTracker airspaceAvailable={airspaceAvailable} initialCity={city} />
     </>
   );

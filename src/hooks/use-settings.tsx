@@ -35,6 +35,7 @@ export type Settings = {
   showAtcPanel: boolean;
   showWeatherRadar: boolean;
   weatherRadarOpacity: number;
+  showDebugData: boolean;
 };
 
 export const TRAIL_THICKNESS_MIN = 0.5;
@@ -51,30 +52,42 @@ export const WEATHER_RADAR_OPACITY_MAX = 0.9;
 export function normalizeSettings(input: Settings): Settings {
   return {
     ...input,
-    orbitSpeed: clamp(input.orbitSpeed, 0.02, 0.5),
-    trailThickness: clamp(
-      input.trailThickness,
-      TRAIL_THICKNESS_MIN,
-      TRAIL_THICKNESS_MAX,
-    ),
-    trailDistance: Math.round(
-      clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
-    ),
-    fpvChaseDistance: clamp(
-      input.fpvChaseDistance,
-      FPV_CHASE_DISTANCE_MIN,
-      FPV_CHASE_DISTANCE_MAX,
-    ),
-    airspaceOpacity: clamp(
-      input.airspaceOpacity,
-      AIRSPACE_OPACITY_MIN,
-      AIRSPACE_OPACITY_MAX,
-    ),
-    weatherRadarOpacity: clamp(
-      input.weatherRadarOpacity,
-      WEATHER_RADAR_OPACITY_MIN,
-      WEATHER_RADAR_OPACITY_MAX,
-    ),
+    orbitSpeed: Number.isFinite(input.orbitSpeed)
+      ? clamp(input.orbitSpeed, 0.02, 0.5)
+      : DEFAULT_SETTINGS.orbitSpeed,
+    trailThickness: Number.isFinite(input.trailThickness)
+      ? clamp(
+          input.trailThickness,
+          TRAIL_THICKNESS_MIN,
+          TRAIL_THICKNESS_MAX,
+        )
+      : DEFAULT_SETTINGS.trailThickness,
+    trailDistance: Number.isFinite(input.trailDistance)
+      ? Math.round(
+          clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
+        )
+      : DEFAULT_SETTINGS.trailDistance,
+    fpvChaseDistance: Number.isFinite(input.fpvChaseDistance)
+      ? clamp(
+          input.fpvChaseDistance,
+          FPV_CHASE_DISTANCE_MIN,
+          FPV_CHASE_DISTANCE_MAX,
+        )
+      : DEFAULT_SETTINGS.fpvChaseDistance,
+    airspaceOpacity: Number.isFinite(input.airspaceOpacity)
+      ? clamp(
+          input.airspaceOpacity,
+          AIRSPACE_OPACITY_MIN,
+          AIRSPACE_OPACITY_MAX,
+        )
+      : DEFAULT_SETTINGS.airspaceOpacity,
+    weatherRadarOpacity: Number.isFinite(input.weatherRadarOpacity)
+      ? clamp(
+          input.weatherRadarOpacity,
+          WEATHER_RADAR_OPACITY_MIN,
+          WEATHER_RADAR_OPACITY_MAX,
+        )
+      : DEFAULT_SETTINGS.weatherRadarOpacity,
   };
 }
 
@@ -96,10 +109,11 @@ export const DEFAULT_SETTINGS: Settings = {
   showAtcPanel: false,
   showWeatherRadar: false,
   weatherRadarOpacity: 0.5,
+  showDebugData: false,
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 5;
+const STORAGE_VERSION = 6;
 const WRITE_DEBOUNCE_MS = 300;
 
 const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
@@ -149,6 +163,7 @@ function isValidSettings(obj: unknown): obj is Settings {
   return (
     typeof s.autoOrbit === "boolean" &&
     typeof s.orbitSpeed === "number" &&
+    Number.isFinite(s.orbitSpeed) &&
     (s.orbitDirection === "clockwise" ||
       s.orbitDirection === "counter-clockwise") &&
     typeof s.showTrails === "boolean" &&
@@ -182,7 +197,8 @@ function isValidSettings(obj: unknown): obj is Settings {
     typeof s.weatherRadarOpacity === "number" &&
     Number.isFinite(s.weatherRadarOpacity) &&
     s.weatherRadarOpacity >= WEATHER_RADAR_OPACITY_MIN &&
-    s.weatherRadarOpacity <= WEATHER_RADAR_OPACITY_MAX
+    s.weatherRadarOpacity <= WEATHER_RADAR_OPACITY_MAX &&
+    typeof s.showDebugData === "boolean"
   );
 }
 

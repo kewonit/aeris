@@ -2,202 +2,173 @@
 
 // ── Route Info Hook ─────────────────────────────────────────────────
 //
-// Combines open route-database data with observed departure data
-// information for a selected flight:
+// Fetches verified route data from external databases ONLY.
 //
-//   1. Free route database lookup (adsbdb.com → hexdb.io fallback)
-//   2. Trace-based observed departure (first waypoint of trace)
-//   3. Client-side observed departure (ground→airborne transition)
+// Sources (queried in parallel server-side):
+//   1. adsbdb.com       – flight-plan database
+//   2. hexdb.io         – route lookup + airport metadata
+//   3. OpenSky Network  – historical route data
 //
-// Destination prediction is intentionally not used. If the open route
-// databases do not know a destination, the UI should show a partial or
-// unavailable route rather than inventing one.
+// IMPORTANT: No predicted, observed, or interpolated routes are ever
+// shown. If none of the databases know the route, the UI displays
+// "Route unavailable" rather than guessing.
 //
-// Only triggers API lookups for the *selected* flight to avoid
-// spamming the API with requests for all visible aircraft.
+// Edge cases handled:
+//   - Rapid flight switching: old requests are cancelled, only the
+//     latest callsign's result is applied.
+//   - Component unmount: no state updates after unmount.
+//   - Hanging fetch: 15-second client timeout guarantees loading
+//     never gets stuck.
+//   - Cached results: instant display for recently-looked-up routes.
 // ────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from "react";
-import type { FlightState, FlightTrack } from "@/lib/opensky";
-import { lookupRoute, formatAirportCode } from "../lib/route-lookup";
-import type { RouteInfo, RouteAirport } from "../lib/route-lookup";
-import { getDeparture, departureFromTrace } from "@/lib/route-detection";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { FlightState } from "@/lib/opensky";
+import { lookupRoute, formatAirportCode } from "@/lib/route-lookup";
+import type { RouteInfo, RouteAirport } from "@/lib/route-lookup";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type FlightRouteInfo = {
-  /** Origin airport (from route database, observed departure, or null) */
+  /** Origin airport (verified from route database, or null) */
   origin: RouteAirport | null;
-  /** Destination airport from route databases only */
+  /** Destination airport (verified from route database, or null) */
   destination: RouteAirport | null;
-  /** Confidence level for the destination */
-  destinationConfidence: "known" | null;
-  /** How the route was determined */
-  source: "route-database" | "observed" | "mixed" | null;
-  /** Whether route data is being fetched and no route info is available yet */
+  /** Whether route data is actively being fetched */
   loading: boolean;
+  /** Whether a verified route was found */
+  available: boolean;
+  /** Whether the route is definitively unknown (not just loading) */
+  unavailable: boolean;
   /** Short display string, e.g. "LHR → JFK" */
   routeDisplay: string | null;
+  /** Data source that resolved this route */
+  source: "adsbdb" | "hexdb" | "opensky" | null;
 };
 
 const EMPTY_ROUTE: FlightRouteInfo = {
   origin: null,
   destination: null,
-  destinationConfidence: null,
-  source: null,
   loading: false,
+  available: false,
+  unavailable: false,
   routeDisplay: null,
+  source: null,
 };
+
+/** Max time to wait for a route lookup before forcing timeout. */
+const LOOKUP_TIMEOUT_MS = 15_000;
 
 // ── Hook ───────────────────────────────────────────────────────────────
 
-export function useRouteInfo(
-  flight: FlightState | null,
-  track?: FlightTrack | null,
-): FlightRouteInfo {
+export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
   const [apiRoute, setApiRoute] = useState<RouteInfo | null>(null);
-  const [apiRouteCallsign, setApiRouteCallsign] = useState<string | null>(null);
-  const lastCallsignRef = useRef<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUnavailable, setIsUnavailable] = useState(false);
 
-  // Track the callsign to avoid re-fetching for the same flight
+  // Use a generation counter to ignore stale async results
+  const generationRef = useRef(0);
+  const mountedRef = useRef(true);
+
   const callsign = flight?.callsign?.trim().toUpperCase() ?? null;
 
-  // Fetch route from API when callsign changes
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // No callsign → nothing to look up
     if (!callsign) {
-      abortRef.current?.abort();
-      lastCallsignRef.current = null;
+      const generation = ++generationRef.current;
+      queueMicrotask(() => {
+        if (!mountedRef.current) return;
+        if (generation !== generationRef.current) return;
+        setApiRoute(null);
+        setIsLoading(false);
+        setIsUnavailable(false);
+      });
       return;
     }
 
-    // Same callsign → don't re-fetch
-    if (callsign === lastCallsignRef.current) return;
-    lastCallsignRef.current = callsign;
+    // Start a new lookup generation
+    const generation = ++generationRef.current;
+    let active = true;
+    let settled = false;
 
-    // Abort any in-progress fetch
-    abortRef.current?.abort();
+    queueMicrotask(() => {
+      if (!active) return;
+      if (settled) return;
+      if (!mountedRef.current) return;
+      if (generation !== generationRef.current) return;
+      setIsLoading(true);
+      setIsUnavailable(false);
+      setApiRoute(null);
+    });
+
     const controller = new AbortController();
-    abortRef.current = controller;
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, LOOKUP_TIMEOUT_MS);
 
     lookupRoute(callsign, controller.signal)
-      .then((result: RouteInfo | null) => {
-        if (!controller.signal.aborted) {
-          setApiRoute(result);
-          setApiRouteCallsign(callsign);
-        }
+      .then((result) => {
+        settled = true;
+        clearTimeout(timeoutId);
+        if (!mountedRef.current) return;
+        if (generation !== generationRef.current) return; // stale
+
+        setApiRoute(result);
+        setIsLoading(false);
+        setIsUnavailable(result === null);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setApiRoute(null);
-          setApiRouteCallsign(callsign);
-        }
+        settled = true;
+        clearTimeout(timeoutId);
+        if (!mountedRef.current) return;
+        if (generation !== generationRef.current) return; // stale
+
+        setApiRoute(null);
+        setIsLoading(false);
+        setIsUnavailable(true);
       });
 
     return () => {
+      active = false;
+      clearTimeout(timeoutId);
       controller.abort();
     };
   }, [callsign]);
 
-  // Build the composite route info
-  const currentApiRoute =
-    callsign && apiRouteCallsign === callsign ? apiRoute : null;
-
-  return buildRouteInfo(
-    flight,
-    currentApiRoute,
-    Boolean(callsign) && apiRouteCallsign !== callsign,
-    track ?? null,
-  );
-}
-
-// ── Composite Builder ──────────────────────────────────────────────────
-//
-// Merges data from all available sources to build the best possible
-// route info. Each field (origin, destination) is filled independently
-// using a priority cascade:
-//
-//   origin:      route API → trace departure → live departure detection
-//   destination: route API only
-//
-// Destination prediction is intentionally excluded. If open route databases
-// do not know the destination, the UI should show a partial or unavailable
-// route rather than inventing one.
-
-export function buildRouteInfo(
-  flight: FlightState | null,
-  apiRoute: RouteInfo | null,
-  loading: boolean,
-  track: FlightTrack | null,
-): FlightRouteInfo {
   if (!flight) return EMPTY_ROUTE;
 
-  // ── Gather origin candidates ───────────────────────────────────────
-  const apiOrigin = apiRoute?.origin ?? null;
-  const traceDeparture = departureFromTrace(track);
-  const liveDeparture = getDeparture(flight.icao24);
-  const liveOrigin = liveDeparture?.airport ?? null;
+  const origin = apiRoute?.origin ?? null;
+  const destination = apiRoute?.destination ?? null;
+  const available = !!origin && !!destination;
 
-  // Treat route database data as a single route record. Observed departure
-  // fills only when the database has no origin, and never creates a guessed
-  // destination.
-  const observedOrigin = traceDeparture ?? liveOrigin;
-  const origin = apiOrigin ?? observedOrigin;
-
-  // ── Gather destination candidates ──────────────────────────────────
-  const apiDestination = apiRoute?.destination ?? null;
-  const destination = apiDestination;
-
-  // ── Determine confidence ───────────────────────────────────────────
-  let destinationConfidence: FlightRouteInfo["destinationConfidence"] = null;
-  if (apiDestination) {
-    destinationConfidence = "known";
-  }
-
-  // ── Determine source label ─────────────────────────────────────────
-  let source: FlightRouteInfo["source"] = null;
-  if (origin || destination) {
-    const hasApiData = !!apiOrigin || !!apiDestination;
-    const usesObservedOrigin = !apiOrigin && !!observedOrigin;
-
-    if (hasApiData && usesObservedOrigin) {
-      source = "mixed";
-    } else if (hasApiData) {
-      source = "route-database";
-    } else if (usesObservedOrigin) {
-      source = "observed";
-    } else {
-      source = null;
-    }
-  }
-
-  // ── Build display string ───────────────────────────────────────────
   const originCode = origin ? formatAirportCode(origin) : null;
   const destCode = destination ? formatAirportCode(destination) : null;
-  const routeDisplay = buildRouteDisplay(originCode, destCode);
-
-  if (!origin && !destination) {
-    return { ...EMPTY_ROUTE, loading };
-  }
+  const routeDisplay =
+    originCode && destCode ? `${originCode} → ${destCode}` : null;
 
   return {
     origin,
     destination,
-    destinationConfidence,
-    source,
-    loading: loading && !origin && !destination,
+    loading: isLoading,
+    available,
+    unavailable: isUnavailable,
     routeDisplay,
+    source: apiRoute?.source ?? null,
   };
 }
 
-// ── Display helpers ────────────────────────────────────────────────────
-
-function buildRouteDisplay(
-  originCode: string | null,
-  destCode: string | null,
-): string | null {
-  if (originCode && destCode) return `${originCode} → ${destCode}`;
-  if (originCode) return `From ${originCode}`;
-  if (destCode) return `→ ${destCode}`;
-  return null;
+/** Imperatively clear the route lookup cache. */
+export function useClearRouteCache() {
+  const clear = useCallback(() => {
+    // route-lookup cache is module-level; re-import to clear
+    void import("@/lib/route-lookup").then((m) => m.clearRouteCache());
+  }, []);
+  return clear;
 }

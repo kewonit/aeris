@@ -18,6 +18,23 @@ export const SEGMENT_DELAY_MS = 200;
 
 // ── Exported Types ─────────────────────────────────────────────────────
 
+/**
+ * Unified position source across all upstream providers.
+ *
+ * OpenSky encodes this as numbers (0=ADS-B, 1=ASTERIX, 2=MLAT, 3=FLARM).
+ * readsb/airplanes.live encode this as the `type` string
+ * (adsb_icao, mlat, tisb_icao, etc.).
+ */
+export type PositionSource =
+  | "adsb"
+  | "asterix"
+  | "mlat"
+  | "flarm"
+  | "tisb"
+  | "adsc"
+  | "other"
+  | null;
+
 export type FlightState = {
   icao24: string;
   callsign: string | null;
@@ -29,10 +46,12 @@ export type FlightState = {
   velocity: number | null;
   trueTrack: number | null;
   verticalRate: number | null;
+  /** Geometric (GNSS) vertical rate in m/s — readsb only */
+  geomRate?: number | null;
   geoAltitude: number | null;
   squawk: string | null;
   spiFlag: boolean;
-  positionSource: number;
+  positionSource: PositionSource;
   category: number | null;
   /** ICAO type designator (e.g. "A320", "B738") - available from readsb */
   typeCode?: string | null;
@@ -84,6 +103,32 @@ export type FlightState = {
   emergencyStatus?: string | null;
   /** Aircraft type description (e.g. "AIRBUS A-320") - Airplanes.live only */
   typeDescription?: string | null;
+
+  // ── Debug / Raw Data (readsb only, hidden by default) ──────────────
+
+  /** Integrity, accuracy, and receiver metadata for advanced users */
+  debugData?: FlightDebugData | null;
+};
+
+export type FlightDebugData = {
+  /** Navigation Integrity Category (0–11) */
+  nic: number | null;
+  /** Navigation Accuracy for Position (0–11) */
+  nacP: number | null;
+  /** Navigation Accuracy for Velocity (0–4) */
+  nacV: number | null;
+  /** Source Integrity Level (0–3) */
+  sil: number | null;
+  /** ADS-B Version (0, 1, 2) */
+  version: number | null;
+  /** Flight status alert bit (0/1) */
+  alert: number | null;
+  /** Total Mode S messages received */
+  messages: number | null;
+  /** Seconds since last message */
+  seen: number | null;
+  /** Signal strength in dBFS (negative) */
+  rssi: number | null;
 };
 
 export type FetchResult = {

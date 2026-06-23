@@ -13,6 +13,7 @@ import {
   Shield,
   Eye,
   CloudRain,
+  Cpu,
 } from "lucide-react";
 import {
   useSettings,
@@ -31,7 +32,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
-import { Balancer } from "react-wrap-balancer";
 
 const ORBIT_SPEED_PRESETS = [
   { label: "Slow", value: 0.06 },
@@ -206,6 +206,17 @@ export function SettingsContent({
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
           badge="BETA"
+        />
+
+        {/* ── Advanced ── */}
+        <SectionHeader title="Advanced" />
+
+        <SettingRow
+          icon={<Cpu className="h-4 w-4" />}
+          title="Show debug data"
+          description="Display raw receiver metrics and route source"
+          checked={settings.showDebugData}
+          onChange={(v) => update("showDebugData", v)}
         />
 
         <div className="mx-3 my-2 h-px bg-foreground/8" />
@@ -605,6 +616,17 @@ const CHANGELOG: {
   entries: { title: string; description: string }[];
 }[] = [
   {
+    version: "0.8.5",
+    date: "Jun 24, 2026",
+    entries: [
+      {
+        title: "React script warning cleanup",
+        description:
+          "Removed inline script injection from the settings panel text renderer so opening Settings, About, or Changelog no longer triggers React's client-side script tag warning.",
+      },
+    ],
+  },
+  {
     version: "0.8.4",
     date: "May 12, 2026",
     entries: [
@@ -870,18 +892,18 @@ export function AboutContent() {
         </h3>
 
         <div className="space-y-3 text-[13px] leading-relaxed text-foreground/55">
-          <Balancer>
+          <p>
             Live flight tracking in 3D. The planes you see are real — position
             data comes from ADS-B Exchange, adsb.lol, and OpenSky Network,
             updated every few seconds via ADS-B receivers people run on their
             roofs worldwide.
-          </Balancer>
-          <Balancer>
+          </p>
+          <p>
             You can search through 9,000+ airports, jump into first-person view
             to ride along with any plane, or just leave it on a screen and watch
             things move. Trails change color with altitude so you can tell
             who&apos;s cruising at 35,000ft and who&apos;s on approach.
-          </Balancer>
+          </p>
         </div>
 
         <div className="h-px w-full bg-foreground/10" />
@@ -949,7 +971,7 @@ export function ChangelogContent() {
                     {entry.title}
                   </p>
                   <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/55 text-justify">
-                    <Balancer ratio={0.6}>{entry.description}</Balancer>
+                    {entry.description}
                   </p>
                 </div>
               ))}

@@ -89,7 +89,10 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
 
   // Ref that allows style-load callbacks to see the latest value without re-running effects
   const isDarkRef = useRef(isDark);
-  isDarkRef.current = isDark;
+
+  useEffect(() => {
+    isDarkRef.current = isDark;
+  }, [isDark]);
 
   // ── Map creation ──────────────────────────────────────────────────
   useEffect(() => {
@@ -125,6 +128,28 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Map initializes once; containerRef is stable, style/terrain/globe applied in separate effects
   }, []);
+
+  useEffect(() => {
+    if (!mapInstance || !containerRef.current) return;
+
+    let frame: number | null = null;
+    const resize = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        mapInstance.resize();
+        frame = null;
+      });
+    };
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(containerRef.current);
+    resize();
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [mapInstance]);
 
   // Inject globe projection into every style change when globe mode is on.
   // In Mercator mode, skip projection injection entirely.
