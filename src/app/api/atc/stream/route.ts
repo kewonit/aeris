@@ -4,8 +4,8 @@ import { VALID_MOUNT_POINTS } from "@/lib/atc-feeds";
 /**
  * GET /api/atc/stream?mount={mountPoint}
  *
- * Fallback audio stream proxy for LiveATC Icecast streams.
- * Only used when direct browser <audio> playback is blocked.
+ * Audio stream proxy for LiveATC Icecast streams.
+ * Used by the ATC player so Web Audio visualizers can analyze same-origin audio.
  *
  * Security:
  *   - Mount point validated against static allowlist (SSRF prevention)
@@ -16,8 +16,8 @@ import { VALID_MOUNT_POINTS } from "@/lib/atc-feeds";
 
 /** Maximum stream duration in milliseconds (4 hours). */
 const MAX_STREAM_DURATION_MS = 4 * 60 * 60 * 1000;
-/** Connection timeout for upstream fetch (30 seconds). */
-const CONNECT_TIMEOUT_MS = 30_000;
+/** Connection timeout for upstream fetch (12 seconds). */
+const CONNECT_TIMEOUT_MS = 12_000;
 
 /**
  * Sanitize and validate mount point parameter.

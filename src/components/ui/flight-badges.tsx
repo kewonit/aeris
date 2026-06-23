@@ -20,31 +20,31 @@ const SOURCE_STYLES: Record<
   adsb: {
     label: "ADS-B",
     className:
-      "border-emerald-500/25 bg-emerald-500/10 text-emerald-400/80",
+      "border-emerald-400/24 bg-emerald-400/10 text-emerald-300/90",
   },
   asterix: {
     label: "ASTERIX",
-    className: "border-sky-500/25 bg-sky-500/10 text-sky-400/80",
+    className: "border-sky-400/24 bg-sky-400/10 text-sky-300/90",
   },
   mlat: {
     label: "MLAT",
-    className: "border-amber-500/25 bg-amber-500/10 text-amber-400/80",
+    className: "border-amber-400/24 bg-amber-400/10 text-amber-300/90",
   },
   flarm: {
     label: "FLARM",
-    className: "border-violet-500/25 bg-violet-500/10 text-violet-400/80",
+    className: "border-violet-400/24 bg-violet-400/10 text-violet-300/90",
   },
   tisb: {
     label: "TIS-B",
-    className: "border-orange-500/25 bg-orange-500/10 text-orange-400/80",
+    className: "border-orange-400/24 bg-orange-400/10 text-orange-300/90",
   },
   adsc: {
     label: "ADS-C",
-    className: "border-cyan-500/25 bg-cyan-500/10 text-cyan-400/80",
+    className: "border-cyan-400/24 bg-cyan-400/10 text-cyan-300/90",
   },
   other: {
     label: "OTHER",
-    className: "border-foreground/10 bg-foreground/[0.04] text-foreground/30",
+    className: "border-foreground/[0.08] bg-foreground/[0.04] text-foreground/45",
   },
 };
 
@@ -56,7 +56,7 @@ export function PositionSourceBadge({ source }: BadgeProps) {
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded border px-1 py-px text-[8px] font-bold uppercase tracking-wider ${style.className}`}
+      className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${style.className}`}
       title={`Position source: ${style.label}`}
     >
       {style.label}
@@ -70,7 +70,7 @@ export function OnGroundBadge({ onGround }: { onGround: boolean }) {
 
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded border border-foreground/10 bg-foreground/[0.04] px-1 py-px text-[8px] font-bold uppercase tracking-wider text-foreground/30"
+      className="inline-flex shrink-0 items-center rounded-full border border-foreground/[0.08] bg-foreground/[0.04] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-foreground/45"
       title="Aircraft is on the ground"
     >
       GND
@@ -106,13 +106,13 @@ export function AircraftTypeLine({
   if (!typeLabel && !reg) return null;
 
   return (
-    <p className="truncate text-[12px] text-foreground/35">
+    <p className="truncate text-[13px] font-medium text-foreground/66">
       {typeLabel}
       {typeLabel && reg ? (
-        <span className="text-foreground/20"> · </span>
+        <span className="text-foreground/34"> · </span>
       ) : null}
       {reg ? (
-        <span className="font-mono text-[11px] text-foreground/30">
+        <span className="font-mono text-[12px] text-foreground/52">
           {reg}
         </span>
       ) : null}
@@ -145,7 +145,7 @@ export function AircraftOperatorLine({
   if (parts.length === 0) return null;
 
   return (
-    <p className="truncate text-[11px] text-foreground/30">
+    <p className="truncate text-[12px] text-foreground/46">
       {parts.join(" · ")}
     </p>
   );

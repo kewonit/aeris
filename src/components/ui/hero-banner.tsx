@@ -38,11 +38,11 @@ export function HeroBanner({
   const hasPhoto = source != null && !failed;
 
   return (
-    <div className="relative h-36 w-full overflow-hidden bg-foreground/5">
+    <div className="relative h-52 w-full overflow-hidden bg-foreground/[0.04] sm:h-56">
       {(loading || (hasPhoto && !loaded)) && (
         <span
           aria-hidden
-          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
+          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
         />
       )}
 
@@ -68,9 +68,9 @@ export function HeroBanner({
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${loaded ? "opacity-100" : "opacity-0"}`}
             draggable={false}
           />
-          <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/40 via-background/5 to-transparent" />
+          <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/55 via-background/5 to-transparent" />
           {photo?.photographer && loaded && (
-            <span className="absolute bottom-2 right-2.5 flex items-center gap-1 rounded-full bg-background/40 px-2 py-0.5 text-[9px] font-medium text-foreground/60 backdrop-blur-sm">
+            <span className="absolute bottom-2 right-2.5 flex items-center gap-1 rounded-full border border-foreground/[0.06] bg-background/55 px-2.5 py-1 text-[9px] font-medium text-foreground/65 shadow-sm backdrop-blur-md">
               <Camera className="h-2.5 w-2.5" />
               {photo?.photographer}
             </span>

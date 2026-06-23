@@ -116,8 +116,6 @@ export function useAtcStream(): UseAtcStreamReturn {
     }
 
     setAudioElement(null);
-    reconnectAttemptsRef.current = 0;
-    proxyAttemptedRef.current = false;
   }, []);
 
   const clearPlaybackState = useCallback(
@@ -129,6 +127,8 @@ export function useAtcStream(): UseAtcStreamReturn {
       setStatus("idle");
       setError(null);
       setUsingProxy(false);
+      reconnectAttemptsRef.current = 0;
+      proxyAttemptedRef.current = false;
 
       if (!broadcastStop) {
         return;
@@ -322,6 +322,15 @@ export function useAtcStream(): UseAtcStreamReturn {
       audio.addEventListener("error", () => {
         if (audioRef.current !== audio) return;
 
+        // Prefer the same-origin proxy for fast startup and Web Audio analysis,
+        // but keep a direct fallback in case the local proxy is unavailable.
+        if (useProxy && !proxyAttemptedRef.current) {
+          proxyAttemptedRef.current = true;
+          setError("Proxy stream failed. Trying direct...");
+          startPlaybackRef.current(targetFeed, false);
+          return;
+        }
+
         // If direct playback failed, try proxy fallback
         if (!useProxy && !proxyAttemptedRef.current) {
           proxyAttemptedRef.current = true;
@@ -334,7 +343,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         setUsingProxy(useProxy);
         setStatus("error");
 
-        if (proxyAttemptedRef.current && useProxy) {
+        if (proxyAttemptedRef.current) {
           setError("Stream unavailable - try another frequency.");
         } else {
           setError("Stream connection failed.");
@@ -379,8 +388,9 @@ export function useAtcStream(): UseAtcStreamReturn {
       feedRef.current = newFeed;
       setFeed(newFeed);
       proxyAttemptedRef.current = false;
+      reconnectAttemptsRef.current = 0;
       stoppedManuallyRef.current = false;
-      startPlayback(newFeed, false);
+      startPlayback(newFeed, true);
     },
     [startPlayback],
   );

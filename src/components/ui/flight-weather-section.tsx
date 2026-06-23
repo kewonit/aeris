@@ -38,14 +38,16 @@ function AirportWeatherCompact({
   if (!icao || !hasData) return null;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Cloud className="h-3 w-3 text-foreground/25" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/35">
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+          <Cloud className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground/72">
           {label}
         </span>
         {metarLoading && !metar && (
-          <Loader2 className="h-2.5 w-2.5 animate-spin text-foreground/20" />
+          <Loader2 className="h-3 w-3 animate-spin text-foreground/30" />
         )}
       </div>
 
@@ -61,14 +63,14 @@ function AirportWeatherCompact({
           <button
             type="button"
             onClick={() => setTafOpen((o) => !o)}
-            className="flex w-full items-center gap-1.5 text-left transition-colors hover:opacity-70"
+            className="flex min-h-9 w-full items-center gap-2 rounded-[14px] px-2 text-left transition-colors hover:bg-foreground/[0.04] active:bg-foreground/[0.07]"
             aria-expanded={tafOpen}
           >
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground/25">
+            <span className="text-[12px] font-medium text-foreground/55">
               Forecast
             </span>
             <ChevronDown
-              className={`h-2.5 w-2.5 text-foreground/20 transition-transform duration-200 ${tafOpen ? "rotate-180" : ""}`}
+              className={`ml-auto h-3.5 w-3.5 text-foreground/24 transition-transform duration-200 ${tafOpen ? "rotate-180" : ""}`}
             />
           </button>
           <AnimatePresence initial={false}>
@@ -110,7 +112,7 @@ export function FlightWeatherSection({
   if (!originIcao && !destIcao) return null;
 
   return (
-    <div className="space-y-3 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-3">
+    <div className="space-y-3 rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
       {originIcao && (
         <AirportWeatherCompact
           icao={originIcao}

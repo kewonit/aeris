@@ -54,13 +54,13 @@ const Thumbnail = memo(function Thumbnail({
       ref={ref}
       type="button"
       onClick={() => onClick(index)}
-      className="group relative h-28 w-36 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-foreground/8 bg-foreground/5 transition-all hover:border-foreground/20 hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
+      className="group relative h-28 w-36 shrink-0 cursor-pointer overflow-hidden rounded-[16px] border border-foreground/[0.08] bg-foreground/[0.045] shadow-sm transition-all hover:border-foreground/18 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
       aria-label={`View photo ${index + 1}${photo.photographer ? ` by ${photo.photographer}` : ""}`}
     >
       {!loaded && (
         <span
           aria-hidden
-          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
+          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
         />
       )}
       {visible && (
@@ -74,7 +74,7 @@ const Thumbnail = memo(function Thumbnail({
           className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
         />
       )}
-      <span className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-inset ring-foreground/5 group-hover:ring-foreground/15" />
+      <span className="pointer-events-none absolute inset-0 rounded-[16px] ring-1 ring-inset ring-foreground/[0.06] group-hover:ring-foreground/16" />
     </button>
   );
 });
@@ -280,32 +280,32 @@ export function AircraftPhotos({
 
   return (
     <>
-      <div className="mt-3">
-        <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-
+      <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2.5 flex w-full items-center gap-1.5 text-left"
+          className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] active:bg-foreground/[0.07]"
           aria-expanded={expanded}
           aria-controls="aircraft-photo-strip"
         >
-          <Camera className="h-3 w-3 text-foreground/25" />
-          <span className="text-[10px] font-medium tracking-wider text-foreground/30 uppercase">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+            <Camera className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground/72">
             {loading ? "Loading\u2026" : hasPhotos ? "Photos" : "Aircraft"}
           </span>
           {hasPhotos && (
-            <span className="text-[10px] tabular-nums text-foreground/20">
+            <span className="rounded-full bg-background/35 px-2 py-0.5 text-[11px] font-medium tabular-nums text-foreground/42 ring-1 ring-foreground/[0.06]">
               ({photos.length})
             </span>
           )}
           {aircraft?.registration && (
-            <span className="ml-auto text-[10px] font-mono tracking-wider text-foreground/20">
+            <span className="text-[11px] font-mono tracking-wide text-foreground/38">
               {aircraft.registration}
             </span>
           )}
           <ChevronRight
-            className={`h-2.5 w-2.5 text-foreground/20 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+            className={`h-4 w-4 text-foreground/24 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
           />
         </button>
 
@@ -317,14 +317,14 @@ export function AircraftPhotos({
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
+              className="overflow-hidden border-t border-foreground/[0.06]"
             >
               {loading && (
-                <div className="mt-2 flex gap-2 overflow-hidden">
+                <div className="flex gap-2 overflow-hidden p-3">
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className="h-28 w-36 shrink-0 animate-pulse rounded-lg bg-foreground/5"
+                      className="h-28 w-36 shrink-0 animate-pulse rounded-[16px] bg-foreground/[0.055]"
                     />
                   ))}
                 </div>
@@ -333,7 +333,7 @@ export function AircraftPhotos({
               {!loading && hasPhotos && (
                 <div
                   ref={scrollRef}
-                  className="mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-none"
+                  className="flex gap-2 overflow-x-auto p-3 scrollbar-none"
                   style={{ scrollbarWidth: "none" }}
                 >
                   {visiblePhotos.map((photo, i) => (
@@ -348,7 +348,7 @@ export function AircraftPhotos({
                     <button
                       type="button"
                       onClick={() => setShowAllPhotos(true)}
-                      className="flex h-28 w-24 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-foreground/8 bg-foreground/5 text-foreground/40 transition-all hover:border-foreground/20 hover:bg-foreground/8 hover:text-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
+                      className="flex h-28 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-[16px] border border-foreground/[0.08] bg-foreground/[0.045] text-foreground/45 transition-all hover:border-foreground/18 hover:bg-foreground/[0.07] hover:text-foreground/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
                       aria-label={`Show ${hiddenCount} more photo${hiddenCount === 1 ? "" : "s"}`}
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -361,16 +361,16 @@ export function AircraftPhotos({
               )}
 
               {!loading && !hasPhotos && hasAircraft && (
-                <div className="mt-2 flex items-center gap-2 rounded-lg border border-foreground/6 bg-foreground/2 px-3 py-2.5">
-                  <Plane className="h-3.5 w-3.5 shrink-0 text-foreground/20" />
+                <div className="m-3 flex items-center gap-3 rounded-[16px] border border-foreground/[0.06] bg-background/35 px-3 py-2.5">
+                  <Plane className="h-4 w-4 shrink-0 text-foreground/35" />
                   <div className="min-w-0 flex-1">
                     {detailLine && (
-                      <p className="truncate text-[11px] font-medium text-foreground/45">
+                      <p className="truncate text-[12px] font-medium text-foreground/58">
                         {detailLine}
                       </p>
                     )}
-                    <p className="mt-0.5 flex items-center gap-1 text-[10px] text-foreground/25">
-                      <ImageOff className="h-2.5 w-2.5" />
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-foreground/38">
+                      <ImageOff className="h-3 w-3" />
                       No photos available
                     </p>
                   </div>
@@ -378,9 +378,9 @@ export function AircraftPhotos({
               )}
 
               {!loading && !hasPhotos && !hasAircraft && error && (
-                <div className="mt-2 flex items-center gap-2 px-1 py-1.5">
-                  <ImageOff className="h-3 w-3 text-foreground/15" />
-                  <p className="text-[10px] text-foreground/25">
+                <div className="m-3 flex items-center gap-2 px-1 py-1.5">
+                  <ImageOff className="h-3.5 w-3.5 text-foreground/25" />
+                  <p className="text-[11px] text-foreground/38">
                     Could not load aircraft data
                   </p>
                 </div>
