@@ -59,9 +59,12 @@ export async function GET(request: NextRequest) {
   // Using the direct Icecast server URL (d.liveatc.net)
   const upstreamUrl = `https://d.liveatc.net/${mount}`;
 
+  let connectTimer: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    const connectTimer = setTimeout(
+    const abortConnect = () => controller.abort();
+    request.signal.addEventListener("abort", abortConnect, { once: true });
+    connectTimer = setTimeout(
       () => controller.abort(),
       CONNECT_TIMEOUT_MS,
     );
@@ -76,6 +79,8 @@ export async function GET(request: NextRequest) {
     });
 
     clearTimeout(connectTimer);
+    connectTimer = null;
+    request.signal.removeEventListener("abort", abortConnect);
 
     if (!upstream.ok) {
       return new Response(
@@ -94,45 +99,50 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Set up max duration cutoff
-    const durationController = new AbortController();
-    const durationTimer = setTimeout(
-      () => durationController.abort(),
-      MAX_STREAM_DURATION_MS,
-    );
-
-    // Pipe the upstream stream through, respecting both abort signals
+    // Pipe the upstream stream through one idempotent cleanup path. Every
+    // termination mode releases the reader, timer, request listener and fetch.
     const reader = upstream.body.getReader();
+    let finalized = false;
+    let durationTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const finalize = (cancelReader: boolean = true) => {
+      if (finalized) return;
+      finalized = true;
+      if (durationTimer) {
+        clearTimeout(durationTimer);
+        durationTimer = null;
+      }
+      request.signal.removeEventListener("abort", onClientAbort);
+      controller.abort();
+      if (cancelReader) reader.cancel().catch(() => {});
+    };
+    const onClientAbort = () => finalize();
+
+    durationTimer = setTimeout(finalize, MAX_STREAM_DURATION_MS);
+    request.signal.addEventListener("abort", onClientAbort, { once: true });
+
     const stream = new ReadableStream({
       async pull(ctrl) {
         try {
-          if (durationController.signal.aborted) {
-            reader.cancel().catch(() => {});
-            clearTimeout(durationTimer);
+          if (finalized) {
             ctrl.close();
             return;
           }
           const { value, done } = await reader.read();
           if (done) {
+            finalize(false);
             ctrl.close();
           } else {
             ctrl.enqueue(value);
           }
         } catch {
-          reader.cancel().catch(() => {});
+          finalize();
           ctrl.close();
         }
       },
       cancel() {
-        clearTimeout(durationTimer);
-        reader.cancel().catch(() => {});
+        finalize();
       },
-    });
-
-    // Detect client disconnect via request abort signal
-    request.signal.addEventListener("abort", () => {
-      clearTimeout(durationTimer);
-      reader.cancel().catch(() => {});
     });
 
     return new Response(stream, {
@@ -145,6 +155,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err) {
+    if (connectTimer) clearTimeout(connectTimer);
     const isAbort = err instanceof Error && err.name === "AbortError";
     if (isAbort) {
       return new Response(

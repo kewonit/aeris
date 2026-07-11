@@ -78,7 +78,7 @@ export function SettingsContent({
         <SettingRow
           icon={<RotateCw className="h-4 w-4" />}
           title="Auto-orbit"
-          description="Camera slowly rotates around the airport"
+          description="Camera rotation with higher battery and GPU usage"
           checked={settings.autoOrbit}
           onChange={(v) => update("autoOrbit", v)}
         />

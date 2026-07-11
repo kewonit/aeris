@@ -429,10 +429,17 @@ export function createTrailStore() {
     };
   }
 
-  function ingestLiveFlights(flights: FlightState[]): void {
+  function ingestLiveFlights(
+    flights: FlightState[],
+    options: { authoritativeEmpty?: boolean } = {},
+  ): void {
     const now = Date.now();
 
-    if (flights.length === 0 && trails.size > 0) {
+    if (
+      flights.length === 0 &&
+      trails.size > 0 &&
+      !options.authoritativeEmpty
+    ) {
       return;
     }
 

@@ -68,6 +68,28 @@ test("empty polls preserve the last trail result when trails already exist", () 
   assert.equal(first, second);
 });
 
+test("authoritative empty snapshots release non-selected live trails", () => {
+  const store = createTrailStore();
+  store.ingestLiveFlights([
+    makeLiveFlight({
+      icao24: "empty01",
+      longitude: 8.55,
+      latitude: 50.04,
+    }),
+  ]);
+  store.ingestLiveFlights([
+    makeLiveFlight({
+      icao24: "empty01",
+      longitude: 8.56,
+      latitude: 50.04,
+    }),
+  ]);
+
+  store.ingestLiveFlights([], { authoritativeEmpty: true });
+
+  assert.equal(store.getSnapshot().trails.length, 0);
+});
+
 test("history resolution is ignored when selection generation is stale", () => {
   const store = createTrailStore();
   const generation = store.selectAircraft("3c66b0");

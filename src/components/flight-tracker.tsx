@@ -19,10 +19,6 @@ import { AirspaceLayer } from "@/components/map/airspace-layer";
 import { WeatherRadarLayer } from "@/components/map/weather-radar-layer";
 import { UserLocationMarker } from "@/components/map/user-location-marker";
 import { FlightLayers } from "@/components/map/flight-layers";
-import {
-  MapStateTracker,
-  type MapViewState,
-} from "@/components/map/map-state-tracker";
 const FlightCard = dynamic(() =>
   import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
 );
@@ -296,24 +292,8 @@ function FlightTrackerInner({
   const displayFlight = selectedFlight;
 
   // ── Airport Board state ──────────────────────────────────────────────
-  const mapStateRef = useRef<MapViewState>({
-    zoom: 9.2,
-    center: { lat: 0, lng: 0 },
-  });
-  const [mapViewState, setMapViewState] = useState<MapViewState>({
-    zoom: 9.2,
-    center: { lat: 0, lng: 0 },
-  });
-
-  const handleMapStateChange = useCallback((state: MapViewState) => {
-    setMapViewState(state);
-  }, []);
-
   const airportBoard = useAirportBoard(
     displayFlights,
-    mapViewState.center,
-    mapViewState.zoom,
-    activeCity.iata,
     selectedAirportIata,
   );
 
@@ -592,10 +572,6 @@ function FlightTrackerInner({
           followFlight={followFlight}
           fpvFlight={fpvFlightOrCached}
           fpvPositionRef={fpvPositionRef}
-        />
-        <MapStateTracker
-          stateRef={mapStateRef}
-          onChange={handleMapStateChange}
         />
         <AirportLayer
           activeCity={activeCity}

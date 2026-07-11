@@ -14,6 +14,7 @@ const LERP = 0.22;
 //   1. InvalidStateError from double-capturing the same <audio> element
 //   2. AudioContext leak (Chrome limits ~6 concurrent contexts)
 let sharedCtx: AudioContext | null = null;
+let activeAudioConsumers = 0;
 
 const capturedElements = new WeakMap<
   HTMLAudioElement,
@@ -31,7 +32,10 @@ export function getOrCreateConnection(
   }
 
   const existing = capturedElements.get(audioElement);
-  if (existing) return existing.analyser;
+  if (existing) {
+    activeAudioConsumers++;
+    return existing.analyser;
+  }
 
   try {
     const source = sharedCtx.createMediaElementSource(audioElement);
@@ -41,9 +45,17 @@ export function getOrCreateConnection(
     source.connect(analyser);
     analyser.connect(sharedCtx.destination);
     capturedElements.set(audioElement, { source, analyser });
+    activeAudioConsumers++;
     return analyser;
   } catch {
     return null;
+  }
+}
+
+export function releaseAudioConnection(): void {
+  activeAudioConsumers = Math.max(0, activeAudioConsumers - 1);
+  if (activeAudioConsumers === 0 && sharedCtx?.state === "running") {
+    sharedCtx.suspend().catch(() => {});
   }
 }
 
@@ -108,6 +120,7 @@ export function AtcWaveform({
     }
 
     analyserRef.current = getOrCreateConnection(audioElement);
+    const connected = analyserRef.current !== null;
 
     // Resume AudioContext when tab returns from background.
     function onVisibilityResume() {
@@ -122,6 +135,7 @@ export function AtcWaveform({
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityResume);
+      if (connected) releaseAudioConnection();
     };
   }, [active, audioElement]);
 
@@ -167,11 +181,31 @@ export function AtcWaveform({
     let binRanges: [number, number][] | null = null;
     let lastBinCount = 0;
     let lastBarCount = 0;
+    let lastRenderedAt = 0;
+    const frameIntervalMs = 1000 / 30;
 
-    function draw() {
-      rafRef.current = requestAnimationFrame(draw);
+    const isPageActive = () =>
+      document.visibilityState === "visible" &&
+      (typeof document.hasFocus !== "function" || document.hasFocus());
 
-      const now = performance.now();
+    function draw(now: number) {
+      rafRef.current = 0;
+
+      if (!active || !isPageActive()) {
+        barsRef.current.fill(0);
+        draw2d!.clearRect(0, 0, layoutRef.current.w, layoutRef.current.h);
+        return;
+      }
+
+      if (
+        lastRenderedAt > 0 &&
+        now - lastRenderedAt < frameIntervalMs
+      ) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      lastRenderedAt = now;
+
       const analyser = analyserRef.current;
       const binCount = analyser?.frequencyBinCount ?? 128;
       const { w: cW, h: cH, barCount } = layoutRef.current;
@@ -202,10 +236,7 @@ export function AtcWaveform({
         }
         const raw = analyser && count > 0 ? sum / count / 255 : 0;
 
-        // Idle breathing: gentle sine wave per bar when no signal
-        const breathPhase = (now / 1200 + i * 0.35) % (Math.PI * 2);
-        const breathVal = 0.08 + Math.sin(breathPhase) * 0.05;
-        const target = raw > 0.02 ? raw : breathVal;
+        const target = raw > 0.02 ? raw : 0;
 
         barsRef.current[i] += (target - barsRef.current[i]) * LERP;
         const val = barsRef.current[i];
@@ -225,14 +256,33 @@ export function AtcWaveform({
         draw2d!.roundRect(x, y, BAR_WIDTH, barH, 1);
         draw2d!.fill();
       }
+
+      rafRef.current = requestAnimationFrame(draw);
     }
 
-    draw();
+    function handleVisibilityChange() {
+      if (!isPageActive()) {
+        if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+        lastRenderedAt = 0;
+      } else if (active && rafRef.current === 0) {
+        rafRef.current = requestAnimationFrame(draw);
+      }
+    }
+
+    draw(performance.now());
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleVisibilityChange);
+    window.addEventListener("focus", handleVisibilityChange);
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleVisibilityChange);
+      window.removeEventListener("focus", handleVisibilityChange);
       ro.disconnect();
     };
-  }, []);
+  }, [active]);
 
   return (
     <canvas

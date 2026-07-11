@@ -22,6 +22,7 @@ import {
   TRACK_DAMPING,
   MLAT_POSITION_ALPHA,
   AIRCRAFT_PICK_RADIUS_PX,
+  SELECTION_FADE_MS,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
   BASE_AIRCRAFT_SIZE,
@@ -59,6 +60,7 @@ import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { useGlobeDots } from "./use-globe-dots";
+import { OVERVIEW_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
 
 export function FlightLayers({
   flights,
@@ -127,6 +129,7 @@ export function FlightLayers({
   // of extrapolating forward on minutes-old headings.
   const resumeSnapRef = useRef(false);
   const pageActiveRef = useRef(true);
+  const requestRenderRef = useRef<() => void>(() => {});
 
   // Data version increments when raw flight data changes - drives color/scale updateTriggers
   const dataVersionRef = useRef(0);
@@ -183,6 +186,7 @@ export function FlightLayers({
       selectionChangeTimeRef.current = performance.now();
     }
     selectedIcao24Ref.current = selectedIcao24;
+    requestRenderRef.current();
   }, [
     updateGlobeDots,
     flights,
@@ -230,6 +234,7 @@ export function FlightLayers({
       dataTimestampRef.current = now;
       lastFlightsForInterpRef.current = null;
       dataVersionRef.current++;
+      requestRenderRef.current();
       return;
     }
     const oldLinearT = Math.min(elapsed / animDurationRef.current, 1);
@@ -304,7 +309,7 @@ export function FlightLayers({
       const medianInterval = sorted[Math.floor(sorted.length / 2)];
       animDurationRef.current = Math.max(
         MIN_ANIM_DURATION_MS,
-        Math.min(MAX_ANIM_DURATION_MS, medianInterval * 0.94),
+        Math.min(MAX_ANIM_DURATION_MS, medianInterval * 0.9),
       );
     }
     dataTimestampRef.current = now;
@@ -313,6 +318,7 @@ export function FlightLayers({
     resumeSnapRef.current = false;
     // Increment data version so model layers know color/scale need recomputation
     dataVersionRef.current++;
+    requestRenderRef.current();
   }, [flights]);
 
   // ── Cursor management ──────────────────────────────────────────────
@@ -388,16 +394,21 @@ export function FlightLayers({
   useEffect(() => {
     if (!map || !isLoaded) return;
 
-    function createOverlay() {
-      overlayRef.current = new MapboxOverlay({
+    function createOverlay(): MapboxOverlay {
+      const overlay = new MapboxOverlay({
         interleaved: false,
         views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         useDevicePixels: 1,
+        deviceProps: {
+          webgl: { antialias: false, preserveDrawingBuffer: false },
+        },
         _typedArrayManagerProps: { overAlloc: 1.5, poolSize: 0 },
         layers: [],
       });
-      map!.addControl(overlayRef.current as unknown as maplibregl.IControl);
+      overlayRef.current = overlay;
+      map!.addControl(overlay as unknown as maplibregl.IControl);
+      return overlay;
     }
 
     if (!overlayRef.current) {
@@ -410,13 +421,21 @@ export function FlightLayers({
     // Without explicit handling, the deck.gl overlay becomes permanently
     // blank. We listen for context events on MapLibre's canvas and
     // rebuild the overlay when the browser restores the context.
-    const canvas = map.getCanvas();
+    const mapCanvas = map.getCanvas();
+    let deckCanvas: HTMLCanvasElement | null = null;
+    let recreatingOverlay = false;
 
     function onContextLost(e: Event) {
       e.preventDefault(); // allow browser to attempt restoration
     }
 
     function onContextRestored() {
+      if (recreatingOverlay) return;
+      recreatingOverlay = true;
+      if (deckCanvas && deckCanvas !== mapCanvas) {
+        deckCanvas.removeEventListener("webglcontextlost", onContextLost);
+        deckCanvas.removeEventListener("webglcontextrestored", onContextRestored);
+      }
       // Tear down the dead overlay and recreate with a fresh context.
       if (overlayRef.current) {
         try {
@@ -429,15 +448,34 @@ export function FlightLayers({
         }
         overlayRef.current = null;
       }
-      createOverlay();
+      const restoredOverlay = createOverlay();
+      trailBasePathCacheRef.current.clear();
+      trailPathCacheRef.current.clear();
+      trailColorCacheRef.current.clear();
+      requestRenderRef.current();
+      deckCanvas = restoredOverlay.getCanvas();
+      if (deckCanvas && deckCanvas !== mapCanvas) {
+        deckCanvas.addEventListener("webglcontextlost", onContextLost);
+        deckCanvas.addEventListener("webglcontextrestored", onContextRestored);
+      }
+      recreatingOverlay = false;
     }
 
-    canvas.addEventListener("webglcontextlost", onContextLost);
-    canvas.addEventListener("webglcontextrestored", onContextRestored);
+    mapCanvas.addEventListener("webglcontextlost", onContextLost);
+    mapCanvas.addEventListener("webglcontextrestored", onContextRestored);
+    deckCanvas = overlayRef.current?.getCanvas() ?? null;
+    if (deckCanvas && deckCanvas !== mapCanvas) {
+      deckCanvas.addEventListener("webglcontextlost", onContextLost);
+      deckCanvas.addEventListener("webglcontextrestored", onContextRestored);
+    }
 
     return () => {
-      canvas.removeEventListener("webglcontextlost", onContextLost);
-      canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      mapCanvas.removeEventListener("webglcontextlost", onContextLost);
+      mapCanvas.removeEventListener("webglcontextrestored", onContextRestored);
+      if (deckCanvas && deckCanvas !== mapCanvas) {
+        deckCanvas.removeEventListener("webglcontextlost", onContextLost);
+        deckCanvas.removeEventListener("webglcontextrestored", onContextRestored);
+      }
       if (overlayRef.current) {
         try {
           map.removeControl(
@@ -474,6 +512,27 @@ export function FlightLayers({
     const isPageActive = () =>
       document.visibilityState === "visible" &&
       (typeof document.hasFocus !== "function" || document.hasFocus());
+    let lastRenderedAt = 0;
+    let needsRender = true;
+    let continueAnimating = true;
+
+    function scheduleFrame() {
+      if (
+        animFrameRef.current !== 0 ||
+        !pageActiveRef.current ||
+        !isPageActive()
+      ) {
+        return;
+      }
+      animFrameRef.current = requestAnimationFrame(buildAndPushLayers);
+    }
+
+    function requestRender() {
+      needsRender = true;
+      scheduleFrame();
+    }
+
+    requestRenderRef.current = requestRender;
 
     function freezeAtCurrentSnapshots() {
       const curr = currSnapshotsRef.current;
@@ -492,6 +551,10 @@ export function FlightLayers({
 
     function markPageInactive() {
       pageActiveRef.current = false;
+      if (animFrameRef.current !== 0) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = 0;
+      }
       freezeAtCurrentSnapshots();
     }
 
@@ -502,6 +565,7 @@ export function FlightLayers({
       if (pageActiveRef.current) {
         // Preserve existing trails but reset bootstrap counter so gaps fill quickly.
         trailStore.handleVisibilityResume();
+        requestRender();
       }
     }
 
@@ -518,9 +582,13 @@ export function FlightLayers({
     window.addEventListener("focus", handlePageResume);
     window.addEventListener("pagehide", markPageInactive);
     window.addEventListener("pageshow", handlePageResume);
+    document.addEventListener("freeze", markPageInactive);
+    document.addEventListener("resume", handlePageResume);
+    map?.on("zoom", requestRender);
+    map?.on("style.load", requestRender);
 
-    function buildAndPushLayers() {
-      animFrameRef.current = requestAnimationFrame(buildAndPushLayers);
+    function buildAndPushLayers(now: number) {
+      animFrameRef.current = 0;
 
       // Skip rendering while the tab is hidden or the window is blurred.
       // Focus can be lost while the page remains visible, so checking only
@@ -532,10 +600,18 @@ export function FlightLayers({
         return;
       }
 
+      if (!isFrameDue(lastRenderedAt, now, OVERVIEW_FRAME_INTERVAL_MS)) {
+        scheduleFrame();
+        return;
+      }
+
+      if (!needsRender && !continueAnimating) return;
+      needsRender = false;
+      lastRenderedAt = now;
+
       const overlay = overlayRef.current;
       if (!overlay) return;
 
-      const now = performance.now();
       visualFrameRef.current++;
 
       const currentZoom = map?.getZoom() ?? 10;
@@ -556,7 +632,7 @@ export function FlightLayers({
       }
 
       try {
-        const elapsed = performance.now() - dataTimestampRef.current;
+        const elapsed = now - dataTimestampRef.current;
         const progress = getSafeInterpolationProgress({
           elapsedMs: elapsed,
           animDurationMs: animDurationRef.current,
@@ -564,7 +640,9 @@ export function FlightLayers({
           // that resume window we render the latest authoritative snapshot only.
           pageActive: pageActiveRef.current && !resumeSnapRef.current,
         });
-        const rawT = progress.rawT;
+        const rawT = fpvIcao24Ref.current
+          ? progress.rawT
+          : Math.min(progress.rawT, 1);
         const tPos = progress.tPos;
         const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
@@ -646,6 +724,12 @@ export function FlightLayers({
         // ── Globe dots ────────────────────────────────────────────────
         updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
+        if (!layersVisible) {
+          overlay.setProps({ layers: [] });
+          continueAnimating = false;
+          return;
+        }
+
         const altColors = showAltColorsRef.current;
         const visibleFlights = interpolated;
 
@@ -683,12 +767,12 @@ export function FlightLayers({
           altitudeDisplayModeRef.current,
         );
 
-        // Shadow layer - always included, toggled via `visible` to retain WebGL state
-        layers.push(
-          new IconLayer<FlightState>({
+        if (layersVisible && showShadowsRef.current) {
+          layers.push(
+            new IconLayer<FlightState>({
             id: "flight-shadows",
             pickable: false,
-            visible: layersVisible && showShadowsRef.current,
+            visible: true,
             data: visibleFlights,
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
@@ -708,12 +792,13 @@ export function FlightLayers({
               getPosition: visualFrameRef.current,
               getAngle: visualFrameRef.current,
             },
-          }),
-        );
+            }),
+          );
+        }
 
-        // Trail layer - always included, toggled via `visible` to retain WebGL state
-        layers.push(
-          ...buildTrailLayers({
+        if (layersVisible && showTrailsRef.current) {
+          layers.push(
+            ...buildTrailLayers({
             interpolated,
             interpolatedMap: interpolatedMapRef.current,
             currentTrails,
@@ -730,20 +815,24 @@ export function FlightLayers({
             globeFade,
             currentZoom,
             elevScale,
-            visible: layersVisible && showTrailsRef.current,
+            visible: true,
             trailBasePathCache: trailBasePathCacheRef.current,
             trailPathCache: trailPathCacheRef.current,
             trailColorCache: trailColorCacheRef.current,
             handledIdsSet: handledIdsRef.current,
             visibleTrailCacheMap: visibleTrailCacheRef.current,
             activeIcaosSet: activeIcaosRef.current,
-          }),
-        );
+            }),
+          );
+        }
 
         // Selection pulse layers (halo + rings) - skip entirely when
         // nothing is selected and no fade-out is in progress. Saves
         // constructing 4 IconLayer objects + deck.gl diffing per frame.
-        if (selectedIcao24Ref.current || prevSelectedRef.current) {
+        if (
+          layersVisible &&
+          (selectedIcao24Ref.current || prevSelectedRef.current)
+        ) {
           const pulseResult = buildSelectionPulseLayers({
             selectionChangeTime: selectionChangeTimeRef.current,
             selectedId: selectedIcao24Ref.current,
@@ -776,7 +865,10 @@ export function FlightLayers({
           use3DRef.current = true;
         }
 
-        if (use3DRef.current) {
+        if (!layersVisible) {
+          // Native MapLibre globe layers own low-zoom rendering. Leaving the
+          // Deck layer list empty releases its per-layer buffers and work.
+        } else if (use3DRef.current) {
           // 3D: one ScenegraphLayer per model type
           layers.push(
             ...buildAircraftModelLayers({
@@ -803,7 +895,7 @@ export function FlightLayers({
             new IconLayer<FlightState>({
               id: "flight-aircraft-2d",
               pickable: true,
-              visible: layersVisible,
+              visible: true,
               data: visibleFlights,
               opacity: globeFade,
               getPosition: (d) => [
@@ -850,21 +942,42 @@ export function FlightLayers({
         }
 
         overlay.setProps({ layers });
+
+        const selectionAnimating =
+          (selectedIcao24Ref.current != null || prevSelectedRef.current != null) &&
+          now - selectionChangeTimeRef.current < SELECTION_FADE_MS;
+        continueAnimating =
+          layersVisible &&
+          ((!resumeSnapRef.current &&
+            currentFlights.length > 0 &&
+            tPos < 1) ||
+            fpvId != null ||
+            selectionAnimating);
+        if (continueAnimating) scheduleFrame();
       } catch (err) {
+        continueAnimating = false;
         if (process.env.NODE_ENV === "development") {
           console.error("[aeris] FlightLayers render error:", err);
         }
       }
     }
 
-    buildAndPushLayers();
+    requestRender();
     return () => {
-      cancelAnimationFrame(animFrameRef.current);
+      requestRenderRef.current = () => {};
+      if (animFrameRef.current !== 0) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = 0;
+      }
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("blur", markPageInactive);
       window.removeEventListener("focus", handlePageResume);
       window.removeEventListener("pagehide", markPageInactive);
       window.removeEventListener("pageshow", handlePageResume);
+      document.removeEventListener("freeze", markPageInactive);
+      document.removeEventListener("resume", handlePageResume);
+      map?.off("zoom", requestRender);
+      map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
 

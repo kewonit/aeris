@@ -13,6 +13,16 @@ const RECONNECT_MAX_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BROADCAST_CHANNEL_NAME = "aeris:atc-playback";
 
+export function getAtcReconnectDelayMs(attempt: number): number {
+  const safeAttempt = Number.isFinite(attempt)
+    ? Math.max(0, Math.floor(attempt))
+    : 0;
+  return Math.min(
+    RECONNECT_BASE_MS * Math.pow(2, safeAttempt),
+    RECONNECT_MAX_MS,
+  );
+}
+
 // ── Volume persistence ─────────────────────────────────────────────────
 
 function loadVolume(): number {
@@ -97,7 +107,7 @@ export function useAtcStream(): UseAtcStreamReturn {
 
   // ── Cleanup helper ─────────────────────────────────────────────────
 
-  const cleanupAudio = useCallback(() => {
+  const cleanupAudio = useCallback((resetSession: boolean = true) => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -116,8 +126,10 @@ export function useAtcStream(): UseAtcStreamReturn {
     }
 
     setAudioElement(null);
-    reconnectAttemptsRef.current = 0;
-    proxyAttemptedRef.current = false;
+    if (resetSession) {
+      reconnectAttemptsRef.current = 0;
+      proxyAttemptedRef.current = false;
+    }
   }, []);
 
   const clearPlaybackState = useCallback(
@@ -217,6 +229,7 @@ export function useAtcStream(): UseAtcStreamReturn {
   const scheduleReconnectAttempt = useCallback(
     (targetFeed: AtcFeed, useProxy: boolean) => {
       if (stoppedManuallyRef.current) return;
+      if (reconnectTimerRef.current) return;
 
       // Give up after too many failures
       if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
@@ -226,13 +239,11 @@ export function useAtcStream(): UseAtcStreamReturn {
       }
 
       const attempt = reconnectAttemptsRef.current++;
-      const delay = Math.min(
-        RECONNECT_BASE_MS * Math.pow(2, attempt),
-        RECONNECT_MAX_MS,
-      );
+      const delay = getAtcReconnectDelayMs(attempt);
 
       // Don't flash status - keep the error visible while we wait
       reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
         if (feedRef.current?.id !== targetFeed.id) return;
         startPlaybackRef.current(targetFeed, useProxy, true);
       }, delay);
@@ -248,7 +259,9 @@ export function useAtcStream(): UseAtcStreamReturn {
       useProxy: boolean = false,
       isReconnect: boolean = false,
     ) => {
-      cleanupAudio();
+      // Dispose the failed Audio element without resetting the retry/proxy
+      // session. Resetting here made every retry look like attempt zero.
+      cleanupAudio(false);
       stoppedManuallyRef.current = false;
 
       const audio = new Audio();
@@ -376,6 +389,7 @@ export function useAtcStream(): UseAtcStreamReturn {
 
   const play = useCallback(
     (newFeed: AtcFeed) => {
+      reconnectAttemptsRef.current = 0;
       feedRef.current = newFeed;
       setFeed(newFeed);
       proxyAttemptedRef.current = false;

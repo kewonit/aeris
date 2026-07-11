@@ -292,9 +292,6 @@ function classifyFlight(
 
 export function useAirportBoard(
   flights: FlightState[],
-  mapCenter: { lat: number; lng: number } | null,
-  zoom: number,
-  activeIata: string | null,
   /** When set, the board opens for this specific airport (user clicked the dot). */
   selectedAirportIata: string | null = null,
 ): AirportBoardData {
