@@ -1,67 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { TrailEntry } from "@/hooks/use-trail-history";
 import { useSettings } from "@/hooks/use-settings";
+import type { UnitSystem } from "@/hooks/use-settings";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { formatAltitude, formatDistanceAxisNm } from "@/lib/unit-formatters";
 
-const PROFILE_HEIGHT = 100;
-const PROFILE_PADDING_TOP = 14;
-const PROFILE_PADDING_BOTTOM = 20;
-const PROFILE_PADDING_X = 6;
 const MIN_POINTS_TO_RENDER = 3;
 const FEET_PER_METER = 3.28084;
-const MAX_ALTITUDE_METERS = 13_000;
-const NM_PER_DEG = 60; // 1 degree latitude ≈ 60 nm
-
-type RGB = [number, number, number];
-
-const ALTITUDE_STOPS: { t: number; color: RGB }[] = [
-  { t: 0.0, color: [72, 210, 160] },
-  { t: 0.1, color: [100, 200, 120] },
-  { t: 0.2, color: [160, 195, 80] },
-  { t: 0.3, color: [210, 180, 60] },
-  { t: 0.4, color: [235, 150, 60] },
-  { t: 0.52, color: [240, 110, 80] },
-  { t: 0.64, color: [220, 85, 130] },
-  { t: 0.76, color: [180, 90, 190] },
-  { t: 0.88, color: [120, 110, 220] },
-  { t: 1.0, color: [100, 170, 240] },
-];
-
-function altColor(altMeters: number): string {
-  const t = Math.max(0, Math.min(1, altMeters / MAX_ALTITUDE_METERS));
-  let i = 0;
-  while (i < ALTITUDE_STOPS.length - 1 && ALTITUDE_STOPS[i + 1].t <= t) i++;
-  if (i >= ALTITUDE_STOPS.length - 1) {
-    const c = ALTITUDE_STOPS[ALTITUDE_STOPS.length - 1].color;
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
-  }
-  const a = ALTITUDE_STOPS[i];
-  const b = ALTITUDE_STOPS[i + 1];
-  const lt = (t - a.t) / (b.t - a.t);
-  const r = Math.round(a.color[0] + (b.color[0] - a.color[0]) * lt);
-  const g = Math.round(a.color[1] + (b.color[1] - a.color[1]) * lt);
-  const bl = Math.round(a.color[2] + (b.color[2] - a.color[2]) * lt);
-  return `rgb(${r},${g},${bl})`;
-}
-
-function haversineNm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R_NM = 3440.065; // earth radius in nautical miles
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return 2 * R_NM * Math.asin(Math.sqrt(a));
-}
+const MAX_PROFILE_POINTS = 180;
 
 type ProfilePoint = {
   distNm: number;
@@ -71,284 +32,268 @@ type ProfilePoint = {
 
 type VerticalProfileProps = {
   trail: TrailEntry | null;
-  /** Selected altitude on MCP/FCU in feet (drawn as dashed target line) */
+  /** Selected altitude on MCP/FCU in feet. */
   navAltitudeMcp?: number | null;
 };
+
+const chartConfig = {
+  altitude: {
+    label: "Altitude",
+    color: "rgb(96 165 250)",
+  },
+} satisfies ChartConfig;
+
+function haversineNm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const radiusNm = 3440.065;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+
+  return 2 * radiusNm * Math.asin(Math.sqrt(a));
+}
+
+function downsamplePoints(points: ProfilePoint[]): ProfilePoint[] {
+  if (points.length <= MAX_PROFILE_POINTS) return points;
+
+  const sampled: ProfilePoint[] = [];
+  const step = (points.length - 1) / (MAX_PROFILE_POINTS - 1);
+  let previousIndex = -1;
+
+  for (let i = 0; i < MAX_PROFILE_POINTS; i++) {
+    const index = Math.min(points.length - 1, Math.round(i * step));
+    if (index === previousIndex) continue;
+    sampled.push(points[index]);
+    previousIndex = index;
+  }
+
+  if (sampled[sampled.length - 1] !== points[points.length - 1]) {
+    sampled.push(points[points.length - 1]);
+  }
+
+  return sampled;
+}
+
+function formatAxisAltitude(feet: number, unitSystem: UnitSystem): string {
+  if (unitSystem === "aviation" && feet >= 1000) {
+    return `FL${Math.round(feet / 100)
+      .toString()
+      .padStart(3, "0")}`;
+  }
+
+  return formatAltitude(feet / FEET_PER_METER, unitSystem).replace(/\s/g, "");
+}
+
+function formatSelectedAltitude(feet: number, unitSystem: UnitSystem): string {
+  if (unitSystem === "aviation") {
+    return `SEL FL${Math.round(feet / 100)
+      .toString()
+      .padStart(3, "0")}`;
+  }
+
+  return `SEL ${formatAltitude(feet / FEET_PER_METER, unitSystem)}`;
+}
 
 export function VerticalProfile({
   trail,
   navAltitudeMcp,
 }: VerticalProfileProps) {
   const { settings } = useSettings();
-  const points = useMemo<ProfilePoint[]>(() => {
+  const gradientId = useId().replace(/:/g, "");
+
+  const rawPoints = useMemo<ProfilePoint[]>(() => {
     if (!trail || trail.path.length < MIN_POINTS_TO_RENDER) return [];
 
     const result: ProfilePoint[] = [];
-    let cumDist = 0;
-    const len = Math.min(trail.path.length, trail.altitudes.length);
+    let cumulativeDistance = 0;
+    const length = Math.min(trail.path.length, trail.altitudes.length);
 
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < length; i++) {
       const [lng, lat] = trail.path[i];
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
 
-      // Always accumulate distance even for null-altitude points
       if (i > 0) {
-        const [pLng, pLat] = trail.path[i - 1];
-        cumDist += haversineNm(pLat, pLng, lat, lng);
+        const [prevLng, prevLat] = trail.path[i - 1];
+        if (
+          Number.isFinite(prevLng) &&
+          Number.isFinite(prevLat) &&
+          Number.isFinite(lng) &&
+          Number.isFinite(lat)
+        ) {
+          cumulativeDistance += haversineNm(prevLat, prevLng, lat, lng);
+        }
       }
 
-      const alt = trail.altitudes[i];
-      if (alt === null || !Number.isFinite(alt)) continue;
+      const altitudeMeters = trail.altitudes[i];
+      if (altitudeMeters === null || !Number.isFinite(altitudeMeters)) {
+        continue;
+      }
 
       result.push({
-        distNm: cumDist,
-        altFt: Math.round(alt * FEET_PER_METER),
-        altMeters: alt,
+        distNm: cumulativeDistance,
+        altFt: Math.max(0, Math.round(altitudeMeters * FEET_PER_METER)),
+        altMeters: Math.max(0, altitudeMeters),
       });
     }
 
     return result;
   }, [trail]);
 
+  const points = useMemo(() => downsamplePoints(rawPoints), [rawPoints]);
   if (points.length < MIN_POINTS_TO_RENDER) return null;
 
-  const maxDist = points[points.length - 1].distNm || 1;
-  const maxAlt = Math.max(
-    ...points.map((p) => p.altFt),
+  const maxDistance = Math.max(points[points.length - 1].distNm, 1);
+  const maxAltitude = Math.max(
+    ...rawPoints.map((point) => point.altFt),
     navAltitudeMcp ?? 0,
     1000,
   );
-  // Round up to nearest 5000ft for clean axis
-  const ceilAlt = Math.ceil(maxAlt / 5000) * 5000;
-
-  const drawW = 200 - PROFILE_PADDING_X * 2;
-  const drawH = PROFILE_HEIGHT - PROFILE_PADDING_TOP - PROFILE_PADDING_BOTTOM;
-
-  const toX = (d: number) => PROFILE_PADDING_X + (d / maxDist) * drawW;
-  const toY = (alt: number) =>
-    PROFILE_PADDING_TOP + drawH - (alt / ceilAlt) * drawH;
-
-  // Build SVG polyline points
-  const polyPoints = points
-    .map((p) => `${toX(p.distNm).toFixed(1)},${toY(p.altFt).toFixed(1)}`)
-    .join(" ");
-
-  // Build colored line segments
-  const segments: {
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    color: string;
-  }[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const p = points[i];
-    const q = points[i + 1];
-    const avgAlt = (p.altMeters + q.altMeters) / 2;
-    segments.push({
-      x1: toX(p.distNm),
-      y1: toY(p.altFt),
-      x2: toX(q.distNm),
-      y2: toY(q.altFt),
-      color: altColor(avgAlt),
-    });
-  }
-
-  // Altitude Y-axis tick labels
-  const ticks: number[] = [];
-  const tickStep = ceilAlt <= 10000 ? 5000 : 10000;
-  for (let a = 0; a <= ceilAlt; a += tickStep) {
-    ticks.push(a);
-  }
+  const altitudeCeiling = Math.max(1000, Math.ceil(maxAltitude / 5000) * 5000);
+  const lastPoint = points[points.length - 1];
+  const selectedAltitudeVisible =
+    navAltitudeMcp != null &&
+    Number.isFinite(navAltitudeMcp) &&
+    navAltitudeMcp > 0 &&
+    navAltitudeMcp <= altitudeCeiling;
 
   return (
     <div className="mt-3">
-      <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
-      <div className="mt-2">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-semibold tracking-widest text-foreground/30 uppercase">
-            Vertical Profile
-          </p>
-          <p className="font-mono text-[10px] tabular-nums text-foreground/25">
-            {settings.unitSystem === "aviation"
-              ? `FL${Math.round(points[points.length - 1].altFt / 100)
-                  .toString()
-                  .padStart(3, "0")}`
-              : formatAltitude(
-                  points[points.length - 1].altMeters,
-                  settings.unitSystem,
-                )}
-          </p>
-        </div>
-        <svg
-          viewBox={`0 0 200 ${PROFILE_HEIGHT}`}
-          className="mt-1.5 w-full"
-          aria-label="Altitude profile chart"
-          role="img"
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold tracking-widest text-foreground/30 uppercase">
+          Vertical Profile
+        </p>
+        <p className="font-mono text-[10px] tabular-nums text-foreground/25">
+          {settings.unitSystem === "aviation"
+            ? `FL${Math.round(lastPoint.altFt / 100)
+                .toString()
+                .padStart(3, "0")}`
+            : formatAltitude(lastPoint.altMeters, settings.unitSystem)}
+        </p>
+      </div>
+
+      <ChartContainer
+        config={chartConfig}
+        className="mt-2 h-[124px] w-full text-foreground"
+        initialDimension={{ width: 320, height: 124 }}
+      >
+        <AreaChart
+          accessibilityLayer
+          data={points}
+          margin={{ top: 10, right: 8, bottom: 0, left: -14 }}
         >
           <defs>
-            {/* Gradient fill under the altitude line */}
-            <linearGradient id="profile-fill-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity={0.08} />
-              <stop offset="100%" stopColor="currentColor" stopOpacity={0.01} />
-            </linearGradient>
-            {/* Glow filter for the current position dot */}
-            <filter
-              id="profile-glow"
-              x="-50%"
-              y="-50%"
-              width="200%"
-              height="200%"
-            >
-              <feGaussianBlur stdDeviation="1.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* Grid lines */}
-          {ticks.map((a) => (
-            <g key={a}>
-              <line
-                x1={PROFILE_PADDING_X}
-                y1={toY(a)}
-                x2={200 - PROFILE_PADDING_X}
-                y2={toY(a)}
-                stroke="currentColor"
-                strokeOpacity={0.05}
-                strokeWidth={0.4}
-                strokeDasharray={a > 0 ? "2 3" : undefined}
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset="8%"
+                stopColor="var(--color-altitude)"
+                stopOpacity={0.24}
               />
-              <text
-                x={PROFILE_PADDING_X + 1}
-                y={toY(a) - 2.5}
-                fill="currentColor"
-                fillOpacity={0.22}
-                fontSize={6}
-                fontFamily="monospace"
-              >
-                {settings.unitSystem === "aviation" && a >= 1000
-                  ? `FL${Math.round(a / 100)
-                      .toString()
-                      .padStart(3, "0")}`
-                  : formatAltitude(a / FEET_PER_METER, settings.unitSystem).replace(
-                      /\s/g,
-                      "",
-                    )}
-              </text>
-            </g>
-          ))}
-
-          {/* Gradient fill under the altitude line */}
-          <polygon
-            points={`${toX(0).toFixed(1)},${toY(0).toFixed(1)} ${polyPoints} ${toX(maxDist).toFixed(1)},${toY(0).toFixed(1)}`}
-            fill="url(#profile-fill-grad)"
+              <stop
+                offset="92%"
+                stopColor="var(--color-altitude)"
+                stopOpacity={0.02}
+              />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            vertical={false}
+            stroke="currentColor"
+            strokeOpacity={0.07}
+            strokeDasharray="2 4"
           />
-
-          {/* Colored altitude segments */}
-          {segments.map((s, i) => (
-            <line
-              key={i}
-              x1={s.x1}
-              y1={s.y1}
-              x2={s.x2}
-              y2={s.y2}
-              stroke={s.color}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeOpacity={0.9}
+          <XAxis
+            type="number"
+            dataKey="distNm"
+            domain={[0, maxDistance]}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={4}
+            minTickGap={30}
+            tickFormatter={(value) =>
+              formatDistanceAxisNm(Number(value), settings.unitSystem)
+            }
+          />
+          <YAxis
+            type="number"
+            domain={[0, altitudeCeiling]}
+            tickLine={false}
+            axisLine={false}
+            width={42}
+            tickFormatter={(value) =>
+              formatAxisAltitude(Number(value), settings.unitSystem)
+            }
+          />
+          <ChartTooltip
+            cursor={{
+              stroke: "currentColor",
+              strokeOpacity: 0.18,
+              strokeWidth: 1,
+            }}
+            content={
+              <ChartTooltipContent
+                indicator="line"
+                hideIndicator
+                labelFormatter={(_, payload) => {
+                  const point = payload?.[0]?.payload as
+                    | ProfilePoint
+                    | undefined;
+                  return point
+                    ? formatDistanceAxisNm(point.distNm, settings.unitSystem)
+                    : null;
+                }}
+                formatter={(value) => (
+                  <span className="font-mono font-semibold tabular-nums text-foreground">
+                    {formatAltitude(
+                      Number(value) / FEET_PER_METER,
+                      settings.unitSystem,
+                    )}
+                  </span>
+                )}
+              />
+            }
+          />
+          {selectedAltitudeVisible && (
+            <ReferenceLine
+              y={navAltitudeMcp}
+              stroke="#34d399"
+              strokeDasharray="3 4"
+              strokeOpacity={0.55}
+              label={{
+                value: formatSelectedAltitude(
+                  navAltitudeMcp,
+                  settings.unitSystem,
+                ),
+                position: "insideTopRight",
+                fill: "#34d399",
+                fontSize: 9,
+              }}
             />
-          ))}
-
-          {/* MCP selected altitude target line */}
-          {navAltitudeMcp != null &&
-            Number.isFinite(navAltitudeMcp) &&
-            navAltitudeMcp > 0 &&
-            navAltitudeMcp <= ceilAlt && (
-              <>
-                <line
-                  x1={PROFILE_PADDING_X}
-                  y1={toY(navAltitudeMcp)}
-                  x2={200 - PROFILE_PADDING_X}
-                  y2={toY(navAltitudeMcp)}
-                  stroke="#34d399"
-                  strokeWidth={0.5}
-                  strokeDasharray="2 2.5"
-                  strokeOpacity={0.45}
-                />
-                <text
-                  x={200 - PROFILE_PADDING_X}
-                  y={toY(navAltitudeMcp) - 2.5}
-                  fill="#34d399"
-                  fillOpacity={0.55}
-                  fontSize={5.5}
-                  fontFamily="monospace"
-                  textAnchor="end"
-                >
-                  {settings.unitSystem === "aviation"
-                    ? `SEL FL${Math.round(navAltitudeMcp / 100)
-                        .toString()
-                        .padStart(3, "0")}`
-                    : `SEL ${formatAltitude(
-                        navAltitudeMcp / FEET_PER_METER,
-                        settings.unitSystem,
-                      )}`}
-                </text>
-              </>
-            )}
-
-          {/* Current position dot (last point) */}
-          {points.length > 0 &&
-            (() => {
-              const last = points[points.length - 1];
-              const cx = toX(last.distNm);
-              const cy = toY(last.altFt);
-              const dotColor = altColor(last.altMeters);
-              return (
-                <g filter="url(#profile-glow)">
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={3}
-                    fill={dotColor}
-                    fillOpacity={0.9}
-                  />
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={1.5}
-                    fill="white"
-                    fillOpacity={0.8}
-                  />
-                </g>
-              );
-            })()}
-
-          {/* Distance labels */}
-          <text
-            x={PROFILE_PADDING_X}
-            y={PROFILE_HEIGHT - 4}
-            fill="currentColor"
-            fillOpacity={0.22}
-            fontSize={6}
-            fontFamily="monospace"
-          >
-            {formatDistanceAxisNm(0, settings.unitSystem)}
-          </text>
-          <text
-            x={200 - PROFILE_PADDING_X}
-            y={PROFILE_HEIGHT - 4}
-            fill="currentColor"
-            fillOpacity={0.22}
-            fontSize={6}
-            fontFamily="monospace"
-            textAnchor="end"
-          >
-            {formatDistanceAxisNm(maxDist, settings.unitSystem)}
-          </text>
-        </svg>
-      </div>
+          )}
+          <Area
+            type="monotone"
+            dataKey="altFt"
+            name="altitude"
+            stroke="var(--color-altitude)"
+            strokeWidth={2.25}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            activeDot={{
+              r: 3,
+              stroke: "var(--background)",
+              strokeWidth: 1.5,
+            }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ChartContainer>
     </div>
   );
 }

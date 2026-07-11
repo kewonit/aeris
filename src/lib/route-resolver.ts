@@ -1,16 +1,22 @@
 import type { RouteAirport, RouteInfo } from "./route-lookup";
+import { findAirportByIcao } from "./airports";
 
 const ADSBDB_BASE = "https://api.adsbdb.com/v0";
 const HEXDB_BASE = "https://hexdb.io/api/v1";
+const OPEN_SKY_ROUTES_BASE = "https://opensky-network.org/api";
 
 const CACHE_HIT_TTL_MS = 15 * 60_000;
 const CACHE_MISS_TTL_MS = 2 * 60_000;
-const CACHE_MAX_ENTRIES = 300;
+const CACHE_MAX_ENTRIES = 500;
 
-const PROVIDER_TIMEOUT_MS = 5_000;
-const PROVIDER_RATE_LIMIT_MS: Record<RouteInfo["source"], number> = {
+const PROVIDER_TIMEOUT_MS = 6_000;
+
+type RouteSource = "adsbdb" | "hexdb" | "opensky";
+
+const PROVIDER_RATE_LIMIT_MS: Record<RouteSource, number> = {
   adsbdb: 1_100,
   hexdb: 600,
+  opensky: 1_100,
 };
 
 const CALLSIGN_RE = /^[A-Z0-9]{1,8}$/i;
@@ -36,14 +42,16 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<RouteResolution>>();
 
-const lastRequestTime: Record<RouteInfo["source"], number> = {
+const lastRequestTime: Record<RouteSource, number> = {
   adsbdb: 0,
   hexdb: 0,
+  opensky: 0,
 };
 
-const providerQueues: Record<RouteInfo["source"], Promise<void>> = {
+const providerQueues: Record<RouteSource, Promise<void>> = {
   adsbdb: Promise.resolve(),
   hexdb: Promise.resolve(),
+  opensky: Promise.resolve(),
 };
 
 function cacheGet(callsign: string): RouteInfo | null | undefined {
@@ -68,7 +76,7 @@ function cacheSet(callsign: string, route: RouteInfo | null): void {
   }
 }
 
-async function enforceProviderRateLimit(source: RouteInfo["source"]) {
+async function enforceProviderRateLimit(source: RouteSource) {
   const previous = providerQueues[source];
 
   const next = previous.then(async () => {
@@ -89,7 +97,7 @@ async function enforceProviderRateLimit(source: RouteInfo["source"]) {
 
 async function fetchProviderJson(
   url: string,
-  source: RouteInfo["source"],
+  source: RouteSource,
 ): Promise<{
   data: unknown | null;
   status: number;
@@ -143,6 +151,8 @@ type ProviderRouteResult = {
   route: RouteInfo | null;
   cacheableMiss: boolean;
 };
+
+// ── ADSBDB ──────────────────────────────────────────────────────────────
 
 type AdsbdbAirport = {
   country_iso_name?: string;
@@ -207,7 +217,8 @@ async function fetchFromAdsbdb(callsign: string): Promise<ProviderRouteResult> {
     route.destination as AdsbdbAirport | null,
   );
 
-  if (!origin && !destination) {
+  // Require both origin and destination for a verified route
+  if (!origin || !destination) {
     return { route: null, cacheableMiss: true };
   }
 
@@ -222,6 +233,8 @@ async function fetchFromAdsbdb(callsign: string): Promise<ProviderRouteResult> {
     cacheableMiss: true,
   };
 }
+
+// ── HexDB ───────────────────────────────────────────────────────────────
 
 function parseHexdbAirport(
   raw: unknown,
@@ -297,33 +310,91 @@ async function fetchFromHexdb(callsign: string): Promise<ProviderRouteResult> {
     fetchHexdbAirport(destinationIcao),
   ]);
 
+  // Require both airports with real data
+  if (!originDetail || !destinationDetail) {
+    return { route: null, cacheableMiss: true };
+  }
+
   return {
     route: {
       callsign,
-      origin: originDetail ?? {
-        iata: "",
-        icao: originIcao,
-        name: "",
-        municipality: "",
-        countryIso: "",
-        latitude: 0,
-        longitude: 0,
-      },
-      destination: destinationDetail ?? {
-        iata: "",
-        icao: destinationIcao,
-        name: "",
-        municipality: "",
-        countryIso: "",
-        latitude: 0,
-        longitude: 0,
-      },
+      origin: originDetail,
+      destination: destinationDetail,
       source: "hexdb",
       fetchedAt: Date.now(),
     },
     cacheableMiss: true,
   };
 }
+
+// ── OpenSky ─────────────────────────────────────────────────────────────
+
+/**
+ * OpenSky routes endpoint returns:
+ *   {"callsign":"BAW123","route":["EGLL","KJFK"],"updateTime":1234567890}
+ *
+ * We resolve ICAO codes against our local airport database.
+ */
+async function fetchFromOpenSky(callsign: string): Promise<ProviderRouteResult> {
+  const result = await fetchProviderJson(
+    `${OPEN_SKY_ROUTES_BASE}/routes?callsign=${encodeURIComponent(callsign)}`,
+    "opensky",
+  );
+
+  if (!result.ok || typeof result.data !== "object" || result.data === null) {
+    return { route: null, cacheableMiss: result.cacheableMiss };
+  }
+
+  const data = result.data as Record<string, unknown>;
+  const routeArr = data.route;
+  if (!Array.isArray(routeArr) || routeArr.length < 2) {
+    return { route: null, cacheableMiss: true };
+  }
+
+  const originIcao = String(routeArr[0]).trim().toUpperCase();
+  const destinationIcao = String(routeArr[routeArr.length - 1])
+    .trim()
+    .toUpperCase();
+
+  if (
+    !/^[A-Z0-9]{4}$/.test(originIcao) ||
+    !/^[A-Z0-9]{4}$/.test(destinationIcao)
+  ) {
+    return { route: null, cacheableMiss: true };
+  }
+
+  const originAirport = findAirportByIcao(originIcao);
+  const destAirport = findAirportByIcao(destinationIcao);
+
+  // OpenSky returns ICAO codes only. We need both airports in our DB
+  // to produce a verified route with full metadata.
+  if (!originAirport || !destAirport) {
+    return { route: null, cacheableMiss: true };
+  }
+
+  const toRouteAirport = (a: typeof originAirport): RouteAirport => ({
+    iata: a.iata ?? "",
+    icao: a.icao,
+    name: a.name,
+    municipality: a.city,
+    countryIso: a.country,
+    latitude: a.lat,
+    longitude: a.lng,
+  });
+
+  return {
+    route: {
+      callsign,
+      origin: toRouteAirport(originAirport),
+      destination: toRouteAirport(destAirport),
+      source: "opensky",
+      fetchedAt: Date.now(),
+    },
+    cacheableMiss: true,
+  };
+}
+
+// ── Resolver ────────────────────────────────────────────────────────────
 
 export async function resolveRouteFromOpenDatabases(
   callsign: string | null | undefined,
@@ -348,23 +419,40 @@ export async function resolveRouteFromOpenDatabasesDetailed(
 
   const promise = (async () => {
     try {
-      const adsbdbResult = await fetchFromAdsbdb(normalized);
+      // Fetch all three sources in parallel for speed.
+      // Each source has its own rate limiter so we won't exceed limits.
+      const [adsbdbResult, hexdbResult, openskyResult] = await Promise.all([
+        fetchFromAdsbdb(normalized),
+        fetchFromHexdb(normalized),
+        fetchFromOpenSky(normalized),
+      ]);
+
+      // Return the first verified route we get
       if (adsbdbResult.route) {
         cacheSet(normalized, adsbdbResult.route);
         return { route: adsbdbResult.route, temporarilyUnavailable: false };
       }
-
-      const hexdbResult = await fetchFromHexdb(normalized);
       if (hexdbResult.route) {
         cacheSet(normalized, hexdbResult.route);
         return { route: hexdbResult.route, temporarilyUnavailable: false };
       }
+      if (openskyResult.route) {
+        cacheSet(normalized, openskyResult.route);
+        return { route: openskyResult.route, temporarilyUnavailable: false };
+      }
 
-      if (adsbdbResult.cacheableMiss && hexdbResult.cacheableMiss) {
+      // All returned cacheable misses → route genuinely unknown
+      const allCacheable =
+        adsbdbResult.cacheableMiss &&
+        hexdbResult.cacheableMiss &&
+        openskyResult.cacheableMiss;
+
+      if (allCacheable) {
         cacheSet(normalized, null);
         return { route: null, temporarilyUnavailable: false };
       }
 
+      // At least one provider errored → transient failure
       return { route: null, temporarilyUnavailable: true };
     } finally {
       inflight.delete(normalized);

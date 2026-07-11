@@ -3,6 +3,9 @@
 // Client-side callers resolve route data through Aeris' own /api/routes
 // endpoint. The server endpoint owns external provider validation, rate
 // limiting, cache headers, and upstream normalization.
+//
+// IMPORTANT: Only verified routes from external databases are shown.
+// No predicted, observed, or interpolated routes are ever displayed.
 
 export type RouteAirport = {
   /** IATA code, e.g. "LHR" */
@@ -29,7 +32,7 @@ export type RouteInfo = {
   /** Destination airport */
   destination: RouteAirport | null;
   /** Data source that resolved this route */
-  source: "adsbdb" | "hexdb";
+  source: "adsbdb" | "hexdb" | "opensky";
   /** When this entry was fetched (for TTL) */
   fetchedAt: number;
 };
@@ -96,7 +99,12 @@ function parseRouteInfo(value: unknown): RouteInfo | null {
   const route = value as Record<string, unknown>;
 
   if (typeof route.callsign !== "string") return null;
-  if (route.source !== "adsbdb" && route.source !== "hexdb") return null;
+  if (
+    route.source !== "adsbdb" &&
+    route.source !== "hexdb" &&
+    route.source !== "opensky"
+  )
+    return null;
   if (
     typeof route.fetchedAt !== "number" ||
     !Number.isFinite(route.fetchedAt)
@@ -109,7 +117,9 @@ function parseRouteInfo(value: unknown): RouteInfo | null {
 
   if (origin !== null && !isRouteAirport(origin)) return null;
   if (destination !== null && !isRouteAirport(destination)) return null;
-  if (origin === null && destination === null) return null;
+
+  // Require both origin and destination for a verified route
+  if (origin === null || destination === null) return null;
 
   return {
     callsign: route.callsign,

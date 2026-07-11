@@ -127,16 +127,26 @@ type ApiResponse = {
 
 // ── Fetcher ─────────────────────────────────────────────────────────────────
 
-type FetchResult = {
+export type AircraftPhotoFetchResult = {
   aircraft: AircraftDetails | null;
   photos: NormalizedPhoto[];
 };
+
+export function mergeAircraftPhotoResults(
+  preferred: AircraftPhotoFetchResult,
+  fallback: AircraftPhotoFetchResult,
+): AircraftPhotoFetchResult {
+  return {
+    aircraft: preferred.aircraft ?? fallback.aircraft,
+    photos: preferred.photos.length > 0 ? preferred.photos : fallback.photos,
+  };
+}
 
 async function fetchPhotos(
   icao24: string,
   reg: string | null,
   signal?: AbortSignal,
-): Promise<FetchResult> {
+): Promise<AircraftPhotoFetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   const onAbort = () => controller.abort();
@@ -223,14 +233,17 @@ export function useAircraftPhotos(
       return;
     }
 
-    if (cached) {
+    const cachedAtStart = getCached(cacheKey);
+    if (cachedAtStart) {
       return;
     }
+    const hexCachedAtStart =
+      normalized && reg ? getCached(normalized) : null;
 
     let cancelled = false;
     const controller = new AbortController();
 
-    if (reg && !hexCached) {
+    if (reg && !hexCachedAtStart) {
       // Phase 1: Fast sources (no JetAPI) → show immediately
       // Phase 2: All sources including JetAPI → upgrade
       fetchPhotos(normalized, null, controller.signal).then(
@@ -243,8 +256,11 @@ export function useAircraftPhotos(
           fetchPhotos(normalized, reg, controller.signal).then(
             (fullResult) => {
               if (cancelled) return;
-              const mergedAircraft = fullResult.aircraft ?? fastResult.aircraft;
-              putCache(cacheKey, mergedAircraft, fullResult.photos);
+              const merged = mergeAircraftPhotoResults(
+                fullResult,
+                fastResult,
+              );
+              putCache(cacheKey, merged.aircraft, merged.photos);
               setResolvedKey(cacheKey);
             },
             () => {
@@ -262,19 +278,26 @@ export function useAircraftPhotos(
           setErrorKey(cacheKey);
         },
       );
-    } else if (reg && hexCached) {
+    } else if (reg && hexCachedAtStart) {
       // Already showing hex-only cache - just fetch JetAPI enhancement
       fetchPhotos(normalized, reg, controller.signal).then(
         (fullResult) => {
           if (cancelled) return;
-          const mergedAircraft = fullResult.aircraft ?? hexCached.aircraft;
-          putCache(cacheKey, mergedAircraft, fullResult.photos);
+          const merged = mergeAircraftPhotoResults(
+            fullResult,
+            hexCachedAtStart,
+          );
+          putCache(cacheKey, merged.aircraft, merged.photos);
           setResolvedKey(cacheKey);
         },
         () => {
           // JetAPI failed - keep cached results
           if (!cancelled) {
-            putCache(cacheKey, hexCached.aircraft, hexCached.photos);
+            putCache(
+              cacheKey,
+              hexCachedAtStart.aircraft,
+              hexCachedAtStart.photos,
+            );
             setResolvedKey(cacheKey);
           }
         },

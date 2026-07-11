@@ -15,8 +15,7 @@ const CR_ALPHA = 0.5; // centripetal
 function crKnot(ti: number, pi: ElevatedPoint, pj: ElevatedPoint): number {
   const dx = pj[0] - pi[0];
   const dy = pj[1] - pi[1];
-  const dz = pj[2] - pi[2];
-  const d2 = dx * dx + dy * dy + dz * dz;
+  const d2 = dx * dx + dy * dy;
   // Guard: NaN inputs produce NaN distances - clamp to epsilon.
   if (!Number.isFinite(d2)) return ti + 1e-6;
   // d^alpha where alpha = 0.5 → sqrt(d) → (d^2)^0.25

@@ -47,6 +47,17 @@ export function speedValueFromKnots(
   return Math.round(knots);
 }
 
+export function formatSpeedFromKnots(
+  knots: number | null | undefined,
+  unitSystem: UnitSystem,
+): string {
+  const value = speedValueFromKnots(knots, unitSystem);
+  if (value === null) return "-";
+  if (unitSystem === "metric") return `${value.toLocaleString()} km/h`;
+  if (unitSystem === "imperial") return `${value.toLocaleString()} mph`;
+  return `${value.toLocaleString()} kts`;
+}
+
 export function formatAltitude(
   meters: number | null,
   unitSystem: UnitSystem,

@@ -218,6 +218,19 @@ function buildSlugVariants(baseSlug: string): string[] {
 
 /** CDN fallback URL for an IATA code. */
 const LOGO_CDN = "https://images.kiwi.com/airlines/64x64";
+const PNG_FIRST_LOGO_SLUGS = new Set(["korean-air"]);
+
+function addLogoCandidates(candidates: string[], slug: string): void {
+  const svgPath = `/airline-logos/${slug}.svg`;
+  const pngPath = `/airline-logos/${slug}.png`;
+  const paths = PNG_FIRST_LOGO_SLUGS.has(slug)
+    ? [pngPath, svgPath]
+    : [svgPath, pngPath];
+
+  for (const path of paths) {
+    if (!candidates.includes(path)) candidates.push(path);
+  }
+}
 
 export function airlineLogoCandidates(
   airlineName: string | null,
@@ -228,8 +241,7 @@ export function airlineLogoCandidates(
   // ── 1. Direct logoSlug from ICAO lookup (highest priority) ──────────
   const directSlug = callsign ? lookupAirlineLogoSlug(callsign) : null;
   if (directSlug) {
-    candidates.push(`/airline-logos/${directSlug}.svg`);
-    candidates.push(`/airline-logos/${directSlug}.png`);
+    addLogoCandidates(candidates, directSlug);
   }
 
   // ── 2. Name-based slug candidates ───────────────────────────────────
@@ -247,10 +259,7 @@ export function airlineLogoCandidates(
     );
 
     for (const s of orderedSlugs) {
-      const svgPath = `/airline-logos/${s}.svg`;
-      const pngPath = `/airline-logos/${s}.png`;
-      if (!candidates.includes(svgPath)) candidates.push(svgPath);
-      if (!candidates.includes(pngPath)) candidates.push(pngPath);
+      addLogoCandidates(candidates, s);
     }
   }
 

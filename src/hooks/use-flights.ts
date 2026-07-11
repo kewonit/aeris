@@ -56,8 +56,11 @@ export function useFlights(
   const fpvIcao24Ref = useRef<string | null>(fpvIcao24);
   const fpvSeedRef = useRef<string | null>(null);
   const fetchDataRef = useRef<(target: City) => void>(() => {});
-  fpvIcao24Ref.current = fpvIcao24;
-  fpvSeedCenterRef.current = fpvSeedCenter;
+
+  useEffect(() => {
+    fpvIcao24Ref.current = fpvIcao24;
+    fpvSeedCenterRef.current = fpvSeedCenter;
+  }, [fpvIcao24, fpvSeedCenter]);
 
   useEffect(() => {
     if (!fpvIcao24) {
@@ -74,13 +77,17 @@ export function useFlights(
     fpvSeedRef.current = fpvIcao24;
   }, [fpvIcao24, flights]);
 
-  const clearCountdown = useCallback(() => {
+  const stopCountdown = useCallback(() => {
     if (countdownRef.current) {
       clearInterval(countdownRef.current);
       countdownRef.current = null;
     }
-    setRetryIn(0);
   }, []);
+
+  const clearCountdown = useCallback(() => {
+    stopCountdown();
+    setRetryIn(0);
+  }, [stopCountdown]);
 
   const startCountdown = useCallback(
     (ms: number) => {
@@ -290,16 +297,17 @@ export function useFlights(
     clearSchedule();
 
     if (!city) {
-      setFlights([]);
-      setRateLimited(false);
-      clearCountdown();
+      abortRef.current?.abort();
+      abortRef.current = null;
+      stopCountdown();
       return;
     }
 
-    setRateLimited(false);
-    clearCountdown();
-
-    const deferred = setTimeout(() => fetchData(city), 0);
+    const deferred = setTimeout(() => {
+      setRateLimited(false);
+      clearCountdown();
+      fetchData(city);
+    }, 0);
 
     return () => {
       clearTimeout(deferred);
@@ -308,22 +316,27 @@ export function useFlights(
       abortRef.current = null;
       clearCountdown();
     };
-  }, [city, fetchData, clearCountdown, clearSchedule]);
+  }, [city, fetchData, clearCountdown, clearSchedule, stopCountdown]);
 
   const prevFpvRef = useRef<string | null>(fpvIcao24);
   useEffect(() => {
     const wasInFpv = prevFpvRef.current !== null;
     const isInFpv = fpvIcao24 !== null;
     prevFpvRef.current = fpvIcao24;
+    let deferred: ReturnType<typeof setTimeout> | null = null;
 
     if (!wasInFpv && isInFpv) {
       clearSchedule();
-      if (city) fetchData(city);
+      if (city) deferred = setTimeout(() => fetchData(city), 0);
     } else if (wasInFpv && !isInFpv && city) {
       fpvCenterRef.current = null;
       clearSchedule();
-      fetchData(city);
+      deferred = setTimeout(() => fetchData(city), 0);
     }
+
+    return () => {
+      if (deferred) clearTimeout(deferred);
+    };
   }, [fpvIcao24, city, clearSchedule, fetchData]);
 
   // Trigger immediate fetch on network reconnect
@@ -347,11 +360,11 @@ export function useFlights(
   }, [clearSchedule, clearCountdown]);
 
   return {
-    flights,
-    loading,
-    error,
-    rateLimited,
-    retryIn,
-    source,
+    flights: city ? flights : [],
+    loading: city ? loading : false,
+    error: city ? error : null,
+    rateLimited: city ? rateLimited : false,
+    retryIn: city ? retryIn : 0,
+    source: city ? source : null,
   };
 }

@@ -3,23 +3,34 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
+  AudioWaveform,
+  Blend,
+  ChartNoAxesColumn,
+  type LucideIcon,
+} from "lucide-react";
+import {
   getOrCreateConnection,
   releaseAudioConnection,
 } from "@/components/ui/atc-waveform";
 
 // -- Constants ----------------------------------------------------------
 
-const BAR_COUNT = 64;
+const BAR_COUNT = 48;
 const CANVAS_PADDING = 20;
+const FRAME_MIN_MS = 1000 / 30;
 const LERP_UP = 0.24; // Quick attack
 const LERP_DOWN = 0.07; // Slow decay - silky smooth
 
 type VisualizationMode = "spectrum" | "waveform" | "combined";
 
-const MODES: { key: VisualizationMode; label: string }[] = [
-  { key: "spectrum", label: "Spectrum" },
-  { key: "waveform", label: "Waveform" },
-  { key: "combined", label: "Combined" },
+const MODES: {
+  key: VisualizationMode;
+  label: string;
+  Icon: LucideIcon;
+}[] = [
+  { key: "spectrum", label: "Spectrum", Icon: ChartNoAxesColumn },
+  { key: "waveform", label: "Waveform", Icon: AudioWaveform },
+  { key: "combined", label: "Combined", Icon: Blend },
 ];
 
 // -- Voice-range bin mapping (logarithmic spread) -----------------------
@@ -66,7 +77,8 @@ function SegmentedControl({
   return (
     <div
       role="tablist"
-      className="relative flex h-6.5 shrink-0 items-center rounded-lg"
+      aria-label="Audio visualization mode"
+      className="relative flex h-7 w-24 shrink-0 items-center rounded-lg"
       style={{ backgroundColor: "rgb(var(--ui-fg) / 0.06)" }}
     >
       {/* Sliding capsule indicator */}
@@ -87,8 +99,10 @@ function SegmentedControl({
           role="tab"
           type="button"
           aria-selected={mode === m.key}
+          aria-label={m.label}
+          title={m.label}
           onClick={() => onChange(m.key)}
-          className="relative z-10 flex h-full flex-1 items-center justify-center px-2.5 text-[10px] font-semibold tracking-wide transition-colors duration-200"
+          className="relative z-10 flex h-full flex-1 items-center justify-center transition-colors duration-200"
           style={{
             color:
               mode === m.key
@@ -96,7 +110,7 @@ function SegmentedControl({
                 : "rgb(var(--ui-fg) / 0.3)",
           }}
         >
-          {m.label}
+          <m.Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       ))}
     </div>
@@ -149,8 +163,8 @@ export function AtcSpectrum({
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+        canvas.width = Math.max(1, Math.round(width * dpr));
+        canvas.height = Math.max(1, Math.round(height * dpr));
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
       }
@@ -164,7 +178,7 @@ export function AtcSpectrum({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
     let freqData: Uint8Array<ArrayBuffer> | null = null;
@@ -172,7 +186,6 @@ export function AtcSpectrum({
     let binRanges: [number, number][] | null = null;
     let lastBinCount = 0;
     let lastRenderedAt = 0;
-    const frameIntervalMs = 1000 / 30;
 
     const isPageActive = () =>
       document.visibilityState === "visible" &&
@@ -189,7 +202,7 @@ export function AtcSpectrum({
 
       if (
         lastRenderedAt > 0 &&
-        now - lastRenderedAt < frameIntervalMs
+        now - lastRenderedAt < FRAME_MIN_MS
       ) {
         rafRef.current = requestAnimationFrame(draw);
         return;
@@ -200,7 +213,7 @@ export function AtcSpectrum({
       const W = canvas!.width / dpr;
       const H = canvas!.height / dpr;
 
-      if (W === 0 || H === 0) {
+      if (W <= 1 || H <= 1) {
         rafRef.current = requestAnimationFrame(draw);
         return;
       }
@@ -212,7 +225,7 @@ export function AtcSpectrum({
       const binCount = analyser?.frequencyBinCount ?? 128;
 
       // Re-allocate if bin count changed
-      if (binCount !== lastBinCount) {
+      if (binCount !== lastBinCount || !freqData || !timeData || !binRanges) {
         freqData = new Uint8Array(binCount) as Uint8Array<ArrayBuffer>;
         timeData = new Uint8Array(binCount) as Uint8Array<ArrayBuffer>;
         binRanges = buildBinRanges(binCount, BAR_COUNT);
@@ -325,7 +338,7 @@ export function AtcSpectrum({
         const waveMid = currentMode === "waveform" ? H * 0.5 : H * 0.5;
         const waveAlpha = currentMode === "combined" ? 0.12 : 0.45;
 
-        const step = Math.max(1, Math.floor(timeData.length / 128));
+        const step = Math.max(1, Math.floor(timeData.length / 96));
         const pts: { x: number; y: number }[] = [];
         let waveSignal = false;
 

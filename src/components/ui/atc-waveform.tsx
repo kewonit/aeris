@@ -6,6 +6,7 @@ const DEFAULT_BAR_COUNT = 12;
 const BAR_WIDTH = 2.5;
 const BAR_GAP = 2;
 const MIN_BAR_H = 2.5;
+const FRAME_MIN_MS = 1000 / 30;
 const LERP = 0.22;
 
 // ── Module-level Web Audio singleton ────────────────────────────────
@@ -139,7 +140,7 @@ export function AtcWaveform({
     };
   }, [active, audioElement]);
 
-  // ── Animation loop (always runs - idle or active) ────────────────
+  // ── Animation loop ───────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -166,8 +167,8 @@ export function AtcWaveform({
       }
 
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
       draw2d.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
@@ -182,7 +183,9 @@ export function AtcWaveform({
     let lastBinCount = 0;
     let lastBarCount = 0;
     let lastRenderedAt = 0;
-    const frameIntervalMs = 1000 / 30;
+    const idleFill = document.documentElement.classList.contains("dark")
+      ? "rgba(255, 255, 255, 0.1)"
+      : "rgba(0, 0, 0, 0.1)";
 
     const isPageActive = () =>
       document.visibilityState === "visible" &&
@@ -199,18 +202,22 @@ export function AtcWaveform({
 
       if (
         lastRenderedAt > 0 &&
-        now - lastRenderedAt < frameIntervalMs
+        now - lastRenderedAt < FRAME_MIN_MS
       ) {
         rafRef.current = requestAnimationFrame(draw);
         return;
       }
       lastRenderedAt = now;
-
       const analyser = analyserRef.current;
       const binCount = analyser?.frequencyBinCount ?? 128;
       const { w: cW, h: cH, barCount } = layoutRef.current;
 
-      if (binCount !== lastBinCount || barCount !== lastBarCount) {
+      if (
+        binCount !== lastBinCount ||
+        barCount !== lastBarCount ||
+        !dataArray ||
+        !binRanges
+      ) {
         dataArray = new Uint8Array(binCount) as Uint8Array<ArrayBuffer>;
         binRanges = buildBinRanges(binCount, barCount);
         lastBinCount = binCount;
@@ -219,12 +226,6 @@ export function AtcWaveform({
       if (analyser && dataArray) analyser.getByteFrequencyData(dataArray);
 
       draw2d!.clearRect(0, 0, cW, cH);
-
-      // Compute theme once per frame (not per bar)
-      const isDark = document.documentElement.classList.contains("dark");
-      const idleFill = isDark
-        ? "rgba(255, 255, 255, 0.1)"
-        : "rgba(0, 0, 0, 0.1)";
 
       for (let i = 0; i < barCount; i++) {
         // Average frequency bins in this bar's range

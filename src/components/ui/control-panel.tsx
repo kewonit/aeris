@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -15,7 +16,6 @@ import {
   Settings,
   Keyboard,
   X,
-  Github,
   Info,
   Clock,
 } from "lucide-react";
@@ -31,7 +31,7 @@ import {
   ChangelogContent,
 } from "@/components/ui/control-panel-settings";
 
-type TabId =
+export type ControlPanelTabId =
   | "search"
   | "style"
   | "settings"
@@ -40,7 +40,7 @@ type TabId =
   | "about";
 
 const MAIN_TABS: {
-  id: TabId;
+  id: ControlPanelTabId;
   icon: typeof Search;
   label: string;
 }[] = [
@@ -48,12 +48,12 @@ const MAIN_TABS: {
   { id: "style", icon: MapIcon, label: "Map Style" },
 ];
 
-const PANEL_TABS = [
+export const CONTROL_PANEL_TABS = [
   ...MAIN_TABS,
-  { id: "settings" as TabId, icon: Settings, label: "Settings" },
-  { id: "shortcuts" as TabId, icon: Keyboard, label: "Shortcuts" },
-  { id: "changelog" as TabId, icon: Clock, label: "Changelog" },
-  { id: "about" as TabId, icon: Info, label: "About" },
+  { id: "settings" as ControlPanelTabId, icon: Settings, label: "Settings" },
+  { id: "shortcuts" as ControlPanelTabId, icon: Keyboard, label: "Shortcuts" },
+  { id: "changelog" as ControlPanelTabId, icon: Clock, label: "Changelog" },
+  { id: "about" as ControlPanelTabId, icon: Info, label: "About" },
 ];
 
 const subscribePortalMount = () => () => {};
@@ -81,19 +81,23 @@ export function ControlPanel({
   onLookupFlight,
   onSelectFlight,
 }: ControlPanelProps) {
-  const [openTab, setOpenTab] = useState<TabId | null>(null);
+  const [openTab, setOpenTab] = useState<ControlPanelTabId | null>(null);
   const portalMounted = useSyncExternalStore(
     subscribePortalMount,
     () => true,
     () => false,
   );
 
+  const open = useCallback((tab: ControlPanelTabId) => {
+    setOpenTab(tab);
+  }, []);
+
   useEffect(() => {
     function handleOpenSearch() {
-      setOpenTab("search");
+      open("search");
     }
     function handleOpenShortcuts() {
-      setOpenTab("shortcuts");
+      open("shortcuts");
     }
     window.addEventListener("aeris:open-search", handleOpenSearch);
     window.addEventListener("aeris:open-shortcuts", handleOpenShortcuts);
@@ -101,9 +105,8 @@ export function ControlPanel({
       window.removeEventListener("aeris:open-search", handleOpenSearch);
       window.removeEventListener("aeris:open-shortcuts", handleOpenShortcuts);
     };
-  }, []);
+  }, [open]);
 
-  const open = (tab: TabId) => setOpenTab(tab);
   const close = () => setOpenTab(null);
 
   return (
@@ -186,8 +189,8 @@ function PanelDialog({
   onLookupFlight,
   onSelectFlight,
 }: {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
+  activeTab: ControlPanelTabId;
+  onTabChange: (tab: ControlPanelTabId) => void;
   onClose: () => void;
   airspaceAvailable: boolean;
   activeCity: City;
@@ -280,7 +283,7 @@ function PanelDialog({
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
-              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
+              {CONTROL_PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button
@@ -311,27 +314,6 @@ function PanelDialog({
                 );
               })}
             </nav>
-
-            <div className="mt-auto pt-4 px-1 flex flex-col gap-3">
-              <a
-                href="https://github.com/kewonit/aeris"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="GitHub (opens in new tab)"
-                className="group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors text-foreground/40 hover:text-foreground/55 hover:bg-foreground/4"
-              >
-                <Github
-                  className="relative h-4 w-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="relative text-[14px] font-medium">GitHub</span>
-              </a>
-              <div className="border-t border-foreground/5 pt-2 px-2.5">
-                <p className="text-[10px] font-medium text-foreground/25 tracking-wide">
-                  Data from ADS-B Exchange, adsb.lol &amp; OpenSky
-                </p>
-              </div>
-            </div>
           </div>
 
           <div className="flex flex-1 flex-col min-h-0 sm:h-120">
@@ -341,7 +323,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[14px] font-semibold tracking-tight text-foreground/90"
               >
-                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
+                {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
             </div>
             {/* Desktop header */}
@@ -350,7 +332,7 @@ function PanelDialog({
                 id="panel-dialog-title"
                 className="text-[15px] font-semibold tracking-tight text-foreground/90"
               >
-                {PANEL_TABS.find((t) => t.id === activeTab)?.label}
+                {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
               <motion.button
                 onClick={onClose}
@@ -419,7 +401,7 @@ function PanelDialog({
           {/* Mobile tab bar */}
           <div className="flex sm:hidden items-center gap-0.5 border-t border-border px-2 pt-2 pb-3">
             <nav className="flex flex-1 gap-0.5">
-              {PANEL_TABS.map(({ id, icon: Icon, label }) => {
+              {CONTROL_PANEL_TABS.map(({ id, icon: Icon, label }) => {
                 const active = id === activeTab;
                 return (
                   <button

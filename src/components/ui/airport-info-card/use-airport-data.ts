@@ -59,13 +59,18 @@ export function useMetar(icao: string | null): MetarState {
 
   useEffect(() => {
     if (!icao) {
-      setMetar(null);
-      setLoading(false);
+      abortRef.current?.abort();
+      abortRef.current = null;
       return;
     }
-    fetchMetar(icao);
-    return () => abortRef.current?.abort();
+    const deferred = setTimeout(() => fetchMetar(icao), 0);
+    return () => {
+      clearTimeout(deferred);
+      abortRef.current?.abort();
+    };
   }, [icao, fetchMetar]);
+
+  if (!icao) return { metar: null, loading: false };
 
   return { metar, loading };
 }
@@ -133,13 +138,18 @@ export function useTaf(icao: string | null): TafState {
 
   useEffect(() => {
     if (!icao) {
-      setTaf(null);
-      setLoading(false);
+      abortRef.current?.abort();
+      abortRef.current = null;
       return;
     }
-    fetchTaf(icao);
-    return () => abortRef.current?.abort();
+    const deferred = setTimeout(() => fetchTaf(icao), 0);
+    return () => {
+      clearTimeout(deferred);
+      abortRef.current?.abort();
+    };
   }, [icao, fetchTaf]);
+
+  if (!icao) return { taf: null, loading: false };
 
   return { taf, loading };
 }
@@ -199,6 +209,7 @@ export function useAirportPhoto(lookup: AirportPhotoLookup | null): PhotoState {
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const markErrored = useCallback(() => setErrored(true), []);
 
   const fetchPhoto = useCallback(async (nextLookup: AirportPhotoLookup) => {
     const fresh = getFreshPhoto(nextLookup.cacheKey);
@@ -235,19 +246,30 @@ export function useAirportPhoto(lookup: AirportPhotoLookup | null): PhotoState {
 
   useEffect(() => {
     if (!lookup) {
-      setPhoto(null);
-      setLoading(false);
-      setErrored(false);
+      abortRef.current?.abort();
+      abortRef.current = null;
       return;
     }
-    fetchPhoto(lookup);
-    return () => abortRef.current?.abort();
+    const deferred = setTimeout(() => fetchPhoto(lookup), 0);
+    return () => {
+      clearTimeout(deferred);
+      abortRef.current?.abort();
+    };
   }, [lookup, fetchPhoto]);
+
+  if (!lookup) {
+    return {
+      photo: null,
+      loading: false,
+      errored: false,
+      markErrored,
+    };
+  }
 
   return {
     photo,
     loading,
     errored,
-    markErrored: useCallback(() => setErrored(true), []),
+    markErrored,
   };
 }

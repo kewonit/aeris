@@ -16,13 +16,17 @@ import {
   ChevronRight,
   ChevronDown,
   Plane,
-  Loader2,
   TrendingUp,
 } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { AircraftPhotos } from "@/components/ui/aircraft-photos";
 import { HeroBanner } from "@/components/ui/hero-banner";
+import {
+  OnGroundBadge,
+  AircraftOperatorLine,
+  AircraftTypeLine,
+  PositionSourceBadge,
+} from "@/components/ui/flight-badges";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 import { VerticalProfile } from "@/components/ui/vertical-profile";
 import type { TrailEntry } from "@/hooks/use-trail-history";
@@ -40,13 +44,19 @@ import {
   markAirlineLogoFailed,
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
+import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { useRouteInfo } from "@/hooks/use-route-info";
 import { formatAirportCode } from "@/lib/route-lookup";
+import { AvionicsSection } from "@/components/ui/avionics-section";
+import { DebugDataSection } from "@/components/ui/debug-data-section";
+import { FlightWeatherSection } from "@/components/ui/flight-weather-section";
 import {
   formatAltitude,
   formatSpeed,
+  formatSpeedFromKnots,
   formatVerticalSpeed,
 } from "@/lib/unit-formatters";
+import { cn } from "@/lib/utils";
 
 type FlightCardProps = {
   flight: FlightState | null;
@@ -55,18 +65,19 @@ type FlightCardProps = {
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
   isFpvActive?: boolean;
+  variant?: "floating" | "sidebar";
 };
 
 export function FlightCard({
   flight,
   trail,
-  track,
   onClose,
   onToggleFpv,
   isFpvActive = false,
+  variant = "floating",
 }: FlightCardProps) {
   const { settings } = useSettings();
-  const routeInfo = useRouteInfo(flight, track);
+  const routeInfo = useRouteInfo(flight);
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
@@ -116,6 +127,23 @@ export function FlightCard({
   } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
   const heroPhoto = photos[0] ?? null;
   const [vpOpen, setVpOpen] = useState(false);
+  const isSidebar = variant === "sidebar";
+  const verticalRate =
+    flight?.verticalRate != null && Number.isFinite(flight.verticalRate)
+      ? flight.verticalRate
+      : flight?.geomRate != null && Number.isFinite(flight.geomRate)
+        ? flight.geomRate
+        : null;
+  const showDebugData =
+    settings.showDebugData && hasDebugData(flight?.debugData);
+  const hasAircraftMetadata = Boolean(
+    flight?.typeCode ||
+      flight?.typeDescription ||
+      model ||
+      flight?.registration ||
+      photoAircraft?.manufacturer ||
+      photoAircraft?.owner,
+  );
 
   return (
     <AnimatePresence mode="wait">
@@ -131,19 +159,33 @@ export function FlightCard({
             damping: 28,
             mass: 0.8,
           }}
-          className="w-72 sm:w-80"
+          className={
+            isSidebar
+              ? "h-full w-full"
+              : "w-[22rem] max-w-[calc(100vw-1rem)] sm:w-[23rem]"
+          }
           role="complementary"
           aria-label="Selected flight details"
           aria-live="polite"
         >
-          <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-background/60 shadow-2xl shadow-background/40 backdrop-blur-2xl">
-            <HeroBanner photo={heroPhoto} loading={photosLoading} />
+          <div
+            className={cn(
+              "overflow-hidden text-foreground",
+              isSidebar
+                ? "h-full overflow-y-auto overscroll-contain bg-sidebar/80 [scrollbar-width:thin] supports-[backdrop-filter]:bg-sidebar/70"
+                : "rounded-[28px] border border-foreground/[0.08] bg-background/80 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-2xl supports-[backdrop-filter]:bg-background/70",
+            )}
+          >
+            <HeroBanner
+              photo={heroPhoto}
+              loading={photosLoading}
+            />
 
-            <div className="p-4">
+            <div className={isSidebar ? "px-5 pb-7 pt-4" : "p-4"}>
               <div className="flex items-center gap-3.5">
-                <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-foreground/14 bg-foreground/10 shadow-lg shadow-background/25">
+                <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_26px_rgba(0,0,0,0.18)]">
                   {showLogo ? (
-                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-background/10 bg-white/95 p-3.5 shadow-sm">
+                    <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-[16px] border border-black/5 bg-white/95 p-3 shadow-sm">
                       {!logoLoaded && (
                         <span
                           aria-hidden="true"
@@ -155,7 +197,7 @@ export function FlightCard({
                         alt={company ? `${company} logo` : "Airline logo"}
                         width={68}
                         height={68}
-                        className={`relative h-13 w-13 object-contain transition-opacity duration-200 ${
+                        className={`relative h-11 w-11 object-contain transition-opacity duration-200 ${
                           logoLoaded ? "opacity-100" : "opacity-0"
                         }`}
                         unoptimized
@@ -183,7 +225,7 @@ export function FlightCard({
                       />
                     </span>
                   ) : (
-                    <span className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-xl border border-foreground/10 bg-white/95 p-3.5 shadow-sm">
+                    <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-[16px] border border-black/5 bg-white/95 p-3 shadow-sm">
                       {genericLogoFailed ? (
                         <span className="text-[22px] font-semibold text-background/25">
                           -
@@ -194,7 +236,7 @@ export function FlightCard({
                           alt="Generic airline logo"
                           width={68}
                           height={68}
-                          className="h-13 w-13 object-contain grayscale opacity-80"
+                          className="h-11 w-11 object-contain grayscale opacity-80"
                           unoptimized
                           onError={() => setGenericLogoFailed(true)}
                         />
@@ -202,63 +244,65 @@ export function FlightCard({
                     </span>
                   )}
                 </div>
-                <div>
-                  <p className="text-base font-bold leading-tight text-foreground">
-                    {formatCallsign(flight.callsign)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] font-medium tracking-widest text-foreground/35 uppercase">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <p className="truncate text-[19px] font-semibold leading-tight tracking-tight text-foreground">
+                      {formatCallsign(flight.callsign)}
+                    </p>
+                    <PositionSourceBadge source={flight.positionSource} />
+                    <OnGroundBadge onGround={flight.onGround} />
+                  </div>
+                  <p className="mt-1 truncate text-[11px] font-medium tracking-wide text-foreground/42 uppercase">
                     {flight.icao24}
                     {flightNum ? ` · #${flightNum}` : ""}
                   </p>
                 </div>
               </div>
 
-              {company && (
-                <div className="mt-2.5 flex items-center gap-1.5">
-                  <Building2 className="h-3 w-3 text-foreground/25" />
-                  <p className="text-xs font-medium text-foreground/50">
-                    {company}
-                    {flight?.typeDescription ? (
-                      <span className="text-foreground/30">
-                        {" "}
-                        · {flight.typeDescription}
-                      </span>
-                    ) : model ? (
-                      <span className="text-foreground/30"> · {model}</span>
-                    ) : null}
-                  </p>
+              {(company || hasAircraftMetadata) && (
+                <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                  {company && (
+                    <GroupedRow icon={<Building2 className="h-3.5 w-3.5" />}>
+                      <p className="min-w-0 truncate text-[13px] font-medium text-foreground/78">
+                        {company}
+                      </p>
+                    </GroupedRow>
+                  )}
+
+                  {hasAircraftMetadata && (
+                    <GroupedRow
+                      icon={<Plane className="h-3.5 w-3.5" />}
+                      divided={Boolean(company)}
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <AircraftTypeLine
+                          typeCode={flight.typeCode}
+                          typeDescription={flight.typeDescription ?? model}
+                          registration={flight.registration}
+                        />
+                        <AircraftOperatorLine
+                          manufacturer={photoAircraft?.manufacturer}
+                          owner={photoAircraft?.owner}
+                          airlineName={company}
+                        />
+                      </div>
+                    </GroupedRow>
+                  )}
                 </div>
               )}
-
-              {flight?.registration && (
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <Plane className="h-3 w-3 text-foreground/25" />
-                  <p className="text-[11px] font-mono font-medium text-foreground/40">
-                    {flight.registration}
-                    {flight.typeCode && !flight.typeDescription ? (
-                      <span className="ml-1 text-foreground/25">
-                        [{flight.typeCode}]
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-
-              {/* Route information banner */}
-              <RouteBanner routeInfo={routeInfo} />
 
               {/* Military / Emergency indicators */}
               {(isMilitary(flight.dbFlags) ||
                 isEmergencyStatus(flight.emergencyStatus)) && (
-                <div className="mt-2 flex items-center gap-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {isMilitary(flight.dbFlags) && (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-amber-400/70">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-amber-300/85">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-300/80" />
                       Military
                     </span>
                   )}
                   {isEmergencyStatus(flight.emergencyStatus) && (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-red-400/80">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-red-300/90">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
                       {flight.emergencyStatus}
                     </span>
@@ -266,18 +310,50 @@ export function FlightCard({
                 </div>
               )}
 
-              <div className="mt-3 h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+              <RouteBanner
+                routeInfo={routeInfo}
+                showSource={settings.showDebugData}
+              />
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              {routeInfo.available &&
+                (routeInfo.origin?.icao || routeInfo.destination?.icao) && (
+                  <div className="mt-3">
+                    <FlightWeatherSection
+                      routeInfo={routeInfo}
+                      unitSystem={settings.unitSystem}
+                    />
+                  </div>
+                )}
+
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-[24px] border border-foreground/[0.07] bg-foreground/[0.035] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                 <Metric
                   icon={<ArrowUp className="h-3 w-3" />}
                   label="Altitude"
-                  value={formatAltitude(flight.baroAltitude, settings.unitSystem)}
+                  value={formatAltitude(
+                    flight.baroAltitude,
+                    settings.unitSystem,
+                  )}
+                  secondary={
+                    flight.geoAltitude !== null
+                      ? `GPS ${formatAltitude(
+                          flight.geoAltitude,
+                          settings.unitSystem,
+                        )}`
+                      : null
+                  }
                 />
                 <Metric
                   icon={<Gauge className="h-3 w-3" />}
                   label="Speed"
                   value={formatSpeed(flight.velocity, settings.unitSystem)}
+                  secondary={
+                    flight.tas != null && Number.isFinite(flight.tas)
+                      ? `TAS ${formatSpeedFromKnots(
+                          flight.tas,
+                          settings.unitSystem,
+                        )}`
+                      : null
+                  }
                 />
                 <Metric
                   icon={<Compass className="h-3 w-3" />}
@@ -292,39 +368,47 @@ export function FlightCard({
                   icon={<ArrowDown className="h-3 w-3" />}
                   label="V/S"
                   value={formatVerticalSpeed(
-                    flight.verticalRate,
+                    verticalRate,
                     settings.unitSystem,
                   )}
                 />
               </div>
 
-              <div className="mt-3 h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+              <div className="mt-3">
+                <AvionicsSection
+                  flight={flight}
+                  unitSystem={settings.unitSystem}
+                />
+              </div>
 
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Globe className="h-3 w-3 text-foreground/25" />
-                  <p className="text-[11px] text-foreground/40">
+              <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                <GroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
+                  <p className="text-[13px] text-foreground/65">
                     {flight.originCountry}
                   </p>
-                </div>
+                </GroupedRow>
                 {cardinal && (
-                  <div className="flex items-center gap-1.5">
-                    <Navigation
-                      className="h-3 w-3 text-foreground/25"
-                      style={{
-                        transform:
-                          heading !== null && Number.isFinite(heading)
-                            ? `rotate(${heading}deg)`
-                            : undefined,
-                      }}
-                    />
-                    <p className="text-[11px] text-foreground/40">
+                  <GroupedRow
+                    icon={
+                      <Navigation
+                        className="h-3.5 w-3.5"
+                        style={{
+                          transform:
+                            heading !== null && Number.isFinite(heading)
+                              ? `rotate(${heading}deg)`
+                              : undefined,
+                        }}
+                      />
+                    }
+                    divided
+                  >
+                    <p className="text-[13px] text-foreground/65">
                       Heading {cardinal}
                       {flight.latitude !== null &&
                         flight.longitude !== null &&
                         Number.isFinite(flight.latitude) &&
                         Number.isFinite(flight.longitude) && (
-                          <span className="text-foreground/20">
+                          <span className="text-foreground/35">
                             {" "}
                             · {Math.abs(flight.latitude).toFixed(2)}°
                             {flight.latitude >= 0 ? "N" : "S"},{" "}
@@ -333,40 +417,49 @@ export function FlightCard({
                           </span>
                         )}
                     </p>
-                  </div>
+                  </GroupedRow>
                 )}
                 {flight.squawk && (
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-3 w-3 text-center text-[8px] font-bold leading-3 ${
-                        isEmergencySquawk(flight.squawk)
-                          ? "text-red-400"
-                          : "text-foreground/25"
-                      }`}
-                    >
-                      SQ
-                    </span>
+                  <GroupedRow
+                    icon={
+                      <span
+                        className={`text-[9px] font-bold leading-none ${
+                          isEmergencySquawk(flight.squawk)
+                            ? "text-red-300"
+                            : "text-foreground/45"
+                        }`}
+                      >
+                        SQ
+                      </span>
+                    }
+                    divided
+                  >
                     <p
-                      className={`font-mono text-[11px] tabular-nums ${
+                      className={`font-mono text-[13px] tabular-nums ${
                         isEmergencySquawk(flight.squawk)
-                          ? "text-red-400"
-                          : "text-foreground/40"
+                          ? "text-red-300"
+                          : "text-foreground/65"
                       }`}
                     >
                       {flight.squawk}
                       {isEmergencySquawk(flight.squawk) && (
-                        <span className="ml-1.5 text-[9px] font-medium tracking-wide text-red-400/80">
+                        <span className="ml-2 font-sans text-[11px] font-medium tracking-wide text-red-300/85">
                           {squawkLabel(flight.squawk)}
                         </span>
                       )}
                     </p>
-                  </div>
+                  </GroupedRow>
                 )}
               </div>
 
+              {showDebugData && (
+                <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                  <DebugDataSection data={flight.debugData} />
+                </div>
+              )}
+
               {onToggleFpv && (
-                <div className="mt-3">
-                  <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+                <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                   <button
                     type="button"
                     onClick={() =>
@@ -375,9 +468,9 @@ export function FlightCard({
                       onToggleFpv(flight.icao24)
                     }
                     disabled={!isFpvActive && !canEnterFpv}
-                    className={`mt-2 flex w-full items-center gap-1.5 text-left transition-colors ${
+                    className={`flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] active:bg-foreground/[0.07] ${
                       !isFpvActive && !canEnterFpv
-                        ? "opacity-35 cursor-not-allowed"
+                        ? "cursor-not-allowed opacity-35"
                         : ""
                     }`}
                     aria-label={
@@ -397,18 +490,20 @@ export function FlightCard({
                             : "FPV unavailable (no position data)"
                     }
                   >
-                    <Eye
-                      className={`h-3 w-3 ${isFpvActive ? "text-emerald-400" : "text-foreground/25"}`}
-                    />
+                    <IconCell active={isFpvActive}>
+                      <Eye
+                        className={`h-3.5 w-3.5 ${isFpvActive ? "text-emerald-300" : ""}`}
+                      />
+                    </IconCell>
                     <span
-                      className={`text-[11px] font-medium tracking-wide uppercase ${isFpvActive ? "text-emerald-400/70" : "text-foreground/30"}`}
+                      className={`min-w-0 flex-1 text-[13px] font-medium ${isFpvActive ? "text-emerald-300/90" : "text-foreground/72"}`}
                     >
                       {isFpvActive
                         ? "Exit First Person View"
                         : "First Person View"}
                     </span>
                     <ChevronRight
-                      className={`ml-auto h-2.5 w-2.5 ${isFpvActive ? "text-emerald-400/40" : "text-foreground/20"}`}
+                      className={`h-4 w-4 shrink-0 ${isFpvActive ? "text-emerald-300/45" : "text-foreground/24"}`}
                     />
                   </button>
                 </div>
@@ -422,12 +517,11 @@ export function FlightCard({
               />
 
               {trail && trail.path.length >= 3 && (
-                <div className="mt-3">
-                  <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+                <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                   <button
                     type="button"
                     onClick={() => setVpOpen((o) => !o)}
-                    className="mt-2 flex w-full items-center gap-1.5 text-left transition-colors hover:opacity-70"
+                    className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] active:bg-foreground/[0.07]"
                     aria-expanded={vpOpen}
                     aria-label={
                       vpOpen
@@ -435,12 +529,14 @@ export function FlightCard({
                         : "Expand vertical profile"
                     }
                   >
-                    <TrendingUp className="h-3 w-3 text-foreground/25" />
-                    <span className="text-[11px] font-medium tracking-wide text-foreground/30 uppercase">
+                    <IconCell>
+                      <TrendingUp className="h-3.5 w-3.5" />
+                    </IconCell>
+                    <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground/72">
                       Vertical Profile
                     </span>
                     <ChevronDown
-                      className={`ml-auto h-3 w-3 text-foreground/20 transition-transform duration-200 ${vpOpen ? "rotate-180" : ""}`}
+                      className={`h-4 w-4 shrink-0 text-foreground/24 transition-transform duration-200 ${vpOpen ? "rotate-180" : ""}`}
                     />
                   </button>
                   <AnimatePresence initial={false}>
@@ -451,28 +547,31 @@ export function FlightCard({
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2, ease: "easeInOut" }}
-                        className="overflow-hidden"
+                        className="overflow-hidden border-t border-foreground/[0.06]"
                       >
-                        <VerticalProfile
-                          trail={trail}
-                          navAltitudeMcp={flight.navAltitudeMcp}
-                        />
+                        <div className="px-3 pb-3 pt-2">
+                          <VerticalProfile
+                            trail={trail}
+                            navAltitudeMcp={flight.navAltitudeMcp}
+                          />
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
               )}
 
-              <div className="mt-3">
-                <div className="h-px bg-linear-to-r from-transparent via-foreground/6 to-transparent" />
+              <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="mt-2 flex w-full items-center gap-1.5 text-left transition-colors hover:opacity-70"
+                  className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] active:bg-foreground/[0.07]"
                   aria-label="Deselect flight"
                 >
-                  <X className="h-3 w-3 text-foreground/25" />
-                  <span className="text-[11px] font-medium tracking-wide text-foreground/30 uppercase">
+                  <IconCell>
+                    <X className="h-3.5 w-3.5" />
+                  </IconCell>
+                  <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground/72">
                     Close
                   </span>
                 </button>
@@ -513,47 +612,102 @@ function isEmergencyStatus(status?: string | null): boolean {
   return !!status && status !== "none";
 }
 
-function Metric({
-  icon,
-  label,
-  value,
+function hasDebugData(data: FlightState["debugData"]): boolean {
+  return !!(
+    data &&
+    (data.nic != null ||
+      data.nacP != null ||
+      data.nacV != null ||
+      data.sil != null ||
+      data.version != null ||
+      (data.alert != null && data.alert !== 0) ||
+      data.messages != null ||
+      data.seen != null ||
+      data.rssi != null)
+  );
+}
+
+function IconCell({
+  children,
+  active = false,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
+  children: React.ReactNode;
+  active?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-foreground/25">
-        {icon}
-        <span className="text-[10px] font-medium tracking-widest uppercase">
-          {label}
-        </span>
-      </div>
-      <p className="text-sm font-semibold tabular-nums text-foreground/90">
-        {value}
-      </p>
+    <span
+      className={cn(
+        "flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/36 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]",
+        active &&
+          "border-emerald-300/20 bg-emerald-400/10 text-emerald-300/90",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function GroupedRow({
+  icon,
+  children,
+  divided = false,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  divided?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-11 items-center gap-3 px-3.5 py-2.5",
+        divided && "border-t border-foreground/[0.06]",
+      )}
+    >
+      <IconCell>{icon}</IconCell>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
 
-// ── Route Banner ───────────────────────────────────────────────────────
-
-function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
-  // Loading state
-  if (routeInfo.loading && !routeInfo.origin && !routeInfo.destination) {
-    return (
-      <div className="mt-3 flex items-center gap-2 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-2.5">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/25" />
-        <span className="text-[11px] text-foreground/30">
-          Looking up route…
+function Metric({
+  icon,
+  label,
+  value,
+  secondary,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  secondary?: string | null;
+}) {
+  return (
+    <div className="flex min-h-[78px] flex-col justify-between rounded-[18px] border border-foreground/[0.055] bg-background/35 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="flex items-center gap-1.5 text-foreground/38">
+        {icon}
+        <span className="text-[10px] font-semibold tracking-wide uppercase">
+          {label}
         </span>
       </div>
-    );
-  }
+      <p className="mt-2 text-[15px] font-semibold leading-none tabular-nums text-foreground/92">
+        {value}
+      </p>
+      {secondary ? (
+        <p className="mt-1 truncate text-[10px] font-medium text-foreground/42">
+          {secondary}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
-  // No route data at all
-  if (!routeInfo.origin && !routeInfo.destination) return null;
+function RouteBanner({
+  routeInfo,
+  showSource = false,
+}: {
+  routeInfo: FlightRouteInfo;
+  showSource?: boolean;
+}) {
+  if (!routeInfo.available) return null;
 
   const originCode = routeInfo.origin
     ? formatAirportCode(routeInfo.origin)
@@ -562,18 +716,19 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
     ? formatAirportCode(routeInfo.destination)
     : null;
 
+  if (!originCode && !destCode) return null;
+
   return (
-    <div className="mt-3 rounded-xl border border-foreground/6 bg-foreground/[0.03] px-3.5 py-3">
+    <div className="mt-4 rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
       <div className="flex items-center">
-        {/* Origin */}
         <div className="flex min-w-0 flex-1 flex-col">
           {originCode ? (
             <>
-              <span className="text-[13px] font-extrabold tracking-wider text-foreground/90">
+              <span className="text-[17px] font-semibold tracking-tight text-foreground/92">
                 {originCode}
               </span>
               {routeInfo.origin?.municipality && (
-                <span className="mt-0.5 truncate text-[10px] text-foreground/35">
+                <span className="mt-0.5 truncate text-[11px] font-medium text-foreground/42">
                   {routeInfo.origin.municipality}
                 </span>
               )}
@@ -583,22 +738,22 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
           )}
         </div>
 
-        {/* Flight path indicator */}
         <div className="mx-2 flex items-center gap-1.5">
-          <div className="h-px w-5 bg-foreground/10" />
-          <Plane className="h-3.5 w-3.5 shrink-0 text-foreground/25" />
-          <div className="h-px w-5 bg-foreground/10" />
+          <div className="h-px w-5 bg-foreground/12" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-background/40 text-foreground/42 ring-1 ring-foreground/[0.06]">
+            <Plane className="h-3.5 w-3.5 shrink-0" />
+          </span>
+          <div className="h-px w-5 bg-foreground/12" />
         </div>
 
-        {/* Destination */}
         <div className="flex min-w-0 flex-1 flex-col items-end text-right">
           {destCode ? (
             <>
-              <span className="text-[13px] font-extrabold tracking-wider text-foreground/90">
+              <span className="text-[17px] font-semibold tracking-tight text-foreground/92">
                 {destCode}
               </span>
               {routeInfo.destination?.municipality && (
-                <span className="mt-0.5 truncate text-[10px] text-foreground/35">
+                <span className="mt-0.5 truncate text-[11px] font-medium text-foreground/42">
                   {routeInfo.destination.municipality}
                 </span>
               )}
@@ -608,6 +763,14 @@ function RouteBanner({ routeInfo }: { routeInfo: FlightRouteInfo }) {
           )}
         </div>
       </div>
+
+      {showSource && routeInfo.source && (
+        <div className="mt-2 flex justify-center">
+          <span className="rounded-full border border-foreground/[0.06] bg-background/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-foreground/35">
+            {routeInfo.source}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

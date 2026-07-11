@@ -276,7 +276,7 @@ export function FlightLayers({
         // MLAT positions (~100m accuracy) jitter visibly compared to
         // ADS-B (~10m). Apply EMA blending against the previous position
         // to suppress the noise while tracking real movement.
-        const isMLAT = f.positionSource === 1;
+        const isMLAT = f.positionSource === "mlat";
         let lng = f.longitude;
         let lat = f.latitude;
         if (isMLAT && prev) {

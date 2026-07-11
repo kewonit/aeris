@@ -43,9 +43,10 @@ export type AirportInfoCardProps = {
   /**
    * Layout variant:
    * - `"desktop"` (default): fixed width, max-height minus top bar, mounted/exit slides up.
+   * - `"sidebar"`: fills the shared left sidebar without its own outer card chrome.
    * - `"mobile"`: full width, taller max-height, subdued entrance (parent handles drag).
    */
-  variant?: "desktop" | "mobile";
+  variant?: "desktop" | "mobile" | "sidebar";
 };
 
 /**
@@ -127,26 +128,42 @@ export function AirportInfoCard({
   if (!airport || !board.isActive) return null;
 
   const isMobile = variant === "mobile";
+  const isSidebar = variant === "sidebar";
+  const contentInsetClass = isSidebar ? "px-5" : "px-4";
   const outerClass = isMobile
     ? "pointer-events-auto fixed inset-x-0 bottom-0 z-40 w-full px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
-    : "w-80 sm:w-96";
-  const innerMaxH = isMobile ? "max-h-[85dvh]" : "max-h-[calc(100dvh-5rem)]";
+    : isSidebar
+      ? "h-full w-full"
+      : "w-80 sm:w-96";
+  const innerMaxH = isMobile
+    ? "max-h-[85dvh]"
+    : isSidebar
+      ? "h-full"
+      : "max-h-[calc(100dvh-5rem)]";
 
   const cardInitial = reduceMotion
     ? false
     : isMobile
       ? { y: "100%" as const }
-      : { opacity: 0, y: 12, scale: 0.97 };
-  const cardAnimate = isMobile ? { y: 0 } : { opacity: 1, y: 0, scale: 1 };
+      : isSidebar
+        ? { opacity: 0, x: -8 }
+        : { opacity: 0, y: 12, scale: 0.97 };
+  const cardAnimate = isMobile
+    ? { y: 0 }
+    : isSidebar
+      ? { opacity: 1, x: 0 }
+      : { opacity: 1, y: 0, scale: 1 };
   const cardExit = reduceMotion
     ? { opacity: 0 }
     : isMobile
       ? { y: "100%" as const }
-      : { opacity: 0, y: 12, scale: 0.97 };
+      : isSidebar
+        ? { opacity: 0, x: -8 }
+        : { opacity: 0, y: 12, scale: 0.97 };
 
   return (
     <motion.div
-      layout={isMobile ? false : "position"}
+      layout={isMobile || isSidebar ? false : "position"}
       initial={cardInitial}
       animate={cardAnimate}
       exit={cardExit}
@@ -170,7 +187,11 @@ export function AirportInfoCard({
       }}
     >
       <div
-        className={`relative flex ${innerMaxH} flex-col overflow-hidden rounded-2xl bg-background/60 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_0_0_1px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.4),0_24px_64px_-16px_rgba(0,0,0,0.6)] backdrop-blur-2xl dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_0_0_1px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(0,0,0,0.6),0_24px_64px_-16px_rgba(0,0,0,0.8)]`}
+        className={
+          isSidebar
+            ? `relative flex ${innerMaxH} flex-col overflow-hidden bg-transparent`
+            : `relative flex ${innerMaxH} flex-col overflow-hidden rounded-2xl bg-background/60 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_0_0_1px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.4),0_24px_64px_-16px_rgba(0,0,0,0.6)] backdrop-blur-2xl dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_0_0_1px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(0,0,0,0.6),0_24px_64px_-16px_rgba(0,0,0,0.8)]`
+        }
       >
         {isMobile && (
           <>
@@ -200,7 +221,7 @@ export function AirportInfoCard({
           icao={icao}
           city={airport.city}
           country={airport.country}
-          onClose={isMobile ? undefined : onClose}
+          onClose={isMobile || isSidebar ? undefined : onClose}
         />
 
         <CardHeader
@@ -230,7 +251,7 @@ export function AirportInfoCard({
                 onValueChange={(v) => setMainTab(v as MainTab)}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <div className="flex flex-col gap-3 px-4 pt-3">
+                <div className={`flex flex-col gap-3 ${contentInsetClass} pt-3`}>
                   <motion.div
                     initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -292,7 +313,9 @@ export function AirportInfoCard({
                   </motion.div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4 [scrollbar-width:thin]">
+                <div
+                  className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${contentInsetClass} pt-3 pb-5 [scrollbar-width:thin]`}
+                >
                   <TabsContent
                     value="flights"
                     className="flex flex-col gap-3 data-[state=inactive]:hidden"
