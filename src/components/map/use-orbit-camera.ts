@@ -6,6 +6,7 @@ import { smoothstep } from "./camera-controller-utils";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import type { Settings } from "@/hooks/use-settings";
+import { ACTIVE_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
 
 const IDLE_TIMEOUT_MS = 5_000;
 const ORBIT_EASE_IN_MS = 2000;
@@ -37,34 +38,60 @@ export function useOrbitCamera(
       followFlight ||
       fpvFlight
     ) {
-      if (orbitFrameRef.current) cancelAnimationFrame(orbitFrameRef.current);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      if (orbitFrameRef.current != null) {
+        cancelAnimationFrame(orbitFrameRef.current);
+        orbitFrameRef.current = null;
+      }
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
       return;
     }
 
-    const prefersReducedMotion =
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    if (prefersReducedMotion) return;
+    const reducedMotionQuery = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    );
+    const isPageActive = () =>
+      document.visibilityState === "visible" &&
+      (typeof document.hasFocus !== "function" || document.hasFocus());
 
     function startOrbit() {
-      if (!map || isInteractingRef.current) return;
+      if (
+        !map ||
+        isInteractingRef.current ||
+        reducedMotionQuery?.matches ||
+        !isPageActive() ||
+        orbitFrameRef.current != null
+      ) {
+        return;
+      }
 
       const resumeStart = performance.now();
       let lastTime = 0;
+      let lastRenderedAt = 0;
 
       function tick(now: number) {
-        if (!map || isInteractingRef.current) return;
-        // Skip orbit rotation when tab is hidden - saves CPU and
-        // prevents large bearing jumps on resume.
-        if (document.hidden) {
-          lastTime = 0;
+        orbitFrameRef.current = null;
+        if (
+          !map ||
+          isInteractingRef.current ||
+          reducedMotionQuery?.matches ||
+          !isPageActive()
+        ) {
+          return;
+        }
+
+        if (!isFrameDue(lastRenderedAt, now, ACTIVE_FRAME_INTERVAL_MS)) {
           orbitFrameRef.current = requestAnimationFrame(tick);
           return;
         }
+
         const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 1 / 60;
         lastTime = now;
+        lastRenderedAt = now;
 
-        const resumeElapsed = performance.now() - resumeStart;
+        const resumeElapsed = now - resumeStart;
         const t = Math.min(resumeElapsed / ORBIT_EASE_IN_MS, 1);
         const easeFactor = smoothstep(t);
         const bearing =
@@ -77,21 +104,49 @@ export function useOrbitCamera(
     }
 
     function stopOrbit() {
-      if (orbitFrameRef.current) {
+      if (orbitFrameRef.current != null) {
         cancelAnimationFrame(orbitFrameRef.current);
         orbitFrameRef.current = null;
       }
     }
 
-    function resetIdleTimer() {
-      isInteractingRef.current = true;
+    function scheduleOrbitAfterIdle() {
       stopOrbit();
-
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(() => {
+        idleTimerRef.current = null;
+        if (!isPageActive() || reducedMotionQuery?.matches) return;
         isInteractingRef.current = false;
         startOrbit();
       }, IDLE_TIMEOUT_MS);
+    }
+
+    function resetIdleTimer() {
+      isInteractingRef.current = true;
+      scheduleOrbitAfterIdle();
+    }
+
+    function suspendOrbit() {
+      stopOrbit();
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    }
+
+    function resumeOrbit() {
+      if (!isPageActive() || reducedMotionQuery?.matches) return;
+      scheduleOrbitAfterIdle();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") resumeOrbit();
+      else suspendOrbit();
+    }
+
+    function handleReducedMotionChange() {
+      if (reducedMotionQuery?.matches) suspendOrbit();
+      else resumeOrbit();
     }
 
     const events = ["mousedown", "wheel", "touchstart"] as const;
@@ -108,26 +163,47 @@ export function useOrbitCamera(
     const onCameraStop = (e: Event) => {
       const { type } = (e as CustomEvent).detail ?? {};
       if (type === "bearing") {
-        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = setTimeout(() => {
-          isInteractingRef.current = false;
-          startOrbit();
-        }, IDLE_TIMEOUT_MS);
+        scheduleOrbitAfterIdle();
       }
     };
     window.addEventListener("aeris:camera-stop", onCameraStop);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", suspendOrbit);
+    window.addEventListener("focus", resumeOrbit);
+    window.addEventListener("pagehide", suspendOrbit);
+    window.addEventListener("pageshow", resumeOrbit);
+    document.addEventListener("freeze", suspendOrbit);
+    document.addEventListener("resume", resumeOrbit);
+    reducedMotionQuery?.addEventListener("change", handleReducedMotionChange);
 
-    idleTimerRef.current = setTimeout(() => {
-      isInteractingRef.current = false;
-      startOrbit();
-    }, IDLE_TIMEOUT_MS);
+    resumeOrbit();
 
     return () => {
-      stopOrbit();
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      suspendOrbit();
       events.forEach((e) => container.removeEventListener(e, resetIdleTimer));
       map.off("movestart", onMoveStart);
       window.removeEventListener("aeris:camera-stop", onCameraStop);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", suspendOrbit);
+      window.removeEventListener("focus", resumeOrbit);
+      window.removeEventListener("pagehide", suspendOrbit);
+      window.removeEventListener("pageshow", resumeOrbit);
+      document.removeEventListener("freeze", suspendOrbit);
+      document.removeEventListener("resume", resumeOrbit);
+      reducedMotionQuery?.removeEventListener(
+        "change",
+        handleReducedMotionChange,
+      );
     };
-  }, [map, isLoaded, city, followFlight, fpvFlight, settings.autoOrbit]);
+  }, [
+    map,
+    isLoaded,
+    city,
+    followFlight,
+    fpvFlight,
+    settings.autoOrbit,
+    isInteractingRef,
+    orbitFrameRef,
+    idleTimerRef,
+  ]);
 }

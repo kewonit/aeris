@@ -92,7 +92,7 @@ export function normalizeSettings(input: Settings): Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  autoOrbit: true,
+  autoOrbit: false,
   orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
@@ -135,6 +135,14 @@ export function migrateSettingsDefaults(
   }
 
   const next = { ...input };
+
+  // Auto-orbit previously defaulted on and continuously drove both map
+  // renderers. We cannot distinguish an inherited v5 default from an explicit
+  // choice, so migrate every older installation to the safe default once.
+  // A user who opts back in will persist that preference in the v6 envelope.
+  if (fromVersion < 6) {
+    next.autoOrbit = false;
+  }
 
   if (
     fromVersion < 4 &&

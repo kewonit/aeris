@@ -16,7 +16,10 @@ export function useTrailHistory(flights?: FlightState[]) {
       return;
     }
 
-    trailStore.ingestLiveFlights(flights);
+    // useFlights only publishes an empty array after its transient-empty guard,
+    // so an empty snapshot here is authoritative and should release stale
+    // non-selected trail geometry.
+    trailStore.ingestLiveFlights(flights, { authoritativeEmpty: true });
   }, [flights]);
 
   return useTrailStoreSnapshot((state) => state.trails);

@@ -16,6 +16,7 @@ import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToElevation } from "@/lib/flight-utils";
+import { ACTIVE_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
 
 const DEFAULT_ZOOM = 9.2;
 const DEFAULT_PITCH = 49;
@@ -100,6 +101,7 @@ export function useFpvCamera(
     let frameId: number | null = null;
     let startupTimer: ReturnType<typeof setTimeout> | null = null;
     let prevBearing = bearing;
+    let lastRenderedAt = 0;
 
     let lastInteractionTime = 0;
     let recenterStartTime = 0;
@@ -133,35 +135,69 @@ export function useFpvCamera(
       map.on(t, onMapInteraction);
     }
 
+    const isPageActive = () =>
+      document.visibilityState === "visible" &&
+      (typeof document.hasFocus !== "function" || document.hasFocus());
+
+    function scheduleFrame() {
+      if (
+        frameId == null &&
+        startupTimer == null &&
+        isFpvActiveRef.current &&
+        isPageActive()
+      ) {
+        frameId = requestAnimationFrame(keepInFrame);
+      }
+    }
+
+    function suspendFrames() {
+      if (frameId != null) cancelAnimationFrame(frameId);
+      frameId = null;
+      lastRenderedAt = 0;
+    }
+
     // Reset FPV tracking on tab resume to prevent camera jumps from
     // stale lerp values accumulated during the hidden period.
     let wasHidden = false;
     function onFpvVisibilityResume() {
-      if (document.visibilityState === "visible" && wasHidden) {
+      if (isPageActive() && wasHidden) {
         wasHidden = false;
         if (map) prevBearing = map.getBearing();
         fpvOffsetX = 0;
         fpvOffsetY = 0;
         lastInteractionTime = 0;
         recenterStartTime = 0;
-      } else if (document.visibilityState === "hidden") {
+        scheduleFrame();
+      } else if (!isPageActive()) {
         wasHidden = true;
+        suspendFrames();
       }
     }
     document.addEventListener("visibilitychange", onFpvVisibilityResume);
+    window.addEventListener("blur", onFpvVisibilityResume);
+    window.addEventListener("focus", onFpvVisibilityResume);
+    window.addEventListener("pagehide", suspendFrames);
+    window.addEventListener("pageshow", onFpvVisibilityResume);
+    document.addEventListener("freeze", suspendFrames);
+    document.addEventListener("resume", onFpvVisibilityResume);
 
-    function keepInFrame() {
+    function keepInFrame(now: number) {
+      frameId = null;
       if (!isFpvActiveRef.current || !map) {
-        frameId = null;
         return;
       }
 
-      // Skip camera updates when tab is hidden - saves CPU and
-      // prevents jarring camera jumps from stale alpha lerps on resume.
-      if (document.hidden) {
-        frameId = requestAnimationFrame(keepInFrame);
+      if (!isPageActive()) {
+        wasHidden = true;
+        lastRenderedAt = 0;
         return;
       }
+
+      if (!isFrameDue(lastRenderedAt, now, ACTIVE_FRAME_INTERVAL_MS)) {
+        scheduleFrame();
+        return;
+      }
+      lastRenderedAt = now;
 
       const interpPos = fpvPosRef.current?.current ?? null;
       const live = fpvFlightRef.current;
@@ -172,7 +208,7 @@ export function useFpvCamera(
       const posTrack = interpPos?.track ?? live?.trueTrack ?? null;
 
       if (posLng == null || posLat == null) {
-        frameId = requestAnimationFrame(keepInFrame);
+        scheduleFrame();
         return;
       }
 
@@ -181,11 +217,10 @@ export function useFpvCamera(
         !Number.isFinite(posLat) ||
         Math.abs(posLat) > 90
       ) {
-        frameId = requestAnimationFrame(keepInFrame);
+        scheduleFrame();
         return;
       }
 
-      const now = performance.now();
       const idleMs =
         lastInteractionTime === 0
           ? FPV_IDLE_RECENTER_MS + 1
@@ -266,9 +301,22 @@ export function useFpvCamera(
         const pitchAlpha = 0.05 * trackingStrength;
         const newPitch = lerp(currentPitch, FPV_PITCH, pitchAlpha);
 
-        programmaticMove = true;
-        try {
-          map.easeTo({
+        const centerLngDelta = Math.abs(
+          ((targetLng - center.lng + 540) % 360) - 180,
+        );
+        const shouldMove =
+          centerLngDelta > 1e-7 ||
+          Math.abs(targetLat - center.lat) > 1e-7 ||
+          Math.abs(bearingToLive) > 0.02 ||
+          Math.abs(smoothZoom - currentZoom) > 0.001 ||
+          Math.abs(newPitch - currentPitch) > 0.02 ||
+          Math.abs(fpvOffsetX) > 0.1 ||
+          Math.abs(fpvOffsetY) > 0.1;
+
+        if (shouldMove) {
+          programmaticMove = true;
+          try {
+            map.easeTo({
             center: [
               lerpLng(center.lng, targetLng, centerAlpha),
               lerp(center.lat, targetLat, centerAlpha),
@@ -280,24 +328,31 @@ export function useFpvCamera(
             duration: 0,
             animate: false,
             essential: true,
-          });
-        } finally {
-          programmaticMove = false;
+            });
+          } finally {
+            programmaticMove = false;
+          }
         }
       }
 
-      frameId = requestAnimationFrame(keepInFrame);
+      scheduleFrame();
     }
 
     startupTimer = setTimeout(() => {
       startupTimer = null;
-      frameId = requestAnimationFrame(keepInFrame);
+      scheduleFrame();
     }, FPV_FLY_DURATION + 300);
 
     return () => {
       if (startupTimer) clearTimeout(startupTimer);
       if (frameId != null) cancelAnimationFrame(frameId);
       document.removeEventListener("visibilitychange", onFpvVisibilityResume);
+      window.removeEventListener("blur", onFpvVisibilityResume);
+      window.removeEventListener("focus", onFpvVisibilityResume);
+      window.removeEventListener("pagehide", suspendFrames);
+      window.removeEventListener("pageshow", onFpvVisibilityResume);
+      document.removeEventListener("freeze", suspendFrames);
+      document.removeEventListener("resume", onFpvVisibilityResume);
       for (const t of interactionEventTypes) {
         map.off(t, onMapInteraction);
       }
@@ -306,5 +361,15 @@ export function useFpvCamera(
         isFpvActiveRef.current = false;
       }
     };
-  }, [map, isLoaded, fpvFlight?.icao24, city]);
+  }, [
+    map,
+    isLoaded,
+    fpvFlight?.icao24,
+    city,
+    altitudeDisplayMode,
+    fpvFlightRef,
+    fpvPosRef,
+    isFpvActiveRef,
+    prevFpvRef,
+  ]);
 }

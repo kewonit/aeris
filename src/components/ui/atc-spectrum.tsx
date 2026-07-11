@@ -8,7 +8,10 @@ import {
   ChartNoAxesColumn,
   type LucideIcon,
 } from "lucide-react";
-import { getOrCreateConnection } from "@/components/ui/atc-waveform";
+import {
+  getOrCreateConnection,
+  releaseAudioConnection,
+} from "@/components/ui/atc-waveform";
 
 // -- Constants ----------------------------------------------------------
 
@@ -142,6 +145,10 @@ export function AtcSpectrum({
     }
 
     analyserRef.current = getOrCreateConnection(audioElement);
+    const connected = analyserRef.current !== null;
+    return () => {
+      if (connected) releaseAudioConnection();
+    };
   }, [active, audioElement]);
 
   // -- Resize observer for responsive canvas ---------------------------
@@ -178,22 +185,38 @@ export function AtcSpectrum({
     let timeData: Uint8Array<ArrayBuffer> | null = null;
     let binRanges: [number, number][] | null = null;
     let lastBinCount = 0;
-    let lastFrameAt = 0;
+    let lastRenderedAt = 0;
 
-    function draw(frameAt: number) {
-      if (active) {
-        rafRef.current = requestAnimationFrame(draw);
+    const isPageActive = () =>
+      document.visibilityState === "visible" &&
+      (typeof document.hasFocus !== "function" || document.hasFocus());
+
+    function draw(now: number) {
+      rafRef.current = 0;
+
+      if (!active || !isPageActive()) {
+        barsRef.current.fill(0);
+        ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+        return;
       }
 
-      if (document.visibilityState === "hidden") return;
-      if (active && frameAt - lastFrameAt < FRAME_MIN_MS) return;
-      lastFrameAt = frameAt;
+      if (
+        lastRenderedAt > 0 &&
+        now - lastRenderedAt < FRAME_MIN_MS
+      ) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      lastRenderedAt = now;
 
       const dpr = window.devicePixelRatio || 1;
       const W = canvas!.width / dpr;
       const H = canvas!.height / dpr;
 
-      if (W <= 1 || H <= 1) return;
+      if (W <= 1 || H <= 1) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
 
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx!.clearRect(0, 0, W, H);
@@ -214,7 +237,6 @@ export function AtcSpectrum({
         analyser.getByteTimeDomainData(timeData);
       }
 
-      const now = frameAt;
       const drawW = W - CANVAS_PADDING * 2;
       const baseY = H - CANVAS_PADDING;
       const maxBarH = H - CANVAS_PADDING * 2;
@@ -369,11 +391,32 @@ export function AtcSpectrum({
         // Main trace
         spline(1.5, accent(0.6, waveAlpha));
       }
+
+      rafRef.current = requestAnimationFrame(draw);
+    }
+
+    function handleVisibilityChange() {
+      if (!isPageActive()) {
+        if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+        lastRenderedAt = 0;
+      } else if (active && rafRef.current === 0) {
+        rafRef.current = requestAnimationFrame(draw);
+      }
     }
 
     draw(performance.now());
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [active, mode]);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleVisibilityChange);
+    window.addEventListener("focus", handleVisibilityChange);
+    return () => {
+      if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleVisibilityChange);
+      window.removeEventListener("focus", handleVisibilityChange);
+    };
+  }, [mode, active]);
 
   return (
     <motion.div

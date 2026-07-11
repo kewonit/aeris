@@ -18,9 +18,9 @@ export type DeckGLOverlay = MapboxOverlay & {
 
 // ── Animation & rendering constants ────────────────────────────────────
 
-export const DEFAULT_ANIM_DURATION_MS = 30_000;
-export const MIN_ANIM_DURATION_MS = 8_000;
-export const MAX_ANIM_DURATION_MS = 45_000;
+export const DEFAULT_ANIM_DURATION_MS = 4_500;
+export const MIN_ANIM_DURATION_MS = 1_000;
+export const MAX_ANIM_DURATION_MS = 30_000;
 export const TELEPORT_THRESHOLD = 0.3;
 export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 export const STARTUP_TRAIL_POLLS = 3;
@@ -51,7 +51,7 @@ export const LOD_3D_ZOOM_OUT = 5.0;
 
 // GeoJSON globe dot layer timing
 export const GEOJSON_THROTTLE_MS = 1500;
-export const GEOJSON_DEBOUNCE_MS = 200;
+export const GEOJSON_DEBOUNCE_MS = 0;
 
 // ── Shared types ───────────────────────────────────────────────────────
 

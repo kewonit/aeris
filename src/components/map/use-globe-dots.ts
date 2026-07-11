@@ -40,6 +40,8 @@ export function useGlobeDots(
 ) {
   const lastGeoJsonUpdateRef = useRef(0);
   const lastGeoJsonTimestampRef = useRef(0);
+  const lastTrailsRef = useRef<TrailEntry[] | null>(null);
+  const lastShowTrailsRef = useRef<boolean | null>(null);
   const geoJsonClearedRef = useRef(false);
   const globeZoomEnteredAtRef = useRef(0);
   // Cache last visibility state to avoid calling setLayoutProperty every frame
@@ -224,18 +226,33 @@ export function useGlobeDots(
 
     if (isGlobe) {
       if (currentZoom < GLOBE_NATIVE_ZOOM_CEIL) {
+        let enteredNativeGlobe = false;
         if (globeZoomEnteredAtRef.current === 0) {
           globeZoomEnteredAtRef.current = now;
+          enteredNativeGlobe = true;
         }
         const stableMs = now - globeZoomEnteredAtRef.current;
 
         if (stableMs >= GEOJSON_DEBOUNCE_MS) {
           const dataChanged =
-            dataTimestampRef.current !== lastGeoJsonTimestampRef.current;
+            dataTimestampRef.current !== lastGeoJsonTimestampRef.current ||
+            trailsRef.current !== lastTrailsRef.current ||
+            showTrailsRef.current !== lastShowTrailsRef.current ||
+            enteredNativeGlobe ||
+            geoJsonClearedRef.current;
+          const settingChanged =
+            showTrailsRef.current !== lastShowTrailsRef.current;
           const throttleExpired =
+            lastGeoJsonUpdateRef.current === 0 ||
             now - lastGeoJsonUpdateRef.current > GEOJSON_THROTTLE_MS;
 
-          if (dataChanged || throttleExpired) {
+          if (
+            dataChanged &&
+            (throttleExpired ||
+              settingChanged ||
+              enteredNativeGlobe ||
+              geoJsonClearedRef.current)
+          ) {
             // ── Update aircraft dots ──
             const dotSrc = map.getSource(SOURCE_ID) as
               | maplibregl.GeoJSONSource
@@ -344,6 +361,8 @@ export function useGlobeDots(
 
             lastGeoJsonUpdateRef.current = now;
             lastGeoJsonTimestampRef.current = dataTimestampRef.current;
+            lastTrailsRef.current = trailsRef.current;
+            lastShowTrailsRef.current = showTrailsRef.current;
             geoJsonClearedRef.current = false;
           }
         }

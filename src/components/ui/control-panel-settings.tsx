@@ -78,7 +78,7 @@ export function SettingsContent({
         <SettingRow
           icon={<RotateCw className="h-4 w-4" />}
           title="Auto-orbit"
-          description="Camera slowly rotates around the airport"
+          description="Camera rotation with higher battery and GPU usage"
           checked={settings.autoOrbit}
           onChange={(v) => update("autoOrbit", v)}
         />
@@ -615,6 +615,17 @@ const CHANGELOG: {
   date: string;
   entries: { title: string; description: string }[];
 }[] = [
+  {
+    version: "0.8.6",
+    date: "Jul 11, 2026",
+    entries: [
+      {
+        title: "Rendering performance",
+        description:
+          "Removed per-frame map state updates, capped animation work at 20–30 FPS, paused inactive render loops, and made auto-orbit opt-in. In the JFK production profile, renderer CPU fell from ~173% to ~24% and the shared GPU process from ~71% to ~18%.",
+      },
+    ],
+  },
   {
     version: "0.8.5",
     date: "Jun 24, 2026",

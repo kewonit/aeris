@@ -709,9 +709,9 @@ export function buildSelectionPulseLayers(
     const data = active ? [{ position: pos }] : EMPTY_PULSE_DATA;
 
     const breathT = (elapsed % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
-    // Pure sine wave for a gentle, smooth breathing effect.
-    // Previous double-smoothStep created sharp snap transitions.
-    const breath = Math.sin(breathT * Math.PI * 2);
+    // Animate only during the finite selection transition. Keeping a selected
+    // ring static afterwards lets the flight renderer sleep between updates.
+    const breath = fadeT < 1 ? Math.sin(breathT * Math.PI * 2) : 0;
 
     // Subtle background glow - barely visible, provides soft ambient light.
     // At 86px with 40% clear center: clear zone = 17px radius, well outside

@@ -8,8 +8,23 @@ import {
 } from "./use-settings";
 
 test("default settings use a 1.0px shorter trail", () => {
+  assert.equal(DEFAULT_SETTINGS.autoOrbit, false);
   assert.equal(DEFAULT_SETTINGS.trailThickness, 1.0);
   assert.equal(DEFAULT_SETTINGS.trailDistance, 48);
+});
+
+test("settings migration disables inherited auto-orbit once", () => {
+  const migrated = migrateSettingsDefaults(
+    { ...DEFAULT_SETTINGS, autoOrbit: true },
+    5,
+  );
+  const explicitV6 = migrateSettingsDefaults(
+    { ...DEFAULT_SETTINGS, autoOrbit: true },
+    6,
+  );
+
+  assert.equal(migrated.autoOrbit, false);
+  assert.equal(explicitV6.autoOrbit, true);
 });
 
 test("settings normalization keeps 0.5px as the minimum selectable trail thickness", () => {

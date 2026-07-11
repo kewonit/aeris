@@ -84,12 +84,12 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const appliedStyleRef = useRef<MapStyleSpec | null>(null);
 
   useImperativeHandle(ref, () => mapInstance as maplibregl.Map, [mapInstance]);
 
   // Ref that allows style-load callbacks to see the latest value without re-running effects
   const isDarkRef = useRef(isDark);
-
   useEffect(() => {
     isDarkRef.current = isDark;
   }, [isDark]);
@@ -102,7 +102,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: DEFAULT_STYLE.style as maplibregl.StyleSpecification | string,
+      style: mapStyle as maplibregl.StyleSpecification | string,
       center,
       zoom,
       pitch: safePitch,
@@ -117,6 +117,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
       pixelRatio: 1, // render at 1x regardless of display DPI - significant GPU savings on HiDPI
       fadeDuration: 0, // disable tile/symbol fade animations - fewer intermediate render frames
     });
+    appliedStyleRef.current = mapStyle;
 
     map.on("load", () => setIsLoaded(true));
     setMapInstance(map);
@@ -156,6 +157,19 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
 
+    // The map was already constructed with this style. Avoid parsing and
+    // loading the same tiles a second time on the common Mercator path.
+    if (
+      appliedStyleRef.current === mapStyle &&
+      terrainProfile === "none" &&
+      !globeMode
+    ) {
+      mapInstance.setProjection({ type: "mercator" });
+      addAerowayLayers(mapInstance, isDarkRef.current);
+      addBuildings3DLayer(mapInstance, { dark: isDarkRef.current });
+      return;
+    }
+
     mapInstance.setStyle(
       mapStyle as maplibregl.StyleSpecification | string,
       {
@@ -188,6 +202,7 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
         },
       } as maplibregl.StyleSwapOptions & { transformStyle: unknown },
     );
+    appliedStyleRef.current = mapStyle;
 
     // Set projection imperatively so it takes effect immediately.
     const onStyleLoad = () => {
