@@ -8,9 +8,9 @@ import {
 
 export function Brand() {
   return (
-    <span className="text-sm font-semibold tracking-wide text-foreground/70">
+    <h1 className="text-sm font-semibold tracking-wide text-foreground/70">
       aeris
-    </span>
+    </h1>
   );
 }
 

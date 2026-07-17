@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import Script from "next/script";
 import { FlightTracker } from "@/components/flight-tracker";
 import { isAirspaceConfigured } from "@/lib/airspace-config";
 import { CITIES } from "@/lib/cities";
@@ -9,8 +8,7 @@ import {
   canonicalizeCityRequest,
   findCityByCode,
 } from "@/lib/city-routing";
-
-const siteUrl = "https://aeris.edbn.me";
+import { serializeJsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 /** IATA codes shown in the UI's city switcher - pre-rendered at build time. */
 const PRESET_IATAS = CITIES.map((c) => c.iata.toLowerCase());
@@ -22,8 +20,12 @@ export async function generateStaticParams() {
 /** Opt arbitrary (non-preset) IATAs into dynamic rendering on first request. */
 export const dynamicParams = true;
 
-function serializeJsonLd(data: unknown) {
-  return JSON.stringify(data).replace(/</g, "\\u003c");
+function getCityTitle(city: { name: string; iata: string }) {
+  return `Live Flights over ${city.name} (${city.iata.toUpperCase()}) - 3D Flight Tracker`;
+}
+
+function getCityDescription(city: { name: string; iata: string }) {
+  return `Track flights above ${city.name} in real-time 3D. See live ADS-B aircraft around ${city.iata.toUpperCase()} with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.`;
 }
 
 export async function generateMetadata({
@@ -36,14 +38,19 @@ export async function generateMetadata({
   if (!city) {
     return {
       title: "City not found",
-      robots: { index: false, follow: false },
+      robots: { index: false, follow: true },
     };
   }
 
-  const iataUpper = city.iata.toUpperCase();
   const canonicalPath = buildCanonicalCityPath(city);
-  const title = `Live Flights over ${city.name} (${iataUpper}) - 3D Flight Tracker`;
-  const description = `Track flights above ${city.name} in real-time 3D. See live ADS-B aircraft around ${iataUpper} with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.`;
+  const title = getCityTitle(city);
+  const description = getCityDescription(city);
+  const socialImage = {
+    url: `${SITE_URL}/opengraph-image`,
+    width: 1200,
+    height: 630,
+    alt: title,
+  };
 
   return {
     title,
@@ -51,29 +58,31 @@ export async function generateMetadata({
     keywords: [
       `${city.name} flight tracker`,
       `${city.name} live flights`,
-      `${iataUpper} flight tracker`,
-      `${iataUpper} arrivals`,
-      `${iataUpper} departures`,
+      `${city.iata.toUpperCase()} flight tracker`,
+      `${city.iata.toUpperCase()} arrivals`,
+      `${city.iata.toUpperCase()} departures`,
       `flights over ${city.name}`,
       `${city.name} aircraft tracker`,
       `${city.name} plane tracker`,
       `live flights ${city.name}`,
-      `${iataUpper} ADS-B`,
+      `${city.iata.toUpperCase()} ADS-B`,
       `3D flight tracker ${city.name}`,
     ],
     alternates: { canonical: canonicalPath },
     openGraph: {
       type: "website",
       locale: "en_US",
-      url: `${siteUrl}${canonicalPath}`,
-      siteName: "Aeris",
+      url: `${SITE_URL}${canonicalPath}`,
+      siteName: SITE_NAME,
       title,
       description,
+      images: [socialImage],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: [socialImage],
     },
     robots: {
       index: true,
@@ -113,66 +122,64 @@ export default async function CityPage({
 
   const airspaceAvailable = isAirspaceConfigured();
   const iataUpper = city.iata.toUpperCase();
-  const canonicalUrl = `${siteUrl}${buildCanonicalCityPath(city)}`;
+  const canonicalUrl = `${SITE_URL}${buildCanonicalCityPath(city)}`;
 
-  const jsonLd = [
-    {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      "@id": `${canonicalUrl}#page`,
-      url: canonicalUrl,
-      name: `Live Flights over ${city.name} (${iataUpper}) - Aeris`,
-      description: `Real-time 3D flight tracking above ${city.name} (${iataUpper}).`,
-      isPartOf: { "@id": `${siteUrl}/#website` },
-      about: { "@id": `${canonicalUrl}#place` },
-      inLanguage: "en",
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "Place",
-      "@id": `${canonicalUrl}#place`,
-      name: city.name,
-      geo: {
-        "@type": "GeoCoordinates",
-        latitude: city.coordinates[1],
-        longitude: city.coordinates[0],
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${canonicalUrl}#page`,
+        url: canonicalUrl,
+        name: `${getCityTitle(city)} | ${SITE_NAME}`,
+        description: getCityDescription(city),
+        isPartOf: { "@id": `${SITE_URL}/#website` },
+        about: { "@id": `${canonicalUrl}#place` },
+        breadcrumb: { "@id": `${canonicalUrl}#breadcrumb` },
+        inLanguage: "en",
       },
-      address: {
-        "@type": "PostalAddress",
-        addressCountry: city.country,
+      {
+        "@type": "Place",
+        "@id": `${canonicalUrl}#place`,
+        name: city.name,
+        geo: {
+          "@type": "GeoCoordinates",
+          latitude: city.coordinates[1],
+          longitude: city.coordinates[0],
+        },
+        address: {
+          "@type": "PostalAddress",
+          addressCountry: city.country,
+        },
       },
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          name: "Aeris",
-          item: siteUrl,
-        },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: `${city.name} (${iataUpper})`,
-          item: canonicalUrl,
-        },
-      ],
-    },
-  ];
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${canonicalUrl}#breadcrumb`,
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: SITE_NAME,
+            item: SITE_URL,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: `${city.name} (${iataUpper})`,
+            item: canonicalUrl,
+          },
+        ],
+      },
+    ],
+  };
 
   return (
     <>
-      {jsonLd.map((entry) => (
-        <Script
-          key={entry["@id"] ?? entry["@type"]}
-          id={`city-jsonld-${String(entry["@type"]).toLowerCase()}`}
-          type="application/ld+json"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
-        />
-      ))}
+      <script
+        id="city-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
       <FlightTracker airspaceAvailable={airspaceAvailable} initialCity={city} />
     </>
   );
