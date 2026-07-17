@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/seo";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -9,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/private/"],
       },
     ],
-    sitemap: "https://aeris.edbn.me/sitemap.xml",
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

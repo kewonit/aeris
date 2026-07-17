@@ -1,104 +1,82 @@
-import Script from "next/script";
 import { FlightTracker } from "@/components/flight-tracker";
 import { isAirspaceConfigured } from "@/lib/airspace-config";
+import packageJson from "../../package.json";
+import {
+  DEFAULT_DESCRIPTION,
+  serializeJsonLd,
+  SITE_NAME,
+  SITE_URL,
+} from "@/lib/seo";
 
-const siteUrl = "https://aeris.edbn.me";
-
-const jsonLd = [
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "@id": `${siteUrl}/#app`,
-    name: "Aeris",
-    url: siteUrl,
-    description:
-      "Track live flights in stunning 3D over the world's busiest airspaces. See real-time ADS-B data with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.",
-    applicationCategory: "TravelApplication",
-    operatingSystem: "Any",
-    browserRequirements: "Requires WebGL support",
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
-      availability: "https://schema.org/OnlineOnly",
-    },
-    author: {
-      "@type": "Person",
-      name: "kewonit",
-      url: "https://github.com/kewonit",
-    },
-    featureList: [
-      "Real-time 3D flight tracking",
-      "Altitude-aware color rendering",
-      "Live ADS-B data from multiple sources",
-      "3D aircraft models",
-      "City-based airspace views",
-      "Live ATC audio streaming",
-      "Flight trail visualization",
-      "Aircraft photo lookup",
-      "Dark mode interface",
-    ],
-    screenshot:
-      "https://github.com/user-attachments/assets/9d1f50ed-be4e-4ef5-95ac-257e9129f8c8",
-    softwareVersion: "0.8.6",
-    isAccessibleForFree: true,
-    inLanguage: "en",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "@id": `${siteUrl}/#website`,
-    name: "Aeris",
-    url: siteUrl,
-    description:
-      "Real-time 3D flight tracking - altitude-aware, visually stunning, and completely free.",
-    inLanguage: "en",
-    publisher: {
-      "@type": "Person",
-      name: "kewonit",
-      url: "https://github.com/kewonit",
-    },
-    potentialAction: {
-      "@type": "SearchAction",
-      target: {
-        "@type": "EntryPoint",
-        urlTemplate: `${siteUrl}/?q={search_term_string}`,
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: SITE_NAME,
+      alternateName: "aeris.edbn.me",
+      url: SITE_URL,
+      description: DEFAULT_DESCRIPTION,
+      inLanguage: "en",
+      publisher: {
+        "@type": "Person",
+        "@id": `${SITE_URL}/#publisher`,
+        name: "kewonit",
+        url: "https://github.com/kewonit",
       },
-      "query-input": "required name=search_term_string",
     },
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Aeris - Real-Time 3D Flight Tracking",
-        item: siteUrl,
+    {
+      "@type": "WebApplication",
+      "@id": `${SITE_URL}/#app`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      description: DEFAULT_DESCRIPTION,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      applicationCategory: "TravelApplication",
+      operatingSystem: "Any",
+      browserRequirements: "Requires WebGL support",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+        availability: "https://schema.org/OnlineOnly",
       },
-    ],
-  },
-];
-
-function serializeJsonLd(data: unknown) {
-  return JSON.stringify(data).replace(/</g, "\\u003c");
-}
+      author: {
+        "@type": "Person",
+        "@id": `${SITE_URL}/#publisher`,
+        name: "kewonit",
+        url: "https://github.com/kewonit",
+      },
+      featureList: [
+        "Real-time 3D flight tracking",
+        "Altitude-aware color rendering",
+        "Live ADS-B data from multiple sources",
+        "3D aircraft models",
+        "City-based airspace views",
+        "Live ATC audio streaming",
+        "Flight trail visualization",
+        "Aircraft photo lookup",
+        "Dark mode interface",
+      ],
+      screenshot: `${SITE_URL}/opengraph-image`,
+      softwareVersion: packageJson.version,
+      isAccessibleForFree: true,
+      inLanguage: "en",
+    },
+  ],
+};
 
 export default function Home() {
   const airspaceAvailable = isAirspaceConfigured();
 
   return (
     <>
-      {jsonLd.map((entry, index) => (
-        <Script
-          key={`home-jsonld-${index}`}
-          id={`home-jsonld-${index}`}
-          type="application/ld+json"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
-        />
-      ))}
+      <script
+        id="home-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
       <FlightTracker airspaceAvailable={airspaceAvailable} />
     </>
   );
