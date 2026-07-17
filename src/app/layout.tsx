@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { ThemeProvider } from "@wrksz/themes/next";
@@ -80,7 +80,24 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: siteUrl },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      {
+        url: "/favicon/favicon.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+      },
+      {
+        url: "/favicon/favicon-96x96.png",
+        type: "image/png",
+        sizes: "96x96",
+      },
+    ],
+    shortcut: "/favicon/favicon.ico",
+    apple: {
+      url: "/favicon/apple-touch-icon.png",
+      type: "image/png",
+      sizes: "180x180",
+    },
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -90,6 +107,14 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -97,12 +122,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
-        />
-      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
