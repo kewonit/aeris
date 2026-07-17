@@ -10,8 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test \"src/**/*.test.ts\"",
-    "test:trails": "tsx --test \"src/lib/trails/**/*.test.ts\" \"src/hooks/use-trail-system.test.ts\" \"src/components/map/*.test.ts\""
+    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "test:trails": "tsx --test \"tests/lib/trails/**/*.test.ts\" \"tests/hooks/use-trail-system.test.ts\" \"tests/components/map/*.test.ts\""
   },
   "dependencies": {
     "@deck.gl/core": "^9.2.11",

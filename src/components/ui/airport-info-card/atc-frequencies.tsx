@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Radio } from "lucide-react";
 import type { AtcFeed } from "@/lib/atc-types";
+import { prefetchAtcSources } from "@/lib/atc-source-client";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -12,6 +13,12 @@ type Props = {
 };
 
 export function AtcFrequencies({ feeds, atc }: Props) {
+  useEffect(() => {
+    for (const icao of new Set(feeds.map((feed) => feed.icao))) {
+      prefetchAtcSources(icao);
+    }
+  }, [feeds]);
+
   const handleClick = useCallback(
     (feed: AtcFeed) => {
       if (!atc) return;
@@ -62,7 +69,8 @@ function FeedRow({
   atc?: UseAtcStreamReturn;
   onClick: () => void;
 }) {
-  const isActive = atc?.feed?.id === feed.id && atc.status === "playing";
+  const isActive =
+    atc?.activeFeed?.id === feed.id && atc.status === "playing";
 
   if (atc) {
     return (

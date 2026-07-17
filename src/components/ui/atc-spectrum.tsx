@@ -9,9 +9,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  getOrCreateConnection,
-  releaseAudioConnection,
-} from "@/components/ui/atc-waveform";
+  getOrCreateAtcAudioConnection,
+  releaseAtcAudioConnection,
+} from "@/lib/atc-audio-analysis";
 
 // -- Constants ----------------------------------------------------------
 
@@ -144,10 +144,10 @@ export function AtcSpectrum({
       return;
     }
 
-    analyserRef.current = getOrCreateConnection(audioElement);
+    analyserRef.current = getOrCreateAtcAudioConnection(audioElement);
     const connected = analyserRef.current !== null;
     return () => {
-      if (connected) releaseAudioConnection();
+      if (connected) releaseAtcAudioConnection(audioElement);
     };
   }, [active, audioElement]);
 

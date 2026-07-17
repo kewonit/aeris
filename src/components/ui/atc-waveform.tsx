@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import {
+  getOrCreateAtcAudioConnection,
+  releaseAtcAudioConnection,
+} from "@/lib/atc-audio-analysis";
 
 const DEFAULT_BAR_COUNT = 12;
 const BAR_WIDTH = 2.5;
@@ -8,57 +12,6 @@ const BAR_GAP = 2;
 const MIN_BAR_H = 2.5;
 const FRAME_MIN_MS = 1000 / 30;
 const LERP = 0.22;
-
-// ── Module-level Web Audio singleton ────────────────────────────────
-// A single AudioContext and WeakMap of captured elements survive across
-// component mounts/unmounts. This prevents:
-//   1. InvalidStateError from double-capturing the same <audio> element
-//   2. AudioContext leak (Chrome limits ~6 concurrent contexts)
-let sharedCtx: AudioContext | null = null;
-let activeAudioConsumers = 0;
-
-const capturedElements = new WeakMap<
-  HTMLAudioElement,
-  { source: MediaElementAudioSourceNode; analyser: AnalyserNode }
->();
-
-export function getOrCreateConnection(
-  audioElement: HTMLAudioElement,
-): AnalyserNode | null {
-  if (!sharedCtx || sharedCtx.state === "closed") {
-    sharedCtx = new AudioContext();
-  }
-  if (sharedCtx.state === "suspended") {
-    sharedCtx.resume().catch(() => {});
-  }
-
-  const existing = capturedElements.get(audioElement);
-  if (existing) {
-    activeAudioConsumers++;
-    return existing.analyser;
-  }
-
-  try {
-    const source = sharedCtx.createMediaElementSource(audioElement);
-    const analyser = sharedCtx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.75;
-    source.connect(analyser);
-    analyser.connect(sharedCtx.destination);
-    capturedElements.set(audioElement, { source, analyser });
-    activeAudioConsumers++;
-    return analyser;
-  } catch {
-    return null;
-  }
-}
-
-export function releaseAudioConnection(): void {
-  activeAudioConsumers = Math.max(0, activeAudioConsumers - 1);
-  if (activeAudioConsumers === 0 && sharedCtx?.state === "running") {
-    sharedCtx.suspend().catch(() => {});
-  }
-}
 
 /**
  * Build bin ranges that spread bars across the voice-relevant spectrum.
@@ -97,9 +50,11 @@ function buildBinRanges(
 export function AtcWaveform({
   audioElement,
   active,
+  analyzable = true,
 }: {
   audioElement: HTMLAudioElement | null;
   active: boolean;
+  analyzable?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -114,31 +69,19 @@ export function AtcWaveform({
 
   // ── Connect to Web Audio API ──────────────────────────────────────
   useEffect(() => {
-    if (!active || !audioElement) {
+    if (!active || !audioElement || !analyzable) {
       barsRef.current = new Array(layoutRef.current.barCount).fill(0);
       analyserRef.current = null;
       return;
     }
 
-    analyserRef.current = getOrCreateConnection(audioElement);
+    analyserRef.current = getOrCreateAtcAudioConnection(audioElement);
     const connected = analyserRef.current !== null;
 
-    // Resume AudioContext when tab returns from background.
-    function onVisibilityResume() {
-      if (
-        document.visibilityState === "visible" &&
-        sharedCtx?.state === "suspended"
-      ) {
-        sharedCtx.resume().catch(() => {});
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibilityResume);
-
     return () => {
-      document.removeEventListener("visibilitychange", onVisibilityResume);
-      if (connected) releaseAudioConnection();
+      if (connected) releaseAtcAudioConnection(audioElement);
     };
-  }, [active, audioElement]);
+  }, [active, analyzable, audioElement]);
 
   // ── Animation loop ───────────────────────────────────────────────
   useEffect(() => {
@@ -174,7 +117,10 @@ export function AtcWaveform({
 
     syncCanvasSize();
 
-    const ro = new ResizeObserver(() => syncCanvasSize());
+    const ro = new ResizeObserver(() => {
+      syncCanvasSize();
+      if (!analyzable) draw(performance.now());
+    });
     ro.observe(canvas);
 
     // Hoist allocations out of draw loop - only reallocate when binCount changes
@@ -211,6 +157,20 @@ export function AtcWaveform({
       const analyser = analyserRef.current;
       const binCount = analyser?.frequencyBinCount ?? 128;
       const { w: cW, h: cH, barCount } = layoutRef.current;
+
+      if (!analyzable) {
+        draw2d!.clearRect(0, 0, cW, cH);
+        for (let i = 0; i < barCount; i++) {
+          const level = 0.2 + 0.35 * Math.abs(Math.sin((i + 1) * 1.7));
+          const barH = Math.max(MIN_BAR_H, level * (cH - 4));
+          const x = i * (BAR_WIDTH + BAR_GAP);
+          draw2d!.fillStyle = idleFill;
+          draw2d!.beginPath();
+          draw2d!.roundRect(x, cH - barH, BAR_WIDTH, barH, 1);
+          draw2d!.fill();
+        }
+        return;
+      }
 
       if (
         binCount !== lastBinCount ||
@@ -283,7 +243,7 @@ export function AtcWaveform({
       window.removeEventListener("focus", handleVisibilityChange);
       ro.disconnect();
     };
-  }, [active]);
+  }, [active, analyzable]);
 
   return (
     <canvas

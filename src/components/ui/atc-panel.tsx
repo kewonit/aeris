@@ -10,13 +10,13 @@ import {
   Loader2,
   X,
   AlertTriangle,
-  Server,
   ChevronUp,
   AudioLines,
 } from "lucide-react";
 import type { AtcFeed, AtcFeedType } from "@/lib/atc-types";
 import { FEED_TYPE_PRIORITY } from "@/lib/atc-types";
 import { lookupAtcFeeds, findNearbyAtcFeeds } from "@/lib/atc-lookup";
+import { prefetchAtcSources } from "@/lib/atc-source-client";
 import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
@@ -60,13 +60,21 @@ export function useAvailableFeeds(
   cityIata: string,
   cityCoordinates: [number, number],
 ): AtcFeed[] {
-  return useMemo(() => {
+  const feeds = useMemo(() => {
     const byCode = lookupAtcFeeds(cityIata);
     if (byCode.length > 0) return sortFeeds(byCode);
     const [lng, lat] = cityCoordinates;
     const nearby = findNearbyAtcFeeds(lat, lng, 30);
     return sortFeeds(nearby.flatMap((r) => r.feeds));
   }, [cityIata, cityCoordinates]);
+
+  useEffect(() => {
+    for (const icao of new Set(feeds.map((feed) => feed.icao))) {
+      prefetchAtcSources(icao);
+    }
+  }, [feeds]);
+
+  return feeds;
 }
 
 // Waveform is in atc-waveform.tsx
@@ -183,11 +191,15 @@ export function AtcFeedDropdown({
                   <div key={group.type}>
                     {group.feeds.map((feed) => {
                       const isPlaying =
-                        atc.feed?.id === feed.id && atc.status === "playing";
+                        atc.activeFeed?.id === feed.id &&
+                        atc.status === "playing";
                       const isLoading =
-                        atc.feed?.id === feed.id && atc.status === "loading";
+                        atc.activeFeed?.id === feed.id &&
+                        (atc.status === "loading" ||
+                          atc.status === "switching" ||
+                          atc.status === "reconnecting");
                       const isFeedError =
-                        atc.feed?.id === feed.id &&
+                        atc.activeFeed?.id === feed.id &&
                         (atc.status === "error" || atc.status === "blocked");
                       const isSelected = atc.feed?.id === feed.id;
 
@@ -278,10 +290,19 @@ export type AtcPlayerBarProps = {
 };
 
 export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
-  const isStreaming = atc.status === "playing" || atc.status === "loading";
-  const isError = atc.status === "error" || atc.status === "blocked";
+  const isStreaming =
+    atc.status === "playing" ||
+    atc.status === "loading" ||
+    atc.status === "switching" ||
+    atc.status === "reconnecting";
+  const isError =
+    atc.status === "error" ||
+    atc.status === "blocked" ||
+    atc.status === "reconnecting";
   const isBlocked = atc.status === "blocked";
+  const activeFeed = atc.activeFeed ?? atc.feed;
   const [spectrumOpen, setSpectrumOpen] = useState(false);
+  const spectrumVisible = spectrumOpen && atc.analyzable;
 
   // Close spectrum on Escape key
   useEffect(() => {
@@ -293,19 +314,19 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [spectrumOpen]);
 
-  if (!atc.feed) return null;
+  if (!atc.feed || !activeFeed) return null;
 
   return (
     <div className="flex flex-col items-center gap-2">
       {/* Expanded Spectrum Visualizer */}
       <AnimatePresence>
-        {spectrumOpen && (
+        {spectrumVisible && (
           <div className="w-[calc(100vw-2rem)] max-w-sm sm:w-96 sm:max-w-none">
             <AtcSpectrum
               audioElement={atc.audioElement}
               active={atc.status === "playing"}
-              feedName={atc.feed.name}
-              feedFrequency={atc.feed.frequency}
+              feedName={activeFeed.name}
+              feedFrequency={activeFeed.frequency}
             />
           </div>
         )}
@@ -341,17 +362,26 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
           <AtcWaveform
             audioElement={atc.audioElement}
             active={atc.status === "playing"}
+            analyzable={atc.analyzable}
           />
         )}
 
         {/* Feed name + frequency (stacked, center) - clickable to open selector */}
         <button
           type="button"
-          onClick={isBlocked ? () => atc.resume() : onOpenFeedSelector}
+          onClick={
+            isBlocked
+              ? () => atc.resume()
+              : atc.status === "error" || atc.status === "reconnecting"
+                ? () => atc.retry()
+                : onOpenFeedSelector
+          }
           className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
         >
           <div className="flex items-center gap-1.5">
-            {atc.status === "loading" ? (
+            {atc.status === "loading" ||
+            atc.status === "switching" ||
+            atc.status === "reconnecting" ? (
               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-400/70" />
             ) : isError ? (
               <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400/70" />
@@ -370,9 +400,11 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             >
               {isBlocked
                 ? "Tap to listen"
-                : isError && atc.error
+                : atc.status === "switching"
+                  ? "Switching source…"
+                  : isError && atc.error
                   ? atc.error
-                  : atc.feed.name}
+                  : activeFeed.name}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -380,33 +412,35 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
               className="font-mono text-[9px] tabular-nums"
               style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
             >
-              {atc.feed.frequency}
+              {activeFeed.frequency}
             </span>
-            {atc.usingProxy && atc.status === "playing" && (
+            {atc.isBackup && (
               <span
-                className="flex items-center gap-0.5 text-[9px]"
-                style={{ color: "rgb(var(--ui-fg) / 0.2)" }}
+                className="rounded px-1 py-px text-[8px] font-semibold tracking-wide uppercase"
+                style={{
+                  color: "rgb(251 191 36 / 0.6)",
+                  backgroundColor: "rgb(251 191 36 / 0.07)",
+                }}
               >
-                <Server className="h-1.5 w-1.5" />
-                proxy
+                Backup
               </span>
             )}
           </div>
         </button>
 
         {/* Spectrum toggle (right of center) */}
-        {!isBlocked && (
+        {!isBlocked && atc.analyzable && (
           <button
             type="button"
             onClick={() => setSpectrumOpen((prev) => !prev)}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all hover:bg-foreground/5 active:bg-foreground/8 active:scale-[0.92]"
-            aria-label={spectrumOpen ? "Hide spectrum" : "Show spectrum"}
-            title={spectrumOpen ? "Hide spectrum (Esc)" : "Show audio spectrum"}
+            aria-label={spectrumVisible ? "Hide spectrum" : "Show spectrum"}
+            title={spectrumVisible ? "Hide spectrum (Esc)" : "Show audio spectrum"}
           >
             <AudioLines
               className="h-3.5 w-3.5 transition-colors"
               style={{
-                color: spectrumOpen
+                color: spectrumVisible
                   ? "rgb(52, 211, 153)"
                   : "rgb(var(--ui-fg) / 0.25)",
               }}

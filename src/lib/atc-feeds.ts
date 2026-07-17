@@ -1,7 +1,7 @@
 import type { AtcFeed } from "./atc-types";
 
 /**
- * Static ATC feed database mapping ICAO codes to LiveATC feed entries.
+ * Static ATC feed database mapping ICAO codes to logical ATC channels.
  *
  * ── Data Sources & Verification ──────────────────────────────────────
  *
@@ -29,12 +29,21 @@ import type { AtcFeed } from "./atc-types";
  * - LiveATC mount point naming is NOT standardized. It varies wildly
  *   per airport (e.g., KORD uses kord1n2_twr_n, not kord_twr).
  *
- * - Stream URLs use the .pls playlist format which resolves to Icecast
- *   endpoints (d.liveatc.net / d2.liveatc.net).
+ * - The built-in LiveATC source registry resolves these verified mount
+ *   points through the same-origin ATC stream relay.
  *
- * Coverage: 633 airports across all continents with documented LiveATC feeds.
+ * Coverage: 635 airports across all continents with documented LiveATC feeds.
  * Last verified: March 2026
  */
+
+const liveAtcMountPointsByFeedId = new Map<string, string>();
+
+function registerLiveAtcMountPoint(feedId: string, mountPoint: string): void {
+  if (liveAtcMountPointsByFeedId.has(feedId)) {
+    throw new Error(`Duplicate ATC feed ID: ${feedId}`);
+  }
+  liveAtcMountPointsByFeedId.set(feedId, mountPoint);
+}
 
 function feed(
   icao: string,
@@ -43,14 +52,15 @@ function feed(
   frequency: string,
   mountPoint: string,
 ): AtcFeed {
+  const id = `${icao.toLowerCase()}-${type}`;
+  registerLiveAtcMountPoint(id, mountPoint);
+
   return {
-    id: `${icao.toLowerCase()}-${type}`,
+    id,
     icao,
     name,
     frequency,
     type,
-    mountPoint,
-    streamUrl: `https://www.liveatc.net/play/${mountPoint}.pls`,
   };
 }
 
@@ -63,14 +73,15 @@ function feedN(
   mountPoint: string,
   suffix: string,
 ): AtcFeed {
+  const id = `${icao.toLowerCase()}-${type}-${suffix}`;
+  registerLiveAtcMountPoint(id, mountPoint);
+
   return {
-    id: `${icao.toLowerCase()}-${type}-${suffix}`,
+    id,
     icao,
     name,
     frequency,
     type,
-    mountPoint,
-    streamUrl: `https://www.liveatc.net/play/${mountPoint}.pls`,
   };
 }
 
@@ -198,10 +209,11 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
   ],
 
   KSFO: [
-    // HTTP 200 confirmed; CSV verified
-    feed("KSFO", "tower", "SFO Tower", "120.500", "ksfo_twr"),
-    feed("KSFO", "ground", "SFO Ground", "121.800", "ksfo_gnd"),
-    feed("KSFO", "approach", "NORCAL App 28L/R", "135.650", "ksfo_app2"),
+    // LiveATC airport page verified July 2026. Tower and ground now share the
+    // combined receiver; the previous ksfo_twr/ksfo_gnd mounts return 404.
+    feed("KSFO", "tower", "SFO Tower", "120.500", "ksfo_twr2"),
+    feed("KSFO", "ground", "SFO Ground", "121.800", "ksfo_twr2"),
+    feed("KSFO", "approach", "NORCAL App 28L/R", "135.650", "ksfo_app2_l"),
     feed("KSFO", "departure", "NORCAL Departure", "120.900", "ksfo_dep1"),
     feed("KSFO", "atis", "SFO D-ATIS", "118.850", "ksfo_atis"),
   ],
@@ -7728,15 +7740,15 @@ export const ATC_FEEDS: Record<string, AtcFeed[]> = {
 
 };
 
-/**
- * Set of all valid mount points for SSRF prevention.
- * Only mount points in this set can be proxied.
- */
-export const VALID_MOUNT_POINTS: ReadonlySet<string> = new Set(
-  Object.values(ATC_FEEDS)
-    .flat()
-    .map((f) => f.mountPoint),
-);
+/** Stable built-in source ID for a logical feed. Safe to use in client code. */
+export function getBuiltInAtcSourceId(feedId: string): string {
+  return `liveatc:${feedId}`;
+}
+
+/** Internal LiveATC mount lookup used by the server-side source registry. */
+export function getLiveAtcMountPoint(feedId: string): string | undefined {
+  return liveAtcMountPointsByFeedId.get(feedId);
+}
 
 /**
  * Get feeds for a specific ICAO code.
