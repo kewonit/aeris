@@ -108,7 +108,8 @@ export function StatusBar({
     }));
   }, [atcToggle]);
 
-  const isAtcPlaying = atc.status === "playing";
+  const isAtcPlaying =
+    atc.status === "playing" || atc.status === "switching";
   return (
     <div className="relative flex flex-col items-start gap-2">
       <AnimatePresence>
@@ -196,7 +197,11 @@ export function StatusBar({
           <AtcTrigger
             hasFeeds={availableFeeds.length > 0}
             isPlaying={isAtcPlaying}
-            isError={atc.status === "error" || atc.status === "blocked"}
+            isError={
+              atc.status === "error" ||
+              atc.status === "blocked" ||
+              atc.status === "reconnecting"
+            }
             onClick={toggleFeedDropdown}
           />
         </motion.div>

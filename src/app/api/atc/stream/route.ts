@@ -1,143 +1,124 @@
-import { type NextRequest } from "next/server";
-import { VALID_MOUNT_POINTS } from "@/lib/atc-feeds";
+import { NextResponse, type NextRequest } from "next/server";
+import { resolveAtcSource } from "@/lib/atc-source-registry";
 
-/**
- * GET /api/atc/stream?mount={mountPoint}
- *
- * Audio stream proxy for LiveATC Icecast streams.
- * Used by the ATC player so Web Audio visualizers can analyze same-origin audio.
- *
- * Security:
- *   - Mount point validated against static allowlist (SSRF prevention)
- *   - Connection timeout: 30 seconds
- *   - Max stream duration: 4 hours
- *   - Simple per-request rate limiting via headers
- */
-
-/** Maximum stream duration in milliseconds (4 hours). */
-const MAX_STREAM_DURATION_MS = 4 * 60 * 60 * 1000;
-/** Connection timeout for upstream fetch (12 seconds). */
+const REDIRECT_CACHE_CONTROL =
+  "public, max-age=30, s-maxage=60, stale-while-revalidate=120";
 const CONNECT_TIMEOUT_MS = 12_000;
+const MAX_STREAM_DURATION_MS = 4 * 60 * 60 * 1_000;
 
-/**
- * Sanitize and validate mount point parameter.
- * Only alphanumeric characters, underscores, and hyphens are allowed.
- */
-function isValidMountFormat(mount: string): boolean {
-  return /^[a-z0-9_-]{2,64}$/i.test(mount);
+function jsonError(message: string, status: number): Response {
+  return NextResponse.json(
+    { error: message },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
+/**
+ * GET /api/atc/stream?source={opaqueSourceId}
+ *
+ * Built-in LiveATC streams are relayed through Aeris. Their redirecting
+ * Icecast endpoints are unreliable when used as cross-origin media sources,
+ * and the same-origin response is required by the Web Audio visualizers.
+ * Explicitly configured sources keep the direct-browser redirect path.
+ */
 export async function GET(request: NextRequest) {
-  const mount = request.nextUrl.searchParams.get("mount")?.trim();
+  const sourceId = request.nextUrl.searchParams.get("source")?.trim();
 
-  if (!mount) {
-    return new Response(
-      JSON.stringify({ error: "Missing required 'mount' parameter." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  if (!sourceId) {
+    return jsonError("Missing required 'source' parameter.", 400);
   }
 
-  // Validate mount point format
-  if (!isValidMountFormat(mount)) {
-    return new Response(
-      JSON.stringify({ error: "Invalid mount point format." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  const source = resolveAtcSource(sourceId);
+  if (!source) {
+    return jsonError("Unknown ATC source.", 403);
   }
 
-  // SSRF prevention: only allow mount points from our static database
-  if (!VALID_MOUNT_POINTS.has(mount)) {
-    return new Response(
-      JSON.stringify({
-        error: "Unknown mount point. Only verified feeds are allowed.",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
+  if (!source.relay) {
+    return new Response(null, {
+      status: 307,
+      headers: {
+        Location: source.streamUrl,
+        "Cache-Control": REDIRECT_CACHE_CONTROL,
+        "Referrer-Policy": "no-referrer",
+        "X-ATC-Provider": source.providerId,
+      },
+    });
   }
 
-  // Construct the upstream URL from the validated mount point
-  // Using the direct Icecast server URL (d.liveatc.net)
-  const upstreamUrl = `https://d.liveatc.net/${mount}`;
+  const controller = new AbortController();
+  let connectTimedOut = false;
+  let connectTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    connectTimedOut = true;
+    controller.abort();
+  }, CONNECT_TIMEOUT_MS);
+  const abortUpstream = () => controller.abort();
+  request.signal.addEventListener("abort", abortUpstream, { once: true });
 
-  let connectTimer: ReturnType<typeof setTimeout> | null = null;
   try {
-    const controller = new AbortController();
-    const abortConnect = () => controller.abort();
-    request.signal.addEventListener("abort", abortConnect, { once: true });
-    connectTimer = setTimeout(
-      () => controller.abort(),
-      CONNECT_TIMEOUT_MS,
-    );
-
-    const upstream = await fetch(upstreamUrl, {
+    const upstream = await fetch(source.streamUrl, {
+      cache: "no-store",
+      redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Aeris/1.0)",
-        Referer: "https://www.liveatc.net/",
         Accept: "audio/mpeg, audio/*, */*",
+        Referer: "https://www.liveatc.net/",
+        "User-Agent": "Mozilla/5.0 (compatible; Aeris/1.0)",
       },
     });
 
     clearTimeout(connectTimer);
     connectTimer = null;
-    request.signal.removeEventListener("abort", abortConnect);
 
     if (!upstream.ok) {
-      return new Response(
-        JSON.stringify({
-          error: "Upstream stream unavailable.",
-          status: upstream.status,
-        }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
-      );
+      request.signal.removeEventListener("abort", abortUpstream);
+      controller.abort();
+      await upstream.body?.cancel().catch(() => {});
+      return jsonError("Upstream stream unavailable.", 502);
     }
 
     if (!upstream.body) {
-      return new Response(
-        JSON.stringify({ error: "No stream body from upstream." }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
-      );
+      request.signal.removeEventListener("abort", abortUpstream);
+      controller.abort();
+      return jsonError("Upstream stream returned no audio.", 502);
     }
 
-    // Pipe the upstream stream through one idempotent cleanup path. Every
-    // termination mode releases the reader, timer, request listener and fetch.
     const reader = upstream.body.getReader();
     let finalized = false;
     let durationTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const finalize = (cancelReader: boolean = true) => {
+    const finalize = (cancelReader = true) => {
       if (finalized) return;
       finalized = true;
       if (durationTimer) {
         clearTimeout(durationTimer);
         durationTimer = null;
       }
-      request.signal.removeEventListener("abort", onClientAbort);
+      request.signal.removeEventListener("abort", abortUpstream);
       controller.abort();
-      if (cancelReader) reader.cancel().catch(() => {});
+      if (cancelReader) void reader.cancel().catch(() => {});
     };
-    const onClientAbort = () => finalize();
 
     durationTimer = setTimeout(finalize, MAX_STREAM_DURATION_MS);
-    request.signal.addEventListener("abort", onClientAbort, { once: true });
 
-    const stream = new ReadableStream({
-      async pull(ctrl) {
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(streamController) {
         try {
           if (finalized) {
-            ctrl.close();
+            streamController.close();
             return;
           }
+
           const { value, done } = await reader.read();
           if (done) {
             finalize(false);
-            ctrl.close();
-          } else {
-            ctrl.enqueue(value);
+            streamController.close();
+            return;
           }
+
+          streamController.enqueue(value);
         } catch {
           finalize();
-          ctrl.close();
+          streamController.close();
         }
       },
       cancel() {
@@ -146,26 +127,32 @@ export async function GET(request: NextRequest) {
     });
 
     return new Response(stream, {
-      status: 200,
       headers: {
-        "Content-Type": upstream.headers.get("Content-Type") ?? "audio/mpeg",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "X-Accel-Buffering": "no", // Disable Nginx buffering if behind reverse proxy
         "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Content-Type": upstream.headers.get("Content-Type") ?? "audio/mpeg",
+        "X-Accel-Buffering": "no",
+        "X-ATC-Provider": source.providerId,
       },
     });
-  } catch (err) {
+  } catch (error) {
     if (connectTimer) clearTimeout(connectTimer);
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    if (isAbort) {
-      return new Response(
-        JSON.stringify({ error: "Connection to upstream timed out." }),
-        { status: 504, headers: { "Content-Type": "application/json" } },
-      );
+    request.signal.removeEventListener("abort", abortUpstream);
+    controller.abort();
+
+    if (connectTimedOut) {
+      return jsonError("Connection to upstream stream timed out.", 504);
     }
-    return new Response(
-      JSON.stringify({ error: "Failed to connect to upstream stream." }),
-      { status: 502, headers: { "Content-Type": "application/json" } },
+    if (request.signal.aborted) {
+      return jsonError("ATC stream request was cancelled.", 499);
+    }
+
+    const aborted = error instanceof Error && error.name === "AbortError";
+    return jsonError(
+      aborted
+        ? "Connection to upstream stream was interrupted."
+        : "Failed to connect to upstream stream.",
+      502,
     );
   }
 }

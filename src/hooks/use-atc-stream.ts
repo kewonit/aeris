@@ -1,17 +1,44 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { AtcFeed, AtcStreamStatus } from "@/lib/atc-types";
-import { VALID_MOUNT_POINTS } from "@/lib/atc-feeds";
-
-// ── Constants ──────────────────────────────────────────────────────────
+import type {
+  AtcFeed,
+  AtcSourceCandidate,
+  AtcSourcesManifest,
+  AtcStreamStatus,
+} from "@/lib/atc-types";
+import {
+  getBuiltInAtcSourceId,
+  getFeedsByIcao,
+} from "@/lib/atc-feeds";
+import {
+  ATC_STABLE_PLAYBACK_MS,
+  buildAtcPlaybackPlan,
+  recordAtcSourceFailure,
+  recordAtcSourceStableSuccess,
+  selectAtcPlaybackCandidate,
+  type AtcPlaybackCandidate,
+  type AtcPlaybackPlan,
+  type AtcSourceHealthById,
+} from "@/lib/atc-failover";
+import {
+  getCachedAtcSources,
+  loadAtcSources,
+} from "@/lib/atc-source-client";
+import {
+  isAtcAudioElementCaptured,
+  retireAtcAudioElement,
+} from "@/lib/atc-audio-analysis";
 
 const VOLUME_STORAGE_KEY = "aeris:atc:volume";
 const DEFAULT_VOLUME = 0.7;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
-const MAX_RECONNECT_ATTEMPTS = 5;
 const BROADCAST_CHANNEL_NAME = "aeris:atc-playback";
+const TRANSIENT_STATUS_DELAY_MS = 1_200;
+
+export const ATC_STARTUP_TIMEOUT_MS = 45_000;
+export const ATC_STALL_TIMEOUT_MS = 12_000;
 
 export function getAtcReconnectDelayMs(attempt: number): number {
   const safeAttempt = Number.isFinite(attempt)
@@ -23,30 +50,93 @@ export function getAtcReconnectDelayMs(attempt: number): number {
   );
 }
 
-// ── Volume persistence ─────────────────────────────────────────────────
+function hasErrorName(error: unknown, name: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === name
+  );
+}
+
+export function isAtcAutoplayBlock(error: unknown): boolean {
+  return hasErrorName(error, "NotAllowedError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return hasErrorName(error, "AbortError");
+}
+
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/**
+ * Reusing the same element preserves WebKit's per-element autoplay grant.
+ * An element that may already be captured by Web Audio cannot safely move
+ * from a CORS-enabled source to a non-CORS source, because captured media
+ * would become silent. Before first playback, no visualizer has captured it.
+ */
+export function canReuseAtcAudioElement(
+  currentAnalyzable: boolean | null,
+  nextAnalyzable: boolean,
+  mayBeWebAudioCaptured: boolean,
+): boolean {
+  if (currentAnalyzable === null) return false;
+  if (currentAnalyzable === nextAnalyzable) return true;
+  if (!currentAnalyzable && nextAnalyzable) return true;
+  return !mayBeWebAudioCaptured;
+}
+
+export function shouldSwitchToAtcManifestCandidate(
+  activeSourceId: string | null,
+  preferredSourceId: string | null,
+  playbackEstablished: boolean,
+): boolean {
+  return (
+    preferredSourceId !== null &&
+    preferredSourceId !== activeSourceId &&
+    !playbackEstablished
+  );
+}
+
+/** Startup buffering is governed by its longer watchdog, not the stall timer. */
+export function shouldArmAtcStallTimeout(hasStartedPlaying: boolean): boolean {
+  return hasStartedPlaying;
+}
 
 function loadVolume(): number {
   if (typeof window === "undefined") return DEFAULT_VOLUME;
   try {
     const raw = localStorage.getItem(VOLUME_STORAGE_KEY);
     if (!raw) return DEFAULT_VOLUME;
-    const v = Number(raw);
-    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : DEFAULT_VOLUME;
+    const volume = Number(raw);
+    return Number.isFinite(volume) && volume >= 0 && volume <= 1
+      ? volume
+      : DEFAULT_VOLUME;
   } catch {
     return DEFAULT_VOLUME;
   }
 }
 
-function saveVolume(v: number): void {
+function saveVolume(volume: number): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(VOLUME_STORAGE_KEY, String(v));
+    localStorage.setItem(VOLUME_STORAGE_KEY, String(volume));
   } catch {
-    // localStorage may be unavailable
+    // localStorage may be unavailable.
   }
 }
 
-// ── BroadcastChannel for single-tab playback ───────────────────────────
+type Timer = ReturnType<typeof setTimeout>;
+type TimerRef = { current: Timer | null };
+
+function clearTimer(ref: TimerRef): void {
+  if (ref.current) {
+    clearTimeout(ref.current);
+    ref.current = null;
+  }
+}
 
 type BroadcastMessage =
   | { type: "playing"; tabId: string; feedId: string }
@@ -56,167 +146,138 @@ function createTabId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────
+function builtInCandidate(feed: AtcFeed): AtcSourceCandidate {
+  const id = getBuiltInAtcSourceId(feed.id);
+  return {
+    id,
+    feedId: feed.id,
+    providerId: "liveatc",
+    providerLabel: "LiveATC.net",
+    attributionUrl: "https://www.liveatc.net/",
+    priority: 100,
+    analyzable: true,
+    playbackUrl: `/api/atc/stream?source=${encodeURIComponent(id)}`,
+  };
+}
+
+function buildSourcesByFeed(
+  feeds: readonly AtcFeed[],
+  manifest: AtcSourcesManifest | null,
+): Record<string, AtcSourceCandidate[]> {
+  return Object.fromEntries(
+    feeds.map((catalogFeed) => {
+      const configured = manifest?.sourcesByFeed[catalogFeed.id];
+      return [
+        catalogFeed.id,
+        configured && configured.length > 0
+          ? configured
+          : [builtInCandidate(catalogFeed)],
+      ];
+    }),
+  );
+}
+
+function buildPlaybackPlan(
+  requestedFeed: AtcFeed,
+  manifest: AtcSourcesManifest | null,
+): AtcPlaybackPlan {
+  const catalog = getFeedsByIcao(requestedFeed.icao);
+  return buildAtcPlaybackPlan(
+    requestedFeed,
+    catalog,
+    buildSourcesByFeed(catalog, manifest),
+  );
+}
 
 export interface UseAtcStreamReturn {
-  /** Currently active feed */
+  /** User-selected logical channel. */
   feed: AtcFeed | null;
-  /** Playback status */
+  /** Channel currently being attempted or played, including facility backup. */
+  activeFeed: AtcFeed | null;
+  activeSourceId: string | null;
   status: AtcStreamStatus;
-  /** Error message (when status is 'error' or 'blocked') */
+  switching: boolean;
+  reconnecting: boolean;
   error: string | null;
-  /** Whether proxy fallback is active */
-  usingProxy: boolean;
-  /** Current volume 0–1 */
+  retryAt: number | null;
+  isBackup: boolean;
+  analyzable: boolean;
   volume: number;
-  /** Reference to the underlying HTMLAudioElement (for Web Audio API) */
   audioElement: HTMLAudioElement | null;
-  /** Start playing a feed */
   play: (feed: AtcFeed) => void;
-  /** Stop playback */
   stop: () => void;
-  /** Resume after browser autoplay block (requires user gesture) */
   resume: () => void;
-  /** Set volume 0–1 */
-  setVolume: (v: number) => void;
+  retry: () => void;
+  setVolume: (volume: number) => void;
 }
 
 export function useAtcStream(): UseAtcStreamReturn {
   const [feed, setFeed] = useState<AtcFeed | null>(null);
+  const [activeFeed, setActiveFeed] = useState<AtcFeed | null>(null);
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [status, setStatus] = useState<AtcStreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [usingProxy, setUsingProxy] = useState(false);
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [isBackup, setIsBackup] = useState(false);
+  const [analyzable, setAnalyzable] = useState(false);
   const [volume, setVolumeState] = useState(loadVolume);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(
     null,
   );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const feedRef = useRef<AtcFeed | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const tabIdRef = useRef<string>(createTabId());
+  const requestedFeedRef = useRef<AtcFeed | null>(null);
+  const activeCandidateRef = useRef<AtcPlaybackCandidate | null>(null);
+  const planRef = useRef<AtcPlaybackPlan | null>(null);
+  const healthRef = useRef<AtcSourceHealthById>({});
+  const desiredPlaybackRef = useRef(false);
+  const volumeRef = useRef(volume);
+  const audioGenerationRef = useRef(0);
+  const audioAnalyzableRef = useRef<boolean | null>(null);
+  const audioConnectionActiveRef = useRef(false);
+  const playbackEstablishedRef = useRef(false);
+  const manifestPendingRef = useRef(false);
+  const audioEventCleanupRef = useRef<(() => void) | null>(null);
+  const sessionGenerationRef = useRef(0);
+  const startupTimerRef = useRef<Timer | null>(null);
+  const stallTimerRef = useRef<Timer | null>(null);
+  const transientStatusTimerRef = useRef<Timer | null>(null);
+  const stableTimerRef = useRef<Timer | null>(null);
+  const retryTimerRef = useRef<Timer | null>(null);
+  const tabIdRef = useRef(createTabId());
   const broadcastRef = useRef<BroadcastChannel | null>(null);
-  const stalledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const proxyAttemptedRef = useRef(false);
-  const stoppedManuallyRef = useRef(false);
   const stopRef = useRef<() => void>(() => {});
-  const startPlaybackRef = useRef<
-    (targetFeed: AtcFeed, useProxy?: boolean, isReconnect?: boolean) => void
+  const startCandidateRef = useRef<
+    (candidate: AtcPlaybackCandidate, phase: "loading" | "switching") => void
   >(() => {});
+  const attemptNextRef = useRef<
+    (phase: "loading" | "switching" | "reconnecting") => void
+  >(() => {});
+  const handleSourceFailureRef = useRef<(sourceId: string) => void>(() => {});
 
-  // ── Cleanup helper ─────────────────────────────────────────────────
-
-  const cleanupAudio = useCallback((resetSession: boolean = true) => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (stalledTimerRef.current) {
-      clearTimeout(stalledTimerRef.current);
-      stalledTimerRef.current = null;
-    }
-
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load(); // release internal resources
-      audioRef.current = null;
-    }
-
-    setAudioElement(null);
-    if (resetSession) {
-      reconnectAttemptsRef.current = 0;
-      proxyAttemptedRef.current = false;
-    }
+  const setPlaybackStatus = useCallback((nextStatus: AtcStreamStatus) => {
+    setStatus(nextStatus);
   }, []);
 
-  const clearPlaybackState = useCallback(
-    (broadcastStop: boolean) => {
-      stoppedManuallyRef.current = true;
-      cleanupAudio();
-      setFeed(null);
-      feedRef.current = null;
-      setStatus("idle");
-      setError(null);
-      setUsingProxy(false);
-      reconnectAttemptsRef.current = 0;
-      proxyAttemptedRef.current = false;
-
-      if (!broadcastStop) {
-        return;
-      }
-
-      try {
-        broadcastRef.current?.postMessage({
-          type: "stopped",
-          tabId: tabIdRef.current,
-        } satisfies BroadcastMessage);
-      } catch {
-        // BroadcastChannel may be closed
-      }
-    },
-    [cleanupAudio],
-  );
-
-  // ── BroadcastChannel setup ─────────────────────────────────────────
-
-  useEffect(() => {
-    if (typeof BroadcastChannel === "undefined") return;
-
-    const bc = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-    broadcastRef.current = bc;
-
-    bc.onmessage = (event: MessageEvent<BroadcastMessage>) => {
-      const msg = event.data;
-      if (!msg || typeof msg !== "object" || !msg.type) return;
-
-      // Another tab started playing - stop our playback
-      if (
-        msg.type === "playing" &&
-        msg.tabId !== tabIdRef.current &&
-        audioRef.current
-      ) {
-        clearPlaybackState(false);
-      }
-    };
-
-    return () => {
-      bc.close();
-      broadcastRef.current = null;
-    };
-  }, [clearPlaybackState]);
-
-  // ── Media Session API ──────────────────────────────────────────────
-
   const updateMediaSession = useCallback(
-    (activeFeed: AtcFeed | null, isPlaying: boolean) => {
-      if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+    (currentFeed: AtcFeed | null, isPlaying: boolean) => {
+      if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
         return;
+      }
 
-      if (!activeFeed || !isPlaying) {
+      if (!currentFeed || !isPlaying) {
         navigator.mediaSession.playbackState = "none";
         return;
       }
 
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: activeFeed.name,
-        artist: `${activeFeed.icao} · ${activeFeed.frequency}`,
+        title: currentFeed.name,
+        artist: `${currentFeed.icao} · ${currentFeed.frequency}`,
         album: "Aeris ATC",
       });
-
       navigator.mediaSession.playbackState = "playing";
-
-      navigator.mediaSession.setActionHandler("pause", () => {
-        stopRef.current();
-      });
-
-      navigator.mediaSession.setActionHandler("stop", () => {
-        stopRef.current();
-      });
-
-      // No seek/track actions for live streams
+      navigator.mediaSession.setActionHandler("pause", () => stopRef.current());
+      navigator.mediaSession.setActionHandler("stop", () => stopRef.current());
       navigator.mediaSession.setActionHandler("play", null);
       navigator.mediaSession.setActionHandler("seekbackward", null);
       navigator.mediaSession.setActionHandler("seekforward", null);
@@ -226,245 +287,526 @@ export function useAtcStream(): UseAtcStreamReturn {
     [],
   );
 
-  // ── Reconnection logic ────────────────────────────────────────────
+  const clearPlaybackTimers = useCallback(() => {
+    clearTimer(startupTimerRef);
+    clearTimer(stallTimerRef);
+    clearTimer(transientStatusTimerRef);
+    clearTimer(stableTimerRef);
+  }, []);
 
-  const scheduleReconnectAttempt = useCallback(
-    (targetFeed: AtcFeed, useProxy: boolean) => {
-      if (stoppedManuallyRef.current) return;
-      if (reconnectTimerRef.current) return;
+  const clearRetryTimer = useCallback(() => {
+    clearTimer(retryTimerRef);
+  }, []);
 
-      // Give up after too many failures
-      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-        setStatus("error");
-        setError("Feed unavailable. Try another frequency.");
-        return;
+  const disposeAudio = useCallback(
+    (preserveElement = false): HTMLAudioElement | null => {
+      audioGenerationRef.current += 1;
+      clearPlaybackTimers();
+      audioEventCleanupRef.current?.();
+      audioEventCleanupRef.current = null;
+      audioConnectionActiveRef.current = false;
+      playbackEstablishedRef.current = false;
+      updateMediaSession(null, false);
+
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
       }
 
-      const attempt = reconnectAttemptsRef.current++;
-      const delay = getAtcReconnectDelayMs(attempt);
+      if (audio && preserveElement) {
+        return audio;
+      }
 
-      // Don't flash status - keep the error visible while we wait
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectTimerRef.current = null;
-        if (feedRef.current?.id !== targetFeed.id) return;
-        startPlaybackRef.current(targetFeed, useProxy, true);
-      }, delay);
+      if (audio) retireAtcAudioElement(audio);
+
+      audioRef.current = null;
+      audioAnalyzableRef.current = null;
+      setAudioElement(null);
+      return null;
     },
-    [],
+    [clearPlaybackTimers, updateMediaSession],
   );
 
-  // ── Core playback ─────────────────────────────────────────────────
+  const scheduleRetry = useCallback(
+    (nextRetryAt: number) => {
+      clearRetryTimer();
+      const delay = Math.max(0, nextRetryAt - Date.now());
+      setRetryAt(nextRetryAt);
+      setPlaybackStatus("reconnecting");
+      setError("All sources unavailable · retrying");
 
-  const startPlayback = useCallback(
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        if (!desiredPlaybackRef.current) return;
+        attemptNextRef.current("reconnecting");
+      }, delay);
+    },
+    [clearRetryTimer, setPlaybackStatus],
+  );
+
+  const startCandidate = useCallback(
     (
-      targetFeed: AtcFeed,
-      useProxy: boolean = false,
-      isReconnect: boolean = false,
+      candidate: AtcPlaybackCandidate,
+      phase: "loading" | "switching",
     ) => {
-      // Dispose the failed Audio element without resetting the retry/proxy
-      // session. Resetting here made every retry look like attempt zero.
-      cleanupAudio(false);
-      stoppedManuallyRef.current = false;
+      if (!desiredPlaybackRef.current) return;
 
-      const audio = new Audio();
+      clearRetryTimer();
+      const reusableAudio = audioRef.current;
+      const canReuse =
+        reusableAudio !== null &&
+        canReuseAtcAudioElement(
+          audioAnalyzableRef.current,
+          candidate.source.analyzable,
+          isAtcAudioElementCaptured(reusableAudio),
+        );
+      const audio = disposeAudio(canReuse) ?? new Audio();
+      const generation = ++audioGenerationRef.current;
+      activeCandidateRef.current = candidate;
       audioRef.current = audio;
+      audioAnalyzableRef.current = candidate.source.analyzable;
+      setActiveFeed(candidate.feed);
+      setActiveSourceId(candidate.source.id);
+      setIsBackup(candidate.isBackup);
+      setAnalyzable(
+        candidate.source.analyzable && !manifestPendingRef.current,
+      );
+      setRetryAt(null);
+      setError(phase === "switching" ? "Switching source…" : null);
+      setPlaybackStatus(phase);
+
       setAudioElement(audio);
-      audio.volume = loadVolume();
-      // Allow audio to play in background - do NOT add visibility listeners
+      audio.volume = volumeRef.current;
       audio.preload = "none";
-
-      // Build stream URL
-      let src: string;
-      if (useProxy) {
-        // Same-origin proxy - enable CORS for Web Audio API analysis
+      if (candidate.source.analyzable) {
         audio.crossOrigin = "anonymous";
-        // Validate mount point exists in our allowlist before proxying
-        if (!VALID_MOUNT_POINTS.has(targetFeed.mountPoint)) {
-          setStatus("error");
-          setError("Invalid feed configuration.");
-          return;
-        }
-        src = `/api/atc/stream?mount=${encodeURIComponent(targetFeed.mountPoint)}`;
-        setUsingProxy(true);
       } else {
-        src = targetFeed.streamUrl;
-        setUsingProxy(false);
+        audio.removeAttribute("crossorigin");
       }
+      audio.src = candidate.source.playbackUrl;
+      audioConnectionActiveRef.current = true;
 
-      // Only flash "loading" on fresh plays, not silent reconnects
-      if (!isReconnect) {
-        setStatus("loading");
-        setError(null);
-      }
+      let terminalFailureHandled = false;
+      let hasStartedPlaying = false;
+      const isCurrent = () =>
+        desiredPlaybackRef.current &&
+        audioGenerationRef.current === generation &&
+        audioRef.current === audio;
 
-      audio.src = src;
+      const fail = () => {
+        if (!isCurrent() || terminalFailureHandled) return;
+        terminalFailureHandled = true;
+        clearPlaybackTimers();
+        handleSourceFailureRef.current(candidate.source.id);
+      };
 
-      audio.addEventListener("playing", () => {
-        if (audioRef.current !== audio) return;
-        // Clear any pending stall timer
-        if (stalledTimerRef.current) {
-          clearTimeout(stalledTimerRef.current);
-          stalledTimerRef.current = null;
+      const armStartupTimeout = () => {
+        clearTimer(startupTimerRef);
+        startupTimerRef.current = setTimeout(fail, ATC_STARTUP_TIMEOUT_MS);
+      };
+
+      const armStallTimeout = () => {
+        if (!isCurrent() || terminalFailureHandled) return;
+        if (!shouldArmAtcStallTimeout(hasStartedPlaying)) return;
+        clearTimer(stableTimerRef);
+
+        if (!transientStatusTimerRef.current) {
+          transientStatusTimerRef.current = setTimeout(() => {
+            if (!isCurrent()) return;
+            setPlaybackStatus("reconnecting");
+            setError("Stream interrupted · reconnecting");
+          }, TRANSIENT_STATUS_DELAY_MS);
         }
-        setStatus("playing");
-        setError(null);
-        reconnectAttemptsRef.current = 0;
-        updateMediaSession(targetFeed, true);
 
-        // Notify other tabs
+        if (!stallTimerRef.current) {
+          stallTimerRef.current = setTimeout(fail, ATC_STALL_TIMEOUT_MS);
+        }
+      };
+
+      const handlePlaying = () => {
+        if (!isCurrent() || terminalFailureHandled) return;
+        hasStartedPlaying = true;
+        clearTimer(startupTimerRef);
+        clearTimer(stallTimerRef);
+        clearTimer(transientStatusTimerRef);
+        clearTimer(stableTimerRef);
+        setPlaybackStatus("playing");
+        setError(null);
+        setRetryAt(null);
+        updateMediaSession(candidate.feed, true);
+
+        stableTimerRef.current = setTimeout(() => {
+          if (!isCurrent()) return;
+          playbackEstablishedRef.current = true;
+          healthRef.current = recordAtcSourceStableSuccess(
+            healthRef.current,
+            candidate.source.id,
+            ATC_STABLE_PLAYBACK_MS,
+          );
+        }, ATC_STABLE_PLAYBACK_MS);
+
         try {
           broadcastRef.current?.postMessage({
             type: "playing",
             tabId: tabIdRef.current,
-            feedId: targetFeed.id,
+            feedId: requestedFeedRef.current?.id ?? candidate.feed.id,
           } satisfies BroadcastMessage);
         } catch {
-          // BroadcastChannel may be closed
+          // BroadcastChannel may be closed.
         }
-      });
+      };
 
-      audio.addEventListener("waiting", () => {
-        if (audioRef.current !== audio) return;
-        // Debounce - only show "loading" if buffering persists >1.2s
-        if (!stalledTimerRef.current) {
-          stalledTimerRef.current = setTimeout(() => {
-            stalledTimerRef.current = null;
-            if (audioRef.current === audio) setStatus("loading");
-          }, 1200);
-        }
-      });
+      audio.addEventListener("playing", handlePlaying);
+      audio.addEventListener("waiting", armStallTimeout);
+      audio.addEventListener("stalled", armStallTimeout);
+      audio.addEventListener("error", fail);
+      audio.addEventListener("ended", fail);
+      audioEventCleanupRef.current = () => {
+        audio.removeEventListener("playing", handlePlaying);
+        audio.removeEventListener("waiting", armStallTimeout);
+        audio.removeEventListener("stalled", armStallTimeout);
+        audio.removeEventListener("error", fail);
+        audio.removeEventListener("ended", fail);
+      };
 
-      audio.addEventListener("error", () => {
-        if (audioRef.current !== audio) return;
+      armStartupTimeout();
+      audio.play().catch((playError: unknown) => {
+        if (!isCurrent() || terminalFailureHandled) return;
 
-        // Prefer the same-origin proxy for fast startup and Web Audio analysis,
-        // but keep a direct fallback in case the local proxy is unavailable.
-        if (useProxy && !proxyAttemptedRef.current) {
-          proxyAttemptedRef.current = true;
-          setError("Proxy stream failed. Trying direct...");
-          startPlaybackRef.current(targetFeed, false);
+        if (isAtcAutoplayBlock(playError)) {
+          terminalFailureHandled = true;
+          clearPlaybackTimers();
+          setPlaybackStatus("blocked");
+          setError("Tap to listen · browser requires interaction");
           return;
         }
 
-        // If direct playback failed, try proxy fallback
-        if (!useProxy && !proxyAttemptedRef.current) {
-          proxyAttemptedRef.current = true;
-          setError("Direct stream blocked. Trying proxy...");
-          startPlaybackRef.current(targetFeed, true);
+        if (isAbortError(playError)) {
+          terminalFailureHandled = true;
+          clearPlaybackTimers();
+          setPlaybackStatus("reconnecting");
+          setError("Reconnecting…");
+          const nextRetryAt = Date.now() + getAtcReconnectDelayMs(0);
+          setRetryAt(nextRetryAt);
+          clearRetryTimer();
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            if (!desiredPlaybackRef.current) return;
+            startCandidateRef.current(candidate, "switching");
+          }, getAtcReconnectDelayMs(0));
           return;
         }
 
-        // Both direct and proxy failed - stay in "error" (not "blocked")
-        setUsingProxy(useProxy);
-        setStatus("error");
+        fail();
+      });
+    },
+    [
+      clearPlaybackTimers,
+      clearRetryTimer,
+      disposeAudio,
+      setPlaybackStatus,
+      updateMediaSession,
+    ],
+  );
 
-        if (proxyAttemptedRef.current) {
-          setError("Stream unavailable - try another frequency.");
+  const attemptNext = useCallback(
+    (phase: "loading" | "switching" | "reconnecting") => {
+      if (!desiredPlaybackRef.current) return;
+      const plan = planRef.current;
+      if (!plan) return;
+
+      if (isOffline()) {
+        clearRetryTimer();
+        disposeAudio(true);
+        setRetryAt(null);
+        setPlaybackStatus("reconnecting");
+        setError("Offline · waiting for connection");
+        return;
+      }
+
+      const selection = selectAtcPlaybackCandidate(
+        plan,
+        healthRef.current,
+        Date.now(),
+      );
+      if (selection.candidate) {
+        startCandidateRef.current(
+          selection.candidate,
+          phase === "loading" ? "loading" : "switching",
+        );
+        return;
+      }
+
+      disposeAudio(true);
+      if (selection.retryAt !== null) {
+        scheduleRetry(selection.retryAt);
+        return;
+      }
+
+      setRetryAt(null);
+      setPlaybackStatus("error");
+      setError("No ATC sources configured for this airport");
+    },
+    [clearRetryTimer, disposeAudio, scheduleRetry, setPlaybackStatus],
+  );
+
+  const handleSourceFailure = useCallback(
+    (sourceId: string) => {
+      if (!desiredPlaybackRef.current) return;
+
+      if (isOffline()) {
+        disposeAudio(true);
+        setRetryAt(null);
+        setPlaybackStatus("reconnecting");
+        setError("Offline · waiting for connection");
+        return;
+      }
+
+      healthRef.current = recordAtcSourceFailure(
+        healthRef.current,
+        sourceId,
+        Date.now(),
+      );
+      setPlaybackStatus("switching");
+      setError("Switching source…");
+      attemptNextRef.current("switching");
+    },
+    [disposeAudio, setPlaybackStatus],
+  );
+
+  useEffect(() => {
+    startCandidateRef.current = startCandidate;
+    attemptNextRef.current = attemptNext;
+    handleSourceFailureRef.current = handleSourceFailure;
+  }, [attemptNext, handleSourceFailure, startCandidate]);
+
+  const clearPlaybackState = useCallback(
+    (broadcastStop: boolean) => {
+      desiredPlaybackRef.current = false;
+      sessionGenerationRef.current += 1;
+      clearRetryTimer();
+      disposeAudio();
+      requestedFeedRef.current = null;
+      activeCandidateRef.current = null;
+      planRef.current = null;
+      manifestPendingRef.current = false;
+      setFeed(null);
+      setActiveFeed(null);
+      setActiveSourceId(null);
+      setRetryAt(null);
+      setIsBackup(false);
+      setAnalyzable(false);
+      setError(null);
+      setPlaybackStatus("idle");
+      updateMediaSession(null, false);
+
+      if (!broadcastStop) return;
+      try {
+        broadcastRef.current?.postMessage({
+          type: "stopped",
+          tabId: tabIdRef.current,
+        } satisfies BroadcastMessage);
+      } catch {
+        // BroadcastChannel may be closed.
+      }
+    },
+    [clearRetryTimer, disposeAudio, setPlaybackStatus, updateMediaSession],
+  );
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+    broadcastRef.current = channel;
+    channel.onmessage = (event: MessageEvent<BroadcastMessage>) => {
+      const message = event.data;
+      if (
+        message?.type === "playing" &&
+        message.tabId !== tabIdRef.current &&
+        desiredPlaybackRef.current
+      ) {
+        clearPlaybackState(false);
+      }
+    };
+
+    return () => {
+      channel.close();
+      if (broadcastRef.current === channel) broadcastRef.current = null;
+    };
+  }, [clearPlaybackState]);
+
+  const play = useCallback((nextFeed: AtcFeed) => {
+    const sessionGeneration = ++sessionGenerationRef.current;
+    desiredPlaybackRef.current = true;
+    requestedFeedRef.current = nextFeed;
+    setFeed(nextFeed);
+    setError(null);
+    setRetryAt(null);
+
+    const cachedManifest = getCachedAtcSources(nextFeed.icao);
+    manifestPendingRef.current = cachedManifest === null;
+    planRef.current = buildPlaybackPlan(nextFeed, cachedManifest);
+    attemptNextRef.current("loading");
+
+    void loadAtcSources(nextFeed.icao)
+      .then((manifest) => {
+        if (
+          !desiredPlaybackRef.current ||
+          sessionGenerationRef.current !== sessionGeneration ||
+          requestedFeedRef.current?.id !== nextFeed.id
+        ) {
+          return;
+        }
+
+        const authoritativePlan = buildPlaybackPlan(nextFeed, manifest);
+        manifestPendingRef.current = false;
+        planRef.current = authoritativePlan;
+        if (!audioConnectionActiveRef.current) {
+          attemptNextRef.current("switching");
+          return;
+        }
+
+        const preferred = selectAtcPlaybackCandidate(
+          authoritativePlan,
+          healthRef.current,
+          Date.now(),
+        ).candidate;
+        if (
+          shouldSwitchToAtcManifestCandidate(
+            activeCandidateRef.current?.source.id ?? null,
+            preferred?.source.id ?? null,
+            playbackEstablishedRef.current,
+          ) &&
+          preferred
+        ) {
+          startCandidateRef.current(preferred, "switching");
         } else {
-          setError("Stream connection failed.");
+          setAnalyzable(
+            activeCandidateRef.current?.source.analyzable ?? false,
+          );
         }
-
-        // Try to reconnect (silently, up to MAX_RECONNECT_ATTEMPTS)
-        scheduleReconnectAttempt(targetFeed, useProxy);
-      });
-
-      audio.addEventListener("stalled", () => {
-        if (audioRef.current !== audio) return;
-        // Debounce - only show "loading" if stall persists >1.2s
-        if (!stalledTimerRef.current) {
-          stalledTimerRef.current = setTimeout(() => {
-            stalledTimerRef.current = null;
-            if (audioRef.current === audio) setStatus("loading");
-          }, 1200);
+      })
+      .catch(() => {
+        if (
+          desiredPlaybackRef.current &&
+          sessionGenerationRef.current === sessionGeneration &&
+          requestedFeedRef.current?.id === nextFeed.id
+        ) {
+          manifestPendingRef.current = false;
+          setAnalyzable(
+            activeCandidateRef.current?.source.analyzable ?? false,
+          );
         }
+        // Built-in LiveATC candidates remain available without the manifest.
       });
-
-      audio.addEventListener("ended", () => {
-        if (audioRef.current !== audio) return;
-        // Live streams shouldn't end, but if they do, reconnect
-        scheduleReconnectAttempt(targetFeed, useProxy);
-      });
-
-      // Start playback - requires user gesture (handled by UI click)
-      audio.play().catch(() => {
-        // Autoplay blocked - user must interact first
-        if (audioRef.current !== audio) return;
-        setStatus("blocked");
-        setError("Tap to listen - browser requires interaction.");
-      });
-    },
-    [cleanupAudio, scheduleReconnectAttempt, updateMediaSession],
-  );
-
-  // ── Public API ────────────────────────────────────────────────────
-
-  const play = useCallback(
-    (newFeed: AtcFeed) => {
-      reconnectAttemptsRef.current = 0;
-      feedRef.current = newFeed;
-      setFeed(newFeed);
-      proxyAttemptedRef.current = false;
-      reconnectAttemptsRef.current = 0;
-      stoppedManuallyRef.current = false;
-      startPlayback(newFeed, true);
-    },
-    [startPlayback],
-  );
+  }, []);
 
   const stop = useCallback(() => {
     clearPlaybackState(true);
-    updateMediaSession(null, false);
-  }, [clearPlaybackState, updateMediaSession]);
-
-  useEffect(() => {
-    startPlaybackRef.current = startPlayback;
-  }, [startPlayback]);
+  }, [clearPlaybackState]);
 
   useEffect(() => {
     stopRef.current = stop;
   }, [stop]);
 
-  const setVolume = useCallback((v: number) => {
-    const clamped = Math.max(0, Math.min(1, v));
+  const resume = useCallback(() => {
+    const candidate = activeCandidateRef.current;
+    if (!desiredPlaybackRef.current || !candidate) return;
+    startCandidateRef.current(candidate, "loading");
+  }, []);
+
+  const retry = useCallback(() => {
+    if (!desiredPlaybackRef.current || !planRef.current) return;
+
+    healthRef.current = Object.fromEntries(
+      Object.entries(healthRef.current).map(([sourceId, sourceHealth]) => [
+        sourceId,
+        sourceHealth
+          ? { ...sourceHealth, cooldownUntil: 0 }
+          : sourceHealth,
+      ]),
+    );
+    clearRetryTimer();
+    disposeAudio(true);
+    attemptNextRef.current("switching");
+
+    const requestedFeed = requestedFeedRef.current;
+    if (requestedFeed) {
+      void loadAtcSources(requestedFeed.icao, { force: true })
+        .then((manifest) => {
+          if (
+            !desiredPlaybackRef.current ||
+            requestedFeedRef.current?.id !== requestedFeed.id
+          ) {
+            return;
+          }
+          planRef.current = buildPlaybackPlan(requestedFeed, manifest);
+        })
+        .catch(() => {});
+    }
+  }, [clearRetryTimer, disposeAudio]);
+
+  const setVolume = useCallback((nextVolume: number) => {
+    const clamped = Math.max(0, Math.min(1, nextVolume));
+    volumeRef.current = clamped;
     setVolumeState(clamped);
     saveVolume(clamped);
-    if (audioRef.current) {
-      audioRef.current.volume = clamped;
-    }
+    if (audioRef.current) audioRef.current.volume = clamped;
   }, []);
 
-  // Resume after autoplay block - must be called from a user gesture
-  const resume = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+  useEffect(() => {
+    const handleOnline = () => {
+      if (!desiredPlaybackRef.current || audioConnectionActiveRef.current) {
+        return;
+      }
+      clearRetryTimer();
+      setRetryAt(null);
+      attemptNextRef.current("reconnecting");
+    };
+    const handleOffline = () => {
+      if (!desiredPlaybackRef.current) return;
+      disposeAudio(true);
+      clearRetryTimer();
+      setRetryAt(null);
+      setPlaybackStatus("reconnecting");
+      setError("Offline · waiting for connection");
+    };
 
-    setStatus("loading");
-    setError(null);
-    audio.play().catch(() => {
-      setStatus("blocked");
-      setError("Tap to listen - browser requires interaction.");
-    });
-  }, []);
-
-  // ── Cleanup on unmount ────────────────────────────────────────────
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [clearRetryTimer, disposeAudio, setPlaybackStatus]);
 
   useEffect(() => {
     return () => {
-      cleanupAudio();
+      desiredPlaybackRef.current = false;
+      clearRetryTimer();
+      disposeAudio();
       updateMediaSession(null, false);
     };
-  }, [cleanupAudio, updateMediaSession]);
+  }, [clearRetryTimer, disposeAudio, updateMediaSession]);
 
   return {
     feed,
+    activeFeed,
+    activeSourceId,
     status,
+    switching: status === "switching",
+    reconnecting: status === "reconnecting",
     error,
-    usingProxy,
+    retryAt,
+    isBackup,
+    analyzable,
     volume,
     audioElement,
     play,
     stop,
     resume,
+    retry,
     setVolume,
   };
 }

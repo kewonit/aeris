@@ -14,8 +14,8 @@ export type AtcFeedType =
   | "combined";
 
 /**
- * A single ATC audio feed from LiveATC.
- * Mount points and stream URLs are sourced from LiveATC's public feed list.
+ * A logical ATC channel. Physical audio sources are resolved separately so a
+ * channel can fail over between providers without changing its stable ID.
  */
 export interface AtcFeed {
   /** Unique feed identifier (e.g., "kjfk-twr") */
@@ -28,10 +28,42 @@ export interface AtcFeed {
   frequency: string;
   /** Feed type classification */
   type: AtcFeedType;
-  /** LiveATC mount point identifier (e.g., "kjfk_twr") */
-  mountPoint: string;
-  /** Direct Icecast stream URL for <audio> src */
-  streamUrl: string;
+}
+
+/** Public attribution details for an ATC audio provider. */
+export interface AtcProviderAttribution {
+  /** Stable provider identifier. */
+  id: string;
+  /** Human-readable provider label. */
+  label: string;
+  /** Provider page that must be linked from attribution UI. */
+  attributionUrl: string;
+}
+
+/** A browser-playable source candidate for one logical ATC channel. */
+export interface AtcSourceCandidate {
+  /** Opaque source identifier accepted by /api/atc/stream. */
+  id: string;
+  /** Stable logical feed ID this candidate can play. */
+  feedId: string;
+  /** Provider identifier. */
+  providerId: string;
+  /** Human-readable provider label. */
+  providerLabel: string;
+  /** Provider page used for attribution. */
+  attributionUrl: string;
+  /** Lower values are attempted first. */
+  priority: number;
+  /** Whether the source permits cross-origin Web Audio analysis. */
+  analyzable: boolean;
+  /** Same-origin resolver or relay endpoint used for playback. */
+  playbackUrl: string;
+}
+
+/** Client-safe source manifest returned by /api/atc/sources. */
+export interface AtcSourcesManifest {
+  providers: AtcProviderAttribution[];
+  sourcesByFeed: Record<string, AtcSourceCandidate[]>;
 }
 
 /**
@@ -40,6 +72,8 @@ export interface AtcFeed {
 export type AtcStreamStatus =
   | "idle"
   | "loading"
+  | "switching"
+  | "reconnecting"
   | "playing"
   | "error"
   | "blocked";
@@ -48,16 +82,28 @@ export type AtcStreamStatus =
  * Full state of the ATC audio stream.
  */
 export interface AtcStreamState {
-  /** Currently active feed, or null if nothing selected */
+  /** User-selected logical feed, or null if nothing is requested. */
   feed: AtcFeed | null;
+  /** Feed currently playing, which may be an automatic facility backup. */
+  activeFeed: AtcFeed | null;
+  /** Opaque ID of the physical source currently in use. */
+  activeSourceId: string | null;
   /** Current playback status */
   status: AtcStreamStatus;
+  /** Whether playback is moving to another source or facility backup. */
+  switching: boolean;
+  /** Whether playback is waiting to recover the current session. */
+  reconnecting: boolean;
   /** Volume level 0–1 */
   volume: number;
   /** Error message when status is 'error' or 'blocked' */
   error?: string;
-  /** Whether the fallback proxy is being used */
-  usingProxy: boolean;
+  /** Earliest automatic retry time after all candidates enter cooldown. */
+  retryAt: number | null;
+  /** Whether activeFeed differs from the user-selected feed. */
+  isBackup: boolean;
+  /** Whether Web Audio visualizations are supported by the active source. */
+  analyzable: boolean;
 }
 
 /**

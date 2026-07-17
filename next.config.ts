@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+import { getAtcMediaOrigins } from "./src/lib/atc-source-registry";
 import { getDirectTraceProviderPolicies } from "./src/lib/trails/providers";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -18,20 +19,35 @@ const directTraceConnectSrc = Array.from(
 // server-side only (accessed via /api/aircraft-photos proxy route). CSP does
 // not apply to server-side fetches, so they are not listed in connect-src.
 // adsbdb.com and hexdb.io are server-side only for route lookup via /api/routes.
-const cspHeader = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' blob: data: https: ;
-  font-src 'self';
-  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com ${directTraceConnectSrc};
-  worker-src 'self' blob:;
-  child-src blob:;
-  object-src 'none';
-  base-uri 'self';
-  form-action 'self';
-  frame-ancestors 'none';${isDev ? "" : "\n  upgrade-insecure-requests;"}
-`;
+export function buildContentSecurityPolicy(
+  atcMediaOrigins: readonly string[] = getAtcMediaOrigins(),
+): string {
+  const atcMediaSrc = Array.from(
+    new Set(["'self'", "https://*.liveatc.net", ...atcMediaOrigins]),
+  ).join(" ");
+
+  return `
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' blob: data: https: ;
+    media-src ${atcMediaSrc};
+    font-src 'self';
+    connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com ${directTraceConnectSrc};
+    worker-src 'self' blob:;
+    child-src blob:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';${isDev ? "" : "\n    upgrade-insecure-requests;"}
+  `
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// Building the policy eagerly also validates ATC_CUSTOM_SOURCES_JSON while
+// Next.js loads its configuration, before an invalid deployment can start.
+const cspHeader = buildContentSecurityPolicy();
 
 const nextConfig: NextConfig = {
   transpilePackages: [
@@ -60,7 +76,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: cspHeader.replace(/\s{2,}/g, " ").trim(),
+            value: cspHeader,
           },
           ...(isDev
             ? []
@@ -82,7 +98,8 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/api/((?!routes(?:/|$)).*)",
+        source:
+          "/api/((?!routes(?:/|$)|atc/(?:sources|stream)(?:/|$)).*)",
         headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
       },
       {

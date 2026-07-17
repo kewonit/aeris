@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
   RotateCw,
@@ -32,6 +32,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
+import {
+  loadAtcProviderAttributions,
+  type AtcProviderAttribution,
+} from "@/lib/atc-provider-attributions-client";
 
 const ORBIT_SPEED_PRESETS = [
   { label: "Slow", value: 0.06 },
@@ -895,6 +899,19 @@ const CHANGELOG: {
 ];
 
 export function AboutContent() {
+  const [atcProviders, setAtcProviders] = useState<
+    AtcProviderAttribution[]
+  >([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadAtcProviderAttributions(controller.signal).then((providers) => {
+      if (!controller.signal.aborted) setAtcProviders(providers);
+    });
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-5 p-5 pt-3">
@@ -916,6 +933,26 @@ export function AboutContent() {
             who&apos;s cruising at 35,000ft and who&apos;s on approach.
           </p>
         </div>
+
+        {atcProviders.length > 0 && (
+          <div className="space-y-2 text-[12px] leading-relaxed text-foreground/40">
+            <p className="font-medium text-foreground/55">ATC audio sources</p>
+            <ul className="flex flex-wrap gap-x-3 gap-y-1">
+              {atcProviders.map((provider) => (
+                <li key={provider.id}>
+                  <a
+                    href={provider.attributionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
+                  >
+                    {provider.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="h-px w-full bg-foreground/10" />
 

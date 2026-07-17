@@ -119,8 +119,15 @@ All variables are optional - Aeris runs with no secrets. See `.env.example` for 
 | `OPENSKY_CLIENT_ID`     | No       | OAuth2 client id for the server-side OpenSky trace fallback in `src/lib/trails/source/server-trace-service.ts`. Without it, the trace service falls back to public ADS-B aggregators.                                 |
 | `OPENSKY_CLIENT_SECRET` | No       | OAuth2 secret that pairs with `OPENSKY_CLIENT_ID`. Set both or neither.                                                                                                                                               |
 | `OPENAIP_API_KEY`       | No       | API key used by the airspace vector-tile proxy `src/app/api/airspace-tiles/route.ts`. Without it the airspace overlay is disabled cleanly and the client skips OpenAIP tile requests; flight rendering is unaffected. |
+| `ATC_CUSTOM_SOURCES_JSON` | No     | Validated provider and source registry for authorized community or self-hosted ATC streams. See the [ATC guide](docs/atc/README.md).                                                                                 |
 
 Live flight data (airplanes.live, adsb.lol) is called directly from the browser with CORS - no credentials needed.
+
+## ATC Audio
+
+Aeris supports LiveATC playback, source failover, and authorized custom
+streams. See the [ATC guide](docs/atc/README.md) for setup and implementation
+details.
 
 ## License
 
