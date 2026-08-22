@@ -1,7 +1,7 @@
 // ── Global Flight Search Client ────────────────────────────────────────
 //
 // Searches live aircraft globally by callsign or ICAO24 hex.
-// Uses the existing server proxy (/api/flights) with adsb.lol fallback chain.
+// Uses the shared provider chain and circuit state used by map/flight lookups.
 //
 // Verified endpoints (actual API docs):
 //   adsb.lol:     https://api.adsb.lol/v2/callsign/{callsign}
@@ -13,15 +13,15 @@
 // ────────────────────────────────────────────────────────────────────────
 
 import type { FlightState } from "./opensky-types";
-import type { ReadsbApiResponse } from "./flight-api-types";
-import { parseAircraftList, type ParseOptions } from "./flight-api-parsing";
+import {
+  fetchFlightsByCallsign,
+  fetchFlightsByHex,
+  getProviderOverride,
+  type ProviderName,
+} from "./flight-api-client";
 import { expandFlightQuery } from "./airlines";
 
 const SEARCH_TIMEOUT_MS = 10_000;
-const DEFAULT_PARSE_OPTS: ParseOptions = {
-  includeGround: true,
-  requireBaroAltitude: false,
-};
 
 // ── Client-Side Cache ──────────────────────────────────────────────────
 
@@ -35,12 +35,16 @@ const CACHE_TTL_MS = 8_000; // 8 seconds for hits - flights move fast
 const CACHE_EMPTY_TTL_MS = 2_000; // 2 seconds for misses - don't block long
 const CACHE_MAX_ENTRIES = 30;
 
-function cacheKey(query: string): string {
-  return query.trim().toUpperCase().replace(/\s+/g, "");
+function cacheKey(query: string, provider: ProviderName): string {
+  const normalized = query.trim().toUpperCase().replace(/\s+/g, "");
+  return `${provider}:${normalized}`;
 }
 
-function getCached(query: string): FlightState[] | undefined {
-  const key = cacheKey(query);
+function getCached(
+  query: string,
+  provider: ProviderName,
+): FlightState[] | undefined {
+  const key = cacheKey(query, provider);
   const entry = cache.get(key);
   if (!entry) return undefined;
   const ttl = entry.flights.length === 0 ? CACHE_EMPTY_TTL_MS : CACHE_TTL_MS;
@@ -51,8 +55,12 @@ function getCached(query: string): FlightState[] | undefined {
   return entry.flights;
 }
 
-function setCached(query: string, flights: FlightState[]): void {
-  const key = cacheKey(query);
+function setCached(
+  query: string,
+  provider: ProviderName,
+  flights: FlightState[],
+): void {
+  const key = cacheKey(query, provider);
   // Evict oldest if at capacity
   if (cache.size >= CACHE_MAX_ENTRIES && !cache.has(key)) {
     const oldest = cache.keys().next().value;
@@ -83,28 +91,19 @@ async function fetchFlightsByPath(
   signal?.addEventListener("abort", onAbort);
 
   try {
-    const res = await fetch(`/api/flights?path=${encodeURIComponent(path)}`, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      if (res.status === 429) {
-        // Rate limited - return empty, let UI handle retry
-        return [];
-      }
-      return [];
+    const hexMatch = path.match(/^\/hex\/([0-9a-f]{6})$/i);
+    if (hexMatch) {
+      return (await fetchFlightsByHex(hexMatch[1], controller.signal)).flights;
     }
 
-    const data: unknown = await res.json();
-
-    // Validate readsb response shape
-    const response = data as ReadsbApiResponse;
-    if (!response || !Array.isArray(response.ac)) {
-      return [];
+    const callsignMatch = path.match(/^\/callsign\/([A-Z0-9-]{1,8})$/i);
+    if (callsignMatch) {
+      return (
+        await fetchFlightsByCallsign(callsignMatch[1], controller.signal)
+      ).flights;
     }
 
-    return parseAircraftList(response.ac, DEFAULT_PARSE_OPTS);
+    return [];
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") return [];
     return [];
@@ -120,9 +119,10 @@ export async function searchFlightsGlobal(
 ): Promise<FlightState[]> {
   const normalized = query.trim();
   if (!normalized) return [];
+  const provider = getProviderOverride();
 
   // Check cache first
-  const cached = getCached(normalized);
+  const cached = getCached(normalized, provider);
   if (cached) return cached;
 
   const compact = normalized.toLowerCase().replace(/\s+/g, "");
@@ -174,30 +174,23 @@ export async function searchFlightsGlobal(
     if (allFlights.length > 0) break;
   }
 
-  // ── Phase 2: Fallbacks for truly ambiguous 6-char queries ────────────
+  // ── Phase 2: Callsign fallback for truly ambiguous hex queries ──────
   //
   // If the original compact query is 6 hex chars and we still have no
   // results, try the opposite endpoint of what we already attempted.
   if (allFlights.length === 0 && !signal?.aborted) {
     const isHex = /^[0-9a-f]{6}$/i.test(compact);
     if (isHex) {
-      // Already tried hex above (if variant matched); try callsign as last resort
+      // Already tried hex above; the same six characters may be a callsign.
       const csResults = await fetchFlightsByPath(
         `/callsign/${compact.toUpperCase()}`,
         signal,
       );
       addUnique(csResults);
-    } else {
-      // Try hex fallback for non-hex queries
-      const hexResults = await fetchFlightsByPath(
-        `/hex/${compact.toLowerCase()}`,
-        signal,
-      );
-      addUnique(hexResults);
     }
   }
 
-  setCached(normalized, allFlights);
+  setCached(normalized, provider, allFlights);
   return allFlights;
 }
 

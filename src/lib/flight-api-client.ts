@@ -1,7 +1,7 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
 // 3-tier fallback: adsb.lol proxy → airplanes.live proxy → OpenSky.
-// Dev/override: ?provider=airplanes|adsb|opensky in the URL.
+// Override: ?provider=airplanes|adsb|opensky in the URL.
 // ────────────────────────────────────────────────────────────────────────
 
 import type { FlightState } from "./opensky-types";
@@ -11,6 +11,7 @@ import { parseAircraftList, type ParseOptions } from "./flight-api-parsing";
 import {
   bboxFromCenter,
   fetchFlightsByBbox,
+  fetchFlightByCallsign as openskyFetchByCallsign,
   fetchFlightByIcao24 as openskyFetchByIcao24,
 } from "./opensky-flights";
 
@@ -34,7 +35,8 @@ export interface FlightApiFetchResult {
 //   • probe fails    → OPEN (cooldown doubles, capped at 5 min)
 //
 // What counts as a failure:
-//   ✓ Timeout, HTTP 5xx, non-JSON response, network error
+//   ✓ Timeout, HTTP errors, non-JSON response, network error
+//   ✓ 401/403 immediately open the circuit for the maximum cooldown
 //   ✗ AbortError (tab switch / navigation)
 //   ✗ 429 rate-limit (server is alive, handled separately)
 // ────────────────────────────────────────────────────────────────────────
@@ -54,6 +56,22 @@ const CIRCUIT_MAX_COOLDOWN_MS = 300_000; // 5 min
 
 const circuits = new Map<string, TierCircuit>();
 
+// Sticky preference is deliberately point-polling state only. One-off
+// lookups and global searches must neither read nor update it.
+const STICKY_WINDOW_MS = 60_000; // 60 s
+let stickySource: string | null = null;
+let stickyUntil = 0;
+
+class ProviderHttpError extends Error {
+  constructor(
+    readonly provider: string,
+    readonly status: number,
+  ) {
+    super(`${provider} proxy ${status}`);
+    this.name = "ProviderHttpError";
+  }
+}
+
 function shouldSkipTier(tierId: string): boolean {
   const c = circuits.get(tierId);
   if (!c || c.state === "closed") return false;
@@ -69,12 +87,25 @@ function recordSuccess(tierId: string): void {
   circuits.set(tierId, { state: "closed", failures: 0, openUntil: 0 });
 }
 
-function recordFailure(tierId: string): void {
+function recordFailure(tierId: string, err: unknown): void {
   const c = circuits.get(tierId) ?? {
     state: "closed" as CircuitState,
     failures: 0,
     openUntil: 0,
   };
+
+  if (
+    err instanceof ProviderHttpError &&
+    (err.status === 401 || err.status === 403)
+  ) {
+    circuits.set(tierId, {
+      state: "open",
+      failures: Math.max(c.failures + 1, CIRCUIT_FAILURE_THRESHOLD),
+      openUntil: Date.now() + CIRCUIT_MAX_COOLDOWN_MS,
+    });
+    return;
+  }
+
   c.failures++;
   if (c.failures >= CIRCUIT_FAILURE_THRESHOLD) {
     // Cooldown: 60s → 120s → 240s → 300s …
@@ -92,8 +123,9 @@ function recordFailure(tierId: string): void {
 /** Returns true if this error should NOT trip the circuit breaker. */
 function isNonCircuitError(err: unknown): boolean {
   // Abort = tab switch / navigation - not a provider failure
-  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (err instanceof Error && err.name === "AbortError") return true;
   // 429 = server is alive, just rate-limiting - already handled via rateLimited flag
+  if (err instanceof ProviderHttpError && err.status === 429) return true;
   const msg =
     err instanceof Error
       ? err.message.toLowerCase()
@@ -123,6 +155,8 @@ export function getCircuitState(tierId: string): {
 /** Reset all circuits (e.g. on network reconnect). */
 export function resetAllCircuits(): void {
   circuits.clear();
+  stickySource = null;
+  stickyUntil = 0;
 }
 
 let _onlineListenerRegistered = false;
@@ -131,7 +165,7 @@ if (typeof window !== "undefined" && !_onlineListenerRegistered) {
   window.addEventListener("online", resetAllCircuits);
 }
 
-// ── Provider Override (dev testing) ────────────────────────────────────
+// ── Provider Override ──────────────────────────────────────────────────
 
 export function getProviderOverride(): ProviderName {
   if (typeof window === "undefined") return "auto";
@@ -183,21 +217,33 @@ async function withTimeout<T>(
 }
 
 function validateReadsb(payload: unknown): ReadsbApiResponse {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid readsb response shape");
+  }
+
+  const response = payload as Partial<ReadsbApiResponse>;
   if (
-    !payload ||
-    typeof payload !== "object" ||
-    !Array.isArray((payload as ReadsbApiResponse).ac)
+    !Array.isArray(response.ac) ||
+    typeof response.msg !== "string" ||
+    typeof response.now !== "number" ||
+    !Number.isFinite(response.now) ||
+    typeof response.total !== "number" ||
+    !Number.isFinite(response.total) ||
+    (response.ctime !== undefined &&
+      (typeof response.ctime !== "number" || !Number.isFinite(response.ctime))) ||
+    (response.ptime !== undefined &&
+      (typeof response.ptime !== "number" || !Number.isFinite(response.ptime)))
   ) {
     throw new Error("Invalid readsb response shape");
   }
-  return payload as ReadsbApiResponse;
+
+  return response as ReadsbApiResponse;
 }
 
 // ── Tier 1 / Tier 2: readsb via server proxy ──────────────────────────
 //
 // Server proxy supports ?provider=adsb|airplanes.
-// Airplanes.live is Tier 1 (richest data: registration, type, description).
-// adsb.lol is Tier 2 (community-run, generous limits).
+// adsb.lol is primary; airplanes.live is the best-effort secondary provider.
 
 async function fetchViaProxy(
   path: string,
@@ -209,7 +255,7 @@ async function fetchViaProxy(
       const url = `/api/flights?path=${encodeURIComponent(path)}&provider=${provider}`;
       const res = await fetch(url, { cache: "no-store", signal: innerSignal });
 
-      if (!res.ok) throw new Error(`${provider} proxy ${res.status}`);
+      if (!res.ok) throw new ProviderHttpError(provider, res.status);
 
       const ct = res.headers.get("content-type") ?? "";
       if (ct.includes("text/html") || ct.includes("text/xml")) {
@@ -244,33 +290,30 @@ interface NamedTier {
   fn: () => Promise<FlightState[]>;
 }
 
-// ── Sticky Source ──────────────────────────────────────────────────────
-//
-// After a provider succeeds, prefer it for STICKY_WINDOW_MS before
-// trying higher-priority tiers again. This prevents unnecessary
-// flip-flopping between providers when both are healthy.
-
-const STICKY_WINDOW_MS = 60_000; // 60 s
-let stickySource: string | null = null;
-let stickyUntil = 0;
-
 function recordStickySuccess(tierId: string): void {
   stickySource = tierId;
   stickyUntil = Date.now() + STICKY_WINDOW_MS;
 }
 
+interface FallbackOptions {
+  /** A valid empty lookup is a miss, so continue to the next provider. */
+  continueOnEmpty?: boolean;
+  /** Only continuous point polling may use or update sticky preference. */
+  usePointSticky?: boolean;
+}
+
 async function runFallbackChain(
   tiers: NamedTier[],
   signal?: AbortSignal,
+  options?: FallbackOptions,
 ): Promise<FlightApiFetchResult> {
   let lastError: Error | null = null;
   let allSkipped = true;
   let lastTriedId: string | undefined;
+  let lastEmptySource: string | undefined;
 
-  // If we have a sticky source and it's still within the window,
-  // try it first before the normal tier order.
   const orderedTiers =
-    stickySource && Date.now() < stickyUntil
+    options?.usePointSticky && stickySource && Date.now() < stickyUntil
       ? [
           ...tiers.filter((t) => t.id === stickySource),
           ...tiers.filter((t) => t.id !== stickySource),
@@ -285,16 +328,26 @@ async function runFallbackChain(
     try {
       const flights = await fn();
       recordSuccess(id);
-      recordStickySuccess(id);
+
+      if (options?.continueOnEmpty && flights.length === 0) {
+        lastEmptySource = id;
+        continue;
+      }
+
+      if (options?.usePointSticky) recordStickySuccess(id);
       return { flights, rateLimited: false, source: id };
     } catch (err) {
       if (signal?.aborted) throw err;
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      if (err instanceof Error && err.name === "AbortError") throw err;
 
-      if (!isNonCircuitError(err)) recordFailure(id);
+      if (!isNonCircuitError(err)) recordFailure(id, err);
 
       lastError = err instanceof Error ? err : new Error(String(err));
     }
+  }
+
+  if (lastEmptySource) {
+    return { flights: [], rateLimited: false, source: lastEmptySource };
   }
 
   if (allSkipped) {
@@ -371,20 +424,20 @@ export async function fetchFlightsByPoint(
     });
   }
 
-  return runFallbackChain(tiers, signal);
+  return runFallbackChain(tiers, signal, { usePointSticky: true });
 }
 
 /**
- * Fetch a single aircraft by ICAO24 hex address.
+ * Fetch all aircraft returned for an ICAO24 hex address.
  * Uses the fallback chain: adsb.lol proxy → airplanes.live proxy → OpenSky.
  */
-export async function fetchFlightByHex(
+export async function fetchFlightsByHex(
   icao24: string,
   signal?: AbortSignal,
-): Promise<{ flight: FlightState | null }> {
+): Promise<FlightApiFetchResult> {
   const normalized = icao24.trim().toLowerCase();
   if (!/^[0-9a-f]{6}$/i.test(normalized)) {
-    return { flight: null };
+    return { flights: [], rateLimited: false };
   }
 
   const parseOpts: ParseOptions = {
@@ -439,23 +492,24 @@ export async function fetchFlightByHex(
   }
 
   try {
-    const result = await runFallbackChain(tiers, signal);
-    return { flight: result.flights[0] ?? null };
+    return await runFallbackChain(tiers, signal, { continueOnEmpty: true });
   } catch {
-    return { flight: null };
+    return { flights: [], rateLimited: false };
   }
 }
 
 /**
- * Fetch flights matching a callsign.
- * No OpenSky tier: callsign search queries all aircraft (4-credit global fetch).
+ * Fetch all aircraft matching a callsign.
+ * Uses OpenSky only after both readsb providers miss or fail.
  */
-export async function fetchFlightByCallsign(
+export async function fetchFlightsByCallsign(
   callsign: string,
   signal?: AbortSignal,
-): Promise<{ flight: FlightState | null }> {
+): Promise<FlightApiFetchResult> {
   const normalized = callsign.trim().toUpperCase();
-  if (!normalized) return { flight: null };
+  if (!/^[A-Z0-9-]{1,8}$/.test(normalized)) {
+    return { flights: [], rateLimited: false };
+  }
 
   const parseOpts: ParseOptions = {
     includeGround: true,
@@ -487,12 +541,38 @@ export async function fetchFlightByCallsign(
     });
   }
 
-  // No OpenSky tier: callsign search queries all aircraft (4-credit global fetch)
+  if (override === "auto" || override === "opensky") {
+    tiers.push({
+      id: "opensky",
+      fn: async () => {
+        const result = await openskyFetchByCallsign(normalized, signal);
+        if (result.rateLimited) throw new Error("OpenSky rate limited (429)");
+        return result.flight ? [result.flight] : [];
+      },
+    });
+  }
 
   try {
-    const result = await runFallbackChain(tiers, signal);
-    return { flight: result.flights[0] ?? null };
+    return await runFallbackChain(tiers, signal, { continueOnEmpty: true });
   } catch {
-    return { flight: null };
+    return { flights: [], rateLimited: false };
   }
+}
+
+/** Fetch a single aircraft by ICAO24 while preserving the existing API. */
+export async function fetchFlightByHex(
+  icao24: string,
+  signal?: AbortSignal,
+): Promise<{ flight: FlightState | null }> {
+  const result = await fetchFlightsByHex(icao24, signal);
+  return { flight: result.flights[0] ?? null };
+}
+
+/** Fetch a single aircraft by callsign while preserving the existing API. */
+export async function fetchFlightByCallsign(
+  callsign: string,
+  signal?: AbortSignal,
+): Promise<{ flight: FlightState | null }> {
+  const result = await fetchFlightsByCallsign(callsign, signal);
+  return { flight: result.flights[0] ?? null };
 }

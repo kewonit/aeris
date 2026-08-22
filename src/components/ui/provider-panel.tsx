@@ -22,14 +22,14 @@ interface ProviderInfo {
 const PROVIDERS: ProviderInfo[] = [
   { id: "adsb", label: "adsb.lol", description: "Primary - server proxy" },
   {
-    id: "opensky",
-    label: "OpenSky",
-    description: "Fallback - limited credits",
-  },
-  {
     id: "airplanes",
     label: "Airplanes.live",
-    description: "Direct - CORS restricted",
+    description: "Fallback - server proxy",
+  },
+  {
+    id: "opensky",
+    label: "OpenSky",
+    description: "Last resort - limited credits",
   },
 ];
 
@@ -92,10 +92,6 @@ export function ProviderDropdown({
 
   const [override, setOverride] = useState(() => getProviderOverride());
   const isAutoMode = override === "auto";
-  const isDev =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1");
 
   const handleSelect = useCallback(
     (provider: ProviderName | "auto") => {
@@ -207,20 +203,15 @@ export function ProviderDropdown({
                 circuit.state,
                 circuit.cooldownRemaining,
               );
-              const isAvailable = provider.id !== "airplanes" || isDev;
-
               return (
                 <button
                   key={provider.id}
                   type="button"
-                  onClick={() => isAvailable && handleSelect(provider.id)}
-                  disabled={!isAvailable}
+                  onClick={() => handleSelect(provider.id)}
                   className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
                     isSelected
                       ? "bg-foreground/6"
-                      : isAvailable
-                        ? "hover:bg-foreground/3 active:bg-foreground/6"
-                        : "cursor-not-allowed opacity-40"
+                      : "hover:bg-foreground/3 active:bg-foreground/6"
                   }`}
                 >
                   <div className="flex h-4 w-4 shrink-0 items-center justify-center">
@@ -256,21 +247,17 @@ export function ProviderDropdown({
                       className="text-[9px] leading-snug"
                       style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
                     >
-                      {!isAvailable
-                        ? "CORS restricted - dev only"
-                        : provider.description}
+                      {provider.description}
                     </span>
                   </div>
                   <span
                     className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
                     style={{
                       backgroundColor: `${badge.color}12`,
-                      color: isAvailable
-                        ? badge.color
-                        : "rgb(var(--ui-fg) / 0.25)",
+                      color: badge.color,
                     }}
                   >
-                    {isAvailable ? badge.label : "CORS"}
+                    {badge.label}
                   </span>
                 </button>
               );

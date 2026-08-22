@@ -560,8 +560,7 @@ function FlightTrackerInner({
           if (result.flight) break;
         }
 
-        // Phase 2: For 6-char hex-like queries, also try the opposite endpoint
-        // of what the variants already attempted.
+        // Phase 2: A 6-char hex query may also be a callsign.
         if (!result.flight && !controller.signal.aborted) {
           const isHex = /^[0-9a-f]{6}$/i.test(compactQuery);
           if (isHex) {
@@ -570,9 +569,6 @@ function FlightTrackerInner({
               compactQuery.toUpperCase(),
               controller.signal,
             );
-          } else {
-            // Variants already tried callsign; try raw hex as last resort
-            result = await fetchFlightByHex(compactQuery, controller.signal);
           }
         }
 

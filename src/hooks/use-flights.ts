@@ -27,7 +27,7 @@ const FPV_POINT_RADIUS = 2;
 const MAX_EMPTY_STREAK = 3;
 
 /**
- * Fetches flights via readsb (Airplanes.live → adsb.lol fallback).
+ * Fetches flights via adsb.lol → airplanes.live → OpenSky fallback.
  * In FPV mode the query center moves with the tracked aircraft.
  * City changes are ignored while in FPV.
  */
@@ -228,6 +228,7 @@ export function useFlights(
       } catch (err) {
         const isAbort = err instanceof Error && err.name === "AbortError";
         if (isAbort) return;
+        setSource("none");
         setError(err instanceof Error ? err.message : "Unknown error");
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
       } finally {

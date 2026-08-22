@@ -91,8 +91,8 @@ for (const [prefix, country] of REG_PREFIX_TO_COUNTRY) {
   else REG_BY_1.set(prefix, country);
 }
 
-function countryFromRegistration(reg: string | undefined): string {
-  if (!reg) return "Unknown";
+function countryFromRegistration(reg: unknown): string {
+  if (typeof reg !== "string" || !reg) return "Unknown";
   const upper = reg.toUpperCase();
   return (
     REG_BY_3.get(upper.slice(0, 3)) ??
@@ -108,8 +108,8 @@ function countryFromRegistration(reg: string | undefined): string {
 // used by OpenSky (DO-260B spec). A-set: A0→0, A1→2(light)…A7→8(rotorcraft).
 // B-set: B0→0, B1→9(glider)…B7→15(space). C-set: surface vehicles. D: reserved.
 
-function readsbCategoryToNumber(cat: string | undefined): number | null {
-  if (!cat || cat.length !== 2) return null;
+function readsbCategoryToNumber(cat: unknown): number | null {
+  if (typeof cat !== "string" || cat.length !== 2) return null;
 
   const set = cat.charAt(0).toUpperCase();
   const idx = Number.parseInt(cat.charAt(1), 10);
@@ -138,9 +138,9 @@ function readsbCategoryToNumber(cat: string | undefined): number | null {
  * tisb_icao, adsc, mode_s, and other provider-specific variants.
  */
 function readsbTypeToPositionSource(
-  type: string | undefined,
+  type: unknown,
 ): PositionSource {
-  if (!type) return null;
+  if (typeof type !== "string" || !type) return null;
   const normalized = type.toLowerCase();
 
   if (normalized.startsWith("adsb") || normalized.startsWith("adsr")) {
@@ -155,7 +155,7 @@ function readsbTypeToPositionSource(
 
 // ── Altitude Parser ────────────────────────────────────────────────────
 
-function parseAltBaro(value: number | "ground" | undefined): {
+function parseAltBaro(value: unknown): {
   altitude: number | null;
   onGround: boolean;
 } {
@@ -169,16 +169,22 @@ function parseAltBaro(value: number | "ground" | undefined): {
 
 const ICAO_HEX_RE = /^[0-9a-f]{6}$/i;
 
-function isValidIcaoHex(hex: string): boolean {
+function isValidIcaoHex(hex: unknown): hex is string {
   // Filter out '~'-prefixed non-ICAO addresses and invalid formats
-  return !hex.startsWith("~") && ICAO_HEX_RE.test(hex);
+  return (
+    typeof hex === "string" && !hex.startsWith("~") && ICAO_HEX_RE.test(hex)
+  );
 }
 
 // ── Optional Finite Helper ─────────────────────────────────────────────
 
 /** Returns the value if it's a finite number, otherwise null. */
-function optionalFinite(v: number | undefined): number | null {
+function optionalFinite(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function optionalTrimmedString(value: unknown): string | null {
+  return typeof value === "string" ? value.trim() || null : null;
 }
 
 // ── Single Aircraft Parser ─────────────────────────────────────────────
@@ -194,14 +200,21 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     return null;
 
   // Filter stale positions (>60s old)
-  if (typeof raw.seen_pos === "number" && raw.seen_pos > MAX_POSITION_AGE_S)
+  if (
+    raw.seen_pos !== undefined &&
+    (typeof raw.seen_pos !== "number" ||
+      !Number.isFinite(raw.seen_pos) ||
+      raw.seen_pos < 0 ||
+      raw.seen_pos > MAX_POSITION_AGE_S)
+  ) {
     return null;
+  }
 
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
 
   return {
     icao24: raw.hex.toLowerCase(),
-    callsign: raw.flight?.trim() || null,
+    callsign: optionalTrimmedString(raw.flight),
     originCountry: countryFromRegistration(raw.r),
     longitude: raw.lon,
     latitude: raw.lat,
@@ -227,12 +240,12 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
       typeof raw.alt_geom === "number" && Number.isFinite(raw.alt_geom)
         ? raw.alt_geom * FT_TO_M
         : null,
-    squawk: raw.squawk ?? null,
+    squawk: optionalTrimmedString(raw.squawk),
     spiFlag: raw.spi === 1,
     positionSource: readsbTypeToPositionSource(raw.type),
     category: readsbCategoryToNumber(raw.category),
-    typeCode: raw.t?.trim() || null,
-    registration: raw.r?.trim() || null,
+    typeCode: optionalTrimmedString(raw.t),
+    registration: optionalTrimmedString(raw.r),
 
     // ── Avionics (readsb-only, will be undefined for OpenSky) ──────
     ias: optionalFinite(raw.ias),
@@ -247,7 +260,12 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     navAltitudeFms: optionalFinite(raw.nav_altitude_fms),
     navHeading: optionalFinite(raw.nav_heading),
     navQnh: optionalFinite(raw.nav_qnh),
-    navModes: raw.nav_modes && raw.nav_modes.length > 0 ? raw.nav_modes : null,
+    navModes:
+      Array.isArray(raw.nav_modes) &&
+      raw.nav_modes.every((mode) => typeof mode === "string") &&
+      raw.nav_modes.length > 0
+        ? raw.nav_modes
+        : null,
 
     // ── Atmospheric ────────────────────────────────────────────────
     windDirection: optionalFinite(raw.wd),
@@ -255,10 +273,12 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     oat: optionalFinite(raw.oat),
 
     // ── Classification ─────────────────────────────────────────────
-    dbFlags: typeof raw.dbFlags === "number" ? raw.dbFlags : null,
+    dbFlags: optionalFinite(raw.dbFlags),
     emergencyStatus:
-      raw.emergency && raw.emergency !== "none" ? raw.emergency : null,
-    typeDescription: raw.desc?.trim() || null,
+      typeof raw.emergency === "string" && raw.emergency !== "none"
+        ? raw.emergency
+        : null,
+    typeDescription: optionalTrimmedString(raw.desc),
 
     // ── Debug / Raw Data (readsb only) ───────────────────────────────
     debugData: {

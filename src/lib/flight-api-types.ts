@@ -2,7 +2,7 @@
 //
 // Shared format used by both Airplanes.live and adsb.lol.
 // Verified against official docs:
-//   https://airplanes.live/rest-api-adsb-data-field-descriptions/
+//   https://api.airplanes.live/openapi.json
 //   https://api.adsb.lol/api/openapi.json
 //   https://github.com/wiedehopf/readsb/blob/dev/README-json.md
 // ────────────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ export interface FlightApiProvider {
 export const PROVIDER_AIRPLANES_LIVE: FlightApiProvider = {
   name: "Airplanes.live",
   baseUrl: "https://api.airplanes.live/v2",
-  rateMs: 1_000, // Documented: 1 req/s
+  rateMs: 1_100, // Conservative best-effort floor; no published 2.0.0 quota
 };
 
 export const PROVIDER_ADSB_LOL: FlightApiProvider = {
@@ -29,8 +29,8 @@ export const PROVIDER_ADSB_LOL: FlightApiProvider = {
 };
 
 export const PROVIDERS: readonly FlightApiProvider[] = [
-  PROVIDER_AIRPLANES_LIVE,
   PROVIDER_ADSB_LOL,
+  PROVIDER_AIRPLANES_LIVE,
 ] as const;
 
 // ── API Constants ──────────────────────────────────────────────────────
@@ -52,13 +52,13 @@ export const NM_PER_DEG_LAT = 60;
 /**
  * A single aircraft entry from the readsb JSON response.
  * Keys are omitted by the API if data is not available.
- * @see https://airplanes.live/rest-api-adsb-data-field-descriptions/
+ * @see https://api.airplanes.live/openapi.json - Aircraft
  */
 export interface RawAircraft {
   /** 24-bit ICAO hex address (6 chars). Starts with '~' for non-ICAO. */
-  hex: string;
+  hex?: string;
   /** Type of underlying message source (adsb_icao, mlat, tisb_icao, etc.) */
-  type: string;
+  type?: string;
   /** Callsign, 8-char padded with trailing spaces. */
   flight?: string;
   /** Aircraft registration from database. */
@@ -74,6 +74,10 @@ export interface RawAircraft {
   lat?: number;
   lon?: number;
   seen_pos?: number;
+  /** Distance from the point query center, nautical miles. */
+  dst?: number;
+  /** Bearing from the point query center, degrees. */
+  dir?: number;
 
   // ── Altitude ───────────────────────────────────────────────────────
   /** In feet, or "ground" when on ground. */
@@ -139,20 +143,20 @@ export interface RawAircraft {
   version?: number;
 
   // ── Message stats ──────────────────────────────────────────────────
-  messages: number;
-  seen: number;
+  messages?: number;
+  seen?: number;
   /** dBFS (always negative). */
-  rssi: number;
-  mlat: string[];
-  tisb: string[];
+  rssi?: number;
+  mlat?: string[];
+  tisb?: string[];
 
   // ── Fallback position (stale) ──────────────────────────────────────
   lastPosition?: {
-    lat: number;
-    lon: number;
-    nic: number;
-    rc: number;
-    seen_pos: number;
+    lat?: number;
+    lon?: number;
+    nic?: number;
+    rc?: number;
+    seen_pos?: number;
   };
 
   // ── Rough estimated position ───────────────────────────────────────
@@ -169,6 +173,6 @@ export interface ReadsbApiResponse {
   msg: string;
   now: number;
   total: number;
-  ctime: number;
-  ptime: number;
+  ctime?: number;
+  ptime?: number;
 }

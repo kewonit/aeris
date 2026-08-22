@@ -616,6 +616,38 @@ const CHANGELOG: {
   entries: { title: string; description: string }[];
 }[] = [
   {
+    version: "0.8.8",
+    date: "Aug 23, 2026",
+    entries: [
+      {
+        title: "airplanes.live API 2.0.0 compatibility",
+        description:
+          "Updated readsb response handling for the airplanes.live 2.0.0 contract, including optional timing and aircraft fields, stricter validation, stale-position filtering, and support for point-query distance and direction values.",
+      },
+      {
+        title: "Consistent provider fallback",
+        description:
+          "Map polling, flight lookup, FPV monitoring, and global search now share the adsb.lol, airplanes.live, and OpenSky fallback order. Provider-specific search caching and point-only sticky selection prevent one-off lookups from changing the live map source.",
+      },
+      {
+        title: "Production provider controls",
+        description:
+          "airplanes.live is now selectable in production through the server proxy. Access denials open the provider circuit immediately, failed requests preserve last-known aircraft, and unavailable providers are reported clearly.",
+      },
+    ],
+  },
+  {
+    version: "0.8.7",
+    date: "Jul 18, 2026",
+    entries: [
+      {
+        title: "Web app identity and discovery",
+        description:
+          "Added complete favicon and install-icon sets, expanded manifest metadata, and improved canonical city pages, structured data, sitemap output, and social previews.",
+      },
+    ],
+  },
+  {
     version: "0.8.6",
     date: "Jul 11, 2026",
     entries: [
@@ -904,8 +936,8 @@ export function AboutContent() {
 
         <div className="space-y-3 text-[13px] leading-relaxed text-foreground/55">
           <p>
-            Live flight tracking in 3D. The planes you see are real — position
-            data comes from ADS-B Exchange, adsb.lol, and OpenSky Network,
+            Live flight tracking in 3D. The planes you see are real. Position
+            data comes from airplanes.live, adsb.lol, and OpenSky Network,
             updated every few seconds via ADS-B receivers people run on their
             roofs worldwide.
           </p>

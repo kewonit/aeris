@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resetAllCircuits } from "./flight-api-client";
 
 async function importFresh() {
   const key = require.resolve("./search-flight-client");
@@ -7,33 +8,36 @@ async function importFresh() {
   return import("./search-flight-client");
 }
 
+function readsbBody(ac: unknown[]): string {
+  return JSON.stringify({ ac, msg: "No error", now: 1, total: ac.length });
+}
+
 test("searchFlightsGlobal finds AXB2680 when user searches IX2680", async () => {
+  resetAllCircuits();
   const calls: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     calls.push(url);
     if (url.includes("hex")) {
-      return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+      return new Response(readsbBody([]), { status: 200 });
     }
     if (url.includes("IX2680")) {
-      return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+      return new Response(readsbBody([]), { status: 200 });
     }
     if (url.includes("AXB2680")) {
       return new Response(
-        JSON.stringify({
-          ac: [
-            {
-              hex: "801673",
-              flight: "AXB2680 ",
-              lat: 12.9,
-              lon: 80.1,
-              alt_baro: 32000,
-              gs: 430,
-              track: 85,
-            },
-          ],
-        }),
+        readsbBody([
+          {
+            hex: "801673",
+            flight: "AXB2680 ",
+            lat: 12.9,
+            lon: 80.1,
+            alt_baro: 32000,
+            gs: 430,
+            track: 85,
+          },
+        ]),
         { status: 200 },
       );
     }
@@ -54,33 +58,32 @@ test("searchFlightsGlobal finds AXB2680 when user searches IX2680", async () => 
 });
 
 test("searchFlightsGlobal finds AXB2680 when user searches AXB2680", async () => {
+  resetAllCircuits();
   const calls: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     calls.push(url);
     if (url.includes("hex")) {
-      return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+      return new Response(readsbBody([]), { status: 200 });
     }
     if (url.includes("AXB2680")) {
       return new Response(
-        JSON.stringify({
-          ac: [
-            {
-              hex: "801673",
-              flight: "AXB2680 ",
-              lat: 12.9,
-              lon: 80.1,
-              alt_baro: 32000,
-              gs: 430,
-              track: 85,
-            },
-          ],
-        }),
+        readsbBody([
+          {
+            hex: "801673",
+            flight: "AXB2680 ",
+            lat: 12.9,
+            lon: 80.1,
+            alt_baro: 32000,
+            gs: 430,
+            track: 85,
+          },
+        ]),
         { status: 200 },
       );
     }
-    return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+    return new Response(readsbBody([]), { status: 200 });
   };
 
   try {
@@ -96,36 +99,35 @@ test("searchFlightsGlobal finds AXB2680 when user searches AXB2680", async () =>
 });
 
 test("searchFlightsGlobal finds AAL1234 when user searches AA1234", async () => {
+  resetAllCircuits();
   const calls: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     calls.push(url);
     if (url.includes("hex")) {
-      return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+      return new Response(readsbBody([]), { status: 200 });
     }
     if (url.includes("AA1234")) {
-      return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+      return new Response(readsbBody([]), { status: 200 });
     }
     if (url.includes("AAL1234")) {
       return new Response(
-        JSON.stringify({
-          ac: [
-            {
-              hex: "aabbcc",
-              flight: "AAL1234 ",
-              lat: 33.9,
-              lon: -118.4,
-              alt_baro: 25000,
-              gs: 400,
-              track: 270,
-            },
-          ],
-        }),
+        readsbBody([
+          {
+            hex: "aabbcc",
+            flight: "AAL1234 ",
+            lat: 33.9,
+            lon: -118.4,
+            alt_baro: 25000,
+            gs: 400,
+            track: 270,
+          },
+        ]),
         { status: 200 },
       );
     }
-    return new Response(JSON.stringify({ ac: [] }), { status: 200 });
+    return new Response(readsbBody([]), { status: 200 });
   };
 
   try {

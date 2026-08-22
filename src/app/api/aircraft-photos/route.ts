@@ -6,7 +6,7 @@ const JETAPI_TIMEOUT_MS = 5_000;
 const HEX_REGEX = /^[0-9a-f]{6}$/;
 const REG_REGEX = /^[A-Z0-9][A-Z0-9-]{1,9}$/;
 const UPSTREAM_USER_AGENT =
-  "AerisFlightTracker/0.8 (+https://github.com/kewonit/aeris)";
+  "AerisFlightTracker/0.8.8 (+https://github.com/kewonit/aeris)";
 
 // ── Upstream types ──────────────────────────────────────────────────────────
 
