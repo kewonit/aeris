@@ -3,11 +3,13 @@ import { READSB_FETCH_TIMEOUT_MS, MAX_RADIUS_NM } from "@/lib/flight-api-types";
 
 // ── Multi-Provider Proxy ───────────────────────────────────────────────
 //
-// Proxies readsb-format requests to adsb.lol or airplanes.live.
-// Both lack browser-compatible CORS headers, so server-side proxy is required.
+// Proxies readsb-format requests to adsb.lol, adsb.fi, or airplanes.live.
+// These APIs lack browser-compatible CORS headers, so a server-side proxy is
+// required.
 //
 // Usage:
 //   /api/flights?path=/point/lat/lon/radius              → adsb.lol (default)
+//   /api/flights?path=/point/lat/lon/radius&provider=adsbfi → adsb.fi
 //   /api/flights?path=/hex/abcdef&provider=airplanes      → airplanes.live
 //   /api/flights?path=/callsign/BAW123&provider=adsb      → adsb.lol
 //
@@ -17,7 +19,7 @@ import { READSB_FETCH_TIMEOUT_MS, MAX_RADIUS_NM } from "@/lib/flight-api-types";
 
 // ── Provider Configuration ─────────────────────────────────────────────
 
-type ProviderKey = "adsb" | "airplanes";
+type ProviderKey = "adsb" | "adsbfi" | "airplanes";
 
 interface ProviderConfig {
   baseUrl: string;
@@ -31,6 +33,11 @@ const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
     baseUrl: "https://api.adsb.lol/v2",
     name: "adsb.lol",
     rateMs: 500,
+  },
+  adsbfi: {
+    baseUrl: "https://opendata.adsb.fi/api",
+    name: "adsb.fi",
+    rateMs: 1_100,
   },
   airplanes: {
     baseUrl: "https://api.airplanes.live/v2",
@@ -102,6 +109,20 @@ function validatePath(path: string): string | null {
   return null;
 }
 
+function buildUpstreamUrl(provider: ProviderKey, path: string): string {
+  const config = PROVIDERS[provider];
+
+  if (provider !== "adsbfi") return `${config.baseUrl}${path}`;
+
+  const pointMatch = path.match(POINT_PATH);
+  if (pointMatch) {
+    const [, lat, lon, radius] = pointMatch;
+    return `${config.baseUrl}/v3/lat/${lat}/lon/${lon}/dist/${radius}`;
+  }
+
+  return `${config.baseUrl}/v2${path}`;
+}
+
 // ── Handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -119,9 +140,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const providerRaw =
     request.nextUrl.searchParams.get("provider")?.toLowerCase() ?? "adsb";
 
-  if (providerRaw !== "adsb" && providerRaw !== "airplanes") {
+  if (
+    providerRaw !== "adsb" &&
+    providerRaw !== "adsbfi" &&
+    providerRaw !== "airplanes"
+  ) {
     return NextResponse.json(
-      { error: "Invalid provider. Use 'adsb' or 'airplanes'." },
+      { error: "Invalid provider. Use 'adsb', 'adsbfi', or 'airplanes'." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -136,7 +161,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const timer = setTimeout(() => controller.abort(), READSB_FETCH_TIMEOUT_MS);
 
   try {
-    const upstream = await fetch(`${config.baseUrl}${path}`, {
+    const upstream = await fetch(buildUpstreamUrl(provider, path), {
       signal: controller.signal,
       headers: {
         Accept: "application/json",

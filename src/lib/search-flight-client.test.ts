@@ -14,6 +14,12 @@ function readsbBody(ac: unknown[]): string {
   return JSON.stringify({ ac, msg: "No error", now: 1, total: ac.length });
 }
 
+function providerFromRequest(input: RequestInfo | URL | string): string | null {
+  return new URL(input.toString(), "http://localhost").searchParams.get(
+    "provider",
+  );
+}
+
 test("searchFlightsGlobal tries hex then callsign for 6-char hex-like query", async () => {
   resetAllCircuits();
   const calls: string[] = [];
@@ -49,9 +55,9 @@ test("searchFlightsGlobal tries hex then callsign for 6-char hex-like query", as
     const results = await searchFlightsGlobal("AA1234");
     assert.equal(results.length, 1);
     assert.equal(results[0].icao24, "a1b2c3");
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.ok(calls[0].includes("hex"));
-    assert.ok(calls[3].includes("callsign"));
+    assert.ok(calls[4].includes("callsign"));
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -64,7 +70,7 @@ test("searchFlightsGlobal tries callsign variants for a non-hex query", async ()
   globalThis.fetch = async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     calls.push(url);
-    if (url.includes("AXB2680") && url.includes("provider=adsb")) {
+    if (url.includes("AXB2680") && providerFromRequest(url) === "adsb") {
       return new Response(
         readsbBody([
           {
@@ -169,9 +175,12 @@ test("search cache is scoped to the effective provider override", async () => {
   });
   globalThis.fetch = async (input: RequestInfo | URL) => {
     callCount++;
-    const provider = input.toString().includes("provider=airplanes")
-      ? "AIR"
-      : "ADSB";
+    const provider =
+      providerFromRequest(input) === "airplanes"
+        ? "AIR"
+        : providerFromRequest(input) === "adsbfi"
+          ? "FI"
+          : "ADSB";
     return new Response(
       readsbBody([
         {
@@ -190,9 +199,11 @@ test("search cache is scoped to the effective provider override", async () => {
     const { searchFlightsGlobal, clearFlightSearchCache } = await importFresh();
     clearFlightSearchCache();
     assert.equal((await searchFlightsGlobal("abcdef"))[0]?.callsign, "ADSB");
+    location.search = "?provider=adsbfi";
+    assert.equal((await searchFlightsGlobal("abcdef"))[0]?.callsign, "FI");
     location.search = "?provider=airplanes";
     assert.equal((await searchFlightsGlobal("abcdef"))[0]?.callsign, "AIR");
-    assert.equal(callCount, 2);
+    assert.equal(callCount, 3);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) {
@@ -203,17 +214,17 @@ test("search cache is scoped to the effective provider override", async () => {
   }
 });
 
-test("global search falls back from adsb.lol to airplanes.live", async () => {
+test("global search falls back from adsb.lol to adsb.fi", async () => {
   resetAllCircuits();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = async (input: RequestInfo | URL) => {
     const url = input.toString();
     calls.push(url);
-    if (url.includes("provider=adsb")) {
+    if (providerFromRequest(url) === "adsb") {
       return new Response(readsbBody([]), { status: 200 });
     }
-    if (url.includes("provider=airplanes")) {
+    if (providerFromRequest(url) === "adsbfi") {
       return new Response(
         readsbBody([
           {
@@ -236,7 +247,7 @@ test("global search falls back from adsb.lol to airplanes.live", async () => {
     const results = await searchFlightsGlobal("BAW123");
     assert.equal(results[0]?.icao24, "abc123");
     assert.match(calls[0], /provider=adsb/);
-    assert.match(calls[1], /provider=airplanes/);
+    assert.match(calls[1], /provider=adsbfi/);
     assert.equal(calls.length, 2);
   } finally {
     globalThis.fetch = originalFetch;

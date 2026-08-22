@@ -6,6 +6,7 @@ import { Satellite, X, ChevronUp, Circle } from "lucide-react";
 import {
   getCircuitState,
   getProviderOverride,
+  setProviderOverride,
   type CircuitState,
 } from "@/lib/flight-api-client";
 import type { ProviderName } from "@/lib/flight-api";
@@ -22,6 +23,11 @@ interface ProviderInfo {
 const PROVIDERS: ProviderInfo[] = [
   { id: "adsb", label: "adsb.lol", description: "Primary - server proxy" },
   {
+    id: "adsbfi",
+    label: "adsb.fi",
+    description: "Public fallback - server proxy",
+  },
+  {
     id: "airplanes",
     label: "Airplanes.live",
     description: "Fallback - server proxy",
@@ -35,6 +41,7 @@ const PROVIDERS: ProviderInfo[] = [
 
 const SOURCE_LABELS: Record<string, string> = {
   adsb: "adsb.lol",
+  adsbfi: "adsb.fi",
   opensky: "OpenSky",
   airplanes: "Airplanes.live",
   none: "Unavailable",
@@ -42,6 +49,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const SOURCE_COLORS: Record<string, string> = {
   adsb: "rgb(52, 211, 153)", // emerald
+  adsbfi: "rgb(34, 211, 238)", // cyan
   opensky: "rgb(251, 191, 36)", // amber
   airplanes: "rgb(96, 165, 250)", // blue
   none: "rgb(248, 113, 113)", // red
@@ -62,16 +70,6 @@ function circuitBadge(
     case "half-open":
       return { label: "PROBING", color: "rgb(251, 191, 36)" };
   }
-}
-
-function setProviderOverride(provider: ProviderName | "auto"): void {
-  const url = new URL(window.location.href);
-  if (provider === "auto") {
-    url.searchParams.delete("provider");
-  } else {
-    url.searchParams.set("provider", provider);
-  }
-  window.history.replaceState({}, "", url.toString());
 }
 
 // ── Provider Dropdown ──────────────────────────────────────────────────
@@ -298,9 +296,11 @@ export function ProviderTrigger({
       ? "text-red-400/80"
       : source === "opensky"
         ? "text-amber-400/80"
-        : source === "airplanes"
-          ? "text-blue-400/80"
-          : "text-emerald-400/80";
+        : source === "adsbfi"
+          ? "text-cyan-400/80"
+          : source === "airplanes"
+            ? "text-blue-400/80"
+            : "text-emerald-400/80";
 
   return (
     <button

@@ -1,7 +1,7 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
-// 3-tier fallback: adsb.lol proxy → airplanes.live proxy → OpenSky.
-// Override: ?provider=airplanes|adsb|opensky in the URL.
+// 4-tier fallback: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
+// Override: ?provider=airplanes|adsb|adsbfi|opensky in the URL.
 // ────────────────────────────────────────────────────────────────────────
 
 import type { FlightState } from "./opensky-types";
@@ -17,7 +17,14 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type ProviderName = "airplanes" | "adsb" | "opensky" | "auto";
+export type ProviderName =
+  | "airplanes"
+  | "adsb"
+  | "adsbfi"
+  | "opensky"
+  | "auto";
+
+export const PROVIDER_CHANGE_EVENT = "aeris:provider-change";
 
 export interface FlightApiFetchResult {
   flights: FlightState[];
@@ -172,8 +179,30 @@ export function getProviderOverride(): ProviderName {
   const p = new URLSearchParams(window.location.search)
     .get("provider")
     ?.toLowerCase();
-  if (p === "airplanes" || p === "adsb" || p === "opensky") return p;
+  if (
+    p === "airplanes" ||
+    p === "adsb" ||
+    p === "adsbfi" ||
+    p === "opensky"
+  )
+    return p;
   return "auto";
+}
+
+export function setProviderOverride(provider: ProviderName): void {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (provider === "auto") {
+    url.searchParams.delete("provider");
+  } else {
+    url.searchParams.set("provider", provider);
+  }
+
+  stickySource = null;
+  stickyUntil = 0;
+  window.history.replaceState({}, "", url.toString());
+  window.dispatchEvent(new Event(PROVIDER_CHANGE_EVENT));
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -240,14 +269,14 @@ function validateReadsb(payload: unknown): ReadsbApiResponse {
   return response as ReadsbApiResponse;
 }
 
-// ── Tier 1 / Tier 2: readsb via server proxy ──────────────────────────
+// ── readsb providers via server proxy ─────────────────────────────────
 //
-// Server proxy supports ?provider=adsb|airplanes.
-// adsb.lol is primary; airplanes.live is the best-effort secondary provider.
+// Server proxy supports ?provider=adsb|adsbfi|airplanes.
+// adsb.lol is primary; adsb.fi and airplanes.live are fallbacks.
 
 async function fetchViaProxy(
   path: string,
-  provider: "adsb" | "airplanes" = "adsb",
+  provider: "adsb" | "adsbfi" | "airplanes" = "adsb",
   signal?: AbortSignal,
 ): Promise<ReadsbApiResponse> {
   return withTimeout(
@@ -269,7 +298,7 @@ async function fetchViaProxy(
   );
 }
 
-// ── Tier 3: OpenSky direct ─────────────────────────────────────────────
+// ── Tier 4: OpenSky direct ─────────────────────────────────────────────
 
 async function fetchFromOpenSkyPoint(
   lat: number,
@@ -366,7 +395,7 @@ async function runFallbackChain(
 
 /**
  * Fetch flights within a radius of a geographic point.
- * Uses the fallback chain: adsb.lol proxy → airplanes.live proxy → OpenSky.
+ * Uses the fallback chain: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
  */
 export async function fetchFlightsByPoint(
   lat: number,
@@ -393,6 +422,17 @@ export async function fetchFlightsByPoint(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, options);
+      },
+    });
+  }
+
+  if (override === "adsbfi" || override === "auto") {
+    // adsb.fi via proxy - public secondary fallback
+    tiers.push({
+      id: "adsbfi",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseAircraftList(resp.ac, options);
       },
     });
@@ -429,7 +469,7 @@ export async function fetchFlightsByPoint(
 
 /**
  * Fetch all aircraft returned for an ICAO24 hex address.
- * Uses the fallback chain: adsb.lol proxy → airplanes.live proxy → OpenSky.
+ * Uses the fallback chain: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
  */
 export async function fetchFlightsByHex(
   icao24: string,
@@ -454,6 +494,17 @@ export async function fetchFlightsByHex(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+  }
+
+  if (override === "adsbfi" || override === "auto") {
+    // adsb.fi via proxy - public secondary fallback
+    tiers.push({
+      id: "adsbfi",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });
@@ -500,7 +551,7 @@ export async function fetchFlightsByHex(
 
 /**
  * Fetch all aircraft matching a callsign.
- * Uses OpenSky only after both readsb providers miss or fail.
+ * Uses OpenSky only after all readsb providers miss or fail.
  */
 export async function fetchFlightsByCallsign(
   callsign: string,
@@ -525,6 +576,17 @@ export async function fetchFlightsByCallsign(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
+        return parseAircraftList(resp.ac, parseOpts);
+      },
+    });
+  }
+
+  if (override === "adsbfi" || override === "auto") {
+    // adsb.fi via proxy - public secondary fallback
+    tiers.push({
+      id: "adsbfi",
+      fn: async () => {
+        const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseAircraftList(resp.ac, parseOpts);
       },
     });

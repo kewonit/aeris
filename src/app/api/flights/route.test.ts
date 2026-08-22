@@ -32,6 +32,14 @@ test("constructs provider URLs and sends identifying headers", async () => {
       200,
     );
     assert.equal(
+      (await GET(request("/point/60.3179/24.9496/25", "adsbfi"))).status,
+      200,
+    );
+    assert.equal(
+      (await GET(request("/hex/461e1a", "adsbfi"))).status,
+      200,
+    );
+    assert.equal(
       (await GET(request("/hex/abc123", "airplanes"))).status,
       200,
     );
@@ -42,6 +50,14 @@ test("constructs provider URLs and sends identifying headers", async () => {
     );
     assert.equal(
       calls[1].url,
+      "https://opendata.adsb.fi/api/v3/lat/60.3179/lon/24.9496/dist/25",
+    );
+    assert.equal(
+      calls[2].url,
+      "https://opendata.adsb.fi/api/v2/hex/461e1a",
+    );
+    assert.equal(
+      calls[3].url,
       "https://api.airplanes.live/v2/hex/abc123",
     );
     for (const call of calls) {

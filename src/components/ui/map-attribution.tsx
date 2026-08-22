@@ -145,7 +145,10 @@ function ExpandedAttribution({
             )}
           </span>
         ))}
-        <span className="ml-0.5" style={{ color: "rgb(var(--ui-fg) / 0.15)" }}>
+        <span
+          className="ml-0.5"
+          style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
+        >
           ·
         </span>
         <a
@@ -156,6 +159,18 @@ function ExpandedAttribution({
           style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
         >
           OpenSky Network
+        </a>
+        <span className="ml-0.5" style={{ color: "rgb(var(--ui-fg) / 0.15)" }}>
+          ·
+        </span>
+        <a
+          href="https://adsb.fi/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="transition-colors hover:underline"
+          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+        >
+          adsb.fi
         </a>
       </span>
     </motion.div>

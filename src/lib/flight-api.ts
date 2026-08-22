@@ -1,15 +1,17 @@
 /**
  * Flight API client - barrel re-export.
  *
- * Default 3-tier fallback chain:
+ * Default 4-tier fallback chain:
  *   Tier 1: adsb.lol       (server proxy)
- *   Tier 2: airplanes.live (server proxy, best effort)
- *   Tier 3: OpenSky        (direct, limited credits)
+ *   Tier 2: adsb.fi        (server proxy, public fallback)
+ *   Tier 3: airplanes.live (server proxy, best effort)
+ *   Tier 4: OpenSky        (direct, limited credits)
  *
- * Override: add ?provider=airplanes|adsb|opensky to the URL.
+ * Override: add ?provider=airplanes|adsb|adsbfi|opensky to the URL.
  *
  * @see https://api.airplanes.live/openapi.json
  * @see https://api.adsb.lol/docs
+ * @see https://github.com/adsbfi/opendata
  * @see https://openskynetwork.github.io/opensky-api/rest.html
  */
 
@@ -27,6 +29,8 @@ export {
   fetchFlightByHex,
   fetchFlightByCallsign,
   getProviderOverride,
+  setProviderOverride,
+  PROVIDER_CHANGE_EVENT,
   getCircuitState,
   resetAllCircuits,
 } from "./flight-api-client";

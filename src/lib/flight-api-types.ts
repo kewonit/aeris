@@ -4,6 +4,7 @@
 // Verified against official docs:
 //   https://api.airplanes.live/openapi.json
 //   https://api.adsb.lol/api/openapi.json
+//   https://github.com/adsbfi/opendata
 //   https://github.com/wiedehopf/readsb/blob/dev/README-json.md
 // ────────────────────────────────────────────────────────────────────────
 
@@ -28,8 +29,15 @@ export const PROVIDER_ADSB_LOL: FlightApiProvider = {
   rateMs: 500, // Self-imposed: 2 req/s
 };
 
+export const PROVIDER_ADSB_FI: FlightApiProvider = {
+  name: "adsb.fi",
+  baseUrl: "https://opendata.adsb.fi/api",
+  rateMs: 1_100, // Public API limit: 1 req/s
+};
+
 export const PROVIDERS: readonly FlightApiProvider[] = [
   PROVIDER_ADSB_LOL,
+  PROVIDER_ADSB_FI,
   PROVIDER_AIRPLANES_LIVE,
 ] as const;
 

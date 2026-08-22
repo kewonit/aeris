@@ -627,12 +627,17 @@ const CHANGELOG: {
       {
         title: "Consistent provider fallback",
         description:
-          "Map polling, flight lookup, FPV monitoring, and global search now share the adsb.lol, airplanes.live, and OpenSky fallback order. Provider-specific search caching and point-only sticky selection prevent one-off lookups from changing the live map source.",
+          "Map polling, flight lookup, FPV monitoring, and global search now share the adsb.lol, adsb.fi, airplanes.live, and OpenSky fallback order. Provider-specific search caching and point-only sticky selection prevent one-off lookups from changing the live map source.",
       },
       {
         title: "Production provider controls",
         description:
-          "airplanes.live is now selectable in production through the server proxy. Access denials open the provider circuit immediately, failed requests preserve last-known aircraft, and unavailable providers are reported clearly.",
+          "airplanes.live and adsb.fi are now selectable in production through the server proxy. Access denials open the provider circuit immediately, failed requests preserve last-known aircraft, and unavailable providers are reported clearly.",
+      },
+      {
+        title: "adsb.fi public fallback",
+        description:
+          "Added the adsb.fi open-data API with its v3 point-query format, conservative request pacing, shared readsb parsing, provider controls, and required linked attribution.",
       },
     ],
   },
@@ -937,9 +942,9 @@ export function AboutContent() {
         <div className="space-y-3 text-[13px] leading-relaxed text-foreground/55">
           <p>
             Live flight tracking in 3D. The planes you see are real. Position
-            data comes from airplanes.live, adsb.lol, and OpenSky Network,
-            updated every few seconds via ADS-B receivers people run on their
-            roofs worldwide.
+            data comes from adsb.lol, adsb.fi, airplanes.live, and OpenSky
+            Network, updated every few seconds via ADS-B receivers people run
+            on their roofs worldwide.
           </p>
           <p>
             You can search through 9,000+ airports, jump into first-person view

@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { FlightState } from "@/lib/opensky";
-import { fetchFlightsByPoint } from "@/lib/flight-api";
+import {
+  fetchFlightsByPoint,
+  PROVIDER_CHANGE_EVENT,
+} from "@/lib/flight-api";
 import type { City } from "@/lib/cities";
 
 /** Normal polling interval - readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
@@ -27,7 +30,7 @@ const FPV_POINT_RADIUS = 2;
 const MAX_EMPTY_STREAK = 3;
 
 /**
- * Fetches flights via adsb.lol → airplanes.live → OpenSky fallback.
+ * Fetches flights via adsb.lol → adsb.fi → airplanes.live → OpenSky fallback.
  * In FPV mode the query center moves with the tracked aircraft.
  * City changes are ignored while in FPV.
  */
@@ -232,7 +235,7 @@ export function useFlights(
         setError(err instanceof Error ? err.message : "Unknown error");
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
       } finally {
-        setLoading(false);
+        if (abortRef.current === controller) setLoading(false);
       }
     },
     [scheduleNext, startCountdown, clearCountdown],
@@ -318,6 +321,23 @@ export function useFlights(
       clearCountdown();
     };
   }, [city, fetchData, clearCountdown, clearSchedule, stopCountdown]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !city) return;
+
+    const activeCity = city;
+    const onProviderChange = () => {
+      clearSchedule();
+      clearCountdown();
+      setRateLimited(false);
+      emptyStreakRef.current = 0;
+      void fetchData(activeCity);
+    };
+
+    window.addEventListener(PROVIDER_CHANGE_EVENT, onProviderChange);
+    return () =>
+      window.removeEventListener(PROVIDER_CHANGE_EVENT, onProviderChange);
+  }, [city, fetchData, clearCountdown, clearSchedule]);
 
   const prevFpvRef = useRef<string | null>(fpvIcao24);
   useEffect(() => {

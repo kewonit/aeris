@@ -6,6 +6,8 @@
 // Verified endpoints (actual API docs):
 //   adsb.lol:     https://api.adsb.lol/v2/callsign/{callsign}
 //                 https://api.adsb.lol/v2/hex/{icao_hex}
+//   adsb.fi:      https://opendata.adsb.fi/api/v2/callsign/{callsign}
+//                 https://opendata.adsb.fi/api/v2/hex/{hex}
 //   airplanes.live: https://api.airplanes.live/v2/callsign/{callsign}
 //                   https://api.airplanes.live/v2/hex/{hex}
 //
