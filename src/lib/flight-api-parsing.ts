@@ -8,6 +8,10 @@
 import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
+import {
+  createFlightProvenance,
+  normalizeFlightTimestamp,
+} from "./flight-provenance";
 
 // ── Unit Conversion Constants ──────────────────────────────────────────
 
@@ -22,7 +26,7 @@ const FTPM_TO_MS = 0.00508;
 
 // ── Registration → Country Lookup ──────────────────────────────────────
 //
-// readsb doesn't provide originCountry. We derive it from the
+// readsb does not provide registrationCountry. We derive it from the
 // registration prefix. Sorted by prefix length descending so longer
 // prefixes match first (e.g. "EC-" before "E").
 
@@ -91,14 +95,14 @@ for (const [prefix, country] of REG_PREFIX_TO_COUNTRY) {
   else REG_BY_1.set(prefix, country);
 }
 
-function countryFromRegistration(reg: unknown): string {
-  if (typeof reg !== "string" || !reg) return "Unknown";
+function countryFromRegistration(reg: unknown): string | null {
+  if (typeof reg !== "string" || !reg) return null;
   const upper = reg.toUpperCase();
   return (
     REG_BY_3.get(upper.slice(0, 3)) ??
     REG_BY_2.get(upper.slice(0, 2)) ??
     REG_BY_1.get(upper[0]) ??
-    "Unknown"
+    null
   );
 }
 
@@ -189,7 +193,10 @@ function optionalTrimmedString(value: unknown): string | null {
 
 // ── Single Aircraft Parser ─────────────────────────────────────────────
 
-function parseRawAircraft(raw: RawAircraft): FlightState | null {
+function parseRawAircraft(
+  raw: RawAircraft,
+  options?: ParseOptions,
+): FlightState | null {
   // Reject non-ICAO addresses (TIS-B, etc.)
   if (!isValidIcaoHex(raw.hex)) return null;
 
@@ -211,11 +218,13 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
   }
 
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
+  const responseTime =
+    normalizeFlightTimestamp(options?.responseTime) ?? Date.now();
 
   return {
     icao24: raw.hex.toLowerCase(),
     callsign: optionalTrimmedString(raw.flight),
-    originCountry: countryFromRegistration(raw.r),
+    registrationCountry: countryFromRegistration(raw.r),
     longitude: raw.lon,
     latitude: raw.lat,
     baroAltitude: altitude,
@@ -246,6 +255,15 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     category: readsbCategoryToNumber(raw.category),
     typeCode: optionalTrimmedString(raw.t),
     registration: optionalTrimmedString(raw.r),
+    provenance: createFlightProvenance({
+      positionProvider: options?.positionProvider ?? "unknown",
+      responseTime,
+      observationTime:
+        typeof raw.seen_pos === "number"
+          ? responseTime - raw.seen_pos * 1000
+          : null,
+      positionAgeSeconds: raw.seen_pos,
+    }),
 
     // ── Avionics (readsb-only, will be undefined for OpenSky) ──────
     ias: optionalFinite(raw.ias),
@@ -311,6 +329,10 @@ export interface ParseOptions {
   includeGround?: boolean;
   /** Require barometric altitude. Default: true. */
   requireBaroAltitude?: boolean;
+  /** Provider that supplied this response. */
+  positionProvider?: string;
+  /** Provider response time in Unix seconds or milliseconds. */
+  responseTime?: number;
 }
 
 /**
@@ -329,7 +351,7 @@ export function parseAircraftList(
 
   for (const raw of rawList) {
     if (!raw || typeof raw !== "object") continue;
-    const state = parseRawAircraft(raw);
+    const state = parseRawAircraft(raw, options);
     if (!state) continue;
 
     // Filter ground aircraft unless specifically requested

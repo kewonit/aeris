@@ -1,7 +1,7 @@
 /**
  * Comprehensive country name → ISO 3166-1 alpha-2 mapping.
  *
- * Covers all ICAO / OpenSky originCountry values, common aliases,
+ * Covers all ICAO / OpenSky registrationCountry values, common aliases,
  * and historical names. Optimised for lookup speed (single pass,
  * normalised keys, early return).
  */
