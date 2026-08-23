@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   clearRouteResolverCache,
   resolveRouteFromOpenDatabases,
+  resolveRouteFromOpenDatabasesDetailed,
 } from "./route-resolver";
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -12,6 +13,18 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
     headers: { "content-type": "application/json" },
     ...init,
   });
+}
+
+function routeContext(callsign: string) {
+  return {
+    callsign,
+    icao24: "abc123",
+    latitude: 37.7,
+    longitude: -122.4,
+    altitudeMeters: 10_000,
+    onGround: false,
+    observationTime: 1_700_000_000_000,
+  };
 }
 
 test("resolveRouteFromOpenDatabases uses direct hexdb fallback after adsbdb misses", async () => {
@@ -61,7 +74,7 @@ test("resolveRouteFromOpenDatabases uses direct hexdb fallback after adsbdb miss
   }) as typeof fetch;
 
   try {
-    const route = await resolveRouteFromOpenDatabases("UAL123");
+    const route = await resolveRouteFromOpenDatabases(routeContext("UAL123"));
 
     assert.equal(route?.source, "hexdb");
     assert.equal(route?.origin?.iata, "SFO");
@@ -102,7 +115,7 @@ test("resolveRouteFromOpenDatabases returns null when all route databases miss",
   }) as typeof fetch;
 
   try {
-    const route = await resolveRouteFromOpenDatabases("UAL456");
+    const route = await resolveRouteFromOpenDatabases(routeContext("UAL456"));
 
     assert.equal(route, null);
     assert.ok(urls.includes("https://hexdb.io/api/v1/route/icao/UAL456"));
@@ -141,8 +154,8 @@ test("resolveRouteFromOpenDatabases caches provider 404 misses", async () => {
   }) as typeof fetch;
 
   try {
-    const first = await resolveRouteFromOpenDatabases("UAL457");
-    const second = await resolveRouteFromOpenDatabases("UAL457");
+    const first = await resolveRouteFromOpenDatabases(routeContext("UAL457"));
+    const second = await resolveRouteFromOpenDatabases(routeContext("UAL457"));
 
     assert.equal(first, null);
     assert.equal(second, null);
@@ -164,12 +177,66 @@ test("resolveRouteFromOpenDatabases does not cache transient provider failures",
   }) as typeof fetch;
 
   try {
-    const first = await resolveRouteFromOpenDatabases("UAL458");
-    const second = await resolveRouteFromOpenDatabases("UAL458");
+    const first = await resolveRouteFromOpenDatabases(routeContext("UAL458"));
+    const second = await resolveRouteFromOpenDatabases(routeContext("UAL458"));
 
     assert.equal(first, null);
     assert.equal(second, null);
     assert.equal(requestCount, 6);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRouteResolverCache();
+  }
+});
+
+test("route providers treat empty 201, HTML, and invalid JSON as temporary", async () => {
+  clearRouteResolverCache();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("api.adsbdb.com")) {
+      return new Response("", {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("hexdb.io")) {
+      return new Response("<html>wait</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    return new Response("not-json", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const resolution = await resolveRouteFromOpenDatabasesDetailed(
+      routeContext("UAL459"),
+    );
+    assert.equal(resolution.route, null);
+    assert.equal(resolution.temporarilyUnavailable, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRouteResolverCache();
+  }
+});
+
+test("route provider timeouts remain temporary", async () => {
+  clearRouteResolverCache();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new DOMException("Timed out", "TimeoutError");
+  }) as typeof fetch;
+
+  try {
+    const resolution = await resolveRouteFromOpenDatabasesDetailed(
+      routeContext("UAL460"),
+    );
+    assert.equal(resolution.route, null);
+    assert.equal(resolution.temporarilyUnavailable, true);
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();
@@ -203,7 +270,7 @@ test("resolveRouteFromOpenDatabases prefers opensky when it returns first", asyn
   }) as typeof fetch;
 
   try {
-    const route = await resolveRouteFromOpenDatabases("BAW123");
+    const route = await resolveRouteFromOpenDatabases(routeContext("BAW123"));
 
     assert.equal(route?.source, "opensky");
     assert.equal(route?.origin?.icao, "EGLL");

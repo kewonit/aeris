@@ -208,6 +208,11 @@ export function setProviderOverride(provider: ProviderName): void {
 // ── Constants ──────────────────────────────────────────────────────────
 
 const PROXY_TIMEOUT_MS = 8_000;
+const PROVIDER_LABELS = {
+  adsb: "adsb.lol",
+  adsbfi: "adsb.fi",
+  airplanes: "airplanes.live",
+} as const;
 
 // ── Internal Helpers ───────────────────────────────────────────────────
 
@@ -296,6 +301,18 @@ async function fetchViaProxy(
     PROXY_TIMEOUT_MS,
     signal,
   );
+}
+
+function parseReadsbResponse(
+  response: ReadsbApiResponse,
+  provider: keyof typeof PROVIDER_LABELS,
+  options?: ParseOptions,
+): FlightState[] {
+  return parseAircraftList(response.ac, {
+    ...options,
+    positionProvider: PROVIDER_LABELS[provider],
+    responseTime: response.now,
+  });
 }
 
 // ── Tier 4: OpenSky direct ─────────────────────────────────────────────
@@ -422,7 +439,7 @@ export async function fetchFlightsByPoint(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, options);
+        return parseReadsbResponse(resp, "adsb", options);
       },
     });
   }
@@ -433,7 +450,7 @@ export async function fetchFlightsByPoint(
       id: "adsbfi",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
-        return parseAircraftList(resp.ac, options);
+        return parseReadsbResponse(resp, "adsbfi", options);
       },
     });
   }
@@ -444,7 +461,7 @@ export async function fetchFlightsByPoint(
       id: "airplanes",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
-        return parseAircraftList(resp.ac, options);
+        return parseReadsbResponse(resp, "airplanes", options);
       },
     });
   }
@@ -494,7 +511,7 @@ export async function fetchFlightsByHex(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "adsb", parseOpts);
       },
     });
   }
@@ -505,7 +522,7 @@ export async function fetchFlightsByHex(
       id: "adsbfi",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "adsbfi", parseOpts);
       },
     });
   }
@@ -516,7 +533,7 @@ export async function fetchFlightsByHex(
       id: "airplanes",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "airplanes", parseOpts);
       },
     });
   }
@@ -549,6 +566,32 @@ export async function fetchFlightsByHex(
   }
 }
 
+/** Fetch one fresh adsb.lol result for selected-aircraft fusion. */
+export async function fetchSelectedAircraftFromAdsbLol(
+  icao24: string,
+  signal?: AbortSignal,
+): Promise<FlightState | null> {
+  const normalized = icao24.trim().toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(normalized)) return null;
+
+  try {
+    const response = await fetchViaProxy(
+      `/hex/${encodeURIComponent(normalized)}`,
+      "adsb",
+      signal,
+    );
+    return (
+      parseReadsbResponse(response, "adsb", {
+        includeGround: true,
+        requireBaroAltitude: false,
+      }).find((flight) => flight.icao24 === normalized) ?? null
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    return null;
+  }
+}
+
 /**
  * Fetch all aircraft matching a callsign.
  * Uses OpenSky only after all readsb providers miss or fail.
@@ -576,7 +619,7 @@ export async function fetchFlightsByCallsign(
       id: "adsb",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "adsb", parseOpts);
       },
     });
   }
@@ -587,7 +630,7 @@ export async function fetchFlightsByCallsign(
       id: "adsbfi",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "adsbfi", parseOpts);
       },
     });
   }
@@ -598,7 +641,7 @@ export async function fetchFlightsByCallsign(
       id: "airplanes",
       fn: async () => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
-        return parseAircraftList(resp.ac, parseOpts);
+        return parseReadsbResponse(resp, "airplanes", parseOpts);
       },
     });
   }

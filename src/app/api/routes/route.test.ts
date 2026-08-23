@@ -30,7 +30,7 @@ test("GET rejects invalid callsigns without touching upstream providers", async 
 
     assert.equal(response.status, 400);
     assert.equal(response.headers.get("Cache-Control"), "no-store");
-    assert.equal(body.error, "Invalid or missing callsign");
+    assert.equal(body.error, "Invalid or missing route context");
     assert.equal(upstreamTouched, false);
   } finally {
     globalThis.fetch = originalFetch;
@@ -75,13 +75,16 @@ test("GET returns normalized route data with shared-cache headers", async () => 
   try {
     const routeModule = await import("./route");
     const request = new NextRequest(
-      "https://aeris.edbn.me/api/routes?callsign=aal789",
+      "https://aeris.edbn.me/api/routes?callsign=aal789&icao24=abc123&latitude=37.7&longitude=-122.4&altitudeMeters=10000&onGround=0&observationTime=1700000000000",
     );
 
     const response = await routeModule.GET(request);
     const route = (await response.json()) as {
       callsign?: string;
       source?: string;
+      sources?: string[];
+      validation?: string;
+      icao24?: string;
       origin?: { iata?: string };
       destination?: { iata?: string };
     };
@@ -89,10 +92,13 @@ test("GET returns normalized route data with shared-cache headers", async () => 
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get("Cache-Control"),
-      "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      "public, max-age=300, s-maxage=300, stale-while-revalidate=300",
     );
     assert.equal(route.callsign, "AAL789");
     assert.equal(route.source, "adsbdb");
+    assert.deepEqual(route.sources, ["adsbdb"]);
+    assert.equal(route.validation, "valid");
+    assert.equal(route.icao24, "abc123");
     assert.equal(route.origin?.iata, "SFO");
     assert.equal(route.destination?.iata, "LHR");
   } finally {
@@ -109,7 +115,7 @@ test("GET does not cache transient provider failures as route misses", async () 
   try {
     const routeModule = await import("./route");
     const request = new NextRequest(
-      "https://aeris.edbn.me/api/routes?callsign=ual790",
+      "https://aeris.edbn.me/api/routes?callsign=ual790&icao24=abc123&latitude=37.7&longitude=-122.4&altitudeMeters=10000&onGround=0&observationTime=1700000000000",
     );
 
     const response = await routeModule.GET(request);

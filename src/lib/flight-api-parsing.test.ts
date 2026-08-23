@@ -30,6 +30,32 @@ test("parses the API 2.0.0 aircraft shape with omitted optional fields", () => {
   assert.equal(flights[0].debugData?.messages, null);
 });
 
+test("preserves response time, position age, and provider identity", () => {
+  const flights = parseAircraftList(
+    [
+      {
+        hex: "ABC123",
+        lat: 12.5,
+        lon: 77.6,
+        seen_pos: 1.25,
+      },
+    ],
+    {
+      ...LOOKUP_OPTIONS,
+      positionProvider: "adsb.lol",
+      responseTime: 1_700_000_000_000,
+    },
+  );
+
+  assert.deepEqual(flights[0].provenance, {
+    responseTime: 1_700_000_000_000,
+    observationTime: 1_699_999_998_750,
+    positionAgeSeconds: 1.25,
+    contributingSources: ["adsb.lol"],
+    positionProvider: "adsb.lol",
+  });
+});
+
 test("skips missing, non-ICAO, and malformed hex values without throwing", () => {
   const malformed = [
     { lat: 1, lon: 2 },
