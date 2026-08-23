@@ -55,6 +55,7 @@ export type SourceManifestEntry = {
   publishedAt: string | null;
   license: string;
   licenseUrl: string;
+  attribution: string;
   records: number;
 };
 

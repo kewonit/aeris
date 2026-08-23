@@ -10,6 +10,7 @@ import {
   type AircraftChunk,
   type AviationAirportRecord,
   type AviationDataManifest,
+  type SourceManifestEntry,
 } from "./lib";
 
 const REPOSITORY_ROOT = path.resolve(
@@ -20,6 +21,16 @@ const DEFAULT_DATA_DIRECTORY = path.join(
   REPOSITORY_ROOT,
   "public/data/aviation",
 );
+const SOURCE_NAMES = ["faa", "mictronics", "ourairports"] as const;
+const REQUIRED_PRIVACY_EXCLUSIONS = [
+  "owner name",
+  "street address",
+  "city",
+  "state",
+  "postal code",
+  "county",
+  "other names",
+] as const;
 
 function checkHash(label: string, expected: string, content: string): void {
   if (content.includes("\u2014")) {
@@ -28,6 +39,37 @@ function checkHash(label: string, expected: string, content: string): void {
   const actual = sha256(content);
   if (actual !== expected) {
     throw new Error(`${label} hash does not match the manifest`);
+  }
+}
+
+function checkSourceEntry(
+  name: string,
+  entry: SourceManifestEntry | undefined,
+): asserts entry is SourceManifestEntry {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`Aviation source is missing: ${name}`);
+  }
+  if (
+    typeof entry.url !== "string" ||
+    !entry.url.startsWith("https://") ||
+    !/^[0-9a-f]{64}$/.test(entry.sha256) ||
+    typeof entry.license !== "string" ||
+    !entry.license.trim() ||
+    typeof entry.licenseUrl !== "string" ||
+    !entry.licenseUrl.startsWith("https://") ||
+    typeof entry.attribution !== "string" ||
+    !entry.attribution.trim() ||
+    !Number.isInteger(entry.records) ||
+    entry.records <= 0
+  ) {
+    throw new Error(`Aviation source metadata is invalid: ${name}`);
+  }
+  if (
+    entry.publishedAt !== null &&
+    (typeof entry.publishedAt !== "string" ||
+      !Number.isFinite(Date.parse(entry.publishedAt)))
+  ) {
+    throw new Error(`Aviation source date is invalid: ${name}`);
   }
 }
 
@@ -63,12 +105,63 @@ export async function checkAviationData(
   if (manifest.schemaVersion !== AVIATION_SCHEMA_VERSION) {
     throw new Error("Aviation manifest has an unsupported schema version");
   }
+  if (
+    manifest.dataDate !== null &&
+    (typeof manifest.dataDate !== "string" ||
+      !Number.isFinite(Date.parse(manifest.dataDate)))
+  ) {
+    throw new Error("Aviation manifest has an invalid data date");
+  }
   if (manifest.counts.aircraft < 100_000 || manifest.counts.airports < 5_000) {
     throw new Error("Aviation manifest record counts are too small");
   }
-  for (const entry of Object.values(manifest.sources)) {
-    if (!/^[0-9a-f]{64}$/.test(entry.sha256)) {
-      throw new Error(`Source hash is invalid: ${entry.url}`);
+  if (
+    !manifest.sources ||
+    typeof manifest.sources !== "object" ||
+    Array.isArray(manifest.sources) ||
+    Object.keys(manifest.sources).sort().join(",") !==
+      [...SOURCE_NAMES].sort().join(",")
+  ) {
+    throw new Error("Aviation manifest has invalid sources");
+  }
+  for (const sourceName of SOURCE_NAMES) {
+    checkSourceEntry(sourceName, manifest.sources[sourceName]);
+  }
+  if (
+    !manifest.files?.aircraft ||
+    typeof manifest.files.aircraft !== "object" ||
+    Array.isArray(manifest.files.aircraft) ||
+    Object.keys(manifest.files.aircraft).length !== AIRCRAFT_CHUNK_COUNT ||
+    !manifest.files.airports ||
+    typeof manifest.files.airports !== "object"
+  ) {
+    throw new Error("Aviation manifest has invalid file metadata");
+  }
+  if (
+    !manifest.privacy ||
+    !Array.isArray(manifest.privacy.includedAircraftFields) ||
+    !Array.isArray(manifest.privacy.excludedFaaFields) ||
+    REQUIRED_PRIVACY_EXCLUSIONS.some(
+      (field) => !manifest.privacy.excludedFaaFields.includes(field),
+    )
+  ) {
+    throw new Error("Aviation manifest has invalid privacy metadata");
+  }
+
+  const noticeContent = await readFile(
+    path.join(dataDirectory, "NOTICE.md"),
+    "utf8",
+  );
+  if (noticeContent.includes("\u2014")) {
+    throw new Error("Aviation data notice contains an em dash character");
+  }
+  for (const sourceName of SOURCE_NAMES) {
+    const entry = manifest.sources[sourceName];
+    if (
+      !noticeContent.includes(entry.attribution) ||
+      !noticeContent.includes(`License: ${entry.license}.`)
+    ) {
+      throw new Error(`Aviation notice is incomplete: ${sourceName}`);
     }
   }
 

@@ -37,6 +37,7 @@ const DATA_DIRECTORY = path.join(
 const AIRCRAFT_DIRECTORY = path.join(DATA_DIRECTORY, "aircraft");
 const MANIFEST_PATH = path.join(DATA_DIRECTORY, "manifest.json");
 const AIRPORTS_PATH = path.join(DATA_DIRECTORY, "airports.json");
+const NOTICE_PATH = path.join(DATA_DIRECTORY, "NOTICE.md");
 
 const SOURCES = {
   mictronics:
@@ -75,7 +76,7 @@ export async function refreshAviationData(): Promise<AviationDataManifest> {
     await Promise.all([
       downloadSource(
         SOURCES.mictronics,
-        process.env.AERIS_MICRONICS_SOURCE_FILE,
+        process.env.AERIS_MICTRONICS_SOURCE_FILE,
       ),
       downloadSource(SOURCES.faa, process.env.AERIS_FAA_SOURCE_FILE),
       downloadSource(
@@ -140,6 +141,8 @@ export async function refreshAviationData(): Promise<AviationDataManifest> {
       license: "Open Data Commons Attribution License",
       licenseUrl:
         "https://github.com/Mictronics/aircraft-database/blob/main/LICENSE",
+      attribution:
+        "Contains information from the Mictronics Aircraft Database.",
       records: mictronicsRecordCount,
     },
     faa: {
@@ -149,6 +152,7 @@ export async function refreshAviationData(): Promise<AviationDataManifest> {
       license: "United States government public data",
       licenseUrl:
         "https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download",
+      attribution: "Source: Federal Aviation Administration aircraft registry.",
       records: faaRecordCount,
     },
     ourairports: {
@@ -160,6 +164,7 @@ export async function refreshAviationData(): Promise<AviationDataManifest> {
       ),
       license: "Public domain",
       licenseUrl: "https://ourairports.com/data/",
+      attribution: "Source: OurAirports.",
       records: airports.length,
     },
   } satisfies AviationDataManifest["sources"];
@@ -226,6 +231,11 @@ export async function refreshAviationData(): Promise<AviationDataManifest> {
     await writeFile(
       path.join(validationDirectory, "manifest.json"),
       serializeJson(manifest),
+      "utf8",
+    );
+    await writeFile(
+      path.join(validationDirectory, "NOTICE.md"),
+      await readFile(NOTICE_PATH, "utf8"),
       "utf8",
     );
     await checkAviationData(validationDirectory);
