@@ -610,11 +610,32 @@ function Toggle({ checked }: { checked: boolean }) {
   );
 }
 
-const CHANGELOG: {
+export const CHANGELOG: {
   version: string;
   date: string;
   entries: { title: string; description: string }[];
 }[] = [
+  {
+    version: "0.8.9",
+    date: "Aug 23, 2026",
+    entries: [
+      {
+        title: "Open aviation data updates",
+        description:
+          "Added deterministic refresh and validation commands for open aircraft, registration, and airport data. Scheduled source checks can open a weekly review PR when generated data changes.",
+      },
+      {
+        title: "Aircraft data and route trust",
+        description:
+          "Added aircraft provenance, selected-aircraft fusion, local registry metadata, and position-aware checks for reported routes.",
+      },
+      {
+        title: "Simpler aircraft details",
+        description:
+          "Reduced the desktop image, moved secondary fields into one Details section, and now hides unsupported aircraft labels.",
+      },
+    ],
+  },
   {
     version: "0.8.8",
     date: "Aug 23, 2026",

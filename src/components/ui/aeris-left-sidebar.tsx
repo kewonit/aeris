@@ -80,7 +80,7 @@ export function AerisLeftSidebar({
 
   const title =
     panel?.kind === "flight"
-      ? "Flight Details"
+      ? "Aircraft details"
       : panel?.kind === "airport"
         ? "Airport Board"
         : "Aeris";
