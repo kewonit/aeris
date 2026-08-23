@@ -122,6 +122,28 @@ All variables are optional - Aeris runs with no secrets. See `.env.example` for 
 
 Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the server proxy; OpenSky is the final automatic fallback. No provider credentials are configured. The adsb.fi public API is limited to one request per second per IP for personal, non-commercial use and is credited in the application as required by its terms.
 
+## Open Aviation Data
+
+Aeris stores reproducible aircraft and airport snapshots in `public/data/aviation`.
+
+- Mictronics supplies global registration, type, model, and database flag data.
+- The FAA supplies US registration, manufacturer, and model data.
+- OurAirports supplies airport codes and coordinates.
+
+The generator copies only approved aircraft fields. It excludes FAA owner names, addresses, and other personal fields.
+
+Run these commands to refresh and check the files:
+
+```bash
+pnpm data:refresh
+pnpm data:check
+pnpm test:data
+```
+
+The automation refreshes FAA data each day and OurAirports data each night. The job starts at 03:17 UTC. It downloads Mictronics data once per UTC week. It validates the combined snapshot each day and opens one draft review PR on Monday when generated files change.
+
+The [aviation data notice](public/data/aviation/NOTICE.md) lists each source and license.
+
 ## License
 
 AGPL-3.0
