@@ -28,7 +28,6 @@ import {
   headingToCardinal,
 } from "@/lib/flight-utils";
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
-import { aircraftTypeHint } from "@/lib/aircraft";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
   loadedAirlineLogoUrls,
@@ -229,13 +228,8 @@ export function MobileFlightToast({
 }: MobileFlightToastProps) {
   const { settings } = useSettings();
   const airline = lookupAirline(flight.callsign);
-  const flightNum = parseFlightNumber(flight.callsign);
-  const company =
-    airline ??
-    (flight.registrationCountry
-      ? `${flight.registrationCountry} operator`
-      : null);
-  const model = aircraftTypeHint(flight.category);
+  const flightNum = airline ? parseFlightNumber(flight.callsign) : null;
+  const company = airline;
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
@@ -249,7 +243,6 @@ export function MobileFlightToast({
   const [logoLoadedByKey, setLogoLoadedByKey] = useState<
     Record<string, boolean>
   >({});
-  const [genericLogoFailed, setGenericLogoFailed] = useState(false);
 
   const airlineKey = airline ?? "__none__";
   const baseLogoIndex = logoIndexByAirline[airlineKey] ?? 0;
@@ -270,7 +263,6 @@ export function MobileFlightToast({
     (logoUrl ? loadedAirlineLogoUrls.has(logoUrl) : false) ||
     (logoLoadedByKey[logoLoadKey] ?? false);
   const showLogo = Boolean(logoUrl);
-  const genericLogoUrl = "/airline-logos/envoy-air.png";
 
   // Aircraft photos and details.
   const {
@@ -338,22 +330,8 @@ export function MobileFlightToast({
                 />
               </span>
             ) : (
-              <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-[14px] border border-black/5 bg-white/95 p-2.5 shadow-sm">
-                {genericLogoFailed ? (
-                  <span className="text-[16px] font-semibold text-background/25">
-                    -
-                  </span>
-                ) : (
-                  <Image
-                    src={genericLogoUrl}
-                    alt="Generic airline logo"
-                    width={40}
-                    height={40}
-                    className="h-9 w-9 object-contain grayscale opacity-80"
-                    unoptimized
-                    onError={() => setGenericLogoFailed(true)}
-                  />
-                )}
+              <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-[14px] border border-foreground/10 bg-background/45 text-foreground/45 shadow-sm">
+                <Plane className="h-6 w-6" aria-hidden="true" />
               </span>
             )}
           </div>
@@ -378,7 +356,7 @@ export function MobileFlightToast({
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-foreground/[0.06] bg-foreground/[0.05] text-foreground/50 transition-colors active:bg-foreground/10"
-            aria-label="Close flight details"
+            aria-label="Close aircraft details"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -388,55 +366,38 @@ export function MobileFlightToast({
           {company && (
             <MobileGroupedRow icon={<Building2 className="h-3.5 w-3.5" />}>
               <p className="truncate text-[13px] font-medium text-foreground/74">
-                {company}
-                {flight?.typeDescription ? (
-                  <span className="text-foreground/40">
-                    {" "}
-                    · {flight.typeDescription}
-                  </span>
-                ) : model ? (
-                  <span className="text-foreground/40"> · {model}</span>
-                ) : null}
+                Airline: {company}
               </p>
             </MobileGroupedRow>
           )}
-          {/* Aircraft details (registration, type, owner) */}
-          {aircraftDetails &&
-            (aircraftDetails.registration ||
-              aircraftDetails.type ||
-              aircraftDetails.typeCode ||
-              aircraftDetails.owner) && (
+          {(flight.registration ||
+            aircraftDetails?.registration ||
+            flight.model ||
+            flight.typeDescription ||
+            aircraftDetails?.type ||
+            flight.typeCode ||
+            aircraftDetails?.typeCode ||
+            flight.manufacturer ||
+            aircraftDetails?.manufacturer) && (
               <MobileGroupedRow
                 icon={<Plane className="h-3.5 w-3.5" />}
                 divided={Boolean(company)}
               >
                 <p className="truncate text-[13px] text-foreground/58">
-                {[
-                  aircraftDetails.registration,
-                  aircraftDetails.type ?? aircraftDetails.typeCode,
-                  aircraftDetails.owner,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+                  {[
+                    flight.registration ?? aircraftDetails?.registration,
+                    flight.model ??
+                      flight.typeDescription ??
+                      aircraftDetails?.type ??
+                      flight.typeCode ??
+                      aircraftDetails?.typeCode,
+                    flight.manufacturer ?? aircraftDetails?.manufacturer,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
               </MobileGroupedRow>
             )}
-          {/* Registration fallback from flight data */}
-          {!aircraftDetails?.registration && flight?.registration && (
-            <MobileGroupedRow
-              icon={<Plane className="h-3.5 w-3.5" />}
-              divided={Boolean(company)}
-            >
-              <p className="truncate font-mono text-[13px] text-foreground/58">
-                {flight.registration}
-                {flight.typeCode && !flight.typeDescription ? (
-                  <span className="ml-1 text-foreground/30">
-                    [{flight.typeCode}]
-                  </span>
-                ) : null}
-              </p>
-            </MobileGroupedRow>
-          )}
         </div>
         {/* Military / Emergency indicators */}
         {(isMilitary(flight.dbFlags) ||
@@ -491,12 +452,14 @@ export function MobileFlightToast({
 
       {/* Info section: origin, heading + coords, squawk */}
       <div className="mx-4 mb-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-        {/* Origin country */}
-        <MobileGroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
-          <p className="text-[13px] text-foreground/65">
-            {flight.registrationCountry}
-          </p>
-        </MobileGroupedRow>
+        {/* Registration country */}
+        {flight.registrationCountry && (
+          <MobileGroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
+            <p className="text-[13px] text-foreground/65">
+              Registration country: {flight.registrationCountry}
+            </p>
+          </MobileGroupedRow>
+        )}
 
         {/* Heading direction + coordinates */}
         {cardinal && (
@@ -512,7 +475,7 @@ export function MobileFlightToast({
                 }}
               />
             }
-            divided
+            divided={Boolean(flight.registrationCountry)}
           >
             <p className="text-[13px] text-foreground/65">
               Heading {cardinal}
