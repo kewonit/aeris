@@ -79,6 +79,58 @@ test("uses quality as a tie-breaker within two seconds", () => {
   );
 });
 
+test("keeps timing and provider with the selected position group", () => {
+  const current = makeFlight("airplanes.live", 10_000, {
+    provenance: {
+      responseTime: 12_000,
+      observationTime: 10_000,
+      positionAgeSeconds: 2,
+      contributingSources: ["airplanes.live"],
+      positionProvider: "airplanes.live",
+    },
+    debugData: {
+      nic: 9,
+      nacP: 10,
+      nacV: null,
+      sil: null,
+      version: 2,
+      alert: null,
+      messages: null,
+      seen: null,
+      rssi: null,
+    },
+  });
+  const fresh = makeFlight("adsb.lol", 11_000, {
+    provenance: {
+      responseTime: 20_000,
+      observationTime: 11_000,
+      positionAgeSeconds: 9,
+      contributingSources: ["adsb.lol"],
+      positionProvider: "adsb.lol",
+    },
+    debugData: {
+      nic: 8,
+      nacP: 8,
+      nacV: null,
+      sil: null,
+      version: 2,
+      alert: null,
+      messages: null,
+      seen: null,
+      rssi: null,
+    },
+  });
+
+  const result = fuseSelectedAircraft(current, fresh, null, 25_000);
+  assert.equal(result.flight.provenance.responseTime, 12_000);
+  assert.equal(result.flight.provenance.observationTime, 10_000);
+  assert.equal(result.flight.provenance.positionAgeSeconds, 2);
+  assert.equal(
+    result.flight.provenance.positionProvider,
+    "airplanes.live",
+  );
+});
+
 test("adds preferred registry metadata and all contributing sources", () => {
   const current = makeFlight("airplanes.live", 10_000);
   const fresh = makeFlight("adsb.lol", 13_000);
