@@ -140,7 +140,7 @@ pnpm data:check
 pnpm test:data
 ```
 
-The automation checks FAA and OurAirports data each day at 03:17 UTC. It builds the combined snapshot each Monday. It opens one draft review PR only when generated files change.
+The automation refreshes FAA data each day and OurAirports data each night. The job starts at 03:17 UTC. It downloads Mictronics data once per UTC week. It validates the combined snapshot each day and opens one draft review PR on Monday when generated files change.
 
 The [aviation data notice](public/data/aviation/NOTICE.md) lists each source and license.
 

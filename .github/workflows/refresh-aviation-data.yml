@@ -33,18 +33,36 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check daily sources
-        run: pnpm data:check:sources
-
       - name: Set the UTC schedule values
         id: schedule
         shell: bash
         run: |
           echo "weekday=$(date -u +%u)" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
-      - name: Build the weekly snapshot
-        if: steps.schedule.outputs.weekday == '1' || github.event_name == 'workflow_dispatch'
+      - name: Restore the weekly Mictronics source
+        id: mictronics-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/aviation/mictronics.zip
+          key: aviation-mictronics-v1-${{ steps.schedule.outputs.week }}
+
+      - name: Download the weekly Mictronics source
+        if: steps.mictronics-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p .cache/aviation
+          curl --location --fail --silent --show-error \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 20 --max-time 180 \
+            --user-agent Mozilla/5.0 \
+            --output .cache/aviation/mictronics.zip \
+            https://raw.githubusercontent.com/Mictronics/aircraft-database/main/aircraft_db.zip
+
+      - name: Build and validate the daily snapshot
+        env:
+          AERIS_MICTRONICS_SOURCE_FILE: .cache/aviation/mictronics.zip
         run: |
           pnpm data:refresh
           pnpm data:check
