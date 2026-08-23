@@ -103,6 +103,46 @@ export function projectLngLatElevationPixelDelta(
   return null;
 }
 
+export function centerLngLatForScreenOffset(
+  map: maplibregl.Map,
+  lng: number,
+  lat: number,
+  offset: [number, number],
+): [number, number] | null {
+  type TransformLike = {
+    center: maplibregl.LngLat;
+    centerPoint: { x: number; y: number };
+    clone: () => TransformLike;
+    setLocationAtPoint: (
+      lnglat: maplibregl.LngLat,
+      point: maplibregl.Point,
+    ) => void;
+  };
+
+  const transform = (map as unknown as { transform?: TransformLike }).transform;
+  if (!transform || typeof transform.clone !== "function") return null;
+
+  try {
+    const clone = transform.clone();
+    clone.setLocationAtPoint(
+      new maplibregl.LngLat(lng, lat),
+      new maplibregl.Point(
+        clone.centerPoint.x + offset[0],
+        clone.centerPoint.y + offset[1],
+      ),
+    );
+
+    const center = clone.center;
+    if (!Number.isFinite(center.lng) || !Number.isFinite(center.lat)) {
+      return null;
+    }
+
+    return [center.lng, center.lat];
+  } catch {
+    return null;
+  }
+}
+
 export function setMapInteractionsEnabled(
   map: maplibregl.Map,
   enabled: boolean,

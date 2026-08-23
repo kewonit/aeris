@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Eye, Plane, X } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
@@ -28,6 +27,9 @@ import {
   formatAircraftDataSources,
   formatAircraftFreshness,
 } from "@/lib/aircraft-sidebar";
+import { AirlineLogo } from "@/components/ui/airline-logo";
+import { PositionSourceBadge } from "@/components/ui/flight-badges";
+import { HeroBanner } from "@/components/ui/hero-banner";
 import { cn } from "@/lib/utils";
 
 type FlightCardProps = {
@@ -50,10 +52,11 @@ export function FlightCard({
   const { settings } = useSettings();
   const routeInfo = useRouteInfo(flight);
   const airline = flight ? lookupAirline(flight.callsign) : null;
-  const { photos, aircraft: photoAircraft } = useAircraftPhotos(
-    flight?.icao24 ?? null,
-    flight?.registration,
-  );
+  const {
+    photos,
+    aircraft: photoAircraft,
+    loading: photosLoading,
+  } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
 
   return (
     <AnimatePresence mode="wait">
@@ -77,6 +80,7 @@ export function FlightCard({
             airline={airline}
             photoAircraft={photoAircraft}
             heroPhoto={photos[0] ?? null}
+            photosLoading={photosLoading}
             routeInfo={routeInfo}
             unitSystem={settings.unitSystem}
             showDebugData={settings.showDebugData}
@@ -96,6 +100,7 @@ type FlightCardContentProps = {
   airline: string | null;
   photoAircraft: AircraftDetails | null;
   heroPhoto: NormalizedPhoto | null;
+  photosLoading: boolean;
   routeInfo: FlightRouteInfo;
   unitSystem: UnitSystem;
   showDebugData: boolean;
@@ -110,6 +115,7 @@ function FlightCardContent({
   airline,
   photoAircraft,
   heroPhoto,
+  photosLoading,
   routeInfo,
   unitSystem,
   showDebugData,
@@ -150,6 +156,27 @@ function FlightCardContent({
       ? flight.emergencyStatus
       : null,
   ].filter((value): value is string => Boolean(value));
+  const primaryFields = [
+    hasPosition(flight)
+      ? {
+          label: "Position",
+          value: formatPosition(flight.latitude, flight.longitude),
+        }
+      : null,
+    finiteValue(flight.baroAltitude) !== null
+      ? {
+          label: "Altitude",
+          value: formatAltitude(flight.baroAltitude, unitSystem),
+        }
+      : null,
+    finiteValue(flight.velocity) !== null
+      ? {
+          label: "Speed",
+          value: formatSpeed(flight.velocity, unitSystem),
+        }
+      : null,
+    { label: "Status", value: statusItems.join(", ") },
+  ].filter((field): field is { label: string; value: string } => field !== null);
 
   return (
     <div
@@ -160,34 +187,54 @@ function FlightCardContent({
           : "rounded-2xl border border-foreground/10 bg-background/90 shadow-2xl backdrop-blur-xl",
       )}
     >
-      <div className="px-5 pb-5 pt-2">
-        <div className="flex items-start gap-3 border-b border-foreground/10 pb-4">
-          <div className="flex min-w-0 flex-1 gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center text-foreground/55">
-              <Plane className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <div className="min-w-0 pt-0.5">
-              <h3 className="truncate text-lg font-semibold tracking-tight">
-                {identity}
-              </h3>
-              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-foreground/50">
-                ICAO {flight.icao24}
-                {flightNumber ? `, flight ${flightNumber}` : ""}
-              </p>
-              {details.airline && (
-                <p className="mt-1 truncate text-xs text-foreground/70">
-                  Airline: {details.airline}
-                </p>
-              )}
-            </div>
+      <HeroBanner
+        photo={heroPhoto}
+        loading={photosLoading}
+        alt={`${identity} aircraft`}
+      />
+
+      <div className="px-5 pb-5 pt-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            {airline ? (
+              <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[16px] border border-black/5 bg-white/95 shadow-sm">
+                <AirlineLogo
+                  callsign={flight.callsign}
+                  airlineName={airline}
+                  size={40}
+                  className="rounded-none bg-transparent"
+                />
+              </span>
+            ) : (
+              <Plane
+                className="h-7 w-7 text-foreground/45"
+                aria-hidden="true"
+              />
+            )}
           </div>
 
-          {heroPhoto && (
-            <PhotoPreview
-              photo={heroPhoto}
-              label={details.registration ?? identity}
-            />
-          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h3 className="truncate text-[19px] font-semibold leading-tight tracking-tight">
+                {identity}
+              </h3>
+              <PositionSourceBadge source={flight.positionSource} />
+            </div>
+            <p className="mt-1 flex min-w-0 items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground/45">
+              <span className="truncate">ICAO {flight.icao24}</span>
+              {flightNumber && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="shrink-0">Flight {flightNumber}</span>
+                </>
+              )}
+            </p>
+            {details.airline && (
+              <p className="mt-1 truncate text-[12px] text-foreground/62">
+                {details.airline}
+              </p>
+            )}
+          </div>
 
           {!isSidebar && (
             <button
@@ -203,29 +250,19 @@ function FlightCardContent({
 
         <RouteSummary routeInfo={routeInfo} />
 
-        <dl className="grid grid-cols-2 border-b border-foreground/10 py-3">
-          {hasPosition(flight) && (
+        <dl className="mt-3 grid grid-cols-2 overflow-hidden rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035]">
+          {primaryFields.map((field, index) => (
             <PrimaryField
-              label="Position"
-              value={formatPosition(flight.latitude, flight.longitude)}
+              key={field.label}
+              label={field.label}
+              value={field.value}
+              dividedTop={index >= 2}
+              dividedRight={index % 2 === 0 && index < primaryFields.length - 1}
             />
-          )}
-          {finiteValue(flight.baroAltitude) !== null && (
-            <PrimaryField
-              label="Altitude"
-              value={formatAltitude(flight.baroAltitude, unitSystem)}
-            />
-          )}
-          {finiteValue(flight.velocity) !== null && (
-            <PrimaryField
-              label="Speed"
-              value={formatSpeed(flight.velocity, unitSystem)}
-            />
-          )}
-          <PrimaryField label="Status" value={statusItems.join(", ")} />
+          ))}
         </dl>
 
-        <div className="border-b border-foreground/10 py-3 text-xs text-foreground/65">
+        <div className="border-b border-foreground/10 px-0.5 py-3 text-xs text-foreground/65">
           <p aria-live="off" aria-atomic="false">
             {freshness}
           </p>
@@ -335,43 +372,7 @@ function FlightCardContent({
   );
 }
 
-function PhotoPreview({
-  photo,
-  label,
-}: {
-  photo: NormalizedPhoto;
-  label: string;
-}) {
-  const image = (
-    <Image
-      src={photo.thumbnail || photo.url}
-      alt={`${label} aircraft`}
-      width={112}
-      height={80}
-      className="h-20 w-28 object-cover"
-      unoptimized
-    />
-  );
-
-  return (
-    <figure className="w-28 shrink-0 overflow-hidden rounded-lg">
-      {photo.link ? (
-        <a href={photo.link} target="_blank" rel="noreferrer">
-          {image}
-        </a>
-      ) : (
-        image
-      )}
-      {photo.photographer && (
-        <figcaption className="truncate pt-1 text-[9px] text-foreground/45">
-          Photo: {photo.photographer}
-        </figcaption>
-      )}
-    </figure>
-  );
-}
-
-function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
+export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
   if (!routeInfo.available) return null;
 
   const origin = routeInfo.origin ? formatAirportCode(routeInfo.origin) : null;
@@ -382,28 +383,72 @@ function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
   if (!origin || !destination) return null;
 
   return (
-    <section className="border-b border-foreground/10 py-3">
+    <section className="mt-4 rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035] px-4 py-3.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">
         Reported route
       </p>
-      <p className="mt-1 text-base font-semibold tracking-tight">
-        {origin} <span aria-hidden="true">→</span> {destination}
-      </p>
-      {(routeInfo.origin?.municipality ||
-        routeInfo.destination?.municipality) && (
-        <p className="mt-1 truncate text-xs text-foreground/55">
-          {[routeInfo.origin?.municipality, routeInfo.destination?.municipality]
-            .filter(Boolean)
-            .join(" to ")}
-        </p>
-      )}
+      <div className="mt-2 flex items-center gap-3">
+        <RouteEndpoint
+          code={origin}
+          municipality={routeInfo.origin?.municipality}
+        />
+        <div className="flex shrink-0 items-center gap-1.5 text-foreground/38">
+          <span className="h-px w-4 bg-foreground/12" aria-hidden="true" />
+          <Plane className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="h-px w-4 bg-foreground/12" aria-hidden="true" />
+        </div>
+        <RouteEndpoint
+          code={destination}
+          municipality={routeInfo.destination?.municipality}
+          align="right"
+        />
+      </div>
     </section>
   );
 }
 
-function PrimaryField({ label, value }: { label: string; value: string }) {
+function RouteEndpoint({
+  code,
+  municipality,
+  align = "left",
+}: {
+  code: string;
+  municipality?: string | null;
+  align?: "left" | "right";
+}) {
   return (
-    <div className="min-w-0 py-2 pr-3">
+    <div className={cn("min-w-0 flex-1", align === "right" && "text-right")}>
+      <p className="text-[17px] font-semibold tracking-tight text-foreground/92">
+        {code}
+      </p>
+      {municipality && (
+        <p className="mt-0.5 truncate text-[11px] font-medium text-foreground/45">
+          {municipality}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PrimaryField({
+  label,
+  value,
+  dividedTop,
+  dividedRight,
+}: {
+  label: string;
+  value: string;
+  dividedTop: boolean;
+  dividedRight: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-h-[70px] min-w-0 px-3.5 py-3",
+        dividedTop && "border-t border-foreground/[0.06]",
+        dividedRight && "border-r border-foreground/[0.06]",
+      )}
+    >
       <dt className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">
         {label}
       </dt>

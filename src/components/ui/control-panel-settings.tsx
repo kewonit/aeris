@@ -617,7 +617,7 @@ export const CHANGELOG: {
 }[] = [
   {
     version: "0.8.9",
-    date: "Aug 23, 2026",
+    date: "Aug 24, 2026",
     entries: [
       {
         title: "Open aviation data updates",
@@ -632,7 +632,7 @@ export const CHANGELOG: {
       {
         title: "Simpler aircraft details",
         description:
-          "Reduced the desktop image, moved secondary fields into one Details section, and now hides unsupported aircraft labels.",
+          "Restored the aircraft photo header and flight summary. The sidebar hides unsupported labels. The map keeps selected aircraft centered during panel transitions.",
       },
     ],
   },
