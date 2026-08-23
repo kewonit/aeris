@@ -364,7 +364,7 @@ export function SearchContent({
       <Command.Item
         key={flight.icao24}
         value={`flight:${flight.icao24}:${cs}:${isGlobal ? "global" : "local"}`}
-        keywords={[flight.icao24, cs, flight.originCountry]}
+        keywords={[flight.icao24, cs, flight.registrationCountry ?? ""]}
         onSelect={() => void openFlight(flight.icao24)}
         className="search-item"
       >
@@ -418,11 +418,11 @@ export function SearchContent({
             )}
             <span className="text-foreground/25">·</span>
             <CountryFlag
-              country={flight.originCountry}
+              country={flight.registrationCountry ?? "Unknown"}
               size={11}
               className="rounded-[1px]"
             />
-            <span className="truncate">{flight.originCountry}</span>
+            <span className="truncate">{flight.registrationCountry}</span>
           </div>
         </div>
 

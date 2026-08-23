@@ -12,7 +12,7 @@ import { useTrailHistory } from "./use-trail-history";
 const TEST_FLIGHT: FlightState = {
   icao24: "abc123",
   callsign: "TEST123",
-  originCountry: "Testland",
+  registrationCountry: "Testland",
   longitude: 8.55,
   latitude: 50.04,
   baroAltitude: 11_000,
@@ -25,6 +25,13 @@ const TEST_FLIGHT: FlightState = {
   spiFlag: false,
   positionSource: "adsb",
   category: null,
+  provenance: {
+    responseTime: 10_000,
+    observationTime: 9_500,
+    positionAgeSeconds: 0.5,
+    contributingSources: ["adsb.lol"],
+    positionProvider: "adsb.lol",
+  },
 };
 
 function HookHarness(props: { flights?: FlightState[] }) {

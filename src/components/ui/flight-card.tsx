@@ -81,7 +81,10 @@ export function FlightCard({
   const airline = flight ? lookupAirline(flight.callsign) : null;
   const flightNum = flight ? parseFlightNumber(flight.callsign) : null;
   const company =
-    airline ?? (flight ? `${flight.originCountry} operator` : null);
+    airline ??
+    (flight?.registrationCountry
+      ? `${flight.registrationCountry} operator`
+      : null);
   const model = flight ? aircraftTypeHint(flight.category) : null;
   const logoCandidates = airlineLogoCandidates(airline, flight?.callsign);
   const heading = flight?.trueTrack ?? null;
@@ -384,7 +387,7 @@ export function FlightCard({
               <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                 <GroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
                   <p className="text-[13px] text-foreground/65">
-                    {flight.originCountry}
+                    {flight.registrationCountry}
                   </p>
                 </GroupedRow>
                 {cardinal && (

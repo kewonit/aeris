@@ -1,46 +1,37 @@
-// Route Lookup Client
-//
-// Client-side callers resolve route data through Aeris' own /api/routes
-// endpoint. The server endpoint owns external provider validation, rate
-// limiting, cache headers, and upstream normalization.
-//
-// IMPORTANT: Only verified routes from external databases are shown.
-// No predicted, observed, or interpolated routes are ever displayed.
+import type { RoutePositionContext } from "./route-validation";
 
 export type RouteAirport = {
-  /** IATA code, e.g. "LHR" */
   iata: string;
-  /** ICAO code, e.g. "EGLL" */
   icao: string;
-  /** Airport name, e.g. "London Heathrow Airport" */
   name: string;
-  /** City/municipality, e.g. "London" */
   municipality: string;
-  /** ISO country code, e.g. "GB" */
   countryIso: string;
-  /** Latitude in degrees */
   latitude: number;
-  /** Longitude in degrees */
   longitude: number;
 };
 
+export type RouteSource = "adsbdb" | "hexdb" | "opensky";
+
 export type RouteInfo = {
-  /** The callsign this route was looked up for */
   callsign: string;
-  /** Origin airport */
+  icao24: string;
   origin: RouteAirport | null;
-  /** Destination airport */
   destination: RouteAirport | null;
-  /** Data source that resolved this route */
-  source: "adsbdb" | "hexdb" | "opensky";
-  /** When this entry was fetched (for TTL) */
+  source: RouteSource;
+  sources: RouteSource[];
+  validation: "valid";
+  validatedAt: number;
   fetchedAt: number;
 };
 
-const CACHE_HIT_TTL_MS = 15 * 60_000;
-const CACHE_MISS_TTL_MS = 2 * 60_000;
+export type RouteRequest = RoutePositionContext;
+
+const CACHE_HIT_TTL_MS = 5 * 60_000;
+const CACHE_MISS_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 300;
-const CALLSIGN_RE = /^[A-Z0-9]{1,8}$/i;
+const SIX_HOURS_MS = 6 * 60 * 60_000;
+const CALLSIGN_RE = /^[A-Z0-9]{1,8}$/;
+const ICAO24_RE = /^[0-9a-f]{6}$/;
 
 type CacheEntry = {
   route: RouteInfo | null;
@@ -50,28 +41,51 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<RouteInfo | null>>();
 
-function normalizeCallsign(callsign: string | null | undefined): string | null {
-  if (!callsign) return null;
-  const normalized = callsign.trim().toUpperCase();
-  return normalized && CALLSIGN_RE.test(normalized) ? normalized : null;
+export function normalizeRouteRequest(
+  request: RouteRequest,
+): RouteRequest | null {
+  const callsign = request.callsign.trim().toUpperCase();
+  const icao24 = request.icao24.trim().toLowerCase();
+  if (!CALLSIGN_RE.test(callsign) || !ICAO24_RE.test(icao24)) return null;
+  if (
+    !Number.isFinite(request.latitude) ||
+    request.latitude < -90 ||
+    request.latitude > 90 ||
+    !Number.isFinite(request.longitude) ||
+    request.longitude < -180 ||
+    request.longitude > 180 ||
+    !Number.isFinite(request.observationTime) ||
+    request.observationTime <= 0 ||
+    (request.altitudeMeters !== null &&
+      (!Number.isFinite(request.altitudeMeters) ||
+        request.altitudeMeters < -1_000 ||
+        request.altitudeMeters > 30_000))
+  ) {
+    return null;
+  }
+  return { ...request, callsign, icao24 };
 }
 
-function cacheGet(callsign: string): RouteInfo | null | undefined {
-  const entry = cache.get(callsign);
+export function routeCacheKey(request: RouteRequest): string {
+  const bucket = Math.floor(request.observationTime / SIX_HOURS_MS);
+  return `${request.icao24}:${request.callsign}:${bucket}`;
+}
+
+function cacheGet(key: string): RouteInfo | null | undefined {
+  const entry = cache.get(key);
   if (!entry) return undefined;
   if (Date.now() > entry.expiresAt) {
-    cache.delete(callsign);
+    cache.delete(key);
     return undefined;
   }
   return entry.route;
 }
 
-function cacheSet(callsign: string, route: RouteInfo | null): void {
-  cache.set(callsign, {
+function cacheSet(key: string, route: RouteInfo | null): void {
+  cache.set(key, {
     route,
     expiresAt: Date.now() + (route ? CACHE_HIT_TTL_MS : CACHE_MISS_TTL_MS),
   });
-
   if (cache.size > CACHE_MAX_ENTRIES) {
     const first = cache.keys().next();
     if (!first.done) cache.delete(first.value);
@@ -89,23 +103,38 @@ function isRouteAirport(value: unknown): value is RouteAirport {
     typeof airport.countryIso === "string" &&
     typeof airport.latitude === "number" &&
     Number.isFinite(airport.latitude) &&
+    airport.latitude >= -90 &&
+    airport.latitude <= 90 &&
     typeof airport.longitude === "number" &&
-    Number.isFinite(airport.longitude)
+    Number.isFinite(airport.longitude) &&
+    airport.longitude >= -180 &&
+    airport.longitude <= 180
   );
 }
 
-function parseRouteInfo(value: unknown): RouteInfo | null {
+function parseRouteInfo(value: unknown, request: RouteRequest): RouteInfo | null {
   if (typeof value !== "object" || value === null) return null;
   const route = value as Record<string, unknown>;
-
-  if (typeof route.callsign !== "string") return null;
+  if (route.callsign !== request.callsign || route.icao24 !== request.icao24) {
+    return null;
+  }
   if (
     route.source !== "adsbdb" &&
     route.source !== "hexdb" &&
     route.source !== "opensky"
-  )
+  ) {
     return null;
+  }
   if (
+    !Array.isArray(route.sources) ||
+    route.sources.length === 0 ||
+    !route.sources.every(
+      (source) =>
+        source === "adsbdb" || source === "hexdb" || source === "opensky",
+    ) ||
+    route.validation !== "valid" ||
+    typeof route.validatedAt !== "number" ||
+    !Number.isFinite(route.validatedAt) ||
     typeof route.fetchedAt !== "number" ||
     !Number.isFinite(route.fetchedAt)
   ) {
@@ -114,64 +143,67 @@ function parseRouteInfo(value: unknown): RouteInfo | null {
 
   const origin = route.origin === null ? null : route.origin;
   const destination = route.destination === null ? null : route.destination;
-
-  if (origin !== null && !isRouteAirport(origin)) return null;
-  if (destination !== null && !isRouteAirport(destination)) return null;
-
-  // Require both origin and destination for a verified route
-  if (origin === null || destination === null) return null;
+  if (!isRouteAirport(origin) || !isRouteAirport(destination)) return null;
 
   return {
-    callsign: route.callsign,
+    callsign: request.callsign,
+    icao24: request.icao24,
     origin,
     destination,
     source: route.source,
+    sources: [...new Set(route.sources)] as RouteSource[],
+    validation: "valid",
+    validatedAt: route.validatedAt,
     fetchedAt: route.fetchedAt,
   };
 }
 
 export async function lookupRoute(
-  callsign: string | null | undefined,
+  input: RouteRequest,
   signal?: AbortSignal,
 ): Promise<RouteInfo | null> {
-  const normalized = normalizeCallsign(callsign);
-  if (!normalized) return null;
-
-  const cached = cacheGet(normalized);
+  const request = normalizeRouteRequest(input);
+  if (!request) return null;
+  const key = routeCacheKey(request);
+  const cached = cacheGet(key);
   if (cached !== undefined) return cached;
-
-  const existing = inflight.get(normalized);
+  const existing = inflight.get(key);
   if (existing) return existing;
+
+  const query = new URLSearchParams({
+    callsign: request.callsign,
+    icao24: request.icao24,
+    latitude: String(request.latitude),
+    longitude: String(request.longitude),
+    altitudeMeters:
+      request.altitudeMeters === null ? "" : String(request.altitudeMeters),
+    onGround: request.onGround ? "1" : "0",
+    observationTime: String(request.observationTime),
+  });
 
   const promise = (async (): Promise<RouteInfo | null> => {
     try {
-      const response = await fetch(
-        `/api/routes?callsign=${encodeURIComponent(normalized)}`,
-        {
-          headers: { Accept: "application/json" },
-          signal,
-        },
-      );
-
-      if (response.status === 400 || response.status === 404) {
-        cacheSet(normalized, null);
+      const response = await fetch(`/api/routes?${query}`, {
+        headers: { Accept: "application/json" },
+        signal,
+      });
+      if (response.status === 404) {
+        cacheSet(key, null);
         return null;
       }
-
       if (!response.ok) return null;
-
-      const route = parseRouteInfo(await response.json());
-      if (route) cacheSet(normalized, route);
+      const route = parseRouteInfo(await response.json(), request);
+      if (route) cacheSet(key, route);
       return route;
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return null;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return null;
       return null;
     } finally {
-      inflight.delete(normalized);
+      inflight.delete(key);
     }
   })();
 
-  inflight.set(normalized, promise);
+  inflight.set(key, promise);
   return promise;
 }
 

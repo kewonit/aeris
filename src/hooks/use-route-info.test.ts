@@ -33,12 +33,16 @@ test("route-lookup module exports lookupRoute", async () => {
   assert.equal(typeof lookupRoute, "function");
 });
 
-test("route lookup parses full verified route from API", async () => {
+test("route lookup parses a complete reported route from API", async () => {
   const apiRoute: RouteInfo = {
     callsign: "UAL123",
+    icao24: "abc123",
     origin: sfo,
     destination: lhr,
     source: "adsbdb",
+    sources: ["adsbdb"],
+    validation: "valid",
+    validatedAt: Date.now(),
     fetchedAt: Date.now(),
   };
 
@@ -50,9 +54,13 @@ test("route lookup parses full verified route from API", async () => {
 test("route lookup accepts opensky source", async () => {
   const apiRoute: RouteInfo = {
     callsign: "BAW123",
+    icao24: "abc123",
     origin: lhr,
     destination: sfo,
     source: "opensky",
+    sources: ["opensky"],
+    validation: "valid",
+    validatedAt: Date.now(),
     fetchedAt: Date.now(),
   };
 

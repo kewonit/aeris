@@ -2,16 +2,15 @@
 
 // ── Route Info Hook ─────────────────────────────────────────────────
 //
-// Fetches verified route data from external databases ONLY.
+// Fetches reported route data from external databases.
 //
 // Sources (queried in parallel server-side):
-//   1. adsbdb.com       – flight-plan database
-//   2. hexdb.io         – route lookup + airport metadata
-//   3. OpenSky Network  – historical route data
+//   1. adsbdb.com       flight-plan database
+//   2. hexdb.io         route lookup and airport metadata
+//   3. OpenSky Network  historical route data
 //
-// IMPORTANT: No predicted, observed, or interpolated routes are ever
-// shown. If none of the databases know the route, the UI displays
-// "Route unavailable" rather than guessing.
+// The server checks the reported route against the aircraft position.
+// It hides a route when the geometry conflicts.
 //
 // Edge cases handled:
 //   - Rapid flight switching: old requests are cancelled, only the
@@ -22,21 +21,26 @@
 //   - Cached results: instant display for recently-looked-up routes.
 // ────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { FlightState } from "@/lib/opensky";
-import { lookupRoute, formatAirportCode } from "@/lib/route-lookup";
+import {
+  lookupRoute,
+  formatAirportCode,
+  routeCacheKey,
+  type RouteSource,
+} from "@/lib/route-lookup";
 import type { RouteInfo, RouteAirport } from "@/lib/route-lookup";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type FlightRouteInfo = {
-  /** Origin airport (verified from route database, or null) */
+  /** Origin airport from a reported route, or null */
   origin: RouteAirport | null;
-  /** Destination airport (verified from route database, or null) */
+  /** Destination airport from a reported route, or null */
   destination: RouteAirport | null;
   /** Whether route data is actively being fetched */
   loading: boolean;
-  /** Whether a verified route was found */
+  /** Whether a position-consistent reported route was found */
   available: boolean;
   /** Whether the route is definitively unknown (not just loading) */
   unavailable: boolean;
@@ -44,6 +48,10 @@ export type FlightRouteInfo = {
   routeDisplay: string | null;
   /** Data source that resolved this route */
   source: "adsbdb" | "hexdb" | "opensky" | null;
+  /** All route sources that returned the same endpoints */
+  sources: RouteSource[];
+  /** Time of the latest route validation */
+  validatedAt: number | null;
 };
 
 const EMPTY_ROUTE: FlightRouteInfo = {
@@ -54,6 +62,8 @@ const EMPTY_ROUTE: FlightRouteInfo = {
   unavailable: false,
   routeDisplay: null,
   source: null,
+  sources: [],
+  validatedAt: null,
 };
 
 /** Max time to wait for a route lookup before forcing timeout. */
@@ -71,6 +81,32 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
   const mountedRef = useRef(true);
 
   const callsign = flight?.callsign?.trim().toUpperCase() ?? null;
+  const routeRequest = useMemo(
+    () =>
+      flight &&
+      callsign &&
+      flight.latitude !== null &&
+      flight.longitude !== null
+        ? {
+            callsign,
+            icao24: flight.icao24,
+            latitude: flight.latitude,
+            longitude: flight.longitude,
+            altitudeMeters: flight.baroAltitude,
+            onGround: flight.onGround,
+            observationTime:
+              flight.provenance.observationTime ??
+              flight.provenance.responseTime,
+          }
+        : null,
+    [callsign, flight],
+  );
+  const requestKey = routeRequest ? routeCacheKey(routeRequest) : null;
+  const routeRequestRef = useRef(routeRequest);
+
+  useEffect(() => {
+    routeRequestRef.current = routeRequest;
+  }, [routeRequest]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -80,8 +116,8 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
   }, []);
 
   useEffect(() => {
-    // No callsign → nothing to look up
-    if (!callsign) {
+    const activeRequest = routeRequestRef.current;
+    if (!activeRequest || !requestKey) {
       const generation = ++generationRef.current;
       queueMicrotask(() => {
         if (!mountedRef.current) return;
@@ -113,7 +149,7 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
       controller.abort();
     }, LOOKUP_TIMEOUT_MS);
 
-    lookupRoute(callsign, controller.signal)
+    lookupRoute(activeRequest, controller.signal)
       .then((result) => {
         settled = true;
         clearTimeout(timeoutId);
@@ -140,7 +176,7 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
       clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [callsign]);
+  }, [requestKey]);
 
   if (!flight) return EMPTY_ROUTE;
 
@@ -161,6 +197,8 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
     unavailable: isUnavailable,
     routeDisplay,
     source: apiRoute?.source ?? null,
+    sources: apiRoute?.sources ?? [],
+    validatedAt: apiRoute?.validatedAt ?? null,
   };
 }
 

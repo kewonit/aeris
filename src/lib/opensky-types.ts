@@ -35,10 +35,23 @@ export type PositionSource =
   | "other"
   | null;
 
+export type FlightProvenance = {
+  /** Provider response time as Unix milliseconds */
+  responseTime: number;
+  /** Time of the position observation as Unix milliseconds */
+  observationTime: number | null;
+  /** Age of the position when the provider built its response */
+  positionAgeSeconds: number | null;
+  /** All sources that supplied fields in this state */
+  contributingSources: string[];
+  /** Provider that supplied the selected position and motion group */
+  positionProvider: string;
+};
+
 export type FlightState = {
   icao24: string;
   callsign: string | null;
-  originCountry: string;
+  registrationCountry: string | null;
   longitude: number | null;
   latitude: number | null;
   baroAltitude: number | null;
@@ -57,6 +70,16 @@ export type FlightState = {
   typeCode?: string | null;
   /** Aircraft registration (e.g. "N12345", "G-KELS") - available from readsb */
   registration?: string | null;
+  /** Two-letter registration country code from the local registry */
+  registrationCountryCode?: string | null;
+  /** Registration country flag from the local registry */
+  registrationCountryFlag?: string | null;
+  /** Aircraft model from the local registry */
+  model?: string | null;
+  /** Aircraft manufacturer from the local registry */
+  manufacturer?: string | null;
+  /** Source and observation timing for this state */
+  provenance: FlightProvenance;
 
   // ── Avionics Data (readsb only, omitted by OpenSky) ──────────────
 
@@ -172,6 +195,8 @@ export type OpenSkyResponse = {
 export type ParseStateOptions = {
   includeGround?: boolean;
   requireBaroAltitude?: boolean;
+  positionProvider?: string;
+  responseTime?: number;
 };
 
 export type RateLimitInfo = {

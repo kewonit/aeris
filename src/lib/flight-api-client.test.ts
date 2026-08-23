@@ -6,6 +6,7 @@ import {
   fetchFlightsByCallsign,
   fetchFlightsByHex,
   fetchFlightsByPoint,
+  fetchSelectedAircraftFromAdsbLol,
   getCircuitState,
   PROVIDER_CHANGE_EVENT,
   resetAllCircuits,
@@ -220,6 +221,26 @@ test("an adsb.fi lookup miss continues to airplanes.live", async () => {
     assert.equal(providerFromRequest(calls[0]), "adsb");
     assert.equal(providerFromRequest(calls[1]), "adsbfi");
     assert.equal(providerFromRequest(calls[2]), "airplanes");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("selected-aircraft lookup calls only adsb.lol", async () => {
+  resetAllCircuits();
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    calls.push(input.toString());
+    return readsbResponse([rawAircraft()]);
+  };
+
+  try {
+    const flight = await fetchSelectedAircraftFromAdsbLol("abc123");
+    assert.equal(flight?.icao24, "abc123");
+    assert.equal(flight?.provenance.positionProvider, "adsb.lol");
+    assert.equal(calls.length, 1);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
   } finally {
     globalThis.fetch = originalFetch;
   }
