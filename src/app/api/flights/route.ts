@@ -37,7 +37,7 @@ const PROVIDERS: Record<ProviderKey, ProviderConfig> = {
   adsbfi: {
     baseUrl: "https://opendata.adsb.fi/api",
     name: "adsb.fi",
-    rateMs: 1_100,
+    rateMs: 1_100, // Public API limit: 1 req/s per IP
   },
   airplanes: {
     baseUrl: "https://api.airplanes.live/v2",

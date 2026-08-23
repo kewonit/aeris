@@ -246,8 +246,8 @@ test("global search falls back from adsb.lol to adsb.fi", async () => {
     clearFlightSearchCache();
     const results = await searchFlightsGlobal("BAW123");
     assert.equal(results[0]?.icao24, "abc123");
-    assert.match(calls[0], /provider=adsb/);
-    assert.match(calls[1], /provider=adsbfi/);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
+    assert.equal(providerFromRequest(calls[1]), "adsbfi");
     assert.equal(calls.length, 2);
   } finally {
     globalThis.fetch = originalFetch;

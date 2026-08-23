@@ -1,6 +1,6 @@
 // ── readsb API Types ─────────────────────────────────────────────────
 //
-// Shared format used by both Airplanes.live and adsb.lol.
+// Shared format used by airplanes.live, adsb.lol, and adsb.fi.
 // Verified against official docs:
 //   https://api.airplanes.live/openapi.json
 //   https://api.adsb.lol/api/openapi.json
@@ -32,7 +32,7 @@ export const PROVIDER_ADSB_LOL: FlightApiProvider = {
 export const PROVIDER_ADSB_FI: FlightApiProvider = {
   name: "adsb.fi",
   baseUrl: "https://opendata.adsb.fi/api",
-  rateMs: 1_100, // Public API limit: 1 req/s
+  rateMs: 1_100, // Public API limit: 1 req/s per IP
 };
 
 export const PROVIDERS: readonly FlightApiProvider[] = [

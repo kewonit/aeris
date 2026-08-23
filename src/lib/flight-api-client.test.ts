@@ -126,7 +126,7 @@ test("adsb.lol success short-circuits point fallback", async () => {
     assert.equal(result.source, "adsb");
     assert.equal(result.flights.length, 1);
     assert.equal(calls.length, 1);
-    assert.match(calls[0], /provider=adsb/);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -169,8 +169,8 @@ test("an adsb.lol point failure falls back to adsb.fi", async () => {
     assert.equal(result.source, "adsbfi");
     assert.equal(result.flights.length, 1);
     assert.equal(calls.length, 2);
-    assert.match(calls[0], /provider=adsb/);
-    assert.match(calls[1], /provider=adsbfi/);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
+    assert.equal(providerFromRequest(calls[1]), "adsbfi");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -193,8 +193,8 @@ test("an empty hex lookup continues from adsb.lol to adsb.fi", async () => {
     assert.equal(result.source, "adsbfi");
     assert.equal(result.flights.length, 1);
     assert.equal(calls.length, 2);
-    assert.match(calls[0], /provider=adsb/);
-    assert.match(calls[1], /provider=adsbfi/);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
+    assert.equal(providerFromRequest(calls[1]), "adsbfi");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -217,9 +217,9 @@ test("an adsb.fi lookup miss continues to airplanes.live", async () => {
     assert.equal(result.source, "airplanes");
     assert.equal(result.flights.length, 1);
     assert.equal(calls.length, 3);
-    assert.match(calls[0], /provider=adsb/);
-    assert.match(calls[1], /provider=adsbfi/);
-    assert.match(calls[2], /provider=airplanes/);
+    assert.equal(providerFromRequest(calls[0]), "adsb");
+    assert.equal(providerFromRequest(calls[1]), "adsbfi");
+    assert.equal(providerFromRequest(calls[2]), "airplanes");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -290,7 +290,7 @@ test("explicit airplanes.live override stays pinned", async () => {
     const result = await fetchFlightsByPoint(12.5, 77.6, 1);
     assert.equal(result.source, "airplanes");
     assert.equal(calls.length, 1);
-    assert.match(calls[0], /provider=airplanes/);
+    assert.equal(providerFromRequest(calls[0]), "airplanes");
   } finally {
     globalThis.fetch = originalFetch;
     restoreWindow(originalWindow);
@@ -318,7 +318,7 @@ test("explicit adsb.fi override stays pinned", async () => {
     const result = await fetchFlightsByPoint(12.5, 77.6, 1);
     assert.equal(result.source, "adsbfi");
     assert.equal(calls.length, 1);
-    assert.match(calls[0], /provider=adsbfi/);
+    assert.equal(providerFromRequest(calls[0]), "adsbfi");
   } finally {
     globalThis.fetch = originalFetch;
     restoreWindow(originalWindow);
@@ -384,7 +384,7 @@ test("one-off lookup success does not change point-polling stickiness", async ()
     const result = await fetchFlightsByPoint(12.5, 77.6, 1);
     assert.equal(result.source, "adsb");
     assert.equal(pointCalls.length, 1);
-    assert.match(pointCalls[0], /provider=adsb/);
+    assert.equal(providerFromRequest(pointCalls[0]), "adsb");
   } finally {
     globalThis.fetch = originalFetch;
   }

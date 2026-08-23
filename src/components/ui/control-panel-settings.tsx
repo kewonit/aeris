@@ -637,7 +637,12 @@ const CHANGELOG: {
       {
         title: "adsb.fi public fallback",
         description:
-          "Added the adsb.fi open-data API with its v3 point-query format, conservative request pacing, shared readsb parsing, provider controls, and required linked attribution.",
+          "Added the adsb.fi open-data API with its v3 point-query format, one-request-per-second pacing, shared readsb parsing, provider controls, and required linked attribution for personal, non-commercial use.",
+      },
+      {
+        title: "Immediate provider switching",
+        description:
+          "Changing providers now cancels the previous request and refreshes the map immediately instead of waiting for the next polling cycle. Last-known aircraft remain visible while the selected provider responds.",
       },
     ],
   },

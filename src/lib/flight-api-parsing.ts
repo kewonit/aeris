@@ -2,7 +2,7 @@
 //
 // Converts raw readsb JSON (RawAircraft[]) → FlightState[].
 // Handles unit conversions, edge cases, and stale-position filtering.
-// Works identically for Airplanes.live and adsb.lol responses.
+// Works identically for airplanes.live, adsb.lol, and adsb.fi responses.
 // ────────────────────────────────────────────────────────────────────────
 
 import type { FlightState, PositionSource } from "./opensky-types";

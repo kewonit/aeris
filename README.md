@@ -120,7 +120,7 @@ All variables are optional - Aeris runs with no secrets. See `.env.example` for 
 | `OPENSKY_CLIENT_SECRET` | No       | OAuth2 secret that pairs with `OPENSKY_CLIENT_ID`. Set both or neither.                                                                                                                                               |
 | `OPENAIP_API_KEY`       | No       | API key used by the airspace vector-tile proxy `src/app/api/airspace-tiles/route.ts`. Without it the airspace overlay is disabled cleanly and the client skips OpenAIP tile requests; flight rendering is unaffected. |
 
-Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the server proxy; OpenSky is the final automatic fallback. No provider credentials are configured. adsb.fi is limited to personal, non-commercial use and is credited in the application as required by its terms.
+Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the server proxy; OpenSky is the final automatic fallback. No provider credentials are configured. The adsb.fi public API is limited to one request per second per IP for personal, non-commercial use and is credited in the application as required by its terms.
 
 ## License
 
