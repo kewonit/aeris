@@ -1,0 +1,77 @@
+name: Refresh aviation data
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the production base
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check daily sources
+        run: pnpm data:check:sources
+
+      - name: Set the UTC schedule values
+        id: schedule
+        shell: bash
+        run: |
+          echo "weekday=$(date -u +%u)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the weekly snapshot
+        if: steps.schedule.outputs.weekday == '1' || github.event_name == 'workflow_dispatch'
+        run: |
+          pnpm data:refresh
+          pnpm data:check
+          pnpm test:data
+
+      - name: Open or update the weekly review PR
+        if: steps.schedule.outputs.weekday == '1' || github.event_name == 'workflow_dispatch'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/refresh-open-aviation-data
+          base: main
+          delete-branch: true
+          draft: true
+          commit-message: "data: refresh open aviation data"
+          title: "Refresh open aviation data (${{ steps.schedule.outputs.date }})"
+          body: |
+            ## Summary
+
+            Refresh the open aircraft and airport snapshots.
+
+            ## Validation
+
+            - `pnpm data:check`
+            - `pnpm test:data`
+
+            ## Safety
+
+            This draft PR does not deploy or merge changes.
+          add-paths: |
+            public/data/aviation/**
