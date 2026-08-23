@@ -114,10 +114,7 @@ export function fuseSelectedAircraft(
       current.registrationCountryFlag ??
       null,
     provenance: {
-      responseTime: Math.max(
-        current.provenance.responseTime,
-        fresh?.provenance.responseTime ?? 0,
-      ),
+      responseTime: position.provenance.responseTime,
       observationTime: position.provenance.observationTime,
       positionAgeSeconds: position.provenance.positionAgeSeconds,
       contributingSources: sources,
