@@ -54,7 +54,6 @@ export function CameraController({
   const { settings } = useSettings();
   const prevCityRef = useRef<string | null>(null);
   const prevFollowRef = useRef<string | null>(null);
-  const prevFpvRef = useRef<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbitFrameRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
@@ -66,11 +65,13 @@ export function CameraController({
   const isFpvActiveRef = useRef(false);
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
   const fpvPosRef = useRef(fpvPositionRef);
+  const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
+  const fpvKey = fpvFlight?.icao24 ?? null;
 
   useEffect(() => {
     fpvPosRef.current = fpvPositionRef;
@@ -130,6 +131,8 @@ export function CameraController({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const panelMotion = mapPanelMotionOptions(reduceMotion);
+    const isExitingFpv =
+      previousFpvKeyRef.current !== null && fpvKey === null;
     const insetChanged =
       Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
 
@@ -140,9 +143,22 @@ export function CameraController({
       previousPanelFocusRef.current = null;
       previousPanelInsetRef.current = 0;
 
-      if (!shouldResetPadding || cityTransitionTargetRef.current) return;
+      if (
+        (!shouldResetPadding && !isExitingFpv) ||
+        cityTransitionTargetRef.current
+      ) {
+        return;
+      }
 
       map.easeTo({
+        ...(isExitingFpv
+          ? {
+              center: city.coordinates,
+              zoom: DEFAULT_ZOOM,
+              pitch: DEFAULT_PITCH,
+              bearing: DEFAULT_BEARING,
+            }
+          : {}),
         padding,
         ...panelMotion,
       });
@@ -170,6 +186,13 @@ export function CameraController({
 
     map.easeTo({
       ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+      ...(isExitingFpv
+        ? {
+            zoom: DEFAULT_ZOOM,
+            pitch: DEFAULT_PITCH,
+            bearing: DEFAULT_BEARING,
+          }
+        : {}),
       padding,
       ...panelMotion,
     });
@@ -312,8 +335,14 @@ export function CameraController({
     panelCamera.kind,
     panelCamera.leftInsetPx,
     hasPanelCoordinates,
+    fpvKey,
     settings.altitudeDisplayMode,
+    city.coordinates,
   ]);
+
+  useEffect(() => {
+    previousFpvKeyRef.current = fpvKey;
+  }, [fpvKey]);
 
   // Follow flight init
   useEffect(() => {
@@ -390,12 +419,9 @@ export function CameraController({
     map,
     isLoaded,
     fpvFlight,
-    city,
     fpvFlightRef,
     fpvPosRef,
     isFpvActiveRef,
-    prevFpvRef,
-    settings.altitudeDisplayMode,
   );
 
   // North-up & reset-view

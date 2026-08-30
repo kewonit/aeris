@@ -159,6 +159,16 @@ export function AerisLeftSidebar({
       : snapshot?.kind === "airport"
         ? "Airport Board"
         : "Aeris";
+  const contextLabel =
+    snapshot?.kind === "flight"
+      ? snapshot.flight.callsign?.trim() ||
+        snapshot.flight.registration?.trim() ||
+        snapshot.flight.icao24.toUpperCase()
+      : snapshot?.kind === "airport"
+        ? [snapshot.board.airport?.iata, snapshot.board.airport?.city]
+            .filter((value): value is string => Boolean(value))
+            .join(" · ")
+        : null;
 
   const handleCloseButton = () => {
     if (leftPanel?.kind === "flight") {
@@ -204,25 +214,34 @@ export function AerisLeftSidebar({
             setSnapshotMemory({ observed: null, retained: null });
           }
         }}
-        className="pointer-events-auto border-0 border-transparent p-0 shadow-none"
+        data-panel-kind={snapshot?.kind}
+        className="aeris-sidebar-shell pointer-events-auto border-0 border-transparent p-0 shadow-none"
+        innerClassName="bg-sidebar/90 backdrop-blur-3xl backdrop-saturate-[1.8]"
       >
-        <SidebarHeader className="border-0 px-5 py-4 shadow-none">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="min-w-0 truncate text-[14px] font-semibold leading-5 tracking-tight text-sidebar-foreground/90">
-              {title}
-            </h2>
+        <SidebarHeader className="aeris-sidebar-toolbar relative z-10 border-0 px-4 py-2.5 shadow-none backdrop-blur-xl backdrop-saturate-[1.7]">
+          <div className="flex min-h-11 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-[13px] font-semibold leading-4 tracking-[-0.01em] text-sidebar-foreground/92">
+                {title}
+              </h2>
+              {contextLabel && (
+                <p className="mt-0.5 truncate text-[11px] font-medium leading-4 tracking-[0.01em] text-sidebar-foreground/45">
+                  {contextLabel}
+                </p>
+              )}
+            </div>
             <button
               type="button"
               onClick={handleCloseButton}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/80 text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/75"
+              className="aeris-sidebar-control flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-full text-sidebar-foreground/55 backdrop-blur-xl backdrop-saturate-[1.6] [transition-duration:100ms] [transition-property:background-color,color,scale] hover:text-sidebar-foreground/90 active:scale-[0.92]"
               aria-label="Close left panel"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="gap-0 overflow-hidden border-0 p-0 shadow-none">
+        <SidebarContent className="aeris-sidebar-content gap-0 overflow-hidden border-0 p-0 shadow-none">
           <div className="min-h-0 flex-1">
             {snapshot?.kind === "flight" ? (
               <FlightCard
