@@ -1,6 +1,17 @@
 import maplibregl from "maplibre-gl";
 
-export const FPV_DISTANCE_ZOOM_OFFSET = 1.1;
+export const FPV_CAMERA_PITCH = 80;
+export const FPV_DEFAULT_ALTITUDE_METERS = 5_000;
+export const FPV_MIN_CAMERA_ALTITUDE_METERS = 60;
+
+const MAX_MERCATOR_LATITUDE = 85.051129;
+
+export type FpvCameraPosition = {
+  lng: number;
+  lat: number;
+  alt: number;
+  track: number | null;
+};
 
 export function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -10,25 +21,51 @@ export function smoothstep(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-export function lerp(from: number, to: number, t: number): number {
-  return from + (to - from) * t;
-}
-
 export function normalizeLng(lng: number): number {
   return ((lng + 540) % 360) - 180;
 }
 
-export function lerpLng(from: number, to: number, t: number): number {
-  const delta = ((to - from + 540) % 360) - 180;
-  return normalizeLng(from + delta * t);
+export function normalizeBearing(bearing: number): number {
+  return ((bearing % 360) + 360) % 360;
 }
 
-export function fpvZoomForAltitude(altMeters: number): number {
-  if (!Number.isFinite(altMeters)) return 12;
-  const alt = Math.max(altMeters, 0);
-  if (alt < 50) return 16.2;
-  const zoom = 18.1 - 2.0 * Math.log10(Math.max(alt, 50));
-  return Math.max(10.1, Math.min(16.2, zoom));
+export function fpvCameraOptions(
+  map: maplibregl.Map,
+  position: FpvCameraPosition,
+  fallbackBearing: number,
+): maplibregl.CameraOptions | null {
+  if (
+    !Number.isFinite(position.lng) ||
+    !Number.isFinite(position.lat) ||
+    Math.abs(position.lat) > 90
+  ) {
+    return null;
+  }
+
+  const latitude = Math.max(
+    -MAX_MERCATOR_LATITUDE,
+    Math.min(MAX_MERCATOR_LATITUDE, position.lat),
+  );
+  const altitude = Number.isFinite(position.alt)
+    ? Math.max(position.alt, FPV_MIN_CAMERA_ALTITUDE_METERS)
+    : FPV_DEFAULT_ALTITUDE_METERS;
+  const bearing = normalizeBearing(
+    position.track !== null && Number.isFinite(position.track)
+      ? position.track
+      : fallbackBearing,
+  );
+
+  try {
+    return map.calculateCameraOptionsFromCameraLngLatAltRotation(
+      new maplibregl.LngLat(normalizeLng(position.lng), latitude),
+      altitude,
+      bearing,
+      FPV_CAMERA_PITCH,
+      0,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**

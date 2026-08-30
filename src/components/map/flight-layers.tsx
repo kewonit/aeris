@@ -60,7 +60,11 @@ import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { useGlobeDots } from "./use-globe-dots";
-import { OVERVIEW_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
+import {
+  ACTIVE_FRAME_INTERVAL_MS,
+  OVERVIEW_FRAME_INTERVAL_MS,
+  isFrameDue,
+} from "./frame-rate";
 
 export function FlightLayers({
   flights,
@@ -602,7 +606,10 @@ export function FlightLayers({
         return;
       }
 
-      if (!isFrameDue(lastRenderedAt, now, OVERVIEW_FRAME_INTERVAL_MS)) {
+      const frameInterval = fpvIcao24Ref.current
+        ? ACTIVE_FRAME_INTERVAL_MS
+        : OVERVIEW_FRAME_INTERVAL_MS;
+      if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
         return;
       }
@@ -725,6 +732,17 @@ export function FlightLayers({
 
         // ── Globe dots ────────────────────────────────────────────────
         updateGlobeDotsRef.current(isGlobe, currentZoom, now);
+
+        // FPV uses this loop for the interpolated aircraft position only.
+        // Map icons, models, trails, selection effects, and shadows turn the
+        // forward view back into a cluttered overview and can intersect the
+        // camera at the tracked aircraft's location.
+        if (fpvId) {
+          overlay.setProps({ layers: [] });
+          continueAnimating = true;
+          scheduleFrame();
+          return;
+        }
 
         if (!layersVisible) {
           overlay.setProps({ layers: [] });
