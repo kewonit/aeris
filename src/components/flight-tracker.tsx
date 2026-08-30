@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from "motion/react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { Map as MapView } from "@/components/map/map";
+import { Map as MapView, type MapRef } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
 import {
   CLOSED_MAP_PANEL_CAMERA_STATE,
@@ -122,6 +122,14 @@ function FlightTrackerInner({
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
   const [fpvIcao24, setFpvIcao24] = useState<string | null>(null);
   const [leftPanel, setLeftPanel] = useState<AerisLeftPanel | null>(null);
+  const [leftPanelInsetPx, setLeftPanelInsetPx] = useState(0);
+  const mapRef = useRef<MapRef>(null);
+
+  const restoreMapFocus = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      mapRef.current?.getCanvas().focus({ preventScroll: true });
+    });
+  }, []);
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
 
@@ -502,10 +510,11 @@ function FlightTrackerInner({
   const handleShortcutDeselect = useCallback(() => {
     if (leftPanel) {
       setLeftPanel(null);
+      restoreMapFocus();
       return;
     }
     handleDeselectFlight();
-  }, [handleDeselectFlight, leftPanel]);
+  }, [handleDeselectFlight, leftPanel, restoreMapFocus]);
 
   // Helper: select flight and optionally enter FPV
   const selectFlight = useCallback(
@@ -656,6 +665,7 @@ function FlightTrackerInner({
         latitude: desktopPanelFlight?.latitude,
         altitudeMeters:
           desktopPanelFlight?.baroAltitude ?? desktopPanelFlight?.geoAltitude,
+        leftInsetPx: leftPanelInsetPx,
       });
     }
 
@@ -667,17 +677,30 @@ function FlightTrackerInner({
       longitude: airportBoard.airport?.lng,
       latitude: airportBoard.airport?.lat,
       altitudeMeters: 0,
+      leftInsetPx: leftPanelInsetPx,
     });
   }, [
     airportBoard.airport,
     desktopLeftPanelOpen,
     desktopPanelFlight,
     leftPanel,
+    leftPanelInsetPx,
   ]);
+  const leftPanelInset =
+    leftPanelInsetPx > 0
+      ? `${leftPanelInsetPx}px`
+      : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} - 4px)`;
   const desktopPanelStyle = {
     "--aeris-left-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH,
-    "--aeris-left-chrome-shift": `calc(${AERIS_LEFT_SIDEBAR_WIDTH} + 0.25rem)`,
-    "--aeris-map-center-shift": `calc(${AERIS_LEFT_SIDEBAR_WIDTH} / 2)`,
+    "--aeris-left-sidebar-inset": leftPanelInset,
+    "--aeris-left-chrome-shift":
+      leftPanelInsetPx > 0
+        ? `${leftPanelInsetPx + 8}px`
+        : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} + 0.25rem)`,
+    "--aeris-map-center-shift":
+      leftPanelInsetPx > 0
+        ? `${leftPanelInsetPx / 2}px`
+        : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} / 2)`,
   } as CSSProperties;
 
   return (
@@ -686,10 +709,11 @@ function FlightTrackerInner({
       style={desktopPanelStyle}
     >
       <div
-        className="aeris-map-surface absolute bottom-0 right-0 top-0 z-0 overflow-hidden bg-background"
+        className="aeris-map-surface absolute inset-0 z-0 overflow-hidden bg-background"
         data-panel-open={desktopLeftPanelOpen}
       >
         <MapView
+          ref={mapRef}
           mapStyle={mapStyle.style}
           terrainProfile={mapStyle.terrainProfile}
           isDark={mapStyle.dark}
@@ -752,7 +776,10 @@ function FlightTrackerInner({
         {!fpvIcao24 && !isMobile && (
           <AerisLeftSidebar
             leftPanel={leftPanel}
-            onClose={() => setLeftPanel(null)}
+            onClose={() => {
+              setLeftPanel(null);
+              restoreMapFocus();
+            }}
             displayFlight={desktopPanelFlight}
             selectedTrail={selectedTrail}
             selectedTrack={selectedTrack}
@@ -766,6 +793,8 @@ function FlightTrackerInner({
             selectedIcao24={selectedIcao24}
             onCloseAirport={handleAirportBoardClose}
             atc={atc}
+            onInsetChange={setLeftPanelInsetPx}
+            onRestoreFocus={restoreMapFocus}
           />
         )}
 

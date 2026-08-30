@@ -62,13 +62,23 @@ export function projectLngLatElevationPixelDelta(
       lnglat: maplibregl.LngLat,
       terrain: unknown,
     ) => { x: number; y: number };
+    centerPoint?: { x: number; y: number };
   };
 
   const tr = (map as unknown as { transform?: TransformLike }).transform;
 
   const canvas = map.getCanvas();
-  const cx = canvas.clientWidth / 2;
-  const cy = canvas.clientHeight / 2;
+  const centerPoint = tr?.centerPoint;
+  const centerX = centerPoint?.x;
+  const centerY = centerPoint?.y;
+  const cx =
+    typeof centerX === "number" && Number.isFinite(centerX)
+      ? centerX
+      : canvas.clientWidth / 2;
+  const cy =
+    typeof centerY === "number" && Number.isFinite(centerY)
+      ? centerY
+      : canvas.clientHeight / 2;
 
   // Try elevation-aware internal API first
   if (tr && typeof tr.locationToScreenPoint === "function") {

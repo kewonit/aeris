@@ -17,8 +17,11 @@ import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
 import {
   coordinatesMatch,
+  mapPanelMotionOptions,
+  mapPanelPadding,
   panelVisualOffset,
   shouldCenterMapPanel,
+  MAP_PANEL_TRANSITION_MS,
   type MapPanelCameraState,
 } from "./panel-camera";
 
@@ -29,7 +32,6 @@ const FOLLOW_ZOOM = 10.5;
 const FOLLOW_PITCH = 55;
 const FOLLOW_EASE_MS = 2000;
 const CITY_FLY_MS = 2800;
-const PANEL_EASE_MS = 640;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
 
@@ -65,6 +67,7 @@ export function CameraController({
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
   const fpvPosRef = useRef(fpvPositionRef);
   const previousPanelFocusRef = useRef<string | null>(null);
+  const previousPanelInsetRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
@@ -93,6 +96,14 @@ export function CameraController({
     }
 
     cityTransitionTargetRef.current = city.coordinates;
+    const isAirportPanelNavigation =
+      panelCamera.open && panelCamera.kind === "airport";
+    const reducePanelMotion =
+      isAirportPanelNavigation &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const transitionOptions = isAirportPanelNavigation
+      ? mapPanelMotionOptions(reducePanelMotion)
+      : { duration: CITY_FLY_MS, essential: true as const };
     const clearTargetTimer = window.setTimeout(() => {
       if (coordinatesMatch(cityTransitionTargetRef.current, city.coordinates)) {
         cityTransitionTargetRef.current = null;
@@ -103,173 +114,193 @@ export function CameraController({
       zoom: DEFAULT_ZOOM,
       pitch: DEFAULT_PITCH,
       bearing: DEFAULT_BEARING,
-      duration: CITY_FLY_MS,
-      essential: true,
+      padding: mapPanelPadding(panelCamera),
+      ...transitionOptions,
     });
 
     return () => window.clearTimeout(clearTargetTimer);
-  }, [map, isLoaded, city, panelCamera.open, panelCamera.kind]);
+  }, [map, isLoaded, city, panelCamera]);
 
   useEffect(() => {
     if (!map || !isLoaded) return;
 
     const activePanel = panelCameraRef.current;
+    const padding = mapPanelPadding(activePanel);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const panelMotion = mapPanelMotionOptions(reduceMotion);
+    const insetChanged =
+      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
 
     if (!activePanel.open) {
+      const shouldResetPadding =
+        previousPanelFocusRef.current !== null ||
+        previousPanelInsetRef.current > 0;
       previousPanelFocusRef.current = null;
+      previousPanelInsetRef.current = 0;
+
+      if (!shouldResetPadding || cityTransitionTargetRef.current) return;
+
+      map.easeTo({
+        padding,
+        ...panelMotion,
+      });
       return;
     }
 
-    if (!shouldCenterMapPanel(previousPanelFocusRef.current, activePanel)) {
-      return;
-    }
-
+    const shouldCenter = shouldCenterMapPanel(
+      previousPanelFocusRef.current,
+      activePanel,
+    );
     const focusKey = activePanel.focusKey;
     const coordinates = activePanel.coordinates;
-    if (!focusKey || !coordinates) return;
-
-    const panelJustOpened = previousPanelFocusRef.current === null;
     const followsCityTransition =
       activePanel.kind === "airport" &&
+      coordinates !== null &&
       coordinatesMatch(cityTransitionTargetRef.current, coordinates);
 
     if (followsCityTransition) {
-      previousPanelFocusRef.current = focusKey;
+      previousPanelFocusRef.current = focusKey ?? null;
+      previousPanelInsetRef.current = activePanel.leftInsetPx;
       return;
     }
 
+    if (!shouldCenter && !insetChanged) return;
+
+    map.easeTo({
+      ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+      padding,
+      ...panelMotion,
+    });
+
+    if (shouldCenter) previousPanelFocusRef.current = focusKey;
+    previousPanelInsetRef.current = activePanel.leftInsetPx;
+
+    const shouldCorrectFlightAltitude =
+      activePanel.kind === "flight" &&
+      Boolean(focusKey && coordinates) &&
+      (shouldCenter || insetChanged);
+    if (!shouldCorrectFlightAltitude || !focusKey) return;
+
     let correctionTimer: number | null = null;
     let refinementTimer: number | null = null;
-    const centerTimer = window.setTimeout(() => {
+    correctionTimer = window.setTimeout(() => {
       const currentPanel = panelCameraRef.current;
       if (!currentPanel.open || currentPanel.focusKey !== focusKey) return;
 
       const currentCoordinates = currentPanel.coordinates;
-      if (!currentCoordinates) return;
-      previousPanelFocusRef.current = focusKey;
+      const altitudeMeters = currentPanel.altitudeMeters;
+      if (!currentCoordinates || altitudeMeters == null) return;
+
+      const elevationMeters =
+        altitudeToElevation(
+          altitudeMeters,
+          settings.altitudeDisplayMode,
+        ) *
+        getZoomAdjustedElevationScale(
+          map.getZoom(),
+          settings.altitudeDisplayMode,
+        );
+      const elevatedPoint = projectLngLatElevationPixelDelta(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        elevationMeters,
+      );
+      const groundPoint = projectLngLatElevationPixelDelta(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        0,
+      );
+      if (!elevatedPoint || !groundPoint) return;
+
+      const canvas = map.getCanvas();
+      const offset = panelVisualOffset(
+        {
+          dx: elevatedPoint.dx - groundPoint.dx,
+          dy: elevatedPoint.dy - groundPoint.dy,
+        },
+        canvas.clientWidth,
+        canvas.clientHeight,
+      );
+      if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return;
+
+      const correctedCenter = centerLngLatForScreenOffset(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        offset,
+      );
+      if (!correctedCenter) return;
 
       map.easeTo({
-        center: currentCoordinates,
-        duration: PANEL_EASE_MS,
-        essential: true,
+        center: correctedCenter,
+        padding: mapPanelPadding(currentPanel),
+        duration: reduceMotion ? 0 : PANEL_VISUAL_EASE_MS,
+        easing: panelMotion.easing,
+        essential: false,
       });
 
-      if (currentPanel.kind !== "flight") return;
+      refinementTimer = window.setTimeout(() => {
+        const refinedPanel = panelCameraRef.current;
+        if (!refinedPanel.open || refinedPanel.focusKey !== focusKey) return;
 
-      correctionTimer = window.setTimeout(() => {
-        const latestPanel = panelCameraRef.current;
-        if (!latestPanel.open || latestPanel.focusKey !== focusKey) return;
+        const refinedCoordinates = refinedPanel.coordinates;
+        const refinedAltitudeMeters = refinedPanel.altitudeMeters;
+        if (!refinedCoordinates || refinedAltitudeMeters == null) return;
 
-        const latestCoordinates = latestPanel.coordinates;
-        const altitudeMeters = latestPanel.altitudeMeters;
-        if (!latestCoordinates || altitudeMeters == null) return;
-
-        const elevationMeters =
+        const refinedElevationMeters =
           altitudeToElevation(
-            altitudeMeters,
+            refinedAltitudeMeters,
             settings.altitudeDisplayMode,
           ) *
           getZoomAdjustedElevationScale(
             map.getZoom(),
             settings.altitudeDisplayMode,
           );
-        const elevatedPoint = projectLngLatElevationPixelDelta(
+        const elevatedResidual = projectLngLatElevationPixelDelta(
           map,
-          latestCoordinates[0],
-          latestCoordinates[1],
-          elevationMeters,
+          refinedCoordinates[0],
+          refinedCoordinates[1],
+          refinedElevationMeters,
         );
-        const groundPoint = projectLngLatElevationPixelDelta(
+        const groundResidual = projectLngLatElevationPixelDelta(
           map,
-          latestCoordinates[0],
-          latestCoordinates[1],
+          refinedCoordinates[0],
+          refinedCoordinates[1],
           0,
         );
-        if (!elevatedPoint || !groundPoint) return;
+        if (!elevatedResidual || !groundResidual) return;
 
-        const canvas = map.getCanvas();
-        const offset = panelVisualOffset(
+        const refinedOffset = panelVisualOffset(
           {
-            dx: elevatedPoint.dx - groundPoint.dx,
-            dy: elevatedPoint.dy - groundPoint.dy,
+            dx: elevatedResidual.dx - groundResidual.dx,
+            dy: elevatedResidual.dy - groundResidual.dy,
           },
           canvas.clientWidth,
           canvas.clientHeight,
         );
-        if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return;
-
-        const correctedCenter = centerLngLatForScreenOffset(
+        const refinedCenter = centerLngLatForScreenOffset(
           map,
-          latestCoordinates[0],
-          latestCoordinates[1],
-          offset,
+          refinedCoordinates[0],
+          refinedCoordinates[1],
+          refinedOffset,
         );
-        if (!correctedCenter) return;
+        if (!refinedCenter) return;
 
         map.easeTo({
-          center: correctedCenter,
-          duration: PANEL_VISUAL_EASE_MS,
-          essential: true,
+          center: refinedCenter,
+          padding: mapPanelPadding(refinedPanel),
+          duration: reduceMotion ? 0 : PANEL_VISUAL_REFINEMENT_MS,
+          easing: panelMotion.easing,
+          essential: false,
         });
-
-        refinementTimer = window.setTimeout(() => {
-          const refinedPanel = panelCameraRef.current;
-          if (!refinedPanel.open || refinedPanel.focusKey !== focusKey) return;
-
-          const refinedCoordinates = refinedPanel.coordinates;
-          const refinedAltitudeMeters = refinedPanel.altitudeMeters;
-          if (!refinedCoordinates || refinedAltitudeMeters == null) return;
-
-          const refinedElevationMeters =
-            altitudeToElevation(
-              refinedAltitudeMeters,
-              settings.altitudeDisplayMode,
-            ) *
-            getZoomAdjustedElevationScale(
-              map.getZoom(),
-              settings.altitudeDisplayMode,
-            );
-          const elevatedResidual = projectLngLatElevationPixelDelta(
-            map,
-            refinedCoordinates[0],
-            refinedCoordinates[1],
-            refinedElevationMeters,
-          );
-          const groundResidual = projectLngLatElevationPixelDelta(
-            map,
-            refinedCoordinates[0],
-            refinedCoordinates[1],
-            0,
-          );
-          if (!elevatedResidual || !groundResidual) return;
-
-          const refinedOffset = panelVisualOffset(
-            {
-              dx: elevatedResidual.dx - groundResidual.dx,
-              dy: elevatedResidual.dy - groundResidual.dy,
-            },
-            canvas.clientWidth,
-            canvas.clientHeight,
-          );
-          const refinedCenter = centerLngLatForScreenOffset(
-            map,
-            refinedCoordinates[0],
-            refinedCoordinates[1],
-            refinedOffset,
-          );
-          if (!refinedCenter) return;
-
-          map.easeTo({
-            center: refinedCenter,
-            duration: PANEL_VISUAL_REFINEMENT_MS,
-            essential: true,
-          });
-        }, PANEL_VISUAL_EASE_MS + 40);
-      }, PANEL_EASE_MS + 80);
-    }, panelJustOpened ? PANEL_EASE_MS : 0);
+      }, reduceMotion ? 0 : PANEL_VISUAL_EASE_MS + 40);
+    }, reduceMotion ? 0 : MAP_PANEL_TRANSITION_MS + 80);
 
     return () => {
-      window.clearTimeout(centerTimer);
       if (correctionTimer !== null) window.clearTimeout(correctionTimer);
       if (refinementTimer !== null) window.clearTimeout(refinementTimer);
     };
@@ -279,6 +310,7 @@ export function CameraController({
     panelCamera.open,
     panelCamera.focusKey,
     panelCamera.kind,
+    panelCamera.leftInsetPx,
     hasPanelCoordinates,
     settings.altitudeDisplayMode,
   ]);

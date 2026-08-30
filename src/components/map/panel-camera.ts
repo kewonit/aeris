@@ -6,7 +6,17 @@ export type MapPanelCameraState = {
   focusKey: string | null;
   coordinates: [number, number] | null;
   altitudeMeters: number | null;
+  leftInsetPx: number;
 };
+
+export type MapPanelPadding = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+export const MAP_PANEL_TRANSITION_MS = 480;
 
 export const CLOSED_MAP_PANEL_CAMERA_STATE: MapPanelCameraState = {
   open: false,
@@ -14,6 +24,7 @@ export const CLOSED_MAP_PANEL_CAMERA_STATE: MapPanelCameraState = {
   focusKey: null,
   coordinates: null,
   altitudeMeters: null,
+  leftInsetPx: 0,
 };
 
 export function createMapPanelCameraState({
@@ -22,12 +33,14 @@ export function createMapPanelCameraState({
   longitude,
   latitude,
   altitudeMeters,
+  leftInsetPx,
 }: {
   kind: MapPanelCameraKind;
   focusKey: string | null | undefined;
   longitude: number | null | undefined;
   latitude: number | null | undefined;
   altitudeMeters?: number | null;
+  leftInsetPx: number | null | undefined;
 }): MapPanelCameraState {
   return {
     open: true,
@@ -38,6 +51,31 @@ export function createMapPanelCameraState({
       altitudeMeters != null && Number.isFinite(altitudeMeters)
         ? Math.max(0, altitudeMeters)
         : null,
+    leftInsetPx: normalizeLeftInset(leftInsetPx),
+  };
+}
+
+export function mapPanelPadding(
+  state: MapPanelCameraState,
+): MapPanelPadding {
+  return {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: state.open ? state.leftInsetPx : 0,
+  };
+}
+
+export function mapPanelEaseOutCubic(t: number): number {
+  const progress = Math.max(0, Math.min(1, t));
+  return 1 - (1 - progress) ** 3;
+}
+
+export function mapPanelMotionOptions(reduceMotion: boolean) {
+  return {
+    duration: reduceMotion ? 0 : MAP_PANEL_TRANSITION_MS,
+    easing: mapPanelEaseOutCubic,
+    essential: false as const,
   };
 }
 
@@ -79,6 +117,10 @@ export function coordinatesMatch(
 function cleanFocusKey(value: string | null | undefined): string | null {
   const cleaned = value?.trim();
   return cleaned ? cleaned : null;
+}
+
+function normalizeLeftInset(value: number | null | undefined): number {
+  return value != null && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function validCoordinates(

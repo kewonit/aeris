@@ -58,6 +58,35 @@ export function FlightCard({
     loading: photosLoading,
   } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
 
+  const cardContent = flight ? (
+    <FlightCardContent
+      flight={flight}
+      airline={airline}
+      photoAircraft={photoAircraft}
+      heroPhoto={photos[0] ?? null}
+      photosLoading={photosLoading}
+      routeInfo={routeInfo}
+      unitSystem={settings.unitSystem}
+      showDebugData={settings.showDebugData}
+      onClose={onClose}
+      onToggleFpv={onToggleFpv}
+      isFpvActive={isFpvActive}
+      isSidebar={variant === "sidebar"}
+    />
+  ) : null;
+
+  if (variant === "sidebar") {
+    return flight ? (
+      <div
+        className="h-full w-full"
+        role="complementary"
+        aria-label="Selected aircraft details"
+      >
+        {cardContent}
+      </div>
+    ) : null;
+  }
+
   return (
     <AnimatePresence mode="wait">
       {flight && (
@@ -67,28 +96,11 @@ export function FlightCard({
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -12 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className={
-            variant === "sidebar"
-              ? "h-full w-full"
-              : "w-[22rem] max-w-[calc(100vw-1rem)]"
-          }
+          className="w-[22rem] max-w-[calc(100vw-1rem)]"
           role="complementary"
           aria-label="Selected aircraft details"
         >
-          <FlightCardContent
-            flight={flight}
-            airline={airline}
-            photoAircraft={photoAircraft}
-            heroPhoto={photos[0] ?? null}
-            photosLoading={photosLoading}
-            routeInfo={routeInfo}
-            unitSystem={settings.unitSystem}
-            showDebugData={settings.showDebugData}
-            onClose={onClose}
-            onToggleFpv={onToggleFpv}
-            isFpvActive={isFpvActive}
-            isSidebar={variant === "sidebar"}
-          />
+          {cardContent}
         </motion.div>
       )}
     </AnimatePresence>
