@@ -57,3 +57,24 @@ test("PhotoBanner renders Wikimedia credit when a photo exists", () => {
   assert.match(html, /https:\/\/example.com\/thumb.jpg/);
   assert.match(html, /Wikipedia/);
 });
+
+test("PhotoBanner uses the compact sidebar hero without a pulse", () => {
+  const html = renderToStaticMarkup(
+    createElement(PhotoBanner, {
+      photo: null,
+      loading: true,
+      errored: false,
+      onError: () => {},
+      airportName: "San Francisco International Airport",
+      iata: "SFO",
+      icao: "KSFO",
+      city: "San Francisco",
+      country: "US",
+      variant: "sidebar",
+    }),
+  );
+
+  assert.match(html, /aeris-airport-hero/);
+  assert.match(html, /h-48/);
+  assert.doesNotMatch(html, /animate-pulse/);
+});

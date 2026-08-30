@@ -143,23 +143,34 @@ function FlightCardContent({
 
   return (
     <div
-      className="h-full overflow-y-auto overscroll-contain bg-sidebar/80 text-foreground [scrollbar-width:thin] supports-[backdrop-filter]:bg-sidebar/70"
+      className="aeris-sidebar-scroll h-full overflow-y-auto overscroll-contain bg-transparent text-foreground [scrollbar-width:thin]"
     >
       <HeroBanner
         photo={heroPhoto}
         loading={photosLoading}
         alt={`${identity} aircraft`}
+        variant="sidebar"
       />
 
-      <div className="px-5 pb-5 pt-4">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="px-4 pb-6 pt-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "aeris-airline-mark flex shrink-0 items-center justify-center border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+              "h-14 w-14 rounded-[17px]",
+            )}
+          >
             {airline ? (
-              <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[16px] border border-black/5 bg-white/95 shadow-sm">
+              <span
+                className={cn(
+                  "flex items-center justify-center overflow-hidden border border-black/5 bg-white/95 shadow-sm",
+              "h-12 w-12 rounded-[14px]",
+                )}
+              >
                 <AirlineLogo
                   callsign={flight.callsign}
                   airlineName={airline}
-                  size={40}
+                  size={36}
                   className="rounded-none bg-transparent"
                 />
               </span>
@@ -198,7 +209,7 @@ function FlightCardContent({
 
         <RouteSummary routeInfo={routeInfo} />
 
-        <dl className="mt-3 grid grid-cols-2 overflow-hidden rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035]">
+        <dl className="aeris-sidebar-group mt-3 grid grid-cols-2 overflow-hidden rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035]">
           {primaryFields.map((field, index) => (
             <PrimaryField
               key={field.label}
@@ -210,7 +221,7 @@ function FlightCardContent({
           ))}
         </dl>
 
-        <div className="border-b border-foreground/10 px-0.5 py-3 text-xs text-foreground/65">
+        <div className="aeris-sidebar-meta border-b border-foreground/10 px-0.5 py-3 text-xs text-foreground/65">
           <p>{freshness}</p>
           {sources.length > 0 && (
             <p className="mt-1">Sources: {sources.join(", ")}</p>
@@ -219,9 +230,9 @@ function FlightCardContent({
 
         <details
           key={flight.icao24}
-          className="group border-b border-foreground/10"
+          className="aeris-sidebar-disclosure group border-b border-foreground/10"
         >
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between py-3 text-sm font-medium marker:content-none">
+          <summary className="flex min-h-11 cursor-pointer touch-manipulation list-none items-center justify-between py-3 text-sm font-medium marker:content-none active:bg-foreground/[0.045]">
             Details
             <ChevronDown className="h-4 w-4 text-foreground/45 transition-transform group-open:rotate-180" />
           </summary>
@@ -298,7 +309,7 @@ function FlightCardContent({
             type="button"
             onClick={() => onToggleFpv(flight.icao24)}
             disabled={!canEnterFpv}
-            className="mt-3 flex min-h-10 w-full items-center gap-2 text-left text-sm font-medium text-foreground/70 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+            className="aeris-sidebar-primary-action mt-3 flex min-h-10 w-full touch-manipulation items-center gap-2 text-left text-sm font-semibold text-foreground/70 [transition-duration:100ms] [transition-property:background-color,color,scale] hover:text-foreground active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Eye className="h-4 w-4" aria-hidden="true" />
             First person view
@@ -320,7 +331,7 @@ export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
   if (!origin || !destination) return null;
 
   return (
-    <section className="mt-4 rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035] px-4 py-3.5">
+    <section className="aeris-sidebar-group mt-4 rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035] px-4 py-3.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">
         Reported route
       </p>

@@ -30,6 +30,7 @@ export function TrafficTiles({
         accent="text-emerald-400"
         activeClass="ring-emerald-400/25 bg-emerald-400/5"
         hoverClass="hover:ring-emerald-400/20 hover:bg-emerald-400/5"
+        tone="arrivals"
         onClick={arrivals > 0 ? onSelectArrivals : undefined}
         active={activeKind === "arrivals"}
       />
@@ -40,6 +41,7 @@ export function TrafficTiles({
         accent="text-amber-400"
         activeClass="ring-amber-400/25 bg-amber-400/5"
         hoverClass="hover:ring-amber-400/20 hover:bg-amber-400/5"
+        tone="departures"
         onClick={departures > 0 ? onSelectDepartures : undefined}
         active={activeKind === "departures"}
       />
@@ -50,6 +52,7 @@ export function TrafficTiles({
         accent="text-foreground/60"
         activeClass="ring-foreground/10 bg-foreground/4"
         hoverClass=""
+        tone="overflights"
       />
     </div>
   );
@@ -62,6 +65,7 @@ function Tile({
   accent,
   activeClass,
   hoverClass,
+  tone,
   onClick,
   active,
 }: {
@@ -71,12 +75,13 @@ function Tile({
   accent: string;
   activeClass: string;
   hoverClass: string;
+  tone: "arrivals" | "departures" | "overflights";
   onClick?: () => void;
   active?: boolean;
 }) {
   const isButton = typeof onClick === "function";
   const baseClass =
-    "flex flex-col gap-0.5 rounded-[10px] px-2 py-1.5 text-left [transition-property:background-color,box-shadow,scale] [transition-duration:180ms]";
+    "aeris-airport-traffic-tile flex flex-col gap-0.5 rounded-[10px] px-2 py-1.5 text-left [transition-property:background-color,box-shadow,scale] [transition-duration:100ms]";
   const idleClass = "bg-foreground/3 ring-1 ring-foreground/4";
   const classes = `${baseClass} ${
     active ? `ring-1 ${activeClass}` : idleClass
@@ -84,14 +89,16 @@ function Tile({
 
   const content = (
     <>
-      <div className={`flex items-center gap-1 ${accent}`}>
+      <div
+        className={`aeris-airport-traffic-label flex items-center gap-1 ${accent}`}
+      >
         {icon}
         <span className="text-[8px] font-medium tracking-widest uppercase">
           {label}
         </span>
       </div>
       <p
-        className={`font-mono text-[14px] font-semibold tabular-nums ${accent}`}
+        className={`aeris-airport-traffic-value font-mono text-[14px] font-semibold tabular-nums ${accent}`}
       >
         {count}
       </p>
@@ -104,11 +111,16 @@ function Tile({
         type="button"
         onClick={onClick}
         aria-pressed={!!active}
-        className={`${classes} active:scale-[0.96]`}
+        data-tone={tone}
+        className={`${classes} touch-manipulation active:scale-[0.96]`}
       >
         {content}
       </button>
     );
   }
-  return <div className={classes}>{content}</div>;
+  return (
+    <div className={classes} data-tone={tone}>
+      {content}
+    </div>
+  );
 }

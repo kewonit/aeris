@@ -127,6 +127,7 @@ export function AirportInfoCard({
 
   const isMobile = variant === "mobile";
   const isSidebar = !isMobile;
+  const suppressEntranceMotion = reduceMotion || isSidebar;
   const contentInsetClass = isSidebar ? "px-5" : "px-4";
   const outerClass = isMobile
     ? "pointer-events-auto fixed inset-x-0 bottom-0 z-40 w-full px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
@@ -161,7 +162,7 @@ export function AirportInfoCard({
       <div
         className={
           isSidebar
-            ? `relative flex ${innerMaxH} flex-col overflow-hidden bg-transparent`
+            ? `aeris-sidebar-scroll relative flex ${innerMaxH} flex-col overflow-hidden bg-transparent`
             : `relative flex ${innerMaxH} flex-col overflow-hidden rounded-2xl bg-background/60 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_0_0_1px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.4),0_24px_64px_-16px_rgba(0,0,0,0.6)] backdrop-blur-2xl dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_0_0_1px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(0,0,0,0.6),0_24px_64px_-16px_rgba(0,0,0,0.8)]`
         }
       >
@@ -195,6 +196,7 @@ export function AirportInfoCard({
           country={airport.country}
           // The sidebar has its own close button in the header.
           onClose={isMobile ? onClose : undefined}
+          variant={isSidebar ? "sidebar" : "default"}
         />
 
         <CardHeader
@@ -203,6 +205,7 @@ export function AirportInfoCard({
           metar={metar}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((c) => !c)}
+          variant={isSidebar ? "sidebar" : "default"}
         />
 
         <AnimatePresence initial={false}>
@@ -226,11 +229,13 @@ export function AirportInfoCard({
               >
                 <div className={`flex flex-col gap-3 ${contentInsetClass} pt-3`}>
                   <motion.div
-                    initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                    initial={
+                      suppressEntranceMotion ? false : { opacity: 0, y: 6 }
+                    }
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      duration: reduceMotion ? 0 : 0.28,
-                      delay: reduceMotion ? 0 : 0.04,
+                      duration: suppressEntranceMotion ? 0 : 0.28,
+                      delay: suppressEntranceMotion ? 0 : 0.04,
                       ease: [0.2, 0, 0, 1],
                     }}
                   >
@@ -241,11 +246,13 @@ export function AirportInfoCard({
                   </motion.div>
 
                   <motion.div
-                    initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                    initial={
+                      suppressEntranceMotion ? false : { opacity: 0, y: 6 }
+                    }
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      duration: reduceMotion ? 0 : 0.28,
-                      delay: reduceMotion ? 0 : 0.14,
+                      duration: suppressEntranceMotion ? 0 : 0.28,
+                      delay: suppressEntranceMotion ? 0 : 0.14,
                       ease: [0.2, 0, 0, 1],
                     }}
                   >
@@ -268,11 +275,13 @@ export function AirportInfoCard({
                   </motion.div>
 
                   <motion.div
-                    initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                    initial={
+                      suppressEntranceMotion ? false : { opacity: 0, y: 6 }
+                    }
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      duration: reduceMotion ? 0 : 0.28,
-                      delay: reduceMotion ? 0 : 0.24,
+                      duration: suppressEntranceMotion ? 0 : 0.28,
+                      delay: suppressEntranceMotion ? 0 : 0.24,
                       ease: [0.2, 0, 0, 1],
                     }}
                   >
@@ -312,6 +321,7 @@ export function AirportInfoCard({
                             selectedIcao24={selectedIcao24}
                             onSelectFlight={onSelectFlight}
                             emptyMessage="No arriving flights"
+                            variant={isSidebar ? "sidebar" : "default"}
                           />
                         </TabsContent>
                         <TabsContent
@@ -323,6 +333,7 @@ export function AirportInfoCard({
                             selectedIcao24={selectedIcao24}
                             onSelectFlight={onSelectFlight}
                             emptyMessage="No departing flights"
+                            variant={isSidebar ? "sidebar" : "default"}
                           />
                         </TabsContent>
                       </Tabs>

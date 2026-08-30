@@ -84,11 +84,13 @@ function FlightRow({
   isSelected,
   onSelect,
   index,
+  isSidebar,
 }: {
   flight: BoardFlight;
   isSelected: boolean;
   onSelect: () => void;
   index: number;
+  isSidebar: boolean;
 }) {
   const style = statusStyle(flight.status);
   const isUrgent = flight.status === "Final" || flight.status === "Departure";
@@ -96,17 +98,24 @@ function FlightRow({
 
   return (
     <motion.button
-      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+      initial={reduceMotion || isSidebar ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+      exit={
+        isSidebar
+          ? undefined
+          : reduceMotion
+            ? { opacity: 0 }
+            : { opacity: 0, y: -4 }
+      }
       transition={{
-        duration: reduceMotion ? 0 : 0.2,
+        duration: reduceMotion || isSidebar ? 0 : 0.2,
         ease: [0.25, 0.1, 0.25, 1],
-        delay: reduceMotion ? 0 : Math.min(index * 0.02, 0.15),
+        delay:
+          reduceMotion || isSidebar ? 0 : Math.min(index * 0.02, 0.15),
       }}
       onClick={onSelect}
       type="button"
-      className={`group flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left [transition-property:background-color,scale] [transition-duration:180ms] active:scale-[0.96] ${
+      className={`aeris-airport-flight-row group flex min-h-9 w-full touch-manipulation items-center gap-2 rounded-[10px] px-2 py-1.5 text-left [transition-property:background-color,scale] [transition-duration:100ms] active:scale-[0.98] ${
         isSelected ? "bg-foreground/8" : "hover:bg-foreground/4"
       }`}
       aria-label={`${flight.callsign} - ${flight.status}, ${flight.altitude}, ${flight.distanceFormatted}`}
@@ -117,19 +126,22 @@ function FlightRow({
           isUrgent ? "animate-pulse" : ""
         } ${style.glow ? `shadow-md ${style.glow}` : ""}`}
       />
-      <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-foreground/80">
+      <span className="aeris-airport-flight-callsign min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-foreground/80">
         {flight.callsign}
       </span>
-      <span className={`shrink-0 text-[10px] font-medium ${style.text}`}>
+      <span
+        data-status={flight.status.toLowerCase()}
+        className={`aeris-airport-flight-status shrink-0 text-[10px] font-medium ${style.text}`}
+      >
         {flight.status}
       </span>
-      <span className="hidden w-12 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/40 sm:inline">
+      <span className="aeris-airport-flight-secondary hidden w-12 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/40 sm:inline">
         {flight.altitude}
       </span>
       <span className="hidden w-12 shrink-0 justify-end sm:inline-flex">
         <VRate rate={flight.verticalRate} />
       </span>
-      <span className="ml-auto w-11 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/30">
+      <span className="aeris-airport-flight-distance ml-auto w-11 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/30">
         {flight.distanceFormatted}
       </span>
     </motion.button>
@@ -141,6 +153,7 @@ type Props = {
   selectedIcao24: string | null;
   onSelectFlight: (icao24: string) => void;
   emptyMessage?: string;
+  variant?: "default" | "sidebar";
 };
 
 export function FlightList({
@@ -148,6 +161,7 @@ export function FlightList({
   selectedIcao24,
   onSelectFlight,
   emptyMessage,
+  variant = "default",
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(flights.length);
@@ -183,6 +197,7 @@ export function FlightList({
               isSelected={f.icao24 === selectedIcao24}
               onSelect={() => onSelectFlight(f.icao24)}
               index={i}
+              isSidebar={variant === "sidebar"}
             />
           ))}
         </AnimatePresence>

@@ -165,6 +165,7 @@ function Sidebar({
   collapsible = "offcanvas",
   reserveSpace = true,
   className,
+  innerClassName,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
@@ -172,6 +173,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
   reserveSpace?: boolean
+  innerClassName?: string
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
@@ -268,7 +270,8 @@ function Sidebar({
             "flex h-full w-full flex-col",
             reserveSpace
               ? "bg-sidebar/90 shadow-[0_20px_80px_rgba(0,0,0,0.22)] backdrop-blur-3xl group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border/75 dark:shadow-[0_20px_90px_rgba(0,0,0,0.72),0_1px_0_rgba(255,255,255,0.05)_inset]"
-              : "border-0 bg-sidebar shadow-none backdrop-blur-none"
+              : "border-0 bg-sidebar shadow-none backdrop-blur-none",
+            innerClassName
           )}
         >
           {children}
