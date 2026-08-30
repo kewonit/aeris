@@ -43,7 +43,7 @@ test("HeroBanner keeps its space while the photo lookup runs", () => {
   assert.doesNotMatch(html, /<img/);
 });
 
-test("HeroBanner uses the compact material state in a sidebar", () => {
+test("HeroBanner uses the compact photo search state in a sidebar", () => {
   const html = renderToStaticMarkup(
     createElement(HeroBanner, {
       photo: null,
@@ -55,8 +55,28 @@ test("HeroBanner uses the compact material state in a sidebar", () => {
 
   assert.match(html, /aeris-sidebar-hero/);
   assert.match(html, /h-44/);
-  assert.match(html, /Loading aircraft photo/);
+  assert.match(html, /Finding aircraft photo/);
+  assert.match(html, /Checking aircraft photo sources/);
+  assert.match(html, /aeris-aircraft-photo-loading-bar/);
+  assert.match(html, /role="status"/);
   assert.doesNotMatch(html, /animate-pulse/);
+  assert.doesNotMatch(html, /bg-linear/);
+});
+
+test("HeroBanner reports image loading after a sidebar photo is found", () => {
+  const html = renderToStaticMarkup(
+    createElement(HeroBanner, {
+      photo: PHOTO,
+      loading: false,
+      alt: "JAL60 aircraft",
+      variant: "sidebar",
+    }),
+  );
+
+  assert.match(html, /Loading aircraft photo/);
+  assert.match(html, /Preparing the best available image/);
+  assert.match(html, /https:\/\/example\.com\/aircraft\.jpg/);
+  assert.doesNotMatch(html, /bg-linear-to-t/);
 });
 
 test("HeroBanner collapses after an empty photo result", () => {
