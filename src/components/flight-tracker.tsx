@@ -508,13 +508,23 @@ function FlightTrackerInner({
   }, [fpvIcao24, handleToggleFpv, isMobile, selectedIcao24]);
 
   const handleShortcutDeselect = useCallback(() => {
+    if (fpvIcao24) {
+      handleExitFpv();
+      return;
+    }
     if (leftPanel) {
       setLeftPanel(null);
       restoreMapFocus();
       return;
     }
     handleDeselectFlight();
-  }, [handleDeselectFlight, leftPanel, restoreMapFocus]);
+  }, [
+    fpvIcao24,
+    handleDeselectFlight,
+    handleExitFpv,
+    leftPanel,
+    restoreMapFocus,
+  ]);
 
   // Helper: select flight and optionally enter FPV
   const selectFlight = useCallback(
@@ -726,12 +736,14 @@ function FlightTrackerInner({
             fpvPositionRef={fpvPositionRef}
             panelCamera={panelCamera}
           />
-          <AirportLayer
-            activeCity={activeCity}
-            onSelectAirport={handleAirportDotClick}
-            isDark={mapStyle.dark}
-          />
-          <UserLocationMarker coordinates={userLocation} />
+          {!fpvIcao24 && (
+            <AirportLayer
+              activeCity={activeCity}
+              onSelectAirport={handleAirportDotClick}
+              isDark={mapStyle.dark}
+            />
+          )}
+          {!fpvIcao24 && <UserLocationMarker coordinates={userLocation} />}
           {airspaceAvailable && (
             <AirspaceLayer
               visible={showAirspace}
