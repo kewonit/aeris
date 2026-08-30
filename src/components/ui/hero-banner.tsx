@@ -9,13 +9,16 @@ type HeroBannerProps = {
   photo: NormalizedPhoto | null;
   loading: boolean;
   alt: string;
+  variant?: "default" | "sidebar";
 };
 
 export function HeroBanner({
   photo,
   loading,
   alt,
+  variant = "default",
 }: HeroBannerProps) {
+  const isSidebar = variant === "sidebar";
   const candidates = useMemo(() => {
     const urls = [photo?.url, photo?.thumbnail]
       .map((url) => url?.trim())
@@ -50,17 +53,36 @@ export function HeroBanner({
       {visible && (
         <motion.div
           key="aircraft-hero"
-          initial={{ opacity: 0 }}
+          initial={isSidebar ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="relative h-52 w-full overflow-hidden bg-foreground/[0.04] sm:h-56"
+          exit={isSidebar ? undefined : { height: 0, opacity: 0 }}
+          transition={
+            isSidebar
+              ? { duration: 0 }
+              : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+          }
+          className={`relative w-full overflow-hidden bg-foreground/[0.04] ${isSidebar ? "aeris-sidebar-hero h-44" : "h-52 sm:h-56"}`}
         >
           {(loading || (hasPhoto && !loaded)) && (
             <span
               aria-hidden
-              className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
+              className={
+                isSidebar
+                  ? "aeris-sidebar-hero-loading absolute inset-0"
+                  : "absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
+              }
             />
+          )}
+
+          {isSidebar && loading && !source && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/42">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/[0.08] bg-background/35 shadow-sm backdrop-blur-md">
+                <Camera className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="text-[11px] font-medium tracking-[0.01em]">
+                Loading aircraft photo
+              </span>
+            </div>
           )}
 
           {source && !failed && (

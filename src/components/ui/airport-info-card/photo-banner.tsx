@@ -2,6 +2,7 @@
 
 import { ExternalLink, X } from "lucide-react";
 import type { AirportPhoto } from "./types";
+import { cn } from "@/lib/utils";
 
 type Props = {
   photo: AirportPhoto | null;
@@ -15,6 +16,7 @@ type Props = {
   country: string;
   /** Renders a floating close button on top of the image. Omit for read-only usage. */
   onClose?: () => void;
+  variant?: "default" | "sidebar";
 };
 
 /**
@@ -36,12 +38,19 @@ export function PhotoBanner({
   city,
   country,
   onClose,
+  variant = "default",
 }: Props) {
   const showPhoto = !!photo && !errored;
   const location = country ? `${city} • ${country}` : city;
+  const isSidebar = variant === "sidebar";
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden bg-background">
+    <div
+      className={cn(
+        "relative w-full overflow-hidden bg-background",
+        isSidebar ? "aeris-airport-hero h-48" : "aspect-video",
+      )}
+    >
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02)_42%,rgba(255,255,255,0.01))]" />
       <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:linear-gradient(to_bottom,rgba(255,255,255,0.85),transparent)]" />
       <div className="absolute -left-6 top-5 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
@@ -70,7 +79,12 @@ export function PhotoBanner({
       </div>
 
       {loading && !showPhoto && (
-        <div className="absolute inset-0 bg-white/[0.03] animate-pulse" />
+        <div
+          className={cn(
+            "absolute inset-0 bg-white/[0.03]",
+            !isSidebar && "animate-pulse",
+          )}
+        />
       )}
 
       {showPhoto && (

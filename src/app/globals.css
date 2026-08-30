@@ -176,6 +176,486 @@
   }
 }
 
+.aeris-sidebar-shell {
+  --aeris-sidebar-material: color-mix(
+    in oklab,
+    var(--sidebar) 88%,
+    transparent
+  );
+  --aeris-sidebar-material-strong: color-mix(
+    in oklab,
+    var(--sidebar) 94%,
+    transparent
+  );
+  --aeris-sidebar-hairline: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 9%,
+    transparent
+  );
+  --aeris-sidebar-tint: oklch(0.57 0.2 255);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+.dark .aeris-sidebar-shell {
+  --aeris-sidebar-material: oklch(0.105 0.006 270 / 94%);
+  --aeris-sidebar-material-strong: oklch(0.125 0.006 270 / 97%);
+  --aeris-sidebar-hairline: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 12%,
+    transparent
+  );
+  --aeris-sidebar-tint: oklch(0.72 0.16 250);
+}
+
+.aeris-sidebar-shell [data-slot="sidebar-inner"] {
+  overflow: hidden;
+  border-right: 1px solid var(--aeris-sidebar-hairline);
+  background-color: var(--aeris-sidebar-material);
+  background-image:
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, white 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--sidebar-foreground) 2.5%, transparent),
+      transparent 22%
+    );
+  box-shadow:
+    inset -1px 0 0 color-mix(in oklab, white 10%, transparent),
+    14px 0 44px -22px color-mix(in oklab, black 48%, transparent);
+}
+
+.aeris-sidebar-toolbar {
+  background: linear-gradient(
+    to bottom,
+    var(--aeris-sidebar-material-strong) 0%,
+    color-mix(in oklab, var(--aeris-sidebar-material-strong) 92%, transparent)
+      100%
+  );
+}
+
+.aeris-sidebar-toolbar::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.75rem;
+  left: 0;
+  height: 0.75rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--sidebar) 20%, transparent),
+    transparent
+  );
+  content: "";
+}
+
+.aeris-sidebar-control {
+  border: 1px solid var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 6%,
+    transparent
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
+    0 3px 12px -6px color-mix(in oklab, black 42%, transparent);
+}
+
+.aeris-sidebar-control:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 10%,
+    transparent
+  );
+}
+
+.aeris-sidebar-scroll {
+  scrollbar-color: color-mix(
+      in oklab,
+      var(--sidebar-foreground) 18%,
+      transparent
+    )
+    transparent;
+}
+
+.aeris-sidebar-shell .aeris-airline-mark {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4.5%,
+    transparent
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 12%, transparent),
+    0 10px 26px -22px color-mix(in oklab, black 52%, transparent);
+}
+
+.aeris-sidebar-shell .aeris-airport-header {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 2.5%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-header:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4.5%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-header:active {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 6%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-code {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 52%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-name {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 72%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-location {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 50%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-fact-tile,
+.aeris-sidebar-shell .aeris-airport-traffic-tile {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px var(--aeris-sidebar-hairline);
+}
+
+.aeris-sidebar-shell .aeris-airport-fact-label {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 46%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-fact-value {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 88%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell
+  .aeris-airport-traffic-tile[data-tone="arrivals"]
+  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
+.aeris-sidebar-shell
+  .aeris-airport-flight-status:is(
+    [data-status="final"],
+    [data-status="approach"],
+    [data-status="inbound"],
+    [data-status="descending"]
+  ) {
+  color: oklch(0.48 0.13 164);
+}
+
+.aeris-sidebar-shell
+  .aeris-airport-traffic-tile[data-tone="departures"]
+  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
+.aeris-sidebar-shell
+  .aeris-airport-flight-status:is(
+    [data-status="departure"],
+    [data-status="climbing"],
+    [data-status="outbound"]
+  ) {
+  color: oklch(0.53 0.14 75);
+}
+
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-traffic-tile[data-tone="arrivals"]
+  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-flight-status:is(
+    [data-status="final"],
+    [data-status="approach"],
+    [data-status="inbound"],
+    [data-status="descending"]
+  ) {
+  color: oklch(0.78 0.13 164);
+}
+
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-traffic-tile[data-tone="departures"]
+  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-flight-status:is(
+    [data-status="departure"],
+    [data-status="climbing"],
+    [data-status="outbound"]
+  ) {
+  color: oklch(0.8 0.13 82);
+}
+
+.aeris-sidebar-shell
+  .aeris-airport-traffic-tile[data-tone="overflights"]
+  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value) {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 64%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell
+  :is(.aeris-airport-main-tabs, .aeris-airport-arrdep-tabs) {
+  border: 1px solid var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4%,
+    transparent
+  );
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 8%, transparent);
+}
+
+.aeris-sidebar-shell
+  :is(.aeris-airport-main-tab, .aeris-airport-arrdep-tab)[data-state="inactive"] {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 56%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-main-tab[data-state="active"] {
+  background-color: var(--aeris-sidebar-material-strong);
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 92%,
+    transparent
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--aeris-sidebar-hairline),
+    0 3px 10px -7px color-mix(in oklab, black 50%, transparent);
+}
+
+.aeris-sidebar-shell
+  .aeris-airport-arrdep-tab[value="arrivals"][data-state="active"] {
+  color: oklch(0.48 0.13 164);
+}
+
+.aeris-sidebar-shell
+  .aeris-airport-arrdep-tab[value="departures"][data-state="active"] {
+  color: oklch(0.53 0.14 75);
+}
+
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-arrdep-tab[value="arrivals"][data-state="active"] {
+  color: oklch(0.78 0.13 164);
+}
+
+.dark
+  .aeris-sidebar-shell
+  .aeris-airport-arrdep-tab[value="departures"][data-state="active"] {
+  color: oklch(0.8 0.13 82);
+}
+
+.aeris-sidebar-shell .aeris-airport-flight-row {
+  border: 1px solid transparent;
+}
+
+.aeris-sidebar-shell .aeris-airport-flight-row:hover {
+  border-color: var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-flight-callsign {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 88%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-flight-secondary {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 56%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-airport-flight-distance {
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 50%,
+    transparent
+  );
+}
+
+.aeris-sidebar-hero,
+.aeris-airport-hero {
+  border-bottom: 1px solid var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4%,
+    var(--sidebar)
+  );
+}
+
+.aeris-sidebar-hero-loading {
+  background:
+    radial-gradient(
+      circle at 22% 18%,
+      color-mix(in oklab, var(--aeris-sidebar-tint) 16%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--sidebar-foreground) 5%, transparent),
+      transparent 58%
+    );
+}
+
+.aeris-sidebar-shell .aeris-sidebar-group,
+.aeris-sidebar-shell .aeris-sidebar-disclosure {
+  border-color: var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 4.5%,
+    transparent
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 10%, transparent),
+    0 8px 24px -22px color-mix(in oklab, black 48%, transparent);
+}
+
+.aeris-sidebar-shell .aeris-sidebar-disclosure {
+  margin-top: 0.75rem;
+  overflow: clip;
+  border-width: 1px;
+  border-radius: 1rem;
+}
+
+.aeris-sidebar-shell .aeris-sidebar-disclosure > summary,
+.aeris-sidebar-shell .aeris-sidebar-disclosure > dl {
+  padding-right: 0.875rem;
+  padding-left: 0.875rem;
+}
+
+.aeris-sidebar-shell .aeris-sidebar-meta {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--aeris-sidebar-hairline);
+  border-radius: 0.875rem;
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 2.75%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-sidebar-primary-action {
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  border: 1px solid
+    color-mix(in oklab, var(--aeris-sidebar-tint) 24%, transparent);
+  border-radius: 0.875rem;
+  background-color: color-mix(
+    in oklab,
+    var(--aeris-sidebar-tint) 11%,
+    transparent
+  );
+  color: var(--aeris-sidebar-tint);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 10%, transparent);
+}
+
+.aeris-sidebar-shell .aeris-sidebar-primary-action:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--aeris-sidebar-tint) 16%,
+    transparent
+  );
+}
+
+.aeris-sidebar-shell .aeris-sidebar-primary-action:disabled {
+  border-color: var(--aeris-sidebar-hairline);
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 3%,
+    transparent
+  );
+  color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 36%,
+    transparent
+  );
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .aeris-sidebar-shell [data-slot="sidebar-inner"],
+  .aeris-sidebar-toolbar,
+  .aeris-sidebar-control {
+    background-color: var(--sidebar);
+    background-image: none;
+    --tw-backdrop-blur: blur(0);
+    --tw-backdrop-saturate: saturate(1);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .aeris-sidebar-shell [data-slot="sidebar-inner"] {
+    border-right-color: color-mix(
+      in oklab,
+      var(--sidebar-foreground) 48%,
+      transparent
+    );
+    background-color: var(--sidebar);
+    background-image: none;
+  }
+
+  .aeris-sidebar-control,
+  .aeris-sidebar-shell .aeris-sidebar-group,
+  .aeris-sidebar-shell .aeris-sidebar-disclosure,
+  .aeris-sidebar-shell .aeris-sidebar-meta {
+    border-color: color-mix(
+      in oklab,
+      var(--sidebar-foreground) 38%,
+      transparent
+    );
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

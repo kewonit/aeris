@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { Airport } from "@/lib/airports";
+import { cn } from "@/lib/utils";
 import { decodeFltCat } from "./formatters";
 import type { MetarData } from "./types";
 
@@ -12,6 +13,7 @@ type Props = {
   metar: MetarData | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  variant?: "default" | "sidebar";
 };
 
 /**
@@ -30,6 +32,7 @@ export function CardHeader({
   metar,
   collapsed,
   onToggleCollapse,
+  variant = "default",
 }: Props) {
   const fltCat = decodeFltCat(metar?.fltcat);
   const hasFltCat = fltCat.label !== "-";
@@ -41,7 +44,10 @@ export function CardHeader({
       onClick={onToggleCollapse}
       aria-expanded={!collapsed}
       aria-label={`${airport.name}, tap to ${collapsed ? "expand" : "collapse"} details`}
-      className="group flex w-full items-start gap-2 p-4 text-left transition-colors hover:bg-foreground/2 active:bg-foreground/4"
+      className={cn(
+        "group flex w-full touch-manipulation items-start gap-2 text-left [transition-duration:100ms] [transition-property:background-color,scale] hover:bg-foreground/2 active:scale-[0.995] active:bg-foreground/4",
+        variant === "sidebar" ? "aeris-airport-header px-5 py-4" : "p-4",
+      )}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -49,7 +55,7 @@ export function CardHeader({
             {airport.iata}
           </p>
           {icao && (
-            <span className="font-mono text-[10px] font-medium tracking-widest text-foreground/35">
+            <span className="aeris-airport-code font-mono text-[10px] font-medium tracking-widest text-foreground/35">
               {icao}
             </span>
           )}
@@ -61,10 +67,10 @@ export function CardHeader({
             </span>
           )}
         </div>
-        <p className="mt-1 truncate text-[11px] font-medium text-balance text-foreground/55">
+        <p className="aeris-airport-name mt-1 truncate text-[11px] font-medium text-balance text-foreground/55">
           {airport.name}
         </p>
-        <p className="truncate text-[10px] text-foreground/30">
+        <p className="aeris-airport-location truncate text-[10px] text-foreground/30">
           {airport.city}
           {airport.country ? `, ${airport.country}` : ""}
         </p>

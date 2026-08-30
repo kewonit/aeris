@@ -35,14 +35,14 @@ function Tile({
   value: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-lg bg-foreground/3 px-2 py-1.5 ring-1 ring-foreground/4">
-      <div className="flex items-center gap-1 text-foreground/25">
+    <div className="aeris-airport-fact-tile flex flex-col gap-0.5 rounded-lg bg-foreground/3 px-2 py-1.5 ring-1 ring-foreground/4">
+      <div className="aeris-airport-fact-label flex items-center gap-1 text-foreground/25">
         {icon}
         <span className="text-[8px] font-medium tracking-widest uppercase">
           {label}
         </span>
       </div>
-      <p className="font-mono text-[11px] font-semibold tabular-nums text-foreground/80">
+      <p className="aeris-airport-fact-value font-mono text-[11px] font-semibold tabular-nums text-foreground/80">
         {value}
       </p>
     </div>

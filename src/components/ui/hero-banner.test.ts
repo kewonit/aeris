@@ -46,6 +46,22 @@ test("HeroBanner renders a full-height loading skeleton", () => {
   assert.doesNotMatch(html, /<img/);
 });
 
+test("HeroBanner uses the compact material state in a sidebar", () => {
+  const html = renderToStaticMarkup(
+    createElement(HeroBanner, {
+      photo: null,
+      loading: true,
+      alt: "Aircraft",
+      variant: "sidebar",
+    }),
+  );
+
+  assert.match(html, /aeris-sidebar-hero/);
+  assert.match(html, /h-44/);
+  assert.match(html, /Loading aircraft photo/);
+  assert.doesNotMatch(html, /animate-pulse/);
+});
+
 test("HeroBanner collapses after an empty photo result", () => {
   const html = renderToStaticMarkup(
     createElement(HeroBanner, {
