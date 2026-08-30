@@ -32,6 +32,7 @@ type Config struct {
 	MaxSourceBodyBytes       int64
 	MaxBBoxAreaDegrees       float64
 	MaxRadiusNM              float64
+	MaxCurrentAircraft       int
 	MaxResponseAircraft      int
 	MaxHistoryPoints         int
 	MaxConnections           int
@@ -65,6 +66,7 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		MaxSourceBodyBytes:       int64Value(lookup, "RELAY_MAX_SOURCE_BODY_BYTES", 16<<20),
 		MaxBBoxAreaDegrees:       floatValue(lookup, "RELAY_MAX_BBOX_AREA_DEGREES", 100),
 		MaxRadiusNM:              floatValue(lookup, "RELAY_MAX_RADIUS_NM", 250),
+		MaxCurrentAircraft:       intValue(lookup, "RELAY_MAX_CURRENT_AIRCRAFT", 50_000),
 		MaxResponseAircraft:      intValue(lookup, "RELAY_MAX_RESPONSE_AIRCRAFT", 2500),
 		MaxHistoryPoints:         intValue(lookup, "RELAY_MAX_HISTORY_POINTS", 2000),
 		MaxConnections:           intValue(lookup, "RELAY_MAX_CONNECTIONS", 256),
@@ -112,17 +114,41 @@ func (c Config) Validate() error {
 	if c.RetentionWindow < c.HistoryWindow {
 		return errors.New("retention window must be at least as long as the history window")
 	}
-	if c.SegmentDuration <= 0 || c.HistoryWindow <= 0 || c.PollInterval <= 0 {
+	if c.SegmentDuration <= 0 || c.HistoryWindow <= 0 || c.PollInterval <= 0 || c.SourceStaleAfter <= 0 || c.AircraftExpiry <= 0 || c.GracefulShutdownDuration <= 0 {
 		return errors.New("duration settings must be positive")
 	}
-	if c.MaxSourceBodyBytes <= 0 || c.MaxResponseAircraft <= 0 || c.MaxHistoryPoints <= 0 {
+	if c.LatenessGrace < 0 {
+		return errors.New("lateness grace cannot be negative")
+	}
+	if c.LatenessGrace > c.SegmentDuration {
+		return errors.New("lateness grace cannot exceed segment duration")
+	}
+	if c.SourceStaleAfter > c.AircraftExpiry {
+		return errors.New("source stale threshold cannot exceed aircraft expiry")
+	}
+	if c.MaxSourceBodyBytes <= 0 || c.MaxCurrentAircraft <= 0 || c.MaxResponseAircraft <= 0 || c.MaxHistoryPoints <= 0 {
 		return errors.New("response and source limits must be positive")
+	}
+	if c.MaxSourceBodyBytes > 256<<20 || c.MaxCurrentAircraft > 250_000 || c.MaxResponseAircraft > 5_000 || c.MaxHistoryPoints > 10_000 {
+		return errors.New("response or source limit exceeds the hard safety bound")
+	}
+	if c.MaxResponseAircraft > c.MaxCurrentAircraft {
+		return errors.New("response aircraft limit cannot exceed current-state limit")
 	}
 	if c.MaxConnections <= 0 || c.SocketQueueDepth <= 0 || c.MaxSubscriptionChanges <= 0 || c.BlockCacheEntries <= 0 {
 		return errors.New("stream bounds must be positive")
 	}
+	if c.MaxConnections > 100_000 || c.SocketQueueDepth > 1_024 || c.MaxSubscriptionChanges > 10_000 || c.BlockCacheEntries > 10_000 {
+		return errors.New("stream limit exceeds the hard safety bound")
+	}
 	if c.MaxRadiusNM <= 0 || c.MaxBBoxAreaDegrees <= 0 {
 		return errors.New("geographic bounds must be positive")
+	}
+	if c.MaxRadiusNM > 250 || c.MaxBBoxAreaDegrees > 100 {
+		return errors.New("geographic limit exceeds the hard safety bound")
+	}
+	if c.EmergencyHistoryBytes < 0 {
+		return errors.New("emergency history limit cannot be negative")
 	}
 	return nil
 }

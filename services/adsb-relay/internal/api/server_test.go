@@ -70,6 +70,7 @@ func newTestServer(t *testing.T) *testServer {
 		AircraftExpiry:         90 * time.Second,
 		MaxBBoxAreaDegrees:     100,
 		MaxRadiusNM:            250,
+		MaxCurrentAircraft:     1000,
 		MaxResponseAircraft:    100,
 		MaxHistoryPoints:       1000,
 		MaxConnections:         8,
@@ -77,16 +78,17 @@ func newTestServer(t *testing.T) *testServer {
 		MaxSubscriptionChanges: 30,
 	}
 	storage, err := store.Open(store.Options{
-		DataDir:           t.TempDir(),
-		HistoryWindow:     config.HistoryWindow,
-		RetentionWindow:   config.RetentionWindow,
-		SegmentDuration:   config.SegmentDuration,
-		BlockCacheEntries: 4,
+		DataDir:            t.TempDir(),
+		HistoryWindow:      config.HistoryWindow,
+		RetentionWindow:    config.RetentionWindow,
+		SegmentDuration:    config.SegmentDuration,
+		MaxCurrentAircraft: config.MaxCurrentAircraft,
+		BlockCacheEntries:  4,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	hub, err := stream.NewHub(config.SocketQueueDepth)
+	hub, err := stream.NewHub(config.SocketQueueDepth, config.MaxResponseAircraft, config.MaxCurrentAircraft)
 	if err != nil {
 		t.Fatal(err)
 	}

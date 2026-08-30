@@ -59,3 +59,31 @@ func TestLoadRejectsWildcardOrigin(t *testing.T) {
 		t.Fatal("expected wildcard origin to fail")
 	}
 }
+
+func TestLoadRejectsLimitsOutsideHardSafetyBounds(t *testing.T) {
+	for key, value := range map[string]string{
+		"RELAY_MAX_SOURCE_BODY_BYTES":    "999999999999",
+		"RELAY_MAX_CURRENT_AIRCRAFT":     "250001",
+		"RELAY_MAX_RESPONSE_AIRCRAFT":    "5001",
+		"RELAY_MAX_HISTORY_POINTS":       "10001",
+		"RELAY_MAX_CONNECTIONS":          "100001",
+		"RELAY_SOCKET_QUEUE_DEPTH":       "1025",
+		"RELAY_MAX_SUBSCRIPTION_CHANGES": "10001",
+		"RELAY_BLOCK_CACHE_ENTRIES":      "10001",
+		"RELAY_MAX_BBOX_AREA_DEGREES":    "101",
+		"RELAY_MAX_RADIUS_NM":            "251",
+		"RELAY_MAX_HISTORY_BYTES":        "-1",
+	} {
+		t.Run(key, func(t *testing.T) {
+			_, err := load(func(candidate string) (string, bool) {
+				if candidate == key {
+					return value, true
+				}
+				return "", false
+			})
+			if err == nil {
+				t.Fatalf("expected %s=%s to fail", key, value)
+			}
+		})
+	}
+}

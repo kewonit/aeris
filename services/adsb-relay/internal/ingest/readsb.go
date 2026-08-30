@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const maxResponseClockSkew = 30 * time.Second
+
 type RawAltitude struct {
 	Value  *float64
 	Ground bool
@@ -100,15 +102,33 @@ func (e ReadsbEnvelope) LatestFixTime(responseTime time.Time) time.Time {
 }
 
 func (e ReadsbEnvelope) ResponseTime(receivedAt time.Time) time.Time {
+	receivedAt = receivedAt.UTC()
 	if e.Now <= 0 {
 		return receivedAt
 	}
+	var responseTime time.Time
 	if e.Now > 10_000_000_000 {
-		return time.UnixMilli(int64(e.Now)).UTC()
+		responseTime = time.UnixMilli(int64(e.Now)).UTC()
+	} else {
+		seconds := int64(e.Now)
+		nanos := int64((e.Now - float64(seconds)) * float64(time.Second))
+		responseTime = time.Unix(seconds, nanos).UTC()
 	}
-	seconds := int64(e.Now)
-	nanos := int64((e.Now - float64(seconds)) * float64(time.Second))
-	return time.Unix(seconds, nanos).UTC()
+	if responseTime.Before(receivedAt.Add(-maxResponseClockSkew)) || responseTime.After(receivedAt.Add(maxResponseClockSkew)) {
+		return time.Time{}
+	}
+	return responseTime
+}
+
+func (e ReadsbEnvelope) IsFresh(responseTime, receivedAt time.Time, maximumAge time.Duration) bool {
+	if responseTime.IsZero() || maximumAge <= 0 {
+		return false
+	}
+	latestFixTime := e.LatestFixTime(responseTime)
+	if latestFixTime.After(receivedAt.Add(maxResponseClockSkew)) {
+		return false
+	}
+	return receivedAt.Sub(latestFixTime) < maximumAge
 }
 
 type ReadsbClient struct {

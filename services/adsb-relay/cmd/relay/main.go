@@ -37,6 +37,8 @@ func run(logger *slog.Logger) error {
 		HistoryWindow:         settings.HistoryWindow,
 		RetentionWindow:       settings.RetentionWindow,
 		SegmentDuration:       settings.SegmentDuration,
+		LatenessGrace:         settings.LatenessGrace,
+		MaxCurrentAircraft:    settings.MaxCurrentAircraft,
 		BlockCacheEntries:     settings.BlockCacheEntries,
 		EmergencyHistoryBytes: settings.EmergencyHistoryBytes,
 	})
@@ -44,7 +46,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	defer history.Close()
-	hub, err := stream.NewHub(settings.SocketQueueDepth)
+	hub, err := stream.NewHub(settings.SocketQueueDepth, settings.MaxResponseAircraft, settings.MaxCurrentAircraft)
 	if err != nil {
 		return err
 	}
@@ -71,7 +73,7 @@ func run(logger *slog.Logger) error {
 		hub.SetSourceStatus(model.SourceDegraded, time.Time{}, time.Now().UTC())
 		logger.Warn("authorized source is not configured")
 	} else {
-		normalizer, err := ingest.NewNormalizer(settings.ProviderID)
+		normalizer, err := ingest.NewNormalizer(settings.ProviderID, settings.SourceStaleAfter)
 		if err != nil {
 			return err
 		}
@@ -123,7 +125,9 @@ func runSource(
 		cancel()
 		if err != nil {
 			now := time.Now().UTC()
-			if lastSuccess.IsZero() {
+			if wasStale {
+				hub.SetSourceStatus(model.SourceStale, time.Time{}, now)
+			} else if lastSuccess.IsZero() {
 				hub.SetSourceStatus(model.SourceDegraded, time.Time{}, now)
 			} else if now.Sub(lastSuccess) >= settings.SourceStaleAfter {
 				wasStale = true
@@ -133,7 +137,25 @@ func runSource(
 			return
 		}
 		responseTime := envelope.ResponseTime(receivedAt)
+		if responseTime.IsZero() {
+			if wasStale {
+				hub.SetSourceStatus(model.SourceStale, time.Time{}, receivedAt)
+			} else if lastSuccess.IsZero() {
+				hub.SetSourceStatus(model.SourceDegraded, time.Time{}, receivedAt)
+			} else if receivedAt.Sub(lastSuccess) >= settings.SourceStaleAfter {
+				wasStale = true
+				hub.SetSourceStatus(model.SourceStale, lastSuccess, receivedAt)
+			}
+			logger.Warn("authorized source returned an invalid timestamp")
+			return
+		}
 		latestFixTime := envelope.LatestFixTime(responseTime)
+		if !envelope.IsFresh(responseTime, receivedAt, settings.SourceStaleAfter) {
+			wasStale = true
+			hub.SetSourceStatus(model.SourceStale, latestFixTime, receivedAt)
+			logger.Warn("authorized source returned a stale snapshot")
+			return
+		}
 		if wasStale {
 			if err := normalizer.RotateSourceEpoch(); err != nil {
 				logger.Error("source epoch rotation failed", "error", err)
