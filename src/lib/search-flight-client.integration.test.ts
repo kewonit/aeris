@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resetAllCircuits } from "./flight-api-client";
 
+process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA = "true";
+process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = "";
+
 async function importFresh() {
   const key = require.resolve("./search-flight-client");
   delete require.cache[key];

@@ -22,8 +22,7 @@ Aeris renders live air traffic over the world's busiest airspaces on a premium d
 | Map       | MapLibre GL JS                                                   |
 | WebGL     | Deck.gl 9 (ScenegraphLayer, IconLayer, PathLayer, MapboxOverlay) |
 | Animation | Motion (Framer Motion)                                           |
-| Data      | adsb.lol / adsb.fi / airplanes.live / OpenSky (4-tier fallback)  |
-| Hosting   | Vercel                                                           |
+| Data      | Authorized provider-neutral ADS-B relay                          |
 
 ## Getting Started
 
@@ -35,6 +34,16 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The interface can run without aircraft credentials, but live aircraft data is
+disabled until an authorized source is configured.
+
+> This repository provides software only and grants no rights to third-party
+> aircraft data. Operators must obtain authorization covering access,
+> processing, retention, attribution, commercial use, and downstream
+> redistribution. The relay may reduce client fanout but does not improve the
+> accuracy, completeness, or availability of its upstream sources and is not
+> intended for safety-critical use.
+
 ## Architecture
 
 ```
@@ -43,7 +52,9 @@ src/
 │   ├── globals.css            Tailwind config, theme vars
 │   ├── layout.tsx             Root layout (Inter font)
 │   ├── page.tsx               Entry - renders <FlightTracker />
-│   └── api/flights/route.ts   readsb provider proxy (validation + rate limiting)
+│   ├── api/flights/route.ts   bounded HTTP relay fallback
+│   ├── api/trails/            viewport history proxy
+│   └── api/tracks/            selected-track history proxy
 ├── components/
 │   ├── flight-tracker.tsx     Orchestrator - state, camera, layers, UI
 │   ├── map/
@@ -59,13 +70,15 @@ src/
 │       ├── slider.tsx         Orbit speed slider (Radix)
 │       └── status-bar.tsx     Live status indicator
 ├── hooks/
-│   ├── use-flights.ts         Adaptive polling hook with credit-aware throttling
+│   ├── use-flight-stream.ts   Snapshot-first relay WebSocket client
+│   ├── use-flights.ts         Live stream with bounded HTTP fallback
 │   ├── use-settings.tsx       Settings context with localStorage persistence
 │   └── use-trail-history.ts   Trail accumulation + Catmull-Rom smoothing
 └── lib/
     ├── cities.ts              Curated aviation hub presets
-    ├── flight-api.ts          Barrel re-export for the 4-tier flight client
-    ├── flight-api-client.ts   adsb.lol → adsb.fi → airplanes.live → OpenSky fallback chain
+    ├── relay/                 Protocol, ticketing, and history normalization
+    ├── flight-api.ts          Flight client barrel exports
+    ├── flight-api-client.ts   Relay HTTP fallback and authorized legacy mode
     ├── flight-api-parsing.ts  readsb JSON → FlightState normalization
     ├── flight-api-types.ts    Shared types for ADS-B providers
     ├── flight-utils.ts        Altitude→color, unit conversions
@@ -111,16 +124,27 @@ Models are optimised GLB files (no Draco compression - avoids external WASM deco
 
 ## Environment Variables
 
-All variables are optional - Aeris runs with no secrets. See `.env.example` for the full template.
+See `.env.example` for the full provider-neutral template. Production endpoints,
+credentials, topology, capacity data, and operational settings are deliberately
+not included in this repository.
 
-| Variable                | Required | Description                                                                                                                                                                                                           |
-| ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_GA_ID`     | No       | Google Analytics 4 measurement ID.                                                                                                                                                                                    |
-| `OPENSKY_CLIENT_ID`     | No       | OAuth2 client id for the server-side OpenSky trace fallback in `src/lib/trails/source/server-trace-service.ts`. Without it, the trace service falls back to public ADS-B aggregators.                                 |
-| `OPENSKY_CLIENT_SECRET` | No       | OAuth2 secret that pairs with `OPENSKY_CLIENT_ID`. Set both or neither.                                                                                                                                               |
-| `OPENAIP_API_KEY`       | No       | API key used by the airspace vector-tile proxy `src/app/api/airspace-tiles/route.ts`. Without it the airspace overlay is disabled cleanly and the client skips OpenAIP tile requests; flight rendering is unaffected. |
+| Variable                                    | Required for relay | Description                                                        |
+| ------------------------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `FLIGHT_DATA_ORIGIN`                        | Yes                | Server-only relay HTTP origin.                                     |
+| `FLIGHT_RELAY_HTTP_TOKEN`                   | Yes                | Server-only bearer token for bounded relay endpoints.              |
+| `FLIGHT_STREAM_PRIVATE_KEY`                 | Yes                | Ed25519 key used to issue short-lived, one-use stream tickets.      |
+| `NEXT_PUBLIC_FLIGHT_STREAM_URL`             | Yes                | Browser WebSocket endpoint; tickets are sent as a subprotocol.      |
+| `FLIGHT_APP_ORIGIN`                         | Yes                | Exact application origin accepted by the ticket route.             |
+| `FLIGHT_DATA_ATTRIBUTION_*`                 | As terms require   | Provider attribution rendered in the application.                  |
+| `FLIGHT_DIRECT_PROVIDER_ACCESS`             | No                 | Explicit server gate for separately authorized legacy providers.   |
+| `NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA` | No                 | Matching browser/CSP gate for separately authorized direct access. |
+| `NEXT_PUBLIC_GA_ID`                         | No                 | Google Analytics measurement ID.                                   |
+| `OPENAIP_API_KEY`                           | No                 | Server-only key for the optional airspace tile proxy.               |
 
-Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the server proxy; OpenSky is the final automatic fallback. No provider credentials are configured. The adsb.fi public API is limited to one request per second per IP for personal, non-commercial use and is credited in the application as required by its terms.
+The relay service and its synthetic tests live in `services/adsb-relay`. Raw
+upstream payloads are not persisted by that service. Provider accounts,
+negotiated endpoints, feed captures, and operational configuration must remain
+outside the public repository.
 
 ## Open Aviation Data
 

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resetAllCircuits } from "./flight-api-client";
 
+process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA = "true";
+
 // We must reset the module cache between tests because search-flight-client
 // holds module-level state (cache Map).
 async function importFresh() {
@@ -12,6 +14,20 @@ async function importFresh() {
 
 function readsbBody(ac: unknown[]): string {
   return JSON.stringify({ ac, msg: "No error", now: 1, total: ac.length });
+}
+
+function relayReadsbBody(ac: unknown[]): string {
+  return JSON.stringify({
+    ac,
+    msg: "No error",
+    now: 1,
+    total: ac.length,
+    meta: {
+      sourceStatus: "live",
+      sourceAgeMs: 100,
+      attribution: { provider: "synthetic" },
+    },
+  });
 }
 
 function providerFromRequest(input: RequestInfo | URL | string): string | null {
@@ -60,6 +76,51 @@ test("searchFlightsGlobal tries hex then callsign for 6-char hex-like query", as
     assert.ok(calls[4].includes("callsign"));
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("searchFlightsGlobal uses bounded relay lookups when streaming is configured", async () => {
+  resetAllCircuits();
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const previousStreamUrl = process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+  process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = "wss://relay.example.test/v1/live";
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    calls.push(url);
+    if (url.includes("callsign")) {
+      return new Response(
+        relayReadsbBody([
+          {
+            hex: "a1b2c3",
+            flight: "AA1234 ",
+            lat: 40.7,
+            lon: -74,
+            alt_baro: 30_000,
+            gs: 450,
+            track: 90,
+          },
+        ]),
+        { status: 200 },
+      );
+    }
+    return new Response(relayReadsbBody([]), { status: 200 });
+  };
+
+  try {
+    const { searchFlightsGlobal, clearFlightSearchCache } = await importFresh();
+    clearFlightSearchCache();
+    const results = await searchFlightsGlobal("AA1234");
+    assert.equal(results.length, 1);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.includes("provider=relay")));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousStreamUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+    } else {
+      process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = previousStreamUrl;
+    }
   }
 });
 

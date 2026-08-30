@@ -8,6 +8,8 @@ import {
   getResponseValidators,
 } from "./readsb-direct-client";
 
+process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA = "true";
+
 test("direct client only advertises providers currently verified as browser-safe", () => {
   assert.deepEqual(getDirectTraceProviders(), ["airplanes-live"]);
 });

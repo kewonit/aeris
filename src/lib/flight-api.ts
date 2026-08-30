@@ -34,6 +34,7 @@ export {
   PROVIDER_CHANGE_EVENT,
   getCircuitState,
   resetAllCircuits,
+  isRelayClientConfigured,
 } from "./flight-api-client";
 
 export type { CircuitState } from "./flight-api-client";

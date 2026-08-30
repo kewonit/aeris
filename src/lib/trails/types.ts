@@ -3,7 +3,8 @@ export type TrailProviderId =
   | "adsb-fi"
   | "adsb-lol"
   | "airplanes-live"
-  | "opensky";
+  | "opensky"
+  | "aeris-relay";
 
 export type TrailSampleQuality =
   | "authoritative-live"
@@ -29,6 +30,11 @@ export type TrailSnapshot = {
   groundSpeed: number | null;
   quality: TrailSampleQuality;
   onGround: boolean;
+  trackId?: string;
+  sourceEpoch?: string;
+  positionSource?: string;
+  altitudeReference?: "barometric" | "geometric" | "ground" | "unknown";
+  discontinuity?: boolean;
 };
 
 export type TrailSegmentKind = "live" | "historical" | "bridge";
@@ -55,6 +61,12 @@ export type TrailEntry = {
   timestamps: number[];
   baroAltitude: number | null;
   fullHistory?: boolean;
+  /** Independent continuous paths. Renderers must never join these parts. */
+  renderSegments?: Array<{
+    path: [number, number][];
+    altitudes: Array<number | null>;
+    timestamps: number[];
+  }>;
 } & TrailMetadata;
 
 export type TrailHistoryState = {

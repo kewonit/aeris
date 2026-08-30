@@ -13,6 +13,7 @@ import {
   ProviderDropdown,
 } from "@/components/ui/provider-panel";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
+import type { RelaySourceStatus } from "@/lib/relay/protocol";
 
 import {
   resolveDropdownState,
@@ -35,6 +36,8 @@ type StatusBarProps = {
   atcToggle?: number;
   /** Current ADS-B data source (e.g. "adsb", "opensky", "none") */
   source?: string | null;
+  sourceStatus?: RelaySourceStatus | null;
+  sourceAgeMs?: number | null;
 };
 
 export function StatusBar({
@@ -51,6 +54,8 @@ export function StatusBar({
   atc,
   atcToggle,
   source,
+  sourceStatus,
+  sourceAgeMs,
 }: StatusBarProps) {
   const [dropdownState, setDropdownState] = useState<StatusBarDropdownState>(
     () => ({
@@ -157,6 +162,8 @@ export function StatusBar({
         >
           <ProviderTrigger
             source={source ?? null}
+            sourceStatus={sourceStatus}
+            sourceAgeMs={sourceAgeMs}
             loading={loading}
             rateLimited={rateLimited}
             onClick={toggleProviderDropdown}

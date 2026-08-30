@@ -13,6 +13,9 @@ import {
   setProviderOverride,
 } from "./flight-api-client";
 
+delete process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA = "true";
+
 function rawAircraft(hex = "abc123") {
   return {
     hex,
@@ -130,6 +133,135 @@ test("adsb.lol success short-circuits point fallback", async () => {
     assert.equal(providerFromRequest(calls[0]), "adsb");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("unauthorized legacy mode issues no provider requests", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const previousAuthorization =
+    process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA;
+  delete process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return readsbResponse([rawAircraft()]);
+  };
+
+  try {
+    const result = await fetchFlightsByPoint(12.5, 77.6, 1);
+    assert.equal(result.source, "none");
+    assert.equal(result.flights.length, 0);
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousAuthorization === undefined) {
+      delete process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA;
+    } else {
+      process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA =
+        previousAuthorization;
+    }
+  }
+});
+
+test("configured relay polling validates and exposes source metadata", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const previousStreamUrl = process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+  process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL =
+    "wss://relay.example.test/v1/live";
+  const calls: string[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    calls.push(input.toString());
+    return Response.json({
+      ac: [
+        {
+          ...rawAircraft(),
+          track_id: "track-a",
+          fix_time: Date.now() - 100,
+        },
+      ],
+      msg: "No error",
+      now: Date.now(),
+      total: 1,
+      meta: {
+        sourceStatus: "live",
+        sourceAgeMs: 100,
+        attribution: {
+          provider: "synthetic",
+          label: "Synthetic source",
+          url: "https://example.test/attribution",
+        },
+      },
+    });
+  };
+
+  try {
+    const result = await fetchFlightsByPoint(12.5, 77.6, 1);
+    assert.equal(result.source, "relay");
+    assert.equal(result.sourceStatus, "live");
+    assert.equal(result.sourceAgeMs, 100);
+    assert.equal(result.attribution?.provider, "synthetic");
+    assert.equal(result.flights[0]?.trackId, "track-a");
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].includes("provider=relay"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousStreamUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+    } else {
+      process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = previousStreamUrl;
+    }
+  }
+});
+
+test("configured relay polling rejects malformed status metadata", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const previousStreamUrl = process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+  process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL =
+    "wss://relay.example.test/v1/live";
+  globalThis.fetch = async () =>
+    Response.json({
+      ac: [],
+      msg: "No error",
+      now: Date.now(),
+      total: 0,
+      meta: {
+        sourceStatus: "pretend-live",
+        attribution: { provider: "synthetic" },
+      },
+    });
+
+  try {
+    await assert.rejects(() => fetchFlightsByPoint(12.5, 77.6, 1));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousStreamUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+    } else {
+      process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = previousStreamUrl;
+    }
+  }
+});
+
+test("configured relay polling rejects missing metadata", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const previousStreamUrl = process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+  process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL =
+    "wss://relay.example.test/v1/live";
+  globalThis.fetch = async () => readsbResponse([]);
+
+  try {
+    await assert.rejects(() => fetchFlightsByPoint(12.5, 77.6, 1));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousStreamUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL;
+    } else {
+      process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL = previousStreamUrl;
+    }
   }
 });
 

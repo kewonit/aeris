@@ -78,6 +78,7 @@ export function FlightLayers({
   showShadows,
   showAltitudeColors,
   altitudeDisplayMode,
+  predictionEnabled = true,
   globeMode = false,
   fpvIcao24 = null,
   fpvPositionRef,
@@ -99,7 +100,10 @@ export function FlightLayers({
 
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailBasePathCacheRef = useRef(
-    new Map<string, { key: string; basePath: ElevatedPoint[] }>(),
+    new Map<
+      string,
+      { key: string; basePath: ElevatedPoint[]; segments?: ElevatedPoint[][] }
+    >(),
   );
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
   const pitchMapRef = useRef(new Map<string, number>());
@@ -133,6 +137,7 @@ export function FlightLayers({
   // of extrapolating forward on minutes-old headings.
   const resumeSnapRef = useRef(false);
   const pageActiveRef = useRef(true);
+  const predictionEnabledRef = useRef(predictionEnabled);
   const requestRenderRef = useRef<() => void>(() => {});
 
   // Data version increments when raw flight data changes - drives color/scale updateTriggers
@@ -181,6 +186,7 @@ export function FlightLayers({
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
+    predictionEnabledRef.current = predictionEnabled;
     fpvIcao24Ref.current = fpvIcao24;
     fpvPosRef.current = fpvPositionRef;
     onClickRef.current = onClick;
@@ -203,6 +209,7 @@ export function FlightLayers({
     showShadows,
     showAltitudeColors,
     altitudeDisplayMode,
+    predictionEnabled,
     globeMode,
     selectedIcao24,
     fpvIcao24,
@@ -647,7 +654,10 @@ export function FlightLayers({
           animDurationMs: animDurationRef.current,
           // `resumeSnapRef` stays true until fresh flight data arrives; during
           // that resume window we render the latest authoritative snapshot only.
-          pageActive: pageActiveRef.current && !resumeSnapRef.current,
+          pageActive:
+            pageActiveRef.current &&
+            !resumeSnapRef.current &&
+            predictionEnabledRef.current,
         });
         const rawT = fpvIcao24Ref.current
           ? progress.rawT

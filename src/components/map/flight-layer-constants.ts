@@ -76,6 +76,8 @@ export type FlightLayerProps = {
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
+  /** Disable dead reckoning when the upstream relay is degraded or stale. */
+  predictionEnabled?: boolean;
   globeMode?: boolean;
   fpvIcao24?: string | null;
   fpvPositionRef?: MutableRefObject<{

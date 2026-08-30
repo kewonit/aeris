@@ -4,17 +4,29 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Info } from "lucide-react";
 import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
+import type { RelayAttribution } from "@/lib/relay/protocol";
 
 type MapAttributionProps = {
   styleId: string;
   showAirspace?: boolean;
+  dataAttribution?: RelayAttribution | null;
+  relayActive?: boolean;
 };
 
 const SM_BREAKPOINT = 640;
 
-export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
+export function MapAttribution({
+  styleId,
+  showAirspace,
+  dataAttribution,
+  relayActive = false,
+}: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
   const attributions = getAttributions(styleId, { showAirspace });
+  const dataLabel = dataAttribution?.label ?? dataAttribution?.provider;
+  if (relayActive && dataLabel && dataAttribution?.url) {
+    attributions.push({ label: dataLabel, url: dataAttribution.url });
+  }
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
@@ -55,6 +67,7 @@ export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
           <ExpandedAttribution
             key="expanded"
             attributions={attributions}
+            relayActive={relayActive}
             onCollapse={toggle}
           />
         ) : (
@@ -89,9 +102,11 @@ function CollapsedAttribution({ onExpand }: { onExpand: () => void }) {
 
 function ExpandedAttribution({
   attributions,
+  relayActive,
   onCollapse,
 }: {
   attributions: AttributionEntry[];
+  relayActive: boolean;
   onCollapse: () => void;
 }) {
   return (
@@ -145,33 +160,40 @@ function ExpandedAttribution({
             )}
           </span>
         ))}
-        <span
-          className="ml-0.5"
-          style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
-        >
-          ·
-        </span>
-        <a
-          href="https://opensky-network.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline"
-          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
-        >
-          OpenSky Network
-        </a>
-        <span className="ml-0.5" style={{ color: "rgb(var(--ui-fg) / 0.15)" }}>
-          ·
-        </span>
-        <a
-          href="https://adsb.fi/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline"
-          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
-        >
-          adsb.fi
-        </a>
+        {!relayActive && (
+          <>
+            <span
+              className="ml-0.5"
+              style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
+            >
+              ·
+            </span>
+            <a
+              href="https://opensky-network.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:underline"
+              style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+            >
+              OpenSky Network
+            </a>
+            <span
+              className="ml-0.5"
+              style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
+            >
+              ·
+            </span>
+            <a
+              href="https://adsb.fi/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:underline"
+              style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+            >
+              adsb.fi
+            </a>
+          </>
+        )}
       </span>
     </motion.div>
   );

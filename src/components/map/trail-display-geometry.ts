@@ -12,6 +12,7 @@ export type TrailDisplayGeometry = {
   sealedBody: ElevatedPoint[];
   previewHead: ElevatedPoint[];
   allPoints: ElevatedPoint[];
+  segments?: ElevatedPoint[][];
 };
 
 function dedupePoints(points: ElevatedPoint[]): ElevatedPoint[] {
@@ -70,6 +71,31 @@ export function buildTrailDisplayGeometry(
   trail: TrailEntry,
   trailDistance: number,
 ): TrailDisplayGeometry {
+  if (trail.renderSegments?.length) {
+    const geometries = trail.renderSegments
+      .map((segment) =>
+        buildTrailDisplayGeometry(
+          {
+            ...trail,
+            path: segment.path,
+            altitudes: segment.altitudes,
+            timestamps: segment.timestamps,
+            renderSegments: undefined,
+          },
+          trailDistance,
+        ),
+      )
+      .filter((geometry) => geometry.allPoints.length >= 2);
+    const latest = geometries[geometries.length - 1];
+    if (!latest) {
+      return { sealedBody: [], previewHead: [], allPoints: [], segments: [] };
+    }
+    return {
+      ...latest,
+      segments: geometries.map((geometry) => geometry.allPoints),
+    };
+  }
+
   if (trail.path.length < 2) {
     return { sealedBody: [], previewHead: [], allPoints: [] };
   }

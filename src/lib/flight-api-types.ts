@@ -65,6 +65,10 @@ export const NM_PER_DEG_LAT = 60;
 export interface RawAircraft {
   /** 24-bit ICAO hex address (6 chars). Starts with '~' for non-ICAO. */
   hex?: string;
+  /** Provider-epoch/session identity emitted by the Aeris relay. */
+  track_id?: string;
+  /** Exact source fix time in Unix milliseconds emitted by the Aeris relay. */
+  fix_time?: number;
   /** Type of underlying message source (adsb_icao, mlat, tisb_icao, etc.) */
   type?: string;
   /** Callsign, 8-char padded with trailing spaces. */
@@ -183,4 +187,18 @@ export interface ReadsbApiResponse {
   total: number;
   ctime?: number;
   ptime?: number;
+  meta?: {
+    sourceStatus?: "starting" | "live" | "degraded" | "stale";
+    sourceAgeMs?: number;
+    attribution?: {
+      provider?: string;
+      label?: string;
+      url?: string;
+    };
+    retention?: {
+      retentionStart?: string;
+      retentionEnd?: string;
+      retentionComplete?: boolean;
+    };
+  };
 }

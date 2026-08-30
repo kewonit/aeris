@@ -188,3 +188,35 @@ test("filters GPS spike artefacts from historical trace data", () => {
     "should keep at least the non-spike points",
   );
 });
+
+test("relay history never joins a live tail across an implausible jump", () => {
+  const metadata = {
+    trackId: "track-a",
+    sourceEpoch: "epoch-a",
+    positionSource: "adsb",
+    altitudeReference: "barometric" as const,
+  };
+  const result = buildTrailGeometry(
+    makeEnvelope({
+      provider: "aeris-relay",
+      outcome: "full-history",
+      historyRevision: 1,
+      historySegments: [
+        {
+          kind: "historical",
+          provider: "aeris-relay",
+          samples: [
+            historySample({ timestamp: 1_000, lng: 8, lat: 50, ...metadata }),
+            historySample({ timestamp: 2_000, lng: 8.01, lat: 50, ...metadata }),
+          ],
+        },
+      ],
+      liveTail: [
+        liveSample({ timestamp: 3_000, lng: 18, lat: 50, ...metadata }),
+        liveSample({ timestamp: 4_000, lng: 18.01, lat: 50, ...metadata }),
+      ],
+    }),
+  );
+
+  assert.equal(result.renderSegments?.length, 2);
+});
