@@ -23,7 +23,11 @@ import (
 
 const maxJSONResponseBytes = 16 << 20
 
-var trackIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+var (
+	trackIDPattern  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	addressPattern  = regexp.MustCompile(`^[0-9A-Fa-f]{6}$`)
+	callsignPattern = regexp.MustCompile(`^[A-Z0-9-]{1,8}$`)
+)
 
 type Server struct {
 	config   config.Config
@@ -47,6 +51,7 @@ func NewServer(config config.Config, store *store.Store, hub *stream.Hub, verifi
 	mux.HandleFunc("GET /readyz", server.handleReadyz)
 	mux.HandleFunc("GET /status", server.handleStatus)
 	mux.HandleFunc("GET /v1/aircraft", server.requireHTTPToken(server.handleAircraft))
+	mux.HandleFunc("GET /v1/lookup", server.requireHTTPToken(server.handleLookup))
 	mux.HandleFunc("GET /v1/trails", server.requireHTTPToken(server.handleTrails))
 	mux.HandleFunc("GET /v1/tracks/{trackID}", server.requireHTTPToken(server.handleTrack))
 	mux.HandleFunc("GET /v1/live", server.handleStream)
@@ -116,6 +121,48 @@ func (s *Server) handleAircraft(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	observations := s.store.CurrentAround(latitude, longitude, radius, now, s.config.AircraftExpiry, s.config.MaxResponseAircraft)
+	aircraft := readsbAircraftFromObservations(observations, now)
+	status, sourceAge := s.hub.Status(now)
+	writeBoundedJSON(w, http.StatusOK, aircraftEnvelope{
+		Aircraft: aircraft,
+		Message:  "No error",
+		Now:      now.UnixMilli(),
+		Total:    len(aircraft),
+		Meta: responseMeta{
+			SourceStatus: status,
+			SourceAgeMS:  sourceAge,
+			Attribution:  s.attribution(),
+		},
+	})
+}
+
+func (s *Server) handleLookup(w http.ResponseWriter, request *http.Request) {
+	address := strings.TrimSpace(request.URL.Query().Get("address"))
+	callsign := strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("callsign")))
+	if (address == "") == (callsign == "") ||
+		(address != "" && !addressPattern.MatchString(address)) ||
+		(callsign != "" && !callsignPattern.MatchString(callsign)) {
+		writeError(w, http.StatusBadRequest, "exactly one valid address or callsign is required")
+		return
+	}
+	now := time.Now().UTC()
+	observations := s.store.CurrentByIdentity(address, callsign, now, s.config.AircraftExpiry, s.config.MaxResponseAircraft)
+	aircraft := readsbAircraftFromObservations(observations, now)
+	status, sourceAge := s.hub.Status(now)
+	writeBoundedJSON(w, http.StatusOK, aircraftEnvelope{
+		Aircraft: aircraft,
+		Message:  "No error",
+		Now:      now.UnixMilli(),
+		Total:    len(aircraft),
+		Meta: responseMeta{
+			SourceStatus: status,
+			SourceAgeMS:  sourceAge,
+			Attribution:  s.attribution(),
+		},
+	})
+}
+
+func readsbAircraftFromObservations(observations []model.Observation, now time.Time) []readsbAircraft {
 	aircraft := make([]readsbAircraft, 0, len(observations))
 	for _, observation := range observations {
 		altitude := any(nil)
@@ -142,18 +189,7 @@ func (s *Server) handleAircraft(w http.ResponseWriter, request *http.Request) {
 			FixTime:      observation.FixTime.UnixMilli(),
 		})
 	}
-	status, sourceAge := s.hub.Status(now)
-	writeBoundedJSON(w, http.StatusOK, aircraftEnvelope{
-		Aircraft: aircraft,
-		Message:  "No error",
-		Now:      now.UnixMilli(),
-		Total:    len(aircraft),
-		Meta: responseMeta{
-			SourceStatus: status,
-			SourceAgeMS:  sourceAge,
-			Attribution:  s.attribution(),
-		},
-	})
+	return aircraft
 }
 
 type trailsEnvelope struct {
