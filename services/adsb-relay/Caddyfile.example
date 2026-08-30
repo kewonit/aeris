@@ -1,0 +1,8 @@
+{
+  admin off
+}
+
+{$RELAY_HOSTNAME} {
+  encode zstd gzip
+  reverse_proxy relay:8080
+}
