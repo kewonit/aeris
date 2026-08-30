@@ -214,43 +214,23 @@
   overflow: hidden;
   border-right: 1px solid var(--aeris-sidebar-hairline);
   background-color: var(--aeris-sidebar-material);
-  background-image:
-    linear-gradient(
-      145deg,
-      color-mix(in oklab, white 12%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in oklab, var(--sidebar-foreground) 2.5%, transparent),
-      transparent 22%
-    );
   box-shadow:
     inset -1px 0 0 color-mix(in oklab, white 10%, transparent),
     14px 0 44px -22px color-mix(in oklab, black 48%, transparent);
 }
 
 .aeris-sidebar-toolbar {
-  background: linear-gradient(
-    to bottom,
-    var(--aeris-sidebar-material-strong) 0%,
-    color-mix(in oklab, var(--aeris-sidebar-material-strong) 92%, transparent)
-      100%
-  );
+  background-color: var(--aeris-sidebar-material-strong);
 }
 
 .aeris-sidebar-toolbar::after {
   position: absolute;
   right: 0;
-  bottom: -0.75rem;
+  bottom: -1px;
   left: 0;
-  height: 0.75rem;
+  height: 1px;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--sidebar) 20%, transparent),
-    transparent
-  );
+  background-color: var(--aeris-sidebar-hairline);
   content: "";
 }
 
@@ -533,18 +513,44 @@
   );
 }
 
-.aeris-sidebar-hero-loading {
-  background:
-    radial-gradient(
-      circle at 22% 18%,
-      color-mix(in oklab, var(--aeris-sidebar-tint) 16%, transparent),
-      transparent 38%
-    ),
-    linear-gradient(
-      145deg,
-      color-mix(in oklab, var(--sidebar-foreground) 5%, transparent),
-      transparent 58%
-    );
+.aeris-aircraft-photo-loading {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 3.5%,
+    var(--sidebar)
+  );
+}
+
+.aeris-aircraft-photo-loading-icon {
+  border: 1px solid var(--aeris-sidebar-hairline);
+  background-color: var(--aeris-sidebar-material-strong);
+  color: color-mix(in oklab, var(--aeris-sidebar-tint) 78%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 12%, transparent),
+    0 8px 22px -18px color-mix(in oklab, black 55%, transparent);
+}
+
+.aeris-aircraft-photo-loading-track {
+  background-color: color-mix(
+    in oklab,
+    var(--sidebar-foreground) 9%,
+    transparent
+  );
+}
+
+.aeris-aircraft-photo-loading-bar {
+  background-color: var(--aeris-sidebar-tint);
+  animation: aeris-aircraft-photo-progress 1.25s
+    cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes aeris-aircraft-photo-progress {
+  from {
+    transform: translateX(-150%);
+  }
+  to {
+    transform: translateX(300%);
+  }
 }
 
 .aeris-sidebar-shell .aeris-sidebar-group,
@@ -630,6 +636,15 @@
     background-image: none;
     --tw-backdrop-blur: blur(0);
     --tw-backdrop-saturate: saturate(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aeris-aircraft-photo-loading-bar {
+    width: 100%;
+    animation: none;
+    opacity: 0.45;
+    transform: none;
   }
 }
 

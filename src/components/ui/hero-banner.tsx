@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Camera } from "lucide-react";
+import { Camera, Plane } from "lucide-react";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
 
 type HeroBannerProps = {
@@ -46,6 +46,7 @@ export function HeroBanner({
   const source = candidates[sourceIndex] ?? null;
 
   const hasPhoto = source != null && !failed;
+  const showLoadingState = loading || (hasPhoto && !loaded);
   const visible = shouldRenderHeroBanner(photo, loading, failed);
 
   return (
@@ -63,27 +64,44 @@ export function HeroBanner({
           }
           className={`relative w-full overflow-hidden bg-foreground/[0.04] ${isSidebar ? "aeris-sidebar-hero h-44" : "h-52 sm:h-56"}`}
         >
-          {(loading || (hasPhoto && !loaded)) && (
-            <span
-              aria-hidden
-              className={
-                isSidebar
-                  ? "aeris-sidebar-hero-loading absolute inset-0"
-                  : "absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
-              }
-            />
-          )}
-
-          {isSidebar && loading && !source && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/42">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/[0.08] bg-background/35 shadow-sm backdrop-blur-md">
-                <Camera className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <span className="text-[11px] font-medium tracking-[0.01em]">
-                Loading aircraft photo
-              </span>
-            </div>
-          )}
+          {showLoadingState &&
+            (isSidebar ? (
+              <div className="aeris-aircraft-photo-loading absolute inset-0 flex items-center justify-center px-8">
+                <div
+                  className="flex w-full max-w-56 flex-col items-center text-center"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="aeris-aircraft-photo-loading-icon flex h-11 w-11 items-center justify-center rounded-full">
+                    <Plane
+                      className="h-5 w-5 -rotate-12"
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="mt-3 text-[12px] font-semibold tracking-[-0.01em] text-foreground/72">
+                    {source
+                      ? "Loading aircraft photo"
+                      : "Finding aircraft photo"}
+                  </span>
+                  <span className="mt-1 text-[10px] font-medium leading-4 text-foreground/38">
+                    {source
+                      ? "Preparing the best available image"
+                      : "Checking aircraft photo sources"}
+                  </span>
+                  <span
+                    className="aeris-aircraft-photo-loading-track mt-3 h-0.5 w-24 overflow-hidden rounded-full"
+                    aria-hidden="true"
+                  >
+                    <span className="aeris-aircraft-photo-loading-bar block h-full w-2/5 rounded-full" />
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <span
+                aria-hidden
+                className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
+              />
+            ))}
 
           {source && !failed && (
             <>
@@ -125,7 +143,9 @@ export function HeroBanner({
                 className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${loaded ? "opacity-100" : "opacity-0"}`}
                 draggable={false}
               />
-              <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/55 via-background/5 to-transparent" />
+              {!isSidebar && (
+                <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/55 via-background/5 to-transparent" />
+              )}
               {photo?.photographer && loaded && (
                 <span className="absolute bottom-2 right-2.5 flex items-center gap-1 rounded-full border border-foreground/[0.06] bg-background/55 px-2.5 py-1 text-[9px] font-medium text-foreground/65 shadow-sm backdrop-blur-md">
                   <Camera className="h-2.5 w-2.5" aria-hidden="true" />
