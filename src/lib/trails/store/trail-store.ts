@@ -27,6 +27,11 @@ type TrailPoint = {
   groundSpeed: number | null;
   quality: TrailSampleQuality;
   onGround: boolean;
+  trackId?: string;
+  sourceEpoch?: string;
+  positionSource?: string;
+  altitudeReference?: "barometric" | "geometric" | "ground" | "unknown";
+  discontinuity?: boolean;
 };
 
 type AltitudeState = {
@@ -213,6 +218,11 @@ function trailPointToSnapshot(point: TrailPoint): TrailSnapshot {
     groundSpeed: point.groundSpeed,
     quality: point.quality,
     onGround: point.onGround,
+    trackId: point.trackId,
+    sourceEpoch: point.sourceEpoch,
+    positionSource: point.positionSource,
+    altitudeReference: point.altitudeReference,
+    discontinuity: point.discontinuity,
   };
 }
 
@@ -300,6 +310,13 @@ export function createTrailStore() {
   const listeners = new Set<Listener>();
   const trails = new Map<string, TrailPoint[]>();
   const altitudeStates = new Map<string, AltitudeState>();
+  const trackIdentities = new Map<string, string>();
+  const sourceEpochs = new Map<string, string>();
+  const positionSources = new Map<string, string>();
+  const altitudeReferences = new Map<
+    string,
+    "barometric" | "geometric" | "ground" | "unknown"
+  >();
   const envelopes = new Map<string, TrailEnvelope>();
   let seen = new Set<string>();
   let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
@@ -464,17 +481,58 @@ export function createTrailStore() {
       const speedMps = getFlightSpeedMps(flight);
 
       let trail = trails.get(id);
+      const altitudeReference =
+        flight.altitudeReference ??
+        (flight.onGround
+          ? "ground"
+          : flight.baroAltitude != null
+            ? "barometric"
+            : flight.geoAltitude != null
+              ? "geometric"
+              : "unknown");
+      const trackChanged =
+        !!flight.trackId &&
+        !!trackIdentities.get(id) &&
+        trackIdentities.get(id) !== flight.trackId;
+      const sourceChanged =
+        (!!flight.sourceEpoch &&
+          !!sourceEpochs.get(id) &&
+          sourceEpochs.get(id) !== flight.sourceEpoch) ||
+        (!!flight.positionSource &&
+          !!positionSources.get(id) &&
+          positionSources.get(id) !== flight.positionSource);
+      const altitudeReferenceChanged =
+        !!altitudeReferences.get(id) &&
+        altitudeReferences.get(id) !== altitudeReference;
+      const mustBreak =
+        trackChanged ||
+        sourceChanged ||
+        altitudeReferenceChanged ||
+        flight.discontinuity === true;
+      if (mustBreak && trail) {
+        trail = [];
+        trails.set(id, trail);
+        altitudeStates.delete(id);
+      }
       const isNewEntry = !trail;
 
       if (isNewEntry) {
         altitudeStates.delete(id);
       }
 
-      let filteredAltitude = filterAltitude(id, flight.baroAltitude);
+      const reportedAltitude = flight.baroAltitude ?? flight.geoAltitude;
+      let filteredAltitude = filterAltitude(id, reportedAltitude);
+      const observationTime = flight.provenance?.observationTime ?? null;
+      const pointTime =
+        observationTime != null &&
+        Number.isFinite(observationTime) &&
+        observationTime <= now + 5_000
+          ? observationTime
+          : now;
       const point: TrailPoint = {
         position: [flight.longitude, flight.latitude],
         baroAltitude: filteredAltitude,
-        timestamp: now,
+        timestamp: pointTime,
         track:
           flight.trueTrack != null && Number.isFinite(flight.trueTrack)
             ? flight.trueTrack
@@ -485,11 +543,16 @@ export function createTrailStore() {
             : null,
         quality: "authoritative-live",
         onGround: flight.onGround,
+        trackId: flight.trackId,
+        sourceEpoch: flight.sourceEpoch,
+        positionSource: flight.positionSource ?? undefined,
+        altitudeReference,
+        discontinuity: flight.discontinuity,
       };
 
       if (isNewEntry) {
         trail =
-          bootstrapUpdatesRemaining > 0
+          bootstrapUpdatesRemaining > 0 && !flight.trackId
             ? synthesizeHistoricalPolls(flight).map((position, index) => ({
                 position,
                 baroAltitude: filteredAltitude,
@@ -539,7 +602,7 @@ export function createTrailStore() {
           liveTrail.length = 0;
           altitudeStates.delete(id);
           // Rebuild altitude smoothing from the accepted reset point.
-          filteredAltitude = filterAltitude(id, flight.baroAltitude);
+          filteredAltitude = filterAltitude(id, reportedAltitude);
           point.baroAltitude = filteredAltitude;
         } else {
           const outlierThresholdDeg = getDynamicMoveThresholdDeg({
@@ -630,6 +693,10 @@ export function createTrailStore() {
       }
 
       const envelope = getOrCreateEnvelope(id);
+      if (trackChanged) {
+        envelope.historySegments = [];
+        envelope.historyRevision += 1;
+      }
       envelope.liveTail = liveTrail.map(trailPointToSnapshot);
       envelope.liveRevision += 1;
       envelope.lastSeenAt = now;
@@ -642,12 +709,20 @@ export function createTrailStore() {
         envelope.outcome = "live-tail-only";
       }
       updateEnvelopeEntry(id);
+      if (flight.trackId) trackIdentities.set(id, flight.trackId);
+      if (flight.sourceEpoch) sourceEpochs.set(id, flight.sourceEpoch);
+      if (flight.positionSource) positionSources.set(id, flight.positionSource);
+      altitudeReferences.set(id, altitudeReference);
     }
 
     for (const id of seen) {
       if (!current.has(id) && id !== history.selectedIcao24) {
         trails.delete(id);
         altitudeStates.delete(id);
+        trackIdentities.delete(id);
+        sourceEpochs.delete(id);
+        positionSources.delete(id);
+        altitudeReferences.delete(id);
         envelopes.delete(id);
       }
     }
@@ -735,6 +810,7 @@ export function createTrailStore() {
     creditsRemaining?: number | null;
     path?: [number, number][];
     track?: FlightTrack | null;
+    segments?: TrailSegment[];
   }): void {
     const normalized = params.icao24.trim().toLowerCase();
     if (
@@ -748,7 +824,10 @@ export function createTrailStore() {
     envelope.selectionGeneration = params.selectionGeneration;
     envelope.provider = params.provider;
     envelope.outcome = params.outcome;
-    if (params.track) {
+    if (params.segments) {
+      envelope.historySegments = params.segments;
+      selectedTrack = params.track ?? null;
+    } else if (params.track) {
       envelope.historySegments = [
         trackToTrailSegment(params.provider ?? "opensky", params.track),
       ];
@@ -769,6 +848,34 @@ export function createTrailStore() {
 
     updateEnvelopeEntry(normalized);
     emit();
+  }
+
+  function hydrateViewportHistory(params: {
+    tracks: Array<{
+      icao24: string;
+      segments: TrailSegment[];
+      outcome: TrailOutcome;
+    }>;
+  }): void {
+    let changed = false;
+    for (const track of params.tracks) {
+      const normalized = track.icao24.trim().toLowerCase();
+      if (!normalized || track.segments.length === 0) continue;
+      const envelope = getOrCreateEnvelope(normalized);
+      if (
+        normalized === history.selectedIcao24 &&
+        envelope.historySegments.length > 0
+      ) {
+        continue;
+      }
+      envelope.historySegments = track.segments;
+      envelope.provider = "aeris-relay";
+      envelope.outcome = track.outcome;
+      envelope.historyRevision += 1;
+      updateEnvelopeEntry(normalized);
+      changed = true;
+    }
+    if (changed) emit();
   }
 
   function failHistory(params: {
@@ -850,6 +957,7 @@ export function createTrailStore() {
     selectAircraft,
     startHistoryLoad,
     resolveHistory,
+    hydrateViewportHistory,
     failHistory,
     markSelectedMissing,
     handleVisibilityResume,

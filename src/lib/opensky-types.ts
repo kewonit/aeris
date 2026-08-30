@@ -50,6 +50,14 @@ export type FlightProvenance = {
 
 export type FlightState = {
   icao24: string;
+  /** Relay identity scoped by provider epoch, address type, and session. */
+  trackId?: string;
+  /** Relay source epoch used to break tracks across whole-feed recovery. */
+  sourceEpoch?: string;
+  /** Altitude datum selected for this normalized observation. */
+  altitudeReference?: "barometric" | "geometric" | "ground" | "unknown";
+  /** True when the relay requires a visual track break before this fix. */
+  discontinuity?: boolean;
   callsign: string | null;
   registrationCountry: string | null;
   longitude: number | null;

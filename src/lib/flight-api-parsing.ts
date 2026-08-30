@@ -220,9 +220,20 @@ function parseRawAircraft(
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
   const responseTime =
     normalizeFlightTimestamp(options?.responseTime) ?? Date.now();
+  const relayFixTime = normalizeFlightTimestamp(raw.fix_time);
 
   return {
     icao24: raw.hex.toLowerCase(),
+    ...(typeof raw.track_id === "string" && raw.track_id.length <= 128
+      ? { trackId: raw.track_id }
+      : {}),
+    altitudeReference: onGround
+      ? "ground"
+      : altitude !== null
+        ? "barometric"
+        : typeof raw.alt_geom === "number" && Number.isFinite(raw.alt_geom)
+          ? "geometric"
+          : "unknown",
     callsign: optionalTrimmedString(raw.flight),
     registrationCountry: countryFromRegistration(raw.r),
     longitude: raw.lon,
@@ -259,9 +270,10 @@ function parseRawAircraft(
       positionProvider: options?.positionProvider ?? "unknown",
       responseTime,
       observationTime:
-        typeof raw.seen_pos === "number"
+        relayFixTime ??
+        (typeof raw.seen_pos === "number"
           ? responseTime - raw.seen_pos * 1000
-          : null,
+          : null),
       positionAgeSeconds: raw.seen_pos,
     }),
 

@@ -4,6 +4,9 @@ import { NextRequest } from "next/server";
 
 import { GET } from "./route";
 
+delete process.env.FLIGHT_DATA_ORIGIN;
+process.env.FLIGHT_DIRECT_PROVIDER_ACCESS = "authorized";
+
 function request(path: string, provider?: string): NextRequest {
   const url = new URL("http://localhost/api/flights");
   url.searchParams.set("path", path);
@@ -157,5 +160,72 @@ test("maps timeouts and upstream HTTP failures correctly", async (t) => {
     }
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("configured relay overrides provider parameters and preserves the polling shape", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousOrigin = process.env.FLIGHT_DATA_ORIGIN;
+  const previousToken = process.env.FLIGHT_RELAY_HTTP_TOKEN;
+  const calls: Array<{ url: string; headers: Headers }> = [];
+  process.env.FLIGHT_DATA_ORIGIN = "https://relay.example.test";
+  process.env.FLIGHT_RELAY_HTTP_TOKEN = "synthetic-token";
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: input.toString(), headers: new Headers(init?.headers) });
+    return Response.json({
+      ac: [],
+      msg: "No error",
+      now: 1,
+      total: 0,
+      meta: { sourceStatus: "live" },
+    });
+  };
+
+  try {
+    const response = await GET(
+      request("/point/12.5/77.6/25", "airplanes"),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      calls[0].url,
+      "https://relay.example.test/v1/aircraft?lat=12.5&lon=77.6&radius=25",
+    );
+    assert.equal(calls[0].headers.get("authorization"), "Bearer synthetic-token");
+
+    assert.equal((await GET(request("/hex/ABC123", "adsb"))).status, 200);
+    assert.equal((await GET(request("/callsign/BAW123"))).status, 200);
+    assert.equal(
+      calls[1].url,
+      "https://relay.example.test/v1/lookup?address=abc123",
+    );
+    assert.equal(
+      calls[2].url,
+      "https://relay.example.test/v1/lookup?callsign=BAW123",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousOrigin === undefined) delete process.env.FLIGHT_DATA_ORIGIN;
+    else process.env.FLIGHT_DATA_ORIGIN = previousOrigin;
+    if (previousToken === undefined) delete process.env.FLIGHT_RELAY_HTTP_TOKEN;
+    else process.env.FLIGHT_RELAY_HTTP_TOKEN = previousToken;
+  }
+});
+
+test("legacy provider access fails closed without explicit authorization", async () => {
+  const previous = process.env.FLIGHT_DIRECT_PROVIDER_ACCESS;
+  const originalFetch = globalThis.fetch;
+  delete process.env.FLIGHT_DIRECT_PROVIDER_ACCESS;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json(readsbEnvelope());
+  };
+  try {
+    assert.equal((await GET(request("/point/12.5/77.6/25"))).status, 503);
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) delete process.env.FLIGHT_DIRECT_PROVIDER_ACCESS;
+    else process.env.FLIGHT_DIRECT_PROVIDER_ACCESS = previous;
   }
 });

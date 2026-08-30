@@ -14,6 +14,18 @@ import {
   useTrailStoreSnapshot,
 } from "@/lib/trails/store/trail-store";
 import type { TrailOutcome, TrailProviderId } from "@/lib/trails/types";
+import type { TrailSegment } from "@/lib/trails/types";
+import type {
+  RelayBoundingBox,
+  RelaySourceStatus,
+} from "@/lib/relay/protocol";
+import {
+  parseRelayTrackResponse,
+  parseRelayTrailsResponse,
+  relayHistoryOutcome,
+  relayHistoryTrackToFlightTrack,
+  relayHistoryTrackToSegments,
+} from "@/lib/relay/history";
 
 function toTrailProviderId(source: string | null): TrailProviderId | null {
   switch (source) {
@@ -22,6 +34,7 @@ function toTrailProviderId(source: string | null): TrailProviderId | null {
     case "adsb-lol":
     case "airplanes-live":
     case "opensky":
+    case "aeris-relay":
       return source;
     default:
       return null;
@@ -53,14 +66,50 @@ export function getHistoryRefreshMs(params: {
 
 async function fetchSelectedTrack(
   icao24: string,
+  trackId: string | null,
+  relayEnabled: boolean,
   signal: AbortSignal,
 ): Promise<{
   track: FlightTrack | null;
+  segments?: TrailSegment[];
   provider: TrailProviderId | null;
   outcome: TrailOutcome;
   creditsRemaining: number | null;
   retryAfterSeconds: number | null;
 }> {
+  if (relayEnabled) {
+    if (!trackId || !/^[A-Za-z0-9_-]{1,128}$/.test(trackId)) {
+      return {
+        track: null,
+        segments: [],
+        provider: "aeris-relay",
+        outcome: "live-tail-only",
+        creditsRemaining: null,
+        retryAfterSeconds: null,
+      };
+    }
+    const response = await fetch(
+      `/api/tracks/${encodeURIComponent(trackId)}?window=3600&limit=720`,
+      { cache: "no-store", signal },
+    );
+    if (!response.ok) throw new Error(`Relay track request returned ${response.status}`);
+    const payload = parseRelayTrackResponse(await response.json());
+    if (!payload) throw new Error("Invalid relay track response");
+    if (payload.track && payload.track.trackId !== trackId) {
+      throw new Error("Relay track response did not match the requested track");
+    }
+    return {
+      track: payload.track ? relayHistoryTrackToFlightTrack(payload.track) : null,
+      segments: payload.track ? relayHistoryTrackToSegments(payload.track) : [],
+      provider: "aeris-relay",
+      outcome: payload.track
+        ? relayHistoryOutcome(payload.meta)
+        : "live-tail-only",
+      creditsRemaining: null,
+      retryAfterSeconds: null,
+    };
+  }
+
   for (const provider of getDirectTraceProviders()) {
     const direct = await fetchReadsbDirectTrack(provider, icao24, signal);
     if (direct.track) {
@@ -88,18 +137,90 @@ export function useTrailSystem(params: {
   flights: FlightState[];
   selectedIcao24: string | null;
   historyEnabled: boolean;
+  relayEnabled?: boolean;
+  sourceStatus?: RelaySourceStatus | null;
+  viewportBbox?: RelayBoundingBox | null;
 }) {
   const snapshot = useTrailStoreSnapshot((state) => state);
 
   useEffect(() => {
-    trailStore.ingestLiveFlights(params.flights);
-  }, [params.flights]);
+    trailStore.ingestLiveFlights(params.flights, {
+      authoritativeEmpty:
+        params.relayEnabled === true && params.sourceStatus === "live",
+    });
+  }, [params.flights, params.relayEnabled, params.sourceStatus]);
 
   useEffect(() => {
     trailStore.selectAircraft(
       params.historyEnabled ? params.selectedIcao24 : null,
     );
   }, [params.historyEnabled, params.selectedIcao24]);
+
+  const viewportKey = params.viewportBbox
+    ? [
+        params.viewportBbox.west,
+        params.viewportBbox.south,
+        params.viewportBbox.east,
+        params.viewportBbox.north,
+      ]
+        .map((value) => value.toFixed(4))
+        .join(",")
+    : null;
+
+  useEffect(() => {
+    if (!params.relayEnabled || !viewportKey) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
+
+    const load = async () => {
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        const response = await fetch(
+          `/api/trails?bbox=${encodeURIComponent(viewportKey)}&window=600&limitPerAircraft=120`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        if (!response.ok) throw new Error(`Relay trails request returned ${response.status}`);
+        const payload = parseRelayTrailsResponse(await response.json());
+        if (!payload) throw new Error("Invalid relay trails response");
+        if (!active) return;
+
+        const grouped = new Map<string, TrailSegment[]>();
+        for (const track of payload.tracks) {
+          const key = track.address.trim().toLowerCase();
+          const segments = relayHistoryTrackToSegments(track);
+          if (segments.length === 0) continue;
+          grouped.set(key, [...(grouped.get(key) ?? []), ...segments]);
+        }
+        const outcome = relayHistoryOutcome(payload.meta);
+        trailStore.hydrateViewportHistory({
+          tracks: [...grouped].map(([icao24, segments]) => ({
+            icao24,
+            segments,
+            outcome,
+          })),
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      } finally {
+        if (active) timer = setTimeout(load, 60_000);
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [params.relayEnabled, viewportKey]);
+
+  const selectedTrackId = params.selectedIcao24
+    ? (params.flights.find(
+        (flight) => flight.icao24 === params.selectedIcao24,
+      )?.trackId ?? null)
+    : null;
 
   useEffect(() => {
     const history = trailStore.getSnapshot().history;
@@ -173,23 +294,13 @@ export function useTrailSystem(params: {
       try {
         const result = await fetchSelectedTrack(
           selectedIcao24,
+          selectedTrackId,
+          params.relayEnabled ?? false,
           controller.signal,
         );
 
-        // After an async gap, the effect may have been cleaned up or
-        // the selection may have changed.  The generation check in
-        // resolveHistory / failHistory guards against stale results,
-        // so we only need to bail on scheduling here.
         if (!active) {
-          // Still resolve if the generation matches - avoids silently
-          // discarding a valid response that would fix the trail.
-          const staleCheck = trailStore.getSnapshot().history;
-          if (
-            staleCheck.selectedIcao24 !== selectedIcao24 ||
-            staleCheck.selectionGeneration !== selectionGeneration
-          ) {
-            return;
-          }
+          return;
         }
 
         const refreshedHistory = trailStore.getSnapshot().history;
@@ -208,6 +319,7 @@ export function useTrailSystem(params: {
             outcome: result.outcome,
             creditsRemaining: result.creditsRemaining,
             track: result.track,
+            segments: result.segments,
           });
         } else if (result.outcome === "rate-limited") {
           trailStore.failHistory({
@@ -277,11 +389,7 @@ export function useTrailSystem(params: {
     return () => {
       active = false;
       clearTimer();
-      // Don't abort in-flight fetches - let them complete naturally.
-      // resolveHistory/failHistory guard against stale results via
-      // selectionGeneration, and completing the fetch avoids the
-      // "cancelled request → lost response" race that prevented
-      // historical trails from rendering after React re-mounts.
+      currentController?.abort();
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
@@ -289,6 +397,8 @@ export function useTrailSystem(params: {
     params.historyEnabled,
     snapshot.history.selectedIcao24,
     snapshot.history.selectionGeneration,
+    selectedTrackId,
+    params.relayEnabled,
   ]);
 
   return snapshot;

@@ -1,11 +1,16 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
-// 4-tier fallback: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
-// Override: ?provider=airplanes|adsb|adsbfi|opensky in the URL.
+// The authorized relay is the normal source. A legacy provider chain is
+// available only behind explicit server and browser authorization gates.
 // ────────────────────────────────────────────────────────────────────────
 
 import type { FlightState } from "./opensky-types";
 import type { ReadsbApiResponse } from "./flight-api-types";
+import {
+  isRelayResponseMeta,
+  type RelayAttribution,
+  type RelaySourceStatus,
+} from "./relay/protocol";
 import { MAX_RADIUS_NM, NM_PER_DEG_LAT } from "./flight-api-types";
 import { parseAircraftList, type ParseOptions } from "./flight-api-parsing";
 import {
@@ -18,6 +23,7 @@ import {
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type ProviderName =
+  | "relay"
   | "airplanes"
   | "adsb"
   | "adsbfi"
@@ -30,6 +36,9 @@ export interface FlightApiFetchResult {
   flights: FlightState[];
   rateLimited: boolean;
   source?: string;
+  sourceStatus?: RelaySourceStatus;
+  sourceAgeMs?: number | null;
+  attribution?: RelayAttribution | null;
 }
 
 // ── Circuit Breaker ────────────────────────────────────────────────────
@@ -180,6 +189,7 @@ export function getProviderOverride(): ProviderName {
     .get("provider")
     ?.toLowerCase();
   if (
+    p === "relay" ||
     p === "airplanes" ||
     p === "adsb" ||
     p === "adsbfi" ||
@@ -209,6 +219,7 @@ export function setProviderOverride(provider: ProviderName): void {
 
 const PROXY_TIMEOUT_MS = 8_000;
 const PROVIDER_LABELS = {
+  relay: "aeris-relay",
   adsb: "adsb.lol",
   adsbfi: "adsb.fi",
   airplanes: "airplanes.live",
@@ -271,6 +282,10 @@ function validateReadsb(payload: unknown): ReadsbApiResponse {
     throw new Error("Invalid readsb response shape");
   }
 
+  if (response.meta !== undefined && !isRelayResponseMeta(response.meta)) {
+    throw new Error("Invalid relay response metadata");
+  }
+
   return response as ReadsbApiResponse;
 }
 
@@ -281,7 +296,7 @@ function validateReadsb(payload: unknown): ReadsbApiResponse {
 
 async function fetchViaProxy(
   path: string,
-  provider: "adsb" | "adsbfi" | "airplanes" = "adsb",
+  provider: "relay" | "adsb" | "adsbfi" | "airplanes" = "adsb",
   signal?: AbortSignal,
 ): Promise<ReadsbApiResponse> {
   return withTimeout(
@@ -296,7 +311,11 @@ async function fetchViaProxy(
         throw new Error(`${provider} proxy returned non-JSON response`);
       }
 
-      return validateReadsb(await res.json());
+      const response = validateReadsb(await res.json());
+      if (provider === "relay" && response.meta === undefined) {
+        throw new Error("Relay response metadata is required");
+      }
+      return response;
     },
     PROXY_TIMEOUT_MS,
     signal,
@@ -310,9 +329,52 @@ function parseReadsbResponse(
 ): FlightState[] {
   return parseAircraftList(response.ac, {
     ...options,
-    positionProvider: PROVIDER_LABELS[provider],
+    positionProvider: response.meta ? "aeris-relay" : PROVIDER_LABELS[provider],
     responseTime: response.now,
   });
+}
+
+function relayFetchResult(
+  response: ReadsbApiResponse,
+  options?: ParseOptions,
+): FlightApiFetchResult {
+  const status = response.meta?.sourceStatus;
+  const attribution = response.meta?.attribution;
+  return {
+    flights: parseReadsbResponse(response, "relay", {
+      includeGround: options?.includeGround ?? true,
+      requireBaroAltitude: options?.requireBaroAltitude ?? false,
+      ...options,
+    }),
+    rateLimited: false,
+    source: "relay",
+    ...(status ? { sourceStatus: status } : {}),
+    sourceAgeMs:
+      typeof response.meta?.sourceAgeMs === "number" &&
+      Number.isFinite(response.meta.sourceAgeMs)
+        ? Math.max(0, response.meta.sourceAgeMs)
+        : null,
+    attribution:
+      attribution && typeof attribution.provider === "string"
+        ? {
+            provider: attribution.provider,
+            ...(typeof attribution.label === "string"
+              ? { label: attribution.label }
+              : {}),
+            ...(typeof attribution.url === "string"
+              ? { url: attribution.url }
+              : {}),
+          }
+        : null,
+  };
+}
+
+export function isRelayClientConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL?.trim());
+}
+
+export function isDirectFlightDataClientAuthorized(): boolean {
+  return process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA === "true";
 }
 
 // ── Tier 4: OpenSky direct ─────────────────────────────────────────────
@@ -433,6 +495,15 @@ export async function fetchFlightsByPoint(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
+  if (isRelayClientConfigured() || override === "relay") {
+    const response = await fetchViaProxy(readsbPath, "relay", signal);
+    return relayFetchResult(response, options);
+  }
+
+  if (!isDirectFlightDataClientAuthorized()) {
+    return { flights: [], rateLimited: false, source: "none" };
+  }
+
   if (override === "adsb" || override === "auto") {
     // adsb.lol via proxy - primary data source
     tiers.push({
@@ -505,6 +576,19 @@ export async function fetchFlightsByHex(
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
 
+  if (isRelayClientConfigured() || override === "relay") {
+    try {
+      const response = await fetchViaProxy(readsbPath, "relay", signal);
+      return relayFetchResult(response, parseOpts);
+    } catch {
+      return { flights: [], rateLimited: false, source: "relay" };
+    }
+  }
+
+  if (!isDirectFlightDataClientAuthorized()) {
+    return { flights: [], rateLimited: false, source: "none" };
+  }
+
   if (override === "adsb" || override === "auto") {
     // adsb.lol via proxy - primary data source
     tiers.push({
@@ -573,15 +657,18 @@ export async function fetchSelectedAircraftFromAdsbLol(
 ): Promise<FlightState | null> {
   const normalized = icao24.trim().toLowerCase();
   if (!/^[0-9a-f]{6}$/.test(normalized)) return null;
+  if (!isRelayClientConfigured() && !isDirectFlightDataClientAuthorized()) {
+    return null;
+  }
 
   try {
     const response = await fetchViaProxy(
       `/hex/${encodeURIComponent(normalized)}`,
-      "adsb",
+      isRelayClientConfigured() ? "relay" : "adsb",
       signal,
     );
     return (
-      parseReadsbResponse(response, "adsb", {
+      parseReadsbResponse(response, isRelayClientConfigured() ? "relay" : "adsb", {
         includeGround: true,
         requireBaroAltitude: false,
       }).find((flight) => flight.icao24 === normalized) ?? null
@@ -612,6 +699,19 @@ export async function fetchFlightsByCallsign(
   const readsbPath = `/callsign/${encodeURIComponent(normalized)}`;
   const override = getProviderOverride();
   const tiers: NamedTier[] = [];
+
+  if (isRelayClientConfigured() || override === "relay") {
+    try {
+      const response = await fetchViaProxy(readsbPath, "relay", signal);
+      return relayFetchResult(response, parseOpts);
+    } catch {
+      return { flights: [], rateLimited: false, source: "relay" };
+    }
+  }
+
+  if (!isDirectFlightDataClientAuthorized()) {
+    return { flights: [], rateLimited: false, source: "none" };
+  }
 
   if (override === "adsb" || override === "auto") {
     // adsb.lol via proxy - primary data source

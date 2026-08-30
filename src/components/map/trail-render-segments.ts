@@ -157,6 +157,7 @@ export function buildTrailRenderSegments(input: {
   altColors: boolean;
   defaultColor: [number, number, number, number];
   elevCtx?: TrailElevationContext;
+  segmentId?: string;
 }): TrailRenderSegment[] {
   const gradientColors =
     input.kind === "connector"
@@ -186,7 +187,7 @@ export function buildTrailRenderSegments(input: {
     }
 
     segments.push({
-      id: `${input.icao24}:${input.kind}:${index}`,
+      id: `${input.icao24}:${input.segmentId ? `${input.segmentId}:` : ""}${input.kind}:${index}`,
       icao24: input.icao24,
       kind: input.kind,
       path: [start, end],

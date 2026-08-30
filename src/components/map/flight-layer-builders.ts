@@ -270,7 +270,10 @@ export interface TrailLayerParams {
   elevScale: number;
   visible?: boolean;
   /** Persistent cache for expensive base path computations across frames */
-  trailBasePathCache?: Map<string, { key: string; basePath: ElevatedPoint[] }>;
+  trailBasePathCache?: Map<
+    string,
+    { key: string; basePath: ElevatedPoint[]; segments?: ElevatedPoint[][] }
+  >;
   /** Persistent cache for slope-limited trail paths across frames */
   trailPathCache?: Map<
     string,
@@ -341,10 +344,25 @@ export function buildTrailLayers(params: TrailLayerParams) {
       return null;
     }
 
+    if (trail.renderSegments?.length) {
+      return null;
+    }
+
     return selectedEnvelope;
   };
 
   const getVisibleGeometryCacheKey = (trail: TrailEntry): string => {
+    if (trail.renderSegments?.length) {
+      return [
+        "segmented",
+        trailDistance,
+        trail.revision ?? 0,
+        ...trail.renderSegments.map((segment) => {
+          const last = segment.path[segment.path.length - 1];
+          return `${segment.path.length}:${last?.[0]}:${last?.[1]}`;
+        }),
+      ].join("|");
+    }
     const envelope = getSelectedEnvelopeForTrail(trail);
 
     if (!envelope) {
@@ -362,43 +380,68 @@ export function buildTrailLayers(params: TrailLayerParams) {
     ].join("|");
   };
 
-  const getVisibleTrailPoints = (trail: TrailEntry): ElevatedPoint[] => {
+  const visibleTrailSegmentsCache = new Map<string, ElevatedPoint[][]>();
+
+  const getVisibleTrailGeometry = (
+    trail: TrailEntry,
+  ): { allPoints: ElevatedPoint[]; segments: ElevatedPoint[][] } => {
     const cached = visibleTrailCache.get(trail.icao24);
-    if (cached) return cached;
+    const cachedSegments = visibleTrailSegmentsCache.get(trail.icao24);
+    if (cached && cachedSegments) {
+      return { allPoints: cached, segments: cachedSegments };
+    }
 
     const selectedEnvelopeForTrail = getSelectedEnvelopeForTrail(trail);
     let displayPath: ElevatedPoint[] | undefined;
+    let displaySegments: ElevatedPoint[][] | undefined;
     const geometryKey = getVisibleGeometryCacheKey(trail);
     if (trailBasePathCache) {
       const entry = trailBasePathCache.get(trail.icao24);
       if (entry && entry.key === geometryKey) {
         displayPath = entry.basePath;
+        displaySegments = entry.segments;
       } else {
-        displayPath = selectedEnvelopeForTrail
-          ? buildSelectedTrailRenderGeometry(
-              selectedEnvelopeForTrail,
-              trailDistance,
-            ).allPoints
-          : buildTrailDisplayGeometry(trail, trailDistance).allPoints;
+        if (selectedEnvelopeForTrail) {
+          displayPath = buildSelectedTrailRenderGeometry(
+            selectedEnvelopeForTrail,
+            trailDistance,
+          ).allPoints;
+          displaySegments = [displayPath];
+        } else {
+          const geometry = buildTrailDisplayGeometry(trail, trailDistance);
+          displayPath = geometry.allPoints;
+          displaySegments = geometry.segments ?? [displayPath];
+        }
         trailBasePathCache.set(trail.icao24, {
           key: geometryKey,
           basePath: displayPath,
+          segments: displaySegments,
         });
       }
       activeIcaos?.add(trail.icao24);
     }
 
-    const computed =
-      displayPath ??
-      (selectedEnvelopeForTrail
-        ? buildSelectedTrailRenderGeometry(
-            selectedEnvelopeForTrail,
-            trailDistance,
-          ).allPoints
-        : buildTrailDisplayGeometry(trail, trailDistance).allPoints);
+    if (!displayPath || !displaySegments) {
+      if (selectedEnvelopeForTrail) {
+        displayPath = buildSelectedTrailRenderGeometry(
+          selectedEnvelopeForTrail,
+          trailDistance,
+        ).allPoints;
+        displaySegments = [displayPath];
+      } else {
+        const geometry = buildTrailDisplayGeometry(trail, trailDistance);
+        displayPath = geometry.allPoints;
+        displaySegments = geometry.segments ?? [displayPath];
+      }
+    }
+    const computed = displayPath;
     visibleTrailCache.set(trail.icao24, computed);
-    return computed;
+    visibleTrailSegmentsCache.set(trail.icao24, displaySegments);
+    return { allPoints: computed, segments: displaySegments };
   };
+
+  const getVisibleTrailPoints = (trail: TrailEntry): ElevatedPoint[] =>
+    getVisibleTrailGeometry(trail).allPoints;
 
   const getRenderableBodyPoints = (
     trail: TrailEntry,
@@ -443,6 +486,14 @@ export function buildTrailLayers(params: TrailLayerParams) {
     if (!handledIds.has(d.icao24)) {
       trailData.push(d);
       activeIcaos?.add(d.icao24);
+    }
+  }
+
+  for (const trail of trailData) {
+    if ((trail.renderSegments?.length ?? 0) > 1) {
+      trail.renderSegments!.forEach((_, index) => {
+        activeIcaos?.add(`${trail.icao24}#${index}`);
+      });
     }
   }
 
@@ -494,14 +545,47 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const trailBodySegments = trailData.flatMap((trail) => {
     const animFlight = interpolatedMap.get(trail.icao24);
     const pathKey = `${getVisibleGeometryCacheKey(trail)}_${altitudeDisplayMode}_${elevScale.toFixed(3)}`;
-    let projectedPoints: [number, number, number][];
+    const visibleSegments = getVisibleTrailGeometry(trail).segments;
 
-    if (trailPathCache) {
-      const cached = trailPathCache.get(trail.icao24);
-      if (cached && cached.key === pathKey) {
-        projectedPoints = cached.result;
+    return visibleSegments.flatMap((visiblePoints, segmentIndex) => {
+      const cacheId =
+        visibleSegments.length === 1
+          ? trail.icao24
+          : `${trail.icao24}#${segmentIndex}`;
+      activeIcaos?.add(cacheId);
+      let projectedPoints: [number, number, number][];
+
+      if (trailPathCache) {
+        const cached = trailPathCache.get(cacheId);
+        if (cached && cached.key === pathKey) {
+          projectedPoints = cached.result;
+        } else {
+          const raw = toPathLayerPoints(visiblePoints).map(
+            (p) =>
+              [
+                p[0],
+                p[1],
+                Math.max(
+                  0,
+                  projectTrailElevationMeters(p[2], altitudeDisplayMode) *
+                    elevScale,
+                ),
+              ] as [number, number, number],
+          );
+          const clean = raw.filter(
+            (p) =>
+              Number.isFinite(p[0]) &&
+              Number.isFinite(p[1]) &&
+              Number.isFinite(p[2]),
+          );
+          projectedPoints = limitTrailSlope(clean);
+          trailPathCache.set(cacheId, {
+            key: pathKey,
+            result: projectedPoints,
+          });
+        }
       } else {
-        const raw = toPathLayerPoints(getVisibleTrailPoints(trail)).map(
+        const raw = toPathLayerPoints(visiblePoints).map(
           (p) =>
             [
               p[0],
@@ -520,42 +604,24 @@ export function buildTrailLayers(params: TrailLayerParams) {
             Number.isFinite(p[2]),
         );
         projectedPoints = limitTrailSlope(clean);
-        trailPathCache.set(trail.icao24, {
-          key: pathKey,
-          result: projectedPoints,
-        });
       }
-    } else {
-      const raw = toPathLayerPoints(getVisibleTrailPoints(trail)).map(
-        (p) =>
-          [
-            p[0],
-            p[1],
-            Math.max(
-              0,
-              projectTrailElevationMeters(p[2], altitudeDisplayMode) *
-                elevScale,
-            ),
-          ] as [number, number, number],
-      );
-      const clean = raw.filter(
-        (p) =>
-          Number.isFinite(p[0]) &&
-          Number.isFinite(p[1]) &&
-          Number.isFinite(p[2]),
-      );
-      projectedPoints = limitTrailSlope(clean);
-    }
 
-    const result = trimTrailForAircraft(projectedPoints, animFlight);
+      const isLatest = segmentIndex === visibleSegments.length - 1;
+      const result = isLatest
+        ? trimTrailForAircraft(projectedPoints, animFlight)
+        : projectedPoints;
 
-    return buildTrailRenderSegments({
-      icao24: trail.icao24,
-      points: result,
-      kind: "body",
-      altColors,
-      defaultColor,
-      elevCtx: { elevScale, altitudeDisplayMode },
+      return buildTrailRenderSegments({
+        icao24: trail.icao24,
+        points: result,
+        kind: "body",
+        altColors,
+        defaultColor,
+        elevCtx: { elevScale, altitudeDisplayMode },
+        ...(visibleSegments.length > 1
+          ? { segmentId: String(segmentIndex) }
+          : {}),
+      });
     });
   });
 

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { READSB_FETCH_TIMEOUT_MS, MAX_RADIUS_NM } from "@/lib/flight-api-types";
+import {
+  directProviderAccessAuthorized,
+  fetchRelayJson,
+  getRelayServerConfig,
+} from "@/lib/relay/server-client";
 
 // ── Multi-Provider Proxy ───────────────────────────────────────────────
 //
@@ -141,13 +146,75 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     request.nextUrl.searchParams.get("provider")?.toLowerCase() ?? "adsb";
 
   if (
+    providerRaw !== "relay" &&
     providerRaw !== "adsb" &&
     providerRaw !== "adsbfi" &&
     providerRaw !== "airplanes"
   ) {
     return NextResponse.json(
-      { error: "Invalid provider. Use 'adsb', 'adsbfi', or 'airplanes'." },
+      {
+        error:
+          "Invalid provider. Use 'relay', 'adsb', 'adsbfi', or 'airplanes'.",
+      },
       { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  // When a relay is configured it is the only operational source. Explicit
+  // provider query parameters cannot bypass the authorization boundary.
+  const relayConfig = getRelayServerConfig();
+  if (relayConfig) {
+    const pointMatch = path.match(POINT_PATH);
+    const hexMatch = path.match(/^\/hex\/([0-9a-f]{6})$/i);
+    const callsignMatch = path.match(/^\/callsign\/([A-Z0-9-]{1,8})$/i);
+    const relayPath = pointMatch ? "/v1/aircraft" : "/v1/lookup";
+    const relayQuery = pointMatch
+      ? new URLSearchParams({
+          lat: pointMatch[1],
+          lon: pointMatch[2],
+          radius: pointMatch[3],
+        })
+      : hexMatch
+        ? new URLSearchParams({ address: hexMatch[1].toLowerCase() })
+        : new URLSearchParams({ callsign: callsignMatch![1].toUpperCase() });
+    try {
+      const response = await fetchRelayJson(
+        relayConfig,
+        relayPath,
+        relayQuery,
+        request.signal,
+      );
+      return NextResponse.json(response.payload, {
+        status: response.status,
+        headers: { "Cache-Control": "no-store" },
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      return NextResponse.json(
+        {
+          error: timedOut
+            ? "Relay request timed out"
+            : "Relay request failed",
+        },
+        {
+          status: timedOut ? 504 : 502,
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
+  }
+
+  if (providerRaw === "relay") {
+    return NextResponse.json(
+      { error: "Authorized flight relay is not configured" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  if (!directProviderAccessAuthorized()) {
+    return NextResponse.json(
+      { error: "Authorized flight data source is not configured" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 

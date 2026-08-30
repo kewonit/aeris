@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import nextConfig from "../../../next.config";
+import nextConfig, { getFlightDataConnectSrc } from "../../../next.config";
 import {
   getDirectTraceProviderPolicies,
 } from "../trails/providers";
@@ -11,7 +11,7 @@ function getConnectSrcEntries(cspHeader: string): string[] {
   return match ? match[1].trim().split(/\s+/) : [];
 }
 
-test("browser-direct trail providers are allowed by the CSP connect-src list", async () => {
+test("browser-direct flight providers require an explicit authorization gate", async () => {
   const headerConfigs = await nextConfig.headers?.();
   const globalHeaders = headerConfigs?.find((entry) => entry.source === "/(.*)");
   const cspHeader = globalHeaders?.headers.find(
@@ -24,9 +24,17 @@ test("browser-direct trail providers are allowed by the CSP connect-src list", a
 
   for (const provider of getDirectTraceProviderPolicies()) {
     const origin = new URL(provider.baseUrl).origin;
-    assert.ok(
-      connectSrcEntries.includes(origin),
-      `Expected CSP connect-src to allow ${origin} for ${provider.id}`,
-    );
+    assert.equal(connectSrcEntries.includes(origin), false);
+  }
+});
+
+test("authorized direct providers and the configured WebSocket get scoped CSP entries", () => {
+  const entries = getFlightDataConnectSrc({
+    NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA: "true",
+    NEXT_PUBLIC_FLIGHT_STREAM_URL: "wss://relay.example.test/v1/live",
+  });
+  assert.ok(entries.includes("wss://relay.example.test"));
+  for (const provider of getDirectTraceProviderPolicies()) {
+    assert.ok(entries.includes(new URL(provider.baseUrl).origin));
   }
 });
