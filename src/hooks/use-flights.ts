@@ -7,6 +7,12 @@ import {
   PROVIDER_CHANGE_EVENT,
 } from "@/lib/flight-api";
 import type { City } from "@/lib/cities";
+import { useFlightStream } from "@/hooks/use-flight-stream";
+import type {
+  RelayAttribution,
+  RelayBoundingBox,
+  RelaySourceStatus,
+} from "@/lib/relay/protocol";
 
 /** Normal polling interval - readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
 const POLL_INTERVAL_MS = 5_000;
@@ -34,10 +40,11 @@ const MAX_EMPTY_STREAK = 3;
  * In FPV mode the query center moves with the tracked aircraft.
  * City changes are ignored while in FPV.
  */
-export function useFlights(
+function usePollingFlights(
   city: City | null,
   fpvIcao24: string | null = null,
   fpvSeedCenter: { lng: number; lat: number } | null = null,
+  enabled = true,
 ) {
   const [flights, setFlights] = useState<FlightState[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,6 +52,11 @@ export function useFlights(
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
   const [source, setSource] = useState<string | null>(null);
+  const [pollSourceStatus, setPollSourceStatus] =
+    useState<RelaySourceStatus | null>(null);
+  const [pollSourceAgeMs, setPollSourceAgeMs] = useState<number | null>(null);
+  const [pollAttribution, setPollAttribution] =
+    useState<RelayAttribution | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -132,6 +144,7 @@ export function useFlights(
 
   const fetchData = useCallback(
     async (target: City) => {
+      if (!enabled) return;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -176,6 +189,9 @@ export function useFlights(
         );
 
         setSource(result.source ?? null);
+        setPollSourceStatus(result.sourceStatus ?? null);
+        setPollSourceAgeMs(result.sourceAgeMs ?? null);
+        setPollAttribution(result.attribution ?? null);
 
         if (result.rateLimited) {
           setRateLimited(true);
@@ -232,13 +248,14 @@ export function useFlights(
         const isAbort = err instanceof Error && err.name === "AbortError";
         if (isAbort) return;
         setSource("none");
+        setPollSourceStatus(null);
         setError(err instanceof Error ? err.message : "Unknown error");
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
       } finally {
         if (abortRef.current === controller) setLoading(false);
       }
     },
-    [scheduleNext, startCountdown, clearCountdown],
+    [enabled, scheduleNext, startCountdown, clearCountdown],
   );
 
   useEffect(() => {
@@ -248,7 +265,7 @@ export function useFlights(
   }, [fetchData]);
 
   useEffect(() => {
-    if (!city) return;
+    if (!enabled || !city) return;
 
     const activeCity = city;
 
@@ -287,9 +304,16 @@ export function useFlights(
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onWindowFocus);
     };
-  }, [city, fetchData, scheduleNext, clearSchedule]);
+  }, [enabled, city, fetchData, scheduleNext, clearSchedule]);
 
   useEffect(() => {
+    if (!enabled) {
+      clearSchedule();
+      abortRef.current?.abort();
+      abortRef.current = null;
+      stopCountdown();
+      return;
+    }
     if (fpvIcao24Ref.current !== null) {
       // In FPV mode, the FPV effect handles fetching. Clear any stale
       // old-city timer that might still be pending to prevent concurrent
@@ -320,10 +344,10 @@ export function useFlights(
       abortRef.current = null;
       clearCountdown();
     };
-  }, [city, fetchData, clearCountdown, clearSchedule, stopCountdown]);
+  }, [enabled, city, fetchData, clearCountdown, clearSchedule, stopCountdown]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !city) return;
+    if (!enabled || typeof window === "undefined" || !city) return;
 
     const activeCity = city;
     const onProviderChange = () => {
@@ -337,10 +361,11 @@ export function useFlights(
     window.addEventListener(PROVIDER_CHANGE_EVENT, onProviderChange);
     return () =>
       window.removeEventListener(PROVIDER_CHANGE_EVENT, onProviderChange);
-  }, [city, fetchData, clearCountdown, clearSchedule]);
+  }, [enabled, city, fetchData, clearCountdown, clearSchedule]);
 
   const prevFpvRef = useRef<string | null>(fpvIcao24);
   useEffect(() => {
+    if (!enabled) return;
     const wasInFpv = prevFpvRef.current !== null;
     const isInFpv = fpvIcao24 !== null;
     prevFpvRef.current = fpvIcao24;
@@ -358,11 +383,11 @@ export function useFlights(
     return () => {
       if (deferred) clearTimeout(deferred);
     };
-  }, [fpvIcao24, city, clearSchedule, fetchData]);
+  }, [enabled, fpvIcao24, city, clearSchedule, fetchData]);
 
   // Trigger immediate fetch on network reconnect
   useEffect(() => {
-    if (typeof window === "undefined" || !city) return;
+    if (!enabled || typeof window === "undefined" || !city) return;
     const activeCity = city;
     const onOnline = () => {
       clearSchedule();
@@ -370,7 +395,7 @@ export function useFlights(
     };
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
-  }, [city, fetchData, clearSchedule]);
+  }, [enabled, city, fetchData, clearSchedule]);
 
   useEffect(() => {
     return () => {
@@ -387,5 +412,75 @@ export function useFlights(
     rateLimited: city ? rateLimited : false,
     retryIn: city ? retryIn : 0,
     source: city ? source : null,
+    sourceStatus: city ? pollSourceStatus : null,
+    sourceAgeMs: city ? pollSourceAgeMs : null,
+    attribution: city ? pollAttribution : null,
+  };
+}
+
+export type UseFlightsResult = {
+  flights: FlightState[];
+  loading: boolean;
+  error: string | null;
+  rateLimited: boolean;
+  retryIn: number;
+  source: string | null;
+  sourceStatus: RelaySourceStatus | null;
+  sourceAgeMs: number | null;
+  attribution: RelayAttribution | null;
+  viewportBbox: RelayBoundingBox | null;
+  relayEnabled: boolean;
+  predictionEnabled: boolean;
+};
+
+export function useFlights(
+  city: City | null,
+  fpvIcao24: string | null = null,
+  fpvSeedCenter: { lng: number; lat: number } | null = null,
+): UseFlightsResult {
+  const stream = useFlightStream(city, fpvIcao24, fpvSeedCenter);
+  const polling = usePollingFlights(
+    city,
+    fpvIcao24,
+    fpvSeedCenter,
+    !stream.enabled || !stream.connected || !stream.hasSnapshot,
+  );
+
+  if (!stream.enabled) {
+    return {
+      ...polling,
+      sourceStatus: polling.sourceStatus,
+      sourceAgeMs: polling.sourceAgeMs,
+      attribution: polling.attribution,
+      viewportBbox: null,
+      relayEnabled: false,
+      predictionEnabled: true,
+    };
+  }
+
+  const pollingReady = polling.source === "relay" && !polling.error;
+  const useStreamSnapshot =
+    stream.hasSnapshot && (stream.connected || !pollingReady);
+  const sourceStatus = useStreamSnapshot
+    ? stream.sourceStatus
+    : pollingReady
+      ? (polling.sourceStatus ?? "degraded")
+      : stream.sourceStatus;
+
+  return {
+    flights: useStreamSnapshot ? stream.flights : polling.flights,
+    loading: !useStreamSnapshot && polling.loading,
+    error: useStreamSnapshot ? stream.error : polling.error ?? stream.error,
+    rateLimited: polling.rateLimited,
+    retryIn: polling.retryIn,
+    source: "relay",
+    sourceStatus,
+    sourceAgeMs: useStreamSnapshot
+      ? stream.sourceAgeMs
+      : (polling.sourceAgeMs ?? stream.sourceAgeMs),
+    attribution: stream.attribution ?? polling.attribution ?? null,
+    viewportBbox: stream.bbox,
+    relayEnabled: true,
+    predictionEnabled: stream.connected && sourceStatus === "live",
   };
 }

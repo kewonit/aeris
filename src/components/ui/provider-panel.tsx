@@ -10,6 +10,7 @@ import {
   type CircuitState,
 } from "@/lib/flight-api-client";
 import type { ProviderName } from "@/lib/flight-api";
+import type { RelaySourceStatus } from "@/lib/relay/protocol";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 
 // ── Provider definitions ───────────────────────────────────────────────
@@ -21,6 +22,7 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
+  { id: "relay", label: "Aeris relay", description: "Authorized live source" },
   { id: "adsb", label: "adsb.lol", description: "Primary - server proxy" },
   {
     id: "adsbfi",
@@ -40,6 +42,7 @@ const PROVIDERS: ProviderInfo[] = [
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
+  relay: "Aeris relay",
   adsb: "adsb.lol",
   adsbfi: "adsb.fi",
   opensky: "OpenSky",
@@ -72,6 +75,16 @@ export function ProviderDropdown({
 
   const [override, setOverride] = useState(() => getProviderOverride());
   const isAutoMode = override === "auto";
+  const relayConfigured = Boolean(
+    process.env.NEXT_PUBLIC_FLIGHT_STREAM_URL?.trim(),
+  );
+  const directProvidersAuthorized =
+    process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA === "true";
+  const providers = relayConfigured
+    ? PROVIDERS.filter((provider) => provider.id === "relay")
+    : directProvidersAuthorized
+      ? PROVIDERS.filter((provider) => provider.id !== "relay")
+      : [];
 
   const handleSelect = useCallback(
     (provider: ProviderName | "auto") => {
@@ -117,7 +130,7 @@ export function ProviderDropdown({
               selected={isAutoMode}
               onSelect={() => handleSelect("auto")}
             />
-            {PROVIDERS.map((provider) => {
+            {providers.map((provider) => {
               const circuit = getCircuitState(provider.id);
               return (
                 <ProviderOption
@@ -144,6 +157,8 @@ export type ProviderTriggerProps = {
   source: string | null;
   loading: boolean;
   rateLimited: boolean;
+  sourceStatus?: RelaySourceStatus | null;
+  sourceAgeMs?: number | null;
   onClick: () => void;
 };
 
@@ -151,15 +166,20 @@ export function ProviderTrigger({
   source,
   loading,
   rateLimited,
+  sourceStatus,
+  sourceAgeMs,
   onClick,
 }: ProviderTriggerProps) {
+  const relayLabel =
+    source === "relay" && sourceStatus
+      ? `Relay · ${sourceStatus.charAt(0).toUpperCase()}${sourceStatus.slice(1)}`
+      : null;
   const label = rateLimited
     ? "Paused"
     : loading && !source
       ? "Connecting…"
-      : source
-        ? (SOURCE_LABELS[source] ?? source)
-        : "Connecting…";
+      : relayLabel ??
+        (source ? (SOURCE_LABELS[source] ?? source) : "Connecting…");
 
   const tone =
     rateLimited || source === "opensky"
@@ -174,6 +194,11 @@ export function ProviderTrigger({
       onClick={onClick}
       className="flex items-center gap-2 text-label text-muted-foreground transition-colors hover:text-foreground"
       aria-label="Select ADS-B provider"
+      title={
+        source === "relay" && sourceAgeMs != null
+          ? `Source age ${Math.max(0, Math.round(sourceAgeMs / 1000))} seconds`
+          : undefined
+      }
     >
       <Satellite className={`size-3 ${tone}`} aria-hidden="true" />
       {label}

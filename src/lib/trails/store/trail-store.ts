@@ -113,10 +113,17 @@ export function createTrailStore() {
 
   function ingestLiveFlights(
     flights: FlightState[],
-    { now = Date.now() }: { now?: number } = {},
+    {
+      now = Date.now(),
+      authoritativeEmpty = false,
+    }: {
+      now?: number;
+      /** The relay vouches that an empty list really is an empty sky. */
+      authoritativeEmpty?: boolean;
+    } = {},
   ): void {
     // An empty poll is a failed fetch far more often than an empty sky.
-    if (flights.length === 0 && entries.size > 0) {
+    if (flights.length === 0 && entries.size > 0 && !authoritativeEmpty) {
       return;
     }
 
@@ -127,6 +134,15 @@ export function createTrailStore() {
 
       const entry = getEntry(flight.icao24.trim().toLowerCase(), now);
       entry.lastSeenAt = now;
+
+      // A new relay track is a new flight session, so the old one goes.
+      const previous = entry.live[entry.live.length - 1];
+      if (previous && sample.trackId !== previous.trackId) {
+        entry.live = [];
+        entry.history = [];
+        entry.dirty = true;
+        changed = true;
+      }
 
       const last = entry.live[entry.live.length - 1];
       if (
@@ -228,13 +244,18 @@ export function createTrailStore() {
     outcome: TrailOutcome;
     creditsRemaining?: number | null;
     track: FlightTrack | null;
+    /** History that is already samples, as the relay sends it. */
+    samples?: TrailSample[];
   }): void {
     if (!isCurrentSelection(params.icao24, params.selectionGeneration)) {
       return;
     }
 
     const entry = getEntry(history.selectedIcao24!, Date.now());
-    if (params.track) {
+    if (params.samples) {
+      entry.history = params.samples;
+      entry.dirty = true;
+    } else if (params.track) {
       entry.history = trackToSamples(params.track);
       entry.dirty = true;
     } else if (
@@ -254,6 +275,30 @@ export function createTrailStore() {
       cooldownUntil: 0,
     };
     emit();
+  }
+
+  /** Recent relay history for every aircraft in view. */
+  function hydrateViewportHistory(
+    tracks: Array<{ icao24: string; samples: TrailSample[] }>,
+  ): void {
+    let changed = false;
+    const now = Date.now();
+    for (const track of tracks) {
+      const icao24 = track.icao24.trim().toLowerCase();
+      if (!icao24 || track.samples.length === 0) continue;
+
+      const entry = getEntry(icao24, now);
+      // The selected aircraft's own, longer history is kept.
+      if (icao24 === history.selectedIcao24 && entry.history.length > 0) {
+        continue;
+      }
+      entry.history = track.samples;
+      entry.dirty = true;
+      changed = true;
+    }
+    if (changed) {
+      emit();
+    }
   }
 
   function failHistory(params: {
@@ -286,6 +331,7 @@ export function createTrailStore() {
     selectAircraft,
     startHistoryLoad,
     resolveHistory,
+    hydrateViewportHistory,
     failHistory,
   };
 }

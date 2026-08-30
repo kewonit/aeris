@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { fetchServerTrace } from "@/lib/trails/source/server-trace-service";
+import { directProviderAccessAuthorized } from "@/lib/relay/server-client";
 
 const HEX_REGEX = /^[0-9a-f]{6}$/;
 
@@ -16,6 +17,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { error: "Invalid or missing 'hex' parameter" },
       {
         status: 400,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
+  }
+
+  if (!directProviderAccessAuthorized()) {
+    return NextResponse.json(
+      { error: "Authorized flight history source is not configured" },
+      {
+        status: 503,
         headers: {
           "Cache-Control": "no-store",
         },

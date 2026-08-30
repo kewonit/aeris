@@ -202,11 +202,19 @@ function FlightTrackerInner({
     saveMapStyle(style);
   }, []);
 
-  const { flights, loading, rateLimited, retryIn, source } = useFlights(
-    activeCity,
-    fpvIcao24,
-    fpvSeedCenter,
-  );
+  const {
+    flights,
+    loading,
+    rateLimited,
+    retryIn,
+    source,
+    sourceStatus,
+    sourceAgeMs,
+    attribution,
+    viewportBbox,
+    relayEnabled,
+    predictionEnabled,
+  } = useFlights(activeCity, fpvIcao24, fpvSeedCenter);
 
   // Both the airspace and weather radar overlays are scoped to ~2×
   // the flight fetch radius so we don't pull tiles for the entire
@@ -259,6 +267,9 @@ function FlightTrackerInner({
     flights: displayFlights,
     selectedIcao24,
     historyEnabled: !!selectedIcao24 && !fpvIcao24,
+    relayEnabled,
+    sourceStatus,
+    viewportBbox,
   });
 
   // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
@@ -747,6 +758,7 @@ function FlightTrackerInner({
             showShadows={settings.showShadows}
             showAltitudeColors={settings.showAltitudeColors}
             altitudeDisplayMode={settings.altitudeDisplayMode}
+            predictionEnabled={predictionEnabled}
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
             fpvPositionRef={fpvPositionRef}
@@ -820,6 +832,8 @@ function FlightTrackerInner({
               atc={atc}
               atcToggle={atcToggle}
               source={source}
+              sourceStatus={sourceStatus}
+              sourceAgeMs={sourceAgeMs}
             />
           </div>
         )}
@@ -850,6 +864,8 @@ function FlightTrackerInner({
               <MapAttribution
                 styleId={mapStyle.id}
                 showAirspace={showAirspace}
+                dataAttribution={attribution}
+                relayActive={relayEnabled}
               />
             </div>
           </div>
