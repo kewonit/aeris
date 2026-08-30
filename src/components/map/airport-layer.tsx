@@ -255,6 +255,9 @@ export function AirportLayer({
       const f = e.features?.[0];
       const iata = String(f?.properties?.iata ?? "");
       if (iata) {
+        // Keep the generic empty-map click handler from immediately clearing
+        // the airport selection opened by this delegated layer event.
+        e.preventDefault();
         const city = resolveCity(iata);
         callbackRef.current(city);
       }

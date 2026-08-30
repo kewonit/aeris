@@ -58,6 +58,7 @@ function SidebarProvider({
   open: openProp,
   onOpenChange: setOpenProp,
   persistState = true,
+  keyboardShortcut = true,
   className,
   style,
   children,
@@ -67,6 +68,7 @@ function SidebarProvider({
   open?: boolean
   onOpenChange?: (open: boolean) => void
   persistState?: boolean
+  keyboardShortcut?: boolean
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
@@ -99,6 +101,8 @@ function SidebarProvider({
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
+    if (!keyboardShortcut) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
@@ -111,7 +115,7 @@ function SidebarProvider({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [toggleSidebar])
+  }, [keyboardShortcut, toggleSidebar])
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
@@ -224,7 +228,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative bg-transparent transition-[width] duration-[620ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "relative bg-transparent transition-[width] duration-[480ms] ease-[cubic-bezier(0.333333,1,0.666667,1)]",
           reserveSpace
             ? [
                 "w-(--sidebar-width)",
@@ -240,7 +244,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-40 hidden h-svh w-(--sidebar-width) translate-x-0 will-change-transform transition-[transform,width] duration-[640ms] ease-[cubic-bezier(0.19,1,0.22,1)] sm:flex",
+          "fixed inset-y-0 z-40 hidden h-svh w-(--sidebar-width) translate-x-0 will-change-[translate] transition-[translate,width] duration-[480ms] ease-[cubic-bezier(0.333333,1,0.666667,1)] sm:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:-translate-x-full"
             : "right-0 group-data-[collapsible=offcanvas]:translate-x-full",

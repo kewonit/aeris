@@ -141,24 +141,22 @@ export function AirportInfoCard({
       ? "h-full"
       : "max-h-[calc(100dvh-5rem)]";
 
-  const cardInitial = reduceMotion
+  const cardInitial = reduceMotion || isSidebar
     ? false
     : isMobile
       ? { y: "100%" as const }
-      : isSidebar
-        ? { opacity: 0, x: -8 }
-        : { opacity: 0, y: 12, scale: 0.97 };
-  const cardAnimate = isMobile
-    ? { y: 0 }
-    : isSidebar
-      ? { opacity: 1, x: 0 }
-      : { opacity: 1, y: 0, scale: 1 };
-  const cardExit = reduceMotion
-    ? { opacity: 0 }
+      : { opacity: 0, y: 12, scale: 0.97 };
+  const cardAnimate = isSidebar
+    ? undefined
     : isMobile
-      ? { y: "100%" as const }
-      : isSidebar
-        ? { opacity: 0, x: -8 }
+      ? { y: 0 }
+      : { opacity: 1, y: 0, scale: 1 };
+  const cardExit = isSidebar
+    ? undefined
+    : reduceMotion
+      ? { opacity: 0 }
+      : isMobile
+        ? { y: "100%" as const }
         : { opacity: 0, y: 12, scale: 0.97 };
 
   return (
@@ -168,7 +166,7 @@ export function AirportInfoCard({
       animate={cardAnimate}
       exit={cardExit}
       transition={
-        reduceMotion
+        reduceMotion || isSidebar
           ? { duration: 0 }
           : { type: "spring", stiffness: 400, damping: 28, mass: 0.8 }
       }
