@@ -187,6 +187,33 @@ func (s *Store) CurrentAround(latitude, longitude, radiusNM float64, now time.Ti
 	return result
 }
 
+func (s *Store) CurrentByIdentity(address, callsign string, now time.Time, expiry time.Duration, limit int) []model.Observation {
+	address = strings.ToLower(strings.TrimSpace(address))
+	callsign = strings.ToUpper(strings.TrimSpace(callsign))
+	s.mu.RLock()
+	result := make([]model.Observation, 0)
+	for _, observation := range s.current {
+		if expiry > 0 && now.Sub(observation.ReceivedAt) > expiry {
+			continue
+		}
+		if (address != "" && strings.EqualFold(observation.Address, address)) ||
+			(callsign != "" && strings.EqualFold(strings.TrimSpace(observation.Callsign), callsign)) {
+			result = append(result, observation)
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].ReceivedAt.Equal(result[j].ReceivedAt) {
+			return result[i].TrackID < result[j].TrackID
+		}
+		return result[i].ReceivedAt.After(result[j].ReceivedAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result
+}
+
 func (s *Store) Track(trackID string, now time.Time, window time.Duration, limit int) ([]model.Observation, model.RetentionInfo, error) {
 	if trackID == "" || len(trackID) > 128 {
 		return nil, model.RetentionInfo{}, errors.New("invalid track id")

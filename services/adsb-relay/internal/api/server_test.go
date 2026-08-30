@@ -149,6 +149,24 @@ func TestAircraftAndTrackResponsesExposeFreshnessAndRetention(t *testing.T) {
 		t.Fatalf("unexpected aircraft response: %#v", aircraft)
 	}
 
+	for _, query := range []string{"address=abc123", "callsign=TEST123"} {
+		request, _ = http.NewRequest(http.MethodGet, server.http.URL+"/v1/lookup?"+query, nil)
+		request.Header.Set("Authorization", "Bearer "+server.httpToken)
+		response, err = http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var lookup aircraftEnvelope
+		if err := json.NewDecoder(response.Body).Decode(&lookup); err != nil {
+			response.Body.Close()
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK || len(lookup.Aircraft) != 1 || lookup.Aircraft[0].TrackID != "track-a" {
+			t.Fatalf("unexpected lookup response for %s: status=%d body=%#v", query, response.StatusCode, lookup)
+		}
+	}
+
 	request, _ = http.NewRequest(http.MethodGet, server.http.URL+"/v1/tracks/track-a", nil)
 	request.Header.Set("Authorization", "Bearer "+server.httpToken)
 	response, err = http.DefaultClient.Do(request)
@@ -162,6 +180,22 @@ func TestAircraftAndTrackResponsesExposeFreshnessAndRetention(t *testing.T) {
 	}
 	if track.Track == nil || len(track.Track.Observations) != 1 || track.Meta.Retention == nil || track.Meta.Retention.Complete {
 		t.Fatalf("unexpected track response: %#v", track)
+	}
+}
+
+func TestLookupRejectsUnboundedOrAmbiguousQueries(t *testing.T) {
+	server := newTestServer(t)
+	for _, query := range []string{"", "address=abc123&callsign=TEST123", "address=not-hex", "callsign=unsafe%20value"} {
+		request, _ := http.NewRequest(http.MethodGet, server.http.URL+"/v1/lookup?"+query, nil)
+		request.Header.Set("Authorization", "Bearer "+server.httpToken)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected bad request for %q, got %d", query, response.StatusCode)
+		}
 	}
 }
 
