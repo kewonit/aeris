@@ -2,13 +2,28 @@
 
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
-import { smoothstep } from "./camera-controller-utils";
+import {
+  centerLngLatForScreenOffset,
+  projectLngLatElevationPixelDelta,
+  smoothstep,
+} from "./camera-controller-utils";
+import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
+import { altitudeToElevation } from "@/lib/flight-utils";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
+import {
+  coordinatesMatch,
+  mapPanelMotionOptions,
+  mapPanelPadding,
+  panelVisualOffset,
+  shouldCenterMapPanel,
+  MAP_PANEL_TRANSITION_MS,
+  type MapPanelCameraState,
+} from "./panel-camera";
 
 const DEFAULT_ZOOM = 9.2;
 const DEFAULT_PITCH = 49;
@@ -16,6 +31,9 @@ const DEFAULT_BEARING = 27.4;
 const FOLLOW_ZOOM = 10.5;
 const FOLLOW_PITCH = 55;
 const FOLLOW_EASE_MS = 2000;
+const CITY_FLY_MS = 2800;
+const PANEL_VISUAL_EASE_MS = 320;
+const PANEL_VISUAL_REFINEMENT_MS = 220;
 
 type FpvPosition = { lng: number; lat: number; alt: number; track: number };
 
@@ -24,11 +42,13 @@ export function CameraController({
   followFlight = null,
   fpvFlight = null,
   fpvPositionRef,
+  panelCamera,
 }: {
   city: City;
   followFlight?: FlightState | null;
   fpvFlight?: FlightState | null;
   fpvPositionRef?: MutableRefObject<FpvPosition | null>;
+  panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
@@ -46,6 +66,11 @@ export function CameraController({
   const isFpvActiveRef = useRef(false);
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
   const fpvPosRef = useRef(fpvPositionRef);
+  const previousPanelFocusRef = useRef<string | null>(null);
+  const previousPanelInsetRef = useRef(0);
+  const cityTransitionTargetRef = useRef<[number, number] | null>(null);
+  const panelCameraRef = useRef(panelCamera);
+  const hasPanelCoordinates = panelCamera.coordinates !== null;
 
   useEffect(() => {
     fpvPosRef.current = fpvPositionRef;
@@ -55,21 +80,240 @@ export function CameraController({
     fpvFlightRef.current = fpvFlight;
   }, [fpvFlight]);
 
+  useEffect(() => {
+    panelCameraRef.current = panelCamera;
+  }, [panelCamera]);
+
   // City flyTo
   useEffect(() => {
     if (!map || !isLoaded || !city) return;
     if (city.id === prevCityRef.current) return;
 
     prevCityRef.current = city.id;
+    if (panelCamera.open && panelCamera.kind === "flight") {
+      cityTransitionTargetRef.current = null;
+      return;
+    }
+
+    cityTransitionTargetRef.current = city.coordinates;
+    const isAirportPanelNavigation =
+      panelCamera.open && panelCamera.kind === "airport";
+    const reducePanelMotion =
+      isAirportPanelNavigation &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const transitionOptions = isAirportPanelNavigation
+      ? mapPanelMotionOptions(reducePanelMotion)
+      : { duration: CITY_FLY_MS, essential: true as const };
+    const clearTargetTimer = window.setTimeout(() => {
+      if (coordinatesMatch(cityTransitionTargetRef.current, city.coordinates)) {
+        cityTransitionTargetRef.current = null;
+      }
+    }, 0);
     map.flyTo({
       center: city.coordinates,
       zoom: DEFAULT_ZOOM,
       pitch: DEFAULT_PITCH,
       bearing: DEFAULT_BEARING,
-      duration: 2800,
-      essential: true,
+      padding: mapPanelPadding(panelCamera),
+      ...transitionOptions,
     });
-  }, [map, isLoaded, city]);
+
+    return () => window.clearTimeout(clearTargetTimer);
+  }, [map, isLoaded, city, panelCamera]);
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    const activePanel = panelCameraRef.current;
+    const padding = mapPanelPadding(activePanel);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const panelMotion = mapPanelMotionOptions(reduceMotion);
+    const insetChanged =
+      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
+
+    if (!activePanel.open) {
+      const shouldResetPadding =
+        previousPanelFocusRef.current !== null ||
+        previousPanelInsetRef.current > 0;
+      previousPanelFocusRef.current = null;
+      previousPanelInsetRef.current = 0;
+
+      if (!shouldResetPadding || cityTransitionTargetRef.current) return;
+
+      map.easeTo({
+        padding,
+        ...panelMotion,
+      });
+      return;
+    }
+
+    const shouldCenter = shouldCenterMapPanel(
+      previousPanelFocusRef.current,
+      activePanel,
+    );
+    const focusKey = activePanel.focusKey;
+    const coordinates = activePanel.coordinates;
+    const followsCityTransition =
+      activePanel.kind === "airport" &&
+      coordinates !== null &&
+      coordinatesMatch(cityTransitionTargetRef.current, coordinates);
+
+    if (followsCityTransition) {
+      previousPanelFocusRef.current = focusKey ?? null;
+      previousPanelInsetRef.current = activePanel.leftInsetPx;
+      return;
+    }
+
+    if (!shouldCenter && !insetChanged) return;
+
+    map.easeTo({
+      ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+      padding,
+      ...panelMotion,
+    });
+
+    if (shouldCenter) previousPanelFocusRef.current = focusKey;
+    previousPanelInsetRef.current = activePanel.leftInsetPx;
+
+    const shouldCorrectFlightAltitude =
+      activePanel.kind === "flight" &&
+      Boolean(focusKey && coordinates) &&
+      (shouldCenter || insetChanged);
+    if (!shouldCorrectFlightAltitude || !focusKey) return;
+
+    let correctionTimer: number | null = null;
+    let refinementTimer: number | null = null;
+    correctionTimer = window.setTimeout(() => {
+      const currentPanel = panelCameraRef.current;
+      if (!currentPanel.open || currentPanel.focusKey !== focusKey) return;
+
+      const currentCoordinates = currentPanel.coordinates;
+      const altitudeMeters = currentPanel.altitudeMeters;
+      if (!currentCoordinates || altitudeMeters == null) return;
+
+      const elevationMeters =
+        altitudeToElevation(
+          altitudeMeters,
+          settings.altitudeDisplayMode,
+        ) *
+        getZoomAdjustedElevationScale(
+          map.getZoom(),
+          settings.altitudeDisplayMode,
+        );
+      const elevatedPoint = projectLngLatElevationPixelDelta(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        elevationMeters,
+      );
+      const groundPoint = projectLngLatElevationPixelDelta(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        0,
+      );
+      if (!elevatedPoint || !groundPoint) return;
+
+      const canvas = map.getCanvas();
+      const offset = panelVisualOffset(
+        {
+          dx: elevatedPoint.dx - groundPoint.dx,
+          dy: elevatedPoint.dy - groundPoint.dy,
+        },
+        canvas.clientWidth,
+        canvas.clientHeight,
+      );
+      if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return;
+
+      const correctedCenter = centerLngLatForScreenOffset(
+        map,
+        currentCoordinates[0],
+        currentCoordinates[1],
+        offset,
+      );
+      if (!correctedCenter) return;
+
+      map.easeTo({
+        center: correctedCenter,
+        padding: mapPanelPadding(currentPanel),
+        duration: reduceMotion ? 0 : PANEL_VISUAL_EASE_MS,
+        easing: panelMotion.easing,
+        essential: false,
+      });
+
+      refinementTimer = window.setTimeout(() => {
+        const refinedPanel = panelCameraRef.current;
+        if (!refinedPanel.open || refinedPanel.focusKey !== focusKey) return;
+
+        const refinedCoordinates = refinedPanel.coordinates;
+        const refinedAltitudeMeters = refinedPanel.altitudeMeters;
+        if (!refinedCoordinates || refinedAltitudeMeters == null) return;
+
+        const refinedElevationMeters =
+          altitudeToElevation(
+            refinedAltitudeMeters,
+            settings.altitudeDisplayMode,
+          ) *
+          getZoomAdjustedElevationScale(
+            map.getZoom(),
+            settings.altitudeDisplayMode,
+          );
+        const elevatedResidual = projectLngLatElevationPixelDelta(
+          map,
+          refinedCoordinates[0],
+          refinedCoordinates[1],
+          refinedElevationMeters,
+        );
+        const groundResidual = projectLngLatElevationPixelDelta(
+          map,
+          refinedCoordinates[0],
+          refinedCoordinates[1],
+          0,
+        );
+        if (!elevatedResidual || !groundResidual) return;
+
+        const refinedOffset = panelVisualOffset(
+          {
+            dx: elevatedResidual.dx - groundResidual.dx,
+            dy: elevatedResidual.dy - groundResidual.dy,
+          },
+          canvas.clientWidth,
+          canvas.clientHeight,
+        );
+        const refinedCenter = centerLngLatForScreenOffset(
+          map,
+          refinedCoordinates[0],
+          refinedCoordinates[1],
+          refinedOffset,
+        );
+        if (!refinedCenter) return;
+
+        map.easeTo({
+          center: refinedCenter,
+          padding: mapPanelPadding(refinedPanel),
+          duration: reduceMotion ? 0 : PANEL_VISUAL_REFINEMENT_MS,
+          easing: panelMotion.easing,
+          essential: false,
+        });
+      }, reduceMotion ? 0 : PANEL_VISUAL_EASE_MS + 40);
+    }, reduceMotion ? 0 : MAP_PANEL_TRANSITION_MS + 80);
+
+    return () => {
+      if (correctionTimer !== null) window.clearTimeout(correctionTimer);
+      if (refinementTimer !== null) window.clearTimeout(refinementTimer);
+    };
+  }, [
+    map,
+    isLoaded,
+    panelCamera.open,
+    panelCamera.focusKey,
+    panelCamera.kind,
+    panelCamera.leftInsetPx,
+    hasPanelCoordinates,
+    settings.altitudeDisplayMode,
+  ]);
 
   // Follow flight init
   useEffect(() => {
@@ -233,6 +477,7 @@ export function CameraController({
     followFlight,
     fpvFlight,
     settings,
+    panelCamera.open,
     isInteractingRef,
     orbitFrameRef,
     idleTimerRef,

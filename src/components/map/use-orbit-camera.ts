@@ -18,6 +18,7 @@ export function useOrbitCamera(
   followFlight: FlightState | null | undefined,
   fpvFlight: FlightState | null | undefined,
   settings: Settings,
+  suspended: boolean,
   isInteractingRef: MutableRefObject<boolean>,
   orbitFrameRef: MutableRefObject<number | null>,
   idleTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>,
@@ -35,6 +36,7 @@ export function useOrbitCamera(
       !isLoaded ||
       !city ||
       !settings.autoOrbit ||
+      suspended ||
       followFlight ||
       fpvFlight
     ) {
@@ -202,6 +204,7 @@ export function useOrbitCamera(
     followFlight,
     fpvFlight,
     settings.autoOrbit,
+    suspended,
     isInteractingRef,
     orbitFrameRef,
     idleTimerRef,

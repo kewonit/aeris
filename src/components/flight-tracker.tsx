@@ -13,8 +13,12 @@ import { AnimatePresence, motion } from "motion/react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { Map as MapView } from "@/components/map/map";
+import { Map as MapView, type MapRef } from "@/components/map/map";
 import { CameraController } from "@/components/map/camera-controller";
+import {
+  CLOSED_MAP_PANEL_CAMERA_STATE,
+  createMapPanelCameraState,
+} from "@/components/map/panel-camera";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { AirspaceLayer } from "@/components/map/airspace-layer";
 import { WeatherRadarLayer } from "@/components/map/weather-radar-layer";
@@ -118,6 +122,14 @@ function FlightTrackerInner({
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
   const [fpvIcao24, setFpvIcao24] = useState<string | null>(null);
   const [leftPanel, setLeftPanel] = useState<AerisLeftPanel | null>(null);
+  const [leftPanelInsetPx, setLeftPanelInsetPx] = useState(0);
+  const mapRef = useRef<MapRef>(null);
+
+  const restoreMapFocus = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      mapRef.current?.getCanvas().focus({ preventScroll: true });
+    });
+  }, []);
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
 
@@ -303,6 +315,28 @@ function FlightTrackerInner({
 
   const fpvFlightOrCached = fpvFlight;
   const displayFlight = selectedFlight;
+  const [retainedDesktopFlight, setRetainedDesktopFlight] =
+    useState<FlightState | null>(displayFlight);
+
+  useEffect(() => {
+    if (displayFlight) {
+      const timeout = window.setTimeout(
+        () => setRetainedDesktopFlight(displayFlight),
+        0,
+      );
+      return () => window.clearTimeout(timeout);
+    }
+
+    if (selectedIcao24) return;
+    const timeout = window.setTimeout(() => setRetainedDesktopFlight(null), 0);
+    return () => window.clearTimeout(timeout);
+  }, [displayFlight, selectedIcao24]);
+
+  const desktopPanelFlight =
+    displayFlight ??
+    (retainedDesktopFlight?.icao24 === selectedIcao24
+      ? retainedDesktopFlight
+      : null);
 
   // ── Airport Board state ──────────────────────────────────────────────
   const airportBoard = useAirportBoard(
@@ -329,11 +363,13 @@ function FlightTrackerInner({
       const nextIcao24 = selectedIcao24 === icao24 ? null : icao24;
       setSelectedIcao24(nextIcao24);
       if (nextIcao24) {
+        const nextFlight = displayFlightMap.get(nextIcao24);
+        if (nextFlight) setRetainedDesktopFlight(nextFlight);
         setSelectedAirportIata(null);
         if (!isMobile) setLeftPanel({ kind: "flight" });
       }
     },
-    [isMobile, selectedIcao24],
+    [displayFlightMap, isMobile, selectedIcao24],
   );
 
   const handleAirportBoardClose = useCallback(() => {
@@ -355,6 +391,7 @@ function FlightTrackerInner({
         const icao24 = info.object.icao24.toLowerCase();
         const nextIcao24 = selectedIcao24 === icao24 ? null : icao24;
         setSelectedIcao24(nextIcao24);
+        if (nextIcao24) setRetainedDesktopFlight(info.object);
         setSelectedAirportIata(null);
         if (!isMobile) {
           setLeftPanel(nextIcao24 ? { kind: "flight" } : null);
@@ -473,15 +510,17 @@ function FlightTrackerInner({
   const handleShortcutDeselect = useCallback(() => {
     if (leftPanel) {
       setLeftPanel(null);
+      restoreMapFocus();
       return;
     }
     handleDeselectFlight();
-  }, [handleDeselectFlight, leftPanel]);
+  }, [handleDeselectFlight, leftPanel, restoreMapFocus]);
 
   // Helper: select flight and optionally enter FPV
   const selectFlight = useCallback(
     (f: FlightState, enterFpv = false) => {
       setSelectedIcao24(f.icao24);
+      setRetainedDesktopFlight(f);
       setFollowIcao24(null);
       setSelectedAirportIata(null);
       if (
@@ -611,10 +650,57 @@ function FlightTrackerInner({
   const showMobileAirportCard =
     isMobile && !fpvIcao24 && !displayFlight && airportBoard.isActive;
   const desktopLeftPanelOpen = !isMobile && !fpvIcao24 && leftPanel !== null;
+  const panelCamera = useMemo(() => {
+    if (!desktopLeftPanelOpen || !leftPanel) {
+      return CLOSED_MAP_PANEL_CAMERA_STATE;
+    }
+
+    if (leftPanel.kind === "flight") {
+      return createMapPanelCameraState({
+        kind: "flight",
+        focusKey: desktopPanelFlight
+          ? `flight:${desktopPanelFlight.icao24}`
+          : null,
+        longitude: desktopPanelFlight?.longitude,
+        latitude: desktopPanelFlight?.latitude,
+        altitudeMeters:
+          desktopPanelFlight?.baroAltitude ?? desktopPanelFlight?.geoAltitude,
+        leftInsetPx: leftPanelInsetPx,
+      });
+    }
+
+    return createMapPanelCameraState({
+      kind: "airport",
+      focusKey: airportBoard.airport
+        ? `airport:${airportBoard.airport.iata}`
+        : null,
+      longitude: airportBoard.airport?.lng,
+      latitude: airportBoard.airport?.lat,
+      altitudeMeters: 0,
+      leftInsetPx: leftPanelInsetPx,
+    });
+  }, [
+    airportBoard.airport,
+    desktopLeftPanelOpen,
+    desktopPanelFlight,
+    leftPanel,
+    leftPanelInsetPx,
+  ]);
+  const leftPanelInset =
+    leftPanelInsetPx > 0
+      ? `${leftPanelInsetPx}px`
+      : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} - 4px)`;
   const desktopPanelStyle = {
     "--aeris-left-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH,
-    "--aeris-left-chrome-shift": `calc(${AERIS_LEFT_SIDEBAR_WIDTH} + 0.25rem)`,
-    "--aeris-map-center-shift": `calc(${AERIS_LEFT_SIDEBAR_WIDTH} / 2)`,
+    "--aeris-left-sidebar-inset": leftPanelInset,
+    "--aeris-left-chrome-shift":
+      leftPanelInsetPx > 0
+        ? `${leftPanelInsetPx + 8}px`
+        : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} + 0.25rem)`,
+    "--aeris-map-center-shift":
+      leftPanelInsetPx > 0
+        ? `${leftPanelInsetPx / 2}px`
+        : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} / 2)`,
   } as CSSProperties;
 
   return (
@@ -627,6 +713,7 @@ function FlightTrackerInner({
         data-panel-open={desktopLeftPanelOpen}
       >
         <MapView
+          ref={mapRef}
           mapStyle={mapStyle.style}
           terrainProfile={mapStyle.terrainProfile}
           isDark={mapStyle.dark}
@@ -637,6 +724,7 @@ function FlightTrackerInner({
             followFlight={followFlight}
             fpvFlight={fpvFlightOrCached}
             fpvPositionRef={fpvPositionRef}
+            panelCamera={panelCamera}
           />
           <AirportLayer
             activeCity={activeCity}
@@ -688,8 +776,11 @@ function FlightTrackerInner({
         {!fpvIcao24 && !isMobile && (
           <AerisLeftSidebar
             leftPanel={leftPanel}
-            onClose={() => setLeftPanel(null)}
-            displayFlight={displayFlight}
+            onClose={() => {
+              setLeftPanel(null);
+              restoreMapFocus();
+            }}
+            displayFlight={desktopPanelFlight}
             selectedTrail={selectedTrail}
             selectedTrack={selectedTrack}
             onCloseFlight={handleDeselectFlight}
@@ -702,6 +793,8 @@ function FlightTrackerInner({
             selectedIcao24={selectedIcao24}
             onCloseAirport={handleAirportBoardClose}
             atc={atc}
+            onInsetChange={setLeftPanelInsetPx}
+            onRestoreFocus={restoreMapFocus}
           />
         )}
 

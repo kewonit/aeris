@@ -62,13 +62,23 @@ export function projectLngLatElevationPixelDelta(
       lnglat: maplibregl.LngLat,
       terrain: unknown,
     ) => { x: number; y: number };
+    centerPoint?: { x: number; y: number };
   };
 
   const tr = (map as unknown as { transform?: TransformLike }).transform;
 
   const canvas = map.getCanvas();
-  const cx = canvas.clientWidth / 2;
-  const cy = canvas.clientHeight / 2;
+  const centerPoint = tr?.centerPoint;
+  const centerX = centerPoint?.x;
+  const centerY = centerPoint?.y;
+  const cx =
+    typeof centerX === "number" && Number.isFinite(centerX)
+      ? centerX
+      : canvas.clientWidth / 2;
+  const cy =
+    typeof centerY === "number" && Number.isFinite(centerY)
+      ? centerY
+      : canvas.clientHeight / 2;
 
   // Try elevation-aware internal API first
   if (tr && typeof tr.locationToScreenPoint === "function") {
@@ -101,6 +111,46 @@ export function projectLngLatElevationPixelDelta(
   }
 
   return null;
+}
+
+export function centerLngLatForScreenOffset(
+  map: maplibregl.Map,
+  lng: number,
+  lat: number,
+  offset: [number, number],
+): [number, number] | null {
+  type TransformLike = {
+    center: maplibregl.LngLat;
+    centerPoint: { x: number; y: number };
+    clone: () => TransformLike;
+    setLocationAtPoint: (
+      lnglat: maplibregl.LngLat,
+      point: maplibregl.Point,
+    ) => void;
+  };
+
+  const transform = (map as unknown as { transform?: TransformLike }).transform;
+  if (!transform || typeof transform.clone !== "function") return null;
+
+  try {
+    const clone = transform.clone();
+    clone.setLocationAtPoint(
+      new maplibregl.LngLat(lng, lat),
+      new maplibregl.Point(
+        clone.centerPoint.x + offset[0],
+        clone.centerPoint.y + offset[1],
+      ),
+    );
+
+    const center = clone.center;
+    if (!Number.isFinite(center.lng) || !Number.isFinite(center.lat)) {
+      return null;
+    }
+
+    return [center.lng, center.lat];
+  } catch {
+    return null;
+  }
 }
 
 export function setMapInteractionsEnabled(
