@@ -21,7 +21,10 @@ import (
 	"github.com/kewonit/aeris/services/adsb-relay/internal/stream"
 )
 
-const maxJSONResponseBytes = 16 << 20
+const (
+	maxJSONResponseBytes  = 16 << 20
+	maxStreamMessageBytes = 8 << 20
+)
 
 var (
 	trackIDPattern  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
@@ -356,20 +359,31 @@ func (s *Server) writeStream(ctx context.Context, connection *websocket.Conn, su
 			return connection.Close(websocket.StatusTryAgainLater, "resnapshot required")
 		case message := <-subscription.Messages():
 			writeContext, cancel := context.WithTimeout(ctx, 10*time.Second)
-			err := wsjson.Write(writeContext, connection, message)
+			err := writeStreamMessage(writeContext, connection, message)
 			cancel()
 			if err != nil {
 				return err
 			}
 		case now := <-heartbeat.C:
 			writeContext, cancel := context.WithTimeout(ctx, 10*time.Second)
-			err := wsjson.Write(writeContext, connection, subscription.Heartbeat(now.UTC()))
+			err := writeStreamMessage(writeContext, connection, subscription.Heartbeat(now.UTC()))
 			cancel()
 			if err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func writeStreamMessage(ctx context.Context, connection *websocket.Conn, message stream.Message) error {
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	if len(payload) > maxStreamMessageBytes {
+		return connection.Close(websocket.StatusMessageTooBig, "stream message exceeded bounds")
+	}
+	return connection.Write(ctx, websocket.MessageText, payload)
 }
 
 func (s *Server) requireHTTPToken(next http.HandlerFunc) http.HandlerFunc {

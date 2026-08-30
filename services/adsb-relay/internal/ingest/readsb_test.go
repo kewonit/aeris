@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,5 +59,31 @@ func TestEnvelopeResponseTimeSupportsSecondsAndMilliseconds(t *testing.T) {
 	}
 	if got := (ReadsbEnvelope{Now: 1_700_000_000_500}).ResponseTime(received); !got.Equal(received.Add(500 * time.Millisecond)) {
 		t.Fatalf("unexpected millisecond response time %s", got)
+	}
+}
+
+func TestEnvelopeRejectsSourceClockAttacks(t *testing.T) {
+	received := time.Unix(1_700_000_000, 0).UTC()
+	for _, sourceTime := range []float64{
+		float64(received.Add(-time.Hour).Unix()),
+		float64(received.Add(time.Hour).Unix()),
+	} {
+		if got := (ReadsbEnvelope{Now: sourceTime}).ResponseTime(received); !got.IsZero() {
+			t.Fatalf("expected invalid source time to be rejected, got %s", got)
+		}
+	}
+}
+
+func TestEnvelopeFreshnessUsesLatestPositionAge(t *testing.T) {
+	received := time.Unix(1_700_000_000, 0).UTC()
+	envelope := ReadsbEnvelope{
+		Now: float64(received.Unix()),
+		Aircraft: []json.RawMessage{
+			json.RawMessage(`{"hex":"abc123","lat":12.5,"lon":77.6,"seen_pos":45}`),
+		},
+	}
+	responseTime := envelope.ResponseTime(received)
+	if envelope.IsFresh(responseTime, received, 30*time.Second) {
+		t.Fatal("cached positions must not make a source snapshot appear live")
 	}
 }

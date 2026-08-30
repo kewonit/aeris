@@ -25,7 +25,7 @@ func syntheticAircraft() RawAircraft {
 }
 
 func TestNormalizerSeparatesFixAndReceiveTime(t *testing.T) {
-	normalizer, err := NewNormalizer("synthetic")
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestNormalizerSeparatesFixAndReceiveTime(t *testing.T) {
 }
 
 func TestNormalizerDownsamplesStableCruiseButKeepsTurns(t *testing.T) {
-	normalizer, err := NewNormalizer("synthetic")
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestNormalizerDownsamplesStableCruiseButKeepsTurns(t *testing.T) {
 }
 
 func TestNormalizerRejectsImpossibleJump(t *testing.T) {
-	normalizer, err := NewNormalizer("synthetic")
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestNormalizerRejectsImpossibleJump(t *testing.T) {
 }
 
 func TestNormalizerBreaksOnAltitudeDatumChange(t *testing.T) {
-	normalizer, err := NewNormalizer("synthetic")
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestNormalizerBreaksOnAltitudeDatumChange(t *testing.T) {
 }
 
 func TestNormalizerRejectsNonFiniteInput(t *testing.T) {
-	normalizer, err := NewNormalizer("synthetic")
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +117,93 @@ func TestNormalizerRejectsNonFiniteInput(t *testing.T) {
 	raw.Latitude = number(math.NaN())
 	if _, _, err := normalizer.Normalize(raw, time.Now(), time.Now()); !errorsIs(err, ErrInvalidPosition) {
 		t.Fatalf("expected invalid position error, got %v", err)
+	}
+}
+
+func TestNormalizerRejectsIndividuallyStalePositions(t *testing.T) {
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := syntheticAircraft()
+	raw.SeenPosition = number(30)
+	if _, accepted, err := normalizer.Normalize(raw, time.Now().UTC(), time.Now().UTC()); err == nil || accepted {
+		t.Fatalf("stale position must be rejected: accepted=%v err=%v", accepted, err)
+	}
+}
+
+func TestNormalizerRejectsDuplicatesAndOutOfOrderFixes(t *testing.T) {
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Unix(1_700_000_000, 0).UTC()
+	raw := syntheticAircraft()
+	first, accepted, err := normalizer.Normalize(raw, start, start)
+	if err != nil || !accepted {
+		t.Fatal("first point must be accepted")
+	}
+	if _, accepted, err := normalizer.Normalize(raw, start.Add(5*time.Second), start.Add(5*time.Second)); err != nil || accepted {
+		t.Fatalf("unchanged repeated position must be suppressed: accepted=%v err=%v", accepted, err)
+	}
+	raw.Longitude = number(77.601)
+	if _, accepted, err := normalizer.Normalize(raw, start.Add(-time.Second), start.Add(6*time.Second)); err != nil || accepted {
+		t.Fatalf("out-of-order fix must be suppressed: accepted=%v err=%v", accepted, err)
+	}
+	raw.Longitude = number(77.605)
+	next, accepted, err := normalizer.Normalize(raw, start.Add(6*time.Second), start.Add(6*time.Second))
+	if err != nil || !accepted || next.TrackID != first.TrackID {
+		t.Fatalf("next ordered fix should retain the session: accepted=%v err=%v", accepted, err)
+	}
+}
+
+func TestNormalizerSeparatesICAOReuseAndAddressTypes(t *testing.T) {
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Unix(1_700_000_000, 0).UTC()
+	raw := syntheticAircraft()
+	first, accepted, err := normalizer.Normalize(raw, start, start)
+	if err != nil || !accepted {
+		t.Fatal("first point must be accepted")
+	}
+
+	reused := syntheticAircraft()
+	reused.Latitude = number(40)
+	reused.Longitude = number(-73)
+	reused.Flight = "OTHER1"
+	second, accepted, err := normalizer.Normalize(reused, start.Add(11*time.Minute), start.Add(11*time.Minute))
+	if err != nil || !accepted || second.SessionGeneration != 2 || second.TrackID == first.TrackID {
+		t.Fatalf("ICAO reuse must start a new session: accepted=%v err=%v", accepted, err)
+	}
+
+	tisb := syntheticAircraft()
+	tisb.Type = "tisb_icao"
+	tisbObservation, accepted, err := normalizer.Normalize(tisb, start.Add(12*time.Minute), start.Add(12*time.Minute))
+	if err != nil || !accepted || tisbObservation.TrackID == second.TrackID {
+		t.Fatalf("TIS-B and ADS-B identities must remain separate: accepted=%v err=%v", accepted, err)
+	}
+	mlat := syntheticAircraft()
+	mlat.Type = "mlat"
+	mlatObservation, accepted, err := normalizer.Normalize(mlat, start.Add(13*time.Minute), start.Add(13*time.Minute))
+	if err != nil || !accepted || mlatObservation.TrackID == tisbObservation.TrackID {
+		t.Fatalf("MLAT and TIS-B identities must remain separate: accepted=%v err=%v", accepted, err)
+	}
+}
+
+func TestNormalizerDoesNotReviveUnchangedPositionAfterSessionGap(t *testing.T) {
+	normalizer, err := NewNormalizer("synthetic", 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Unix(1_700_000_000, 0).UTC()
+	raw := syntheticAircraft()
+	if _, accepted, err := normalizer.Normalize(raw, start, start); err != nil || !accepted {
+		t.Fatal("first point must be accepted")
+	}
+	if _, accepted, err := normalizer.Normalize(raw, start.Add(11*time.Minute), start.Add(11*time.Minute)); err != nil || accepted {
+		t.Fatalf("unchanged cached position must not be revived: accepted=%v err=%v", accepted, err)
 	}
 }
 

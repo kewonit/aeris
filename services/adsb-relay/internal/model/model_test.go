@@ -8,17 +8,22 @@ import (
 
 func TestObservationValidationRejectsUnsafeValues(t *testing.T) {
 	now := time.Now().UTC()
+	altitude := 30_000.0
 	base := Observation{
 		TrackID:           "track",
 		Provider:          "synthetic",
 		SourceEpoch:       "epoch",
+		SessionGeneration: 1,
 		Address:           "abc123",
 		AddressType:       "adsb_icao",
 		FixTime:           now,
 		ReceivedAt:        now,
+		PublishedAt:       now,
 		Latitude:          12.5,
 		Longitude:         77.6,
+		BaroAltitudeFt:    &altitude,
 		AltitudeReference: AltitudeBarometric,
+		PositionSource:    "adsb_icao",
 	}
 	if err := base.Validate(); err != nil {
 		t.Fatalf("valid observation rejected: %v", err)
@@ -34,6 +39,26 @@ func TestObservationValidationRejectsUnsafeValues(t *testing.T) {
 	invalid.FixTime = now.Add(time.Minute)
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("expected future source timestamp to be rejected")
+	}
+
+	invalid = base
+	unsafeAltitude := 1_000_000.0
+	invalid.BaroAltitudeFt = &unsafeAltitude
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("expected unsafe altitude to be rejected")
+	}
+
+	invalid = base
+	unsafeRate := 50_000.0
+	invalid.VerticalRateFPM = &unsafeRate
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("expected unsafe vertical rate to be rejected")
+	}
+
+	invalid = base
+	invalid.Address = "abc\n123"
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("expected unsafe address text to be rejected")
 	}
 }
 
