@@ -60,7 +60,7 @@ func (s *Subscription) Heartbeat(now time.Time) Message {
 		SubscriptionRevision: s.revision,
 		Sequence:             s.hub.sequence,
 		AsOf:                 now.UTC(),
-		SourceStatus:         s.hub.sourceStatus,
+		SourceStatus:         s.hub.effectiveStatusLocked(),
 		SourceAgeMS:          s.hub.sourceAgeLocked(now),
 	}
 }
@@ -76,13 +76,16 @@ type Hub struct {
 	current      map[string]model.Observation
 	clients      map[*Subscription]struct{}
 	queueDepth   int
+	maxVisible   int
+	maxCurrent   int
 	sourceStatus model.SourceStatus
+	currentFull  bool
 	lastSourceAt time.Time
 }
 
-func NewHub(queueDepth int) (*Hub, error) {
-	if queueDepth <= 0 {
-		return nil, errors.New("queue depth must be positive")
+func NewHub(queueDepth, maxVisible, maxCurrent int) (*Hub, error) {
+	if queueDepth <= 0 || maxVisible <= 0 || maxCurrent <= 0 || maxVisible > maxCurrent {
+		return nil, errors.New("invalid hub bounds")
 	}
 	var epoch [16]byte
 	if _, err := rand.Read(epoch[:]); err != nil {
@@ -93,6 +96,8 @@ func NewHub(queueDepth int) (*Hub, error) {
 		current:      make(map[string]model.Observation),
 		clients:      make(map[*Subscription]struct{}),
 		queueDepth:   queueDepth,
+		maxVisible:   maxVisible,
+		maxCurrent:   maxCurrent,
 		sourceStatus: model.SourceStarting,
 	}, nil
 }
@@ -122,19 +127,32 @@ func (h *Hub) ApplyBatch(observations []model.Observation, publishedAt time.Time
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sequence++
+	previousStatus := h.effectiveStatusLocked()
+	accepted := observations[:0]
 	for index := range observations {
 		observations[index].PublishedAt = publishedAt.UTC()
+		if _, exists := h.current[observations[index].TrackID]; !exists && len(h.current) >= h.maxCurrent {
+			h.currentFull = true
+			continue
+		}
 		h.current[observations[index].TrackID] = observations[index]
+		accepted = append(accepted, observations[index])
 	}
+	if h.effectiveStatusLocked() != previousStatus {
+		h.broadcastSourceStatusLocked(publishedAt)
+	}
+	if len(accepted) == 0 {
+		return
+	}
+	h.sequence++
 	for subscription := range h.clients {
 		upserts := make([]model.Observation, 0)
 		removals := make([]string, 0)
-		for _, observation := range observations {
+		for _, observation := range accepted {
 			_, wasVisible := subscription.visible[observation.TrackID]
 			isVisible := subscription.bbox.Contains(observation.Latitude, observation.Longitude)
 			switch {
-			case isVisible:
+			case isVisible && (wasVisible || len(subscription.visible) < h.maxVisible):
 				subscription.visible[observation.TrackID] = struct{}{}
 				upserts = append(upserts, observation)
 			case wasVisible:
@@ -152,7 +170,7 @@ func (h *Hub) ApplyBatch(observations []model.Observation, publishedAt time.Time
 			SubscriptionRevision: subscription.revision,
 			Sequence:             h.sequence,
 			AsOf:                 publishedAt.UTC(),
-			SourceStatus:         h.sourceStatus,
+			SourceStatus:         h.effectiveStatusLocked(),
 			SourceAgeMS:          h.sourceAgeLocked(publishedAt),
 			Upserts:              upserts,
 			Removals:             removals,
@@ -163,25 +181,13 @@ func (h *Hub) ApplyBatch(observations []model.Observation, publishedAt time.Time
 func (h *Hub) SetSourceStatus(status model.SourceStatus, sourceObservedAt, now time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	previousStatus := h.effectiveStatusLocked()
 	if !sourceObservedAt.IsZero() {
 		h.lastSourceAt = sourceObservedAt.UTC()
 	}
-	if h.sourceStatus == status && status == model.SourceLive {
-		return
-	}
 	h.sourceStatus = status
-	h.sequence++
-	for subscription := range h.clients {
-		h.enqueueLocked(subscription, Message{
-			Type:                 "source_status",
-			ProtocolVersion:      model.ProtocolVersion,
-			ServerEpoch:          h.serverEpoch,
-			SubscriptionRevision: subscription.revision,
-			Sequence:             h.sequence,
-			AsOf:                 now.UTC(),
-			SourceStatus:         status,
-			SourceAgeMS:          h.sourceAgeLocked(now),
-		})
+	if h.effectiveStatusLocked() != previousStatus {
+		h.broadcastSourceStatusLocked(now)
 	}
 }
 
@@ -189,6 +195,7 @@ func (h *Hub) ResetAfterSourceRecovery(now time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.current = make(map[string]model.Observation)
+	h.currentFull = false
 	h.sequence++
 	for subscription := range h.clients {
 		subscription.visible = make(map[string]struct{})
@@ -202,12 +209,19 @@ func (h *Hub) RemoveExpired(now time.Time, expiry time.Duration) {
 	if h.sourceStatus != model.SourceLive {
 		return
 	}
+	previousStatus := h.effectiveStatusLocked()
 	removed := make([]string, 0)
 	for trackID, observation := range h.current {
 		if now.Sub(observation.ReceivedAt) > expiry {
 			delete(h.current, trackID)
 			removed = append(removed, trackID)
 		}
+	}
+	if h.currentFull && len(h.current) < h.maxCurrent {
+		h.currentFull = false
+	}
+	if h.effectiveStatusLocked() != previousStatus {
+		h.broadcastSourceStatusLocked(now)
 	}
 	if len(removed) == 0 {
 		return
@@ -232,7 +246,7 @@ func (h *Hub) RemoveExpired(now time.Time, expiry time.Duration) {
 			SubscriptionRevision: subscription.revision,
 			Sequence:             h.sequence,
 			AsOf:                 now.UTC(),
-			SourceStatus:         h.sourceStatus,
+			SourceStatus:         h.effectiveStatusLocked(),
 			SourceAgeMS:          h.sourceAgeLocked(now),
 			Removals:             visibleRemovals,
 		})
@@ -242,7 +256,7 @@ func (h *Hub) RemoveExpired(now time.Time, expiry time.Duration) {
 func (h *Hub) Status(now time.Time) (model.SourceStatus, *int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.sourceStatus, h.sourceAgeLocked(now)
+	return h.effectiveStatusLocked(), h.sourceAgeLocked(now)
 }
 
 func (h *Hub) updateSubscription(subscription *Subscription, request SubscribeRequest, now time.Time) error {
@@ -272,10 +286,15 @@ func (h *Hub) enqueueSnapshotLocked(subscription *Subscription, now time.Time, r
 	for _, observation := range h.current {
 		if subscription.bbox.Contains(observation.Latitude, observation.Longitude) {
 			aircraft = append(aircraft, observation)
-			subscription.visible[observation.TrackID] = struct{}{}
 		}
 	}
 	sort.Slice(aircraft, func(i, j int) bool { return aircraft[i].TrackID < aircraft[j].TrackID })
+	if len(aircraft) > h.maxVisible {
+		aircraft = aircraft[:h.maxVisible]
+	}
+	for _, observation := range aircraft {
+		subscription.visible[observation.TrackID] = struct{}{}
+	}
 	h.enqueueLocked(subscription, Message{
 		Type:                 "snapshot",
 		ProtocolVersion:      model.ProtocolVersion,
@@ -283,11 +302,35 @@ func (h *Hub) enqueueSnapshotLocked(subscription *Subscription, now time.Time, r
 		SubscriptionRevision: subscription.revision,
 		Sequence:             h.sequence,
 		AsOf:                 now.UTC(),
-		SourceStatus:         h.sourceStatus,
+		SourceStatus:         h.effectiveStatusLocked(),
 		SourceAgeMS:          h.sourceAgeLocked(now),
 		Aircraft:             aircraft,
 		Reason:               reason,
 	})
+}
+
+func (h *Hub) effectiveStatusLocked() model.SourceStatus {
+	if h.currentFull && h.sourceStatus == model.SourceLive {
+		return model.SourceDegraded
+	}
+	return h.sourceStatus
+}
+
+func (h *Hub) broadcastSourceStatusLocked(now time.Time) {
+	h.sequence++
+	status := h.effectiveStatusLocked()
+	for subscription := range h.clients {
+		h.enqueueLocked(subscription, Message{
+			Type:                 "source_status",
+			ProtocolVersion:      model.ProtocolVersion,
+			ServerEpoch:          h.serverEpoch,
+			SubscriptionRevision: subscription.revision,
+			Sequence:             h.sequence,
+			AsOf:                 now.UTC(),
+			SourceStatus:         status,
+			SourceAgeMS:          h.sourceAgeLocked(now),
+		})
+	}
 }
 
 func (h *Hub) enqueueLocked(subscription *Subscription, message Message) {

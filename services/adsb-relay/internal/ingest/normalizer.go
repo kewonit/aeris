@@ -17,7 +17,6 @@ const (
 	dynamicMinInterval   = time.Second
 	sessionGap           = 10 * time.Minute
 	discontinuityGap     = 90 * time.Second
-	maxSourceAge         = 90 * time.Second
 	maxImpliedSpeedKt    = 1500.0
 )
 
@@ -28,22 +27,27 @@ type sessionState struct {
 }
 
 type Normalizer struct {
-	mu          sync.Mutex
-	provider    string
-	sourceEpoch string
-	sessions    map[string]*sessionState
-	processed   uint64
+	mu           sync.Mutex
+	provider     string
+	maxSourceAge time.Duration
+	sourceEpoch  string
+	sessions     map[string]*sessionState
+	processed    uint64
 }
 
-func NewNormalizer(provider string) (*Normalizer, error) {
+func NewNormalizer(provider string, maxSourceAge time.Duration) (*Normalizer, error) {
+	if maxSourceAge <= 0 {
+		return nil, errors.New("maximum source age must be positive")
+	}
 	epoch, err := NewSourceEpoch()
 	if err != nil {
 		return nil, err
 	}
 	return &Normalizer{
-		provider:    provider,
-		sourceEpoch: epoch,
-		sessions:    make(map[string]*sessionState),
+		provider:     provider,
+		maxSourceAge: maxSourceAge,
+		sourceEpoch:  epoch,
+		sessions:     make(map[string]*sessionState),
 	}, nil
 }
 
@@ -82,7 +86,7 @@ func (n *Normalizer) Normalize(raw RawAircraft, responseTime, receivedAt time.Ti
 	}
 	fixTime := responseTime.UTC()
 	if raw.SeenPosition != nil {
-		if !finite(*raw.SeenPosition) || *raw.SeenPosition < 0 || time.Duration(*raw.SeenPosition*float64(time.Second)) > maxSourceAge {
+		if !finite(*raw.SeenPosition) || *raw.SeenPosition < 0 || time.Duration(*raw.SeenPosition*float64(time.Second)) >= n.maxSourceAge {
 			return model.Observation{}, false, errors.New("stale or invalid source position age")
 		}
 		fixTime = responseTime.Add(-time.Duration(*raw.SeenPosition * float64(time.Second))).UTC()
@@ -107,24 +111,20 @@ func (n *Normalizer) Normalize(raw RawAircraft, responseTime, receivedAt time.Ti
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	key := addressType + "\x00" + address
 	n.processed++
 	if n.processed%1024 == 0 {
 		for sessionKey, session := range n.sessions {
-			if receivedAt.Sub(session.lastSeen) > 2*sessionGap {
+			if sessionKey != key && !session.lastSeen.IsZero() && receivedAt.Sub(session.lastSeen) > 2*sessionGap {
 				delete(n.sessions, sessionKey)
 			}
 		}
 	}
-	key := addressType + "\x00" + address
 	state := n.sessions[key]
 	if state == nil {
 		state = &sessionState{generation: 1}
 		n.sessions[key] = state
-	} else if !state.lastSeen.IsZero() && receivedAt.Sub(state.lastSeen) > sessionGap {
-		state.generation++
-		state.last = nil
 	}
-	state.lastSeen = receivedAt
 
 	observation := model.Observation{
 		Provider:          n.provider,
@@ -152,6 +152,15 @@ func (n *Normalizer) Normalize(raw RawAircraft, responseTime, receivedAt time.Ti
 		NACP:              finitePointer(raw.NACP),
 		SIL:               finitePointer(raw.SIL),
 	}
+	if state.last != nil && !state.lastSeen.IsZero() && receivedAt.Sub(state.lastSeen) > sessionGap {
+		if sameKinematics(*state.last, observation) {
+			return model.Observation{}, false, nil
+		}
+		state.generation++
+		state.last = nil
+		state.lastSeen = time.Time{}
+		observation.SessionGeneration = state.generation
+	}
 	observation.TrackID = model.StableTrackID(
 		observation.Provider,
 		observation.SourceEpoch,
@@ -163,7 +172,7 @@ func (n *Normalizer) Normalize(raw RawAircraft, responseTime, receivedAt time.Ti
 	if state.last != nil {
 		previous := *state.last
 		interval := observation.FixTime.Sub(previous.FixTime)
-		if interval < 0 || (interval == 0 && samePosition(previous, observation)) {
+		if interval <= 0 || sameKinematics(previous, observation) {
 			return model.Observation{}, false, nil
 		}
 		distance := model.DistanceNM(previous.Latitude, previous.Longitude, observation.Latitude, observation.Longitude)
@@ -186,6 +195,7 @@ func (n *Normalizer) Normalize(raw RawAircraft, responseTime, receivedAt time.Ti
 	}
 	copyObservation := observation
 	state.last = &copyObservation
+	state.lastSeen = receivedAt
 	return observation, true, nil
 }
 
@@ -214,8 +224,24 @@ func shouldPersist(previous, next model.Observation, interval time.Duration) boo
 	return pointerDelta(previous.VerticalRateFPM, next.VerticalRateFPM, absoluteDelta) >= 250
 }
 
-func samePosition(left, right model.Observation) bool {
-	return left.Latitude == right.Latitude && left.Longitude == right.Longitude
+func sameKinematics(left, right model.Observation) bool {
+	return left.Latitude == right.Latitude &&
+		left.Longitude == right.Longitude &&
+		left.OnGround == right.OnGround &&
+		left.PositionSource == right.PositionSource &&
+		left.AltitudeReference == right.AltitudeReference &&
+		equalPointers(left.BaroAltitudeFt, right.BaroAltitudeFt) &&
+		equalPointers(left.GeomAltitudeFt, right.GeomAltitudeFt) &&
+		equalPointers(left.TrackDeg, right.TrackDeg) &&
+		equalPointers(left.GroundSpeedKt, right.GroundSpeedKt) &&
+		equalPointers(left.VerticalRateFPM, right.VerticalRateFPM)
+}
+
+func equalPointers(left, right *float64) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func pointerDelta(left, right *float64, delta func(float64, float64) float64) float64 {

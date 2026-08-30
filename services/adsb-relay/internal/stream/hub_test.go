@@ -35,7 +35,7 @@ func request(revision uint64) SubscribeRequest {
 }
 
 func TestSubscriptionAlwaysReceivesSnapshotBeforeDeltas(t *testing.T) {
-	hub, err := NewHub(4)
+	hub, err := NewHub(4, 100, 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestSubscriptionAlwaysReceivesSnapshotBeforeDeltas(t *testing.T) {
 }
 
 func TestAircraftLeavingViewportProducesTombstone(t *testing.T) {
-	hub, _ := NewHub(4)
+	hub, _ := NewHub(4, 100, 1000)
 	now := time.Now().UTC()
 	hub.ApplyBatch([]model.Observation{streamObservation("track-a", 12.5, 77.6, now)}, now)
 	subscription, err := hub.Register(request(1), now)
@@ -72,7 +72,7 @@ func TestAircraftLeavingViewportProducesTombstone(t *testing.T) {
 }
 
 func TestSlowConsumerIsClosedInsteadOfGrowing(t *testing.T) {
-	hub, _ := NewHub(1)
+	hub, _ := NewHub(1, 100, 1000)
 	now := time.Now().UTC()
 	subscription, err := hub.Register(request(1), now)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestSlowConsumerIsClosedInsteadOfGrowing(t *testing.T) {
 }
 
 func TestFeedOutageDoesNotMassRemoveAircraft(t *testing.T) {
-	hub, _ := NewHub(4)
+	hub, _ := NewHub(4, 100, 1000)
 	now := time.Now().UTC()
 	hub.SetSourceStatus(model.SourceLive, now, now)
 	hub.ApplyBatch([]model.Observation{streamObservation("track-a", 12.5, 77.6, now)}, now)
@@ -111,7 +111,7 @@ func TestFeedOutageDoesNotMassRemoveAircraft(t *testing.T) {
 }
 
 func TestHeartbeatCarriesConsistencyCursor(t *testing.T) {
-	hub, _ := NewHub(4)
+	hub, _ := NewHub(4, 100, 1000)
 	now := time.Now().UTC()
 	subscription, err := hub.Register(request(7), now)
 	if err != nil {
@@ -121,5 +121,39 @@ func TestHeartbeatCarriesConsistencyCursor(t *testing.T) {
 	heartbeat := subscription.Heartbeat(now)
 	if heartbeat.ServerEpoch == "" || heartbeat.SubscriptionRevision != 7 || heartbeat.ProtocolVersion != model.ProtocolVersion {
 		t.Fatalf("heartbeat lacks consistency metadata: %#v", heartbeat)
+	}
+}
+
+func TestHubBoundsCurrentStateAndViewportSnapshot(t *testing.T) {
+	hub, err := NewHub(8, 2, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	hub.SetSourceStatus(model.SourceLive, now, now)
+	hub.ApplyBatch([]model.Observation{
+		streamObservation("track-a", 12.5, 77.6, now),
+		streamObservation("track-b", 12.6, 77.6, now),
+		streamObservation("track-c", 12.7, 77.6, now),
+		streamObservation("track-d", 12.8, 77.6, now),
+	}, now)
+	if len(hub.current) != 3 {
+		t.Fatalf("current state exceeded its bound: %d", len(hub.current))
+	}
+	if status, _ := hub.Status(now); status != model.SourceDegraded {
+		t.Fatalf("saturated current state must report degraded, got %s", status)
+	}
+	subscription, err := hub.Register(request(1), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	snapshot := <-subscription.Messages()
+	if len(snapshot.Aircraft) != 2 || len(subscription.visible) != 2 || snapshot.SourceStatus != model.SourceDegraded {
+		t.Fatalf("viewport snapshot exceeded its bound: aircraft=%d visible=%d", len(snapshot.Aircraft), len(subscription.visible))
+	}
+	hub.RemoveExpired(now.Add(2*time.Second), time.Second)
+	if status, _ := hub.Status(now.Add(2 * time.Second)); status != model.SourceLive {
+		t.Fatalf("capacity recovery must restore live status, got %s", status)
 	}
 }

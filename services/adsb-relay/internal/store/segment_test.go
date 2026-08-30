@@ -34,6 +34,16 @@ func TestSegmentPartitionsAndIndexesTracks(t *testing.T) {
 	if err != nil || len(records) != 1 || records[0].TrackID != "track-a" {
 		t.Fatalf("block read failed: %v", err)
 	}
+	temporaryFiles, err := filepath.Glob(filepath.Join(directory, "*.tmp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(temporaryFiles) != 0 {
+		t.Fatalf("atomic segment finalization left temporary files: %#v", temporaryFiles)
+	}
+	if _, err := os.Stat(filepath.Join(directory, manifest.ID+".manifest.json")); err != nil {
+		t.Fatalf("finalized manifest is missing: %v", err)
+	}
 }
 
 func TestSegmentChecksumDetectsCorruption(t *testing.T) {

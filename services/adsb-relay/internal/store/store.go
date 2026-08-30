@@ -18,13 +18,16 @@ type Options struct {
 	HistoryWindow         time.Duration
 	RetentionWindow       time.Duration
 	SegmentDuration       time.Duration
+	LatenessGrace         time.Duration
+	MaxCurrentAircraft    int
 	BlockCacheEntries     int
 	EmergencyHistoryBytes int64
 }
 
 type rotation struct {
-	walPath string
-	records []model.Observation
+	walPath   string
+	records   []model.Observation
+	notBefore time.Time
 }
 
 const maxPendingSegments = 3
@@ -50,7 +53,7 @@ type Store struct {
 }
 
 func Open(options Options) (*Store, error) {
-	if options.DataDir == "" || options.HistoryWindow <= 0 || options.RetentionWindow < options.HistoryWindow || options.SegmentDuration <= 0 {
+	if options.DataDir == "" || options.HistoryWindow <= 0 || options.RetentionWindow < options.HistoryWindow || options.SegmentDuration <= 0 || options.LatenessGrace < 0 || options.MaxCurrentAircraft <= 0 {
 		return nil, errors.New("invalid store options")
 	}
 	if options.BlockCacheEntries <= 0 {
@@ -104,7 +107,11 @@ func Open(options Options) (*Store, error) {
 		for _, record := range records {
 			store.updateCurrent(record)
 		}
-		rotations = append(rotations, rotation{walPath: path, records: records})
+		rotations = append(rotations, rotation{
+			walPath:   path,
+			records:   records,
+			notBefore: records[len(records)-1].ReceivedAt.Add(options.LatenessGrace),
+		})
 	}
 	if len(store.current) > 0 || len(store.manifests) > 0 {
 		store.ready = true
@@ -375,7 +382,11 @@ func (s *Store) rotateLocked(now time.Time) (rotation, error) {
 	if err := s.openNewActive(now); err != nil {
 		return rotation{}, err
 	}
-	return rotation{walPath: pendingPath, records: records}, nil
+	return rotation{
+		walPath:   pendingPath,
+		records:   records,
+		notBefore: now.Add(s.options.LatenessGrace),
+	}, nil
 }
 
 func (s *Store) openNewActive(now time.Time) error {
@@ -392,6 +403,9 @@ func (s *Store) openNewActive(now time.Time) error {
 
 func (s *Store) updateCurrent(observation model.Observation) {
 	previous, exists := s.current[observation.TrackID]
+	if !exists && len(s.current) >= s.options.MaxCurrentAircraft {
+		return
+	}
 	if !exists || observation.ReceivedAt.After(previous.ReceivedAt) {
 		s.current[observation.TrackID] = observation
 	}
@@ -421,6 +435,17 @@ func (s *Store) finalizerLoop() {
 		case <-s.stop:
 			return
 		case item := <-s.finalize:
+			if delay := time.Until(item.notBefore); delay > 0 {
+				timer := time.NewTimer(delay)
+				select {
+				case <-s.stop:
+					if !timer.Stop() {
+						<-timer.C
+					}
+					return
+				case <-timer.C:
+				}
+			}
 			manifest, err := writeSegment(s.segmentDirectory, append([]model.Observation(nil), item.records...))
 			if err != nil {
 				s.mu.Lock()

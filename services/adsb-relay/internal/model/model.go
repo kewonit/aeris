@@ -14,6 +14,9 @@ import (
 const (
 	ProtocolVersion = 1
 	EarthRadiusNM   = 3440.065
+	minAltitudeFt   = -2_000.0
+	maxAltitudeFt   = 100_000.0
+	maxVerticalFPM  = 20_000.0
 )
 
 type SourceStatus string
@@ -64,20 +67,28 @@ type Observation struct {
 }
 
 func (o Observation) Validate() error {
-	if o.TrackID == "" || len(o.TrackID) > 128 {
+	if !safeText(o.TrackID, 128, false) {
 		return errors.New("invalid track id")
 	}
-	if o.Provider == "" || len(o.Provider) > 64 {
+	if !safeText(o.Provider, 64, false) {
 		return errors.New("invalid provider")
 	}
-	if o.SourceEpoch == "" || len(o.SourceEpoch) > 64 {
+	if !safeText(o.SourceEpoch, 64, false) {
 		return errors.New("invalid source epoch")
 	}
-	if o.Address == "" || len(o.Address) > 32 {
+	if o.SessionGeneration == 0 {
+		return errors.New("invalid session generation")
+	}
+	if !safeText(o.Address, 32, false) {
 		return errors.New("invalid address")
 	}
-	if o.AddressType == "" || len(o.AddressType) > 32 || len(o.PositionSource) > 32 {
+	if !safeText(o.AddressType, 32, false) || !safeText(o.PositionSource, 32, false) {
 		return errors.New("invalid address or position source type")
+	}
+	for _, label := range []string{o.Callsign, o.Registration, o.AircraftType} {
+		if !safeText(label, 64, true) {
+			return errors.New("invalid observation label")
+		}
 	}
 	if !finite(o.Latitude) || o.Latitude < -90 || o.Latitude > 90 {
 		return errors.New("invalid latitude")
@@ -85,11 +96,14 @@ func (o Observation) Validate() error {
 	if !finite(o.Longitude) || o.Longitude < -180 || o.Longitude > 180 {
 		return errors.New("invalid longitude")
 	}
-	if o.FixTime.IsZero() || o.ReceivedAt.IsZero() {
+	if o.FixTime.IsZero() || o.ReceivedAt.IsZero() || o.PublishedAt.IsZero() {
 		return errors.New("missing observation timestamps")
 	}
 	if o.FixTime.After(o.ReceivedAt.Add(30 * time.Second)) {
 		return errors.New("fix timestamp is unreasonably far in the future")
+	}
+	if o.PublishedAt.Before(o.ReceivedAt) {
+		return errors.New("publish timestamp precedes receive timestamp")
 	}
 	for name, value := range map[string]*float64{
 		"barometric altitude": o.BaroAltitudeFt,
@@ -111,10 +125,60 @@ func (o Observation) Validate() error {
 	if o.GroundSpeedKt != nil && (*o.GroundSpeedKt < 0 || *o.GroundSpeedKt > 1500) {
 		return errors.New("ground speed outside accepted range")
 	}
-	if o.AltitudeReference == "" {
-		return errors.New("missing altitude reference")
+	for _, altitude := range []*float64{o.BaroAltitudeFt, o.GeomAltitudeFt} {
+		if altitude != nil && (*altitude < minAltitudeFt || *altitude > maxAltitudeFt) {
+			return errors.New("altitude outside accepted range")
+		}
+	}
+	if o.VerticalRateFPM != nil && math.Abs(*o.VerticalRateFPM) > maxVerticalFPM {
+		return errors.New("vertical rate outside accepted range")
+	}
+	for _, quality := range []struct {
+		name    string
+		value   *float64
+		maximum float64
+	}{
+		{name: "nic", value: o.NIC, maximum: 11},
+		{name: "nacp", value: o.NACP, maximum: 11},
+		{name: "sil", value: o.SIL, maximum: 3},
+	} {
+		if quality.value != nil && (*quality.value < 0 || *quality.value > quality.maximum || math.Trunc(*quality.value) != *quality.value) {
+			return fmt.Errorf("%s outside accepted range", quality.name)
+		}
+	}
+	switch o.AltitudeReference {
+	case AltitudeGround:
+		if !o.OnGround {
+			return errors.New("ground altitude requires ground state")
+		}
+	case AltitudeBarometric:
+		if o.BaroAltitudeFt == nil || o.OnGround {
+			return errors.New("barometric altitude reference is inconsistent")
+		}
+	case AltitudeGeometric:
+		if o.GeomAltitudeFt == nil || o.OnGround {
+			return errors.New("geometric altitude reference is inconsistent")
+		}
+	case AltitudeUnknown:
+		if o.OnGround {
+			return errors.New("ground observation has unknown altitude reference")
+		}
+	default:
+		return errors.New("invalid altitude reference")
 	}
 	return nil
+}
+
+func safeText(value string, maximumBytes int, allowEmpty bool) bool {
+	if len(value) > maximumBytes || (!allowEmpty && value == "") {
+		return false
+	}
+	for _, current := range value {
+		if unicode.IsControl(current) || current == '\u007f' {
+			return false
+		}
+	}
+	return true
 }
 
 func StableTrackID(provider, sourceEpoch, addressType, address string, session uint64) string {
