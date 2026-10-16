@@ -230,7 +230,11 @@ export function MobileFlightToast({
   const { settings } = useSettings();
   const airline = lookupAirline(flight.callsign);
   const flightNum = parseFlightNumber(flight.callsign);
-  const company = airline ?? `${flight.originCountry} operator`;
+  const company =
+    airline ??
+    (flight.registrationCountry
+      ? `${flight.registrationCountry} operator`
+      : null);
   const model = aircraftTypeHint(flight.category);
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
@@ -490,7 +494,7 @@ export function MobileFlightToast({
         {/* Origin country */}
         <MobileGroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
           <p className="text-[13px] text-foreground/65">
-            {flight.originCountry}
+            {flight.registrationCountry}
           </p>
         </MobileGroupedRow>
 

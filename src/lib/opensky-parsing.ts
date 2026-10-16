@@ -5,6 +5,7 @@ import type {
   RateLimitInfo,
 } from "./opensky-types";
 import { ICAO24_REGEX, clamp } from "./opensky-types";
+import { createFlightProvenance } from "./flight-provenance";
 
 // ── Header Parsing ─────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ function openskyPositionSource(
 
 export function parseStateRow(
   rawState: (string | number | boolean | null)[],
+  options?: Pick<ParseStateOptions, "positionProvider" | "responseTime">,
 ): FlightState | null {
   if (!Array.isArray(rawState) || rawState.length < 18) return null;
 
@@ -89,7 +91,8 @@ export function parseStateRow(
     icao24,
     callsign:
       typeof rawState[1] === "string" ? rawState[1].trim() || null : null,
-    originCountry: typeof rawState[2] === "string" ? rawState[2] : "Unknown",
+    registrationCountry:
+      typeof rawState[2] === "string" ? rawState[2] : null,
     longitude,
     latitude,
     baroAltitude,
@@ -102,6 +105,11 @@ export function parseStateRow(
     spiFlag: rawState[15] === true,
     positionSource: openskyPositionSource(rawState[16]),
     category: isFiniteNumber(rawState[17]) ? rawState[17] : null,
+    provenance: createFlightProvenance({
+      positionProvider: options?.positionProvider ?? "opensky",
+      responseTime: options?.responseTime ?? Date.now(),
+      observationTime: rawState[3],
+    }),
   };
 }
 
@@ -115,7 +123,12 @@ export function parseStates(
   const requireBaroAltitude = options?.requireBaroAltitude ?? true;
 
   return raw.states
-    .map(parseStateRow)
+    .map((state) =>
+      parseStateRow(state, {
+        positionProvider: options?.positionProvider ?? "opensky",
+        responseTime: options?.responseTime ?? raw.time,
+      }),
+    )
     .filter((state): state is FlightState => state !== null)
     .filter(
       (f) =>

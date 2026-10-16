@@ -45,6 +45,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailSystem } from "@/hooks/use-trail-system";
 import { useFlightMonitors } from "@/hooks/use-flight-monitors";
+import { useSelectedAircraft } from "@/hooks/use-selected-aircraft";
 import { useAtcStream } from "@/hooks/use-atc-stream";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAirportBoard } from "@/hooks/use-airport-board";
@@ -255,10 +256,11 @@ function FlightTrackerInner({
     return m;
   }, [displayFlights]);
 
-  const selectedFlight = useMemo(() => {
+  const selectedMapFlight = useMemo(() => {
     if (!selectedIcao24) return null;
     return displayFlightMap.get(selectedIcao24) ?? null;
   }, [selectedIcao24, displayFlightMap]);
+  const selectedFlight = useSelectedAircraft(selectedMapFlight);
 
   const selectedTrail = useMemo(() => {
     if (!selectedIcao24) return null;

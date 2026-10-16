@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { NextRequest } from "next/server";
 
+import type { RouteLookupResponse } from "@/lib/route-lookup";
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -37,7 +39,7 @@ test("GET rejects invalid callsigns without touching upstream providers", async 
   }
 });
 
-test("GET returns normalized route data with shared-cache headers", async () => {
+test("GET returns provider routes by callsign with shared-cache headers", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -79,22 +81,23 @@ test("GET returns normalized route data with shared-cache headers", async () => 
     );
 
     const response = await routeModule.GET(request);
-    const route = (await response.json()) as {
-      callsign?: string;
-      source?: string;
-      origin?: { iata?: string };
-      destination?: { iata?: string };
-    };
+    const route = (await response.json()) as RouteLookupResponse;
 
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get("Cache-Control"),
-      "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      "public, max-age=300, s-maxage=900, stale-while-revalidate=300",
     );
+    // The first route stays at the top level for clients built before
+    // the routes list existed.
     assert.equal(route.callsign, "AAL789");
     assert.equal(route.source, "adsbdb");
-    assert.equal(route.origin?.iata, "SFO");
-    assert.equal(route.destination?.iata, "LHR");
+    assert.equal(route.origin.iata, "SFO");
+    assert.equal(route.destination.iata, "LHR");
+    assert.deepEqual(
+      route.routes.map((candidate) => candidate.source),
+      ["adsbdb"],
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
