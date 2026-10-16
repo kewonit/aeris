@@ -1,38 +1,37 @@
 import type { AircraftRegistryRecord } from "./aircraft-registry";
 import { lookupAircraftRegistry } from "./aircraft-registry";
-import { fetchSelectedAircraftFromAdsbLol } from "./flight-api-client";
+import { fetchFlightByHex } from "./flight-api-client";
 import type { FlightState } from "./opensky-types";
+import { createTtlCache } from "./ttl-cache";
 
-const SELECTED_AIRCRAFT_CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 30_000;
 
 export type SelectedAircraftSources = {
   icao24: string;
+  /** A one-off lookup of this aircraft, taken when it was selected. */
   fresh: FlightState | null;
   registry: AircraftRegistryRecord | null;
-  fetchedAt: number;
 };
 
-export type SelectedAircraftFusionResult = {
-  flight: FlightState;
-  registry: AircraftRegistryRecord | null;
-  contributingSources: string[];
-  fusedAt: number;
+type SourceLoaders = {
+  fetchFresh: (icao24: string, signal?: AbortSignal) => Promise<FlightState | null>;
+  lookupRegistry: typeof lookupAircraftRegistry;
 };
 
-type SelectedAircraftCacheEntry = {
-  expiresAt: number;
-  sources: SelectedAircraftSources;
+const defaultLoaders: SourceLoaders = {
+  fetchFresh: async (icao24, signal) =>
+    (await fetchFlightByHex(icao24, signal)).flight,
+  lookupRegistry: lookupAircraftRegistry,
 };
 
-const selectedAircraftCache = new Map<string, SelectedAircraftCacheEntry>();
+const cache = createTtlCache<SelectedAircraftSources>(50);
 
 function observationTime(flight: FlightState): number {
-  const provenance = flight.provenance;
-  if (provenance.observationTime !== null) return provenance.observationTime;
-  if (provenance.positionAgeSeconds !== null) {
-    return provenance.responseTime - provenance.positionAgeSeconds * 1000;
-  }
-  return provenance.responseTime;
+  const { observationTime, positionAgeSeconds, responseTime } =
+    flight.provenance;
+  if (observationTime !== null) return observationTime;
+  if (positionAgeSeconds !== null) return responseTime - positionAgeSeconds * 1000;
+  return responseTime;
 }
 
 function qualityTuple(flight: FlightState): [number, number, number] {
@@ -54,6 +53,10 @@ function compareQuality(left: FlightState, right: FlightState): number {
   return 0;
 }
 
+/**
+ * Picks the newer of two states for the same aircraft. Within two seconds
+ * of each other, the more precise position wins instead.
+ */
 export function selectCoherentFlightState(
   current: FlightState,
   fresh: FlightState | null,
@@ -68,101 +71,80 @@ export function selectCoherentFlightState(
   return freshTime >= currentTime ? fresh : current;
 }
 
-function uniqueSources(...groups: (readonly string[] | undefined)[]): string[] {
-  return [...new Set(groups.flatMap((group) => group ?? []))];
-}
-
+/**
+ * Merges the live state with the selection lookup and the registry. Live
+ * fields (position, callsign, type description) come from whichever state
+ * is newer, so they keep following the feed after the lookup ages.
+ * Registry fields describe the airframe and win over feed values.
+ */
 export function fuseSelectedAircraft(
   current: FlightState,
   fresh: FlightState | null,
   registry: AircraftRegistryRecord | null,
-  fusedAt = Date.now(),
-): SelectedAircraftFusionResult {
-  const position = selectCoherentFlightState(current, fresh);
-  const sources = uniqueSources(
-    current.provenance.contributingSources,
-    fresh?.provenance.contributingSources,
-    registry?.sources,
-  );
+): FlightState {
+  const live = selectCoherentFlightState(current, fresh);
+  const other = live === current ? fresh : current;
 
-  const flight: FlightState = {
-    ...position,
-    callsign: fresh?.callsign ?? current.callsign,
+  return {
+    ...live,
+    callsign: live.callsign ?? other?.callsign ?? null,
+    typeDescription: live.typeDescription ?? other?.typeDescription ?? null,
     registration:
-      registry?.registration ?? fresh?.registration ?? current.registration,
-    typeCode: registry?.typeCode ?? fresh?.typeCode ?? current.typeCode,
-    typeDescription:
-      fresh?.typeDescription ?? current.typeDescription ?? null,
-    model: registry?.model ?? fresh?.model ?? current.model ?? null,
+      registry?.registration ?? live.registration ?? other?.registration,
+    typeCode: registry?.typeCode ?? live.typeCode ?? other?.typeCode,
+    model: registry?.model ?? live.model ?? other?.model ?? null,
     manufacturer:
-      registry?.manufacturer ??
-      fresh?.manufacturer ??
-      current.manufacturer ??
-      null,
+      registry?.manufacturer ?? live.manufacturer ?? other?.manufacturer ?? null,
     registrationCountry:
       registry?.registrationCountry ??
-      fresh?.registrationCountry ??
-      current.registrationCountry,
-    registrationCountryCode:
-      registry?.registrationCountryCode ??
-      fresh?.registrationCountryCode ??
-      current.registrationCountryCode ??
+      live.registrationCountry ??
+      other?.registrationCountry ??
       null,
     registrationCountryFlag:
       registry?.registrationCountryFlag ??
-      fresh?.registrationCountryFlag ??
-      current.registrationCountryFlag ??
+      live.registrationCountryFlag ??
+      other?.registrationCountryFlag ??
       null,
     provenance: {
-      responseTime: position.provenance.responseTime,
-      observationTime: position.provenance.observationTime,
-      positionAgeSeconds: position.provenance.positionAgeSeconds,
-      contributingSources: sources,
-      positionProvider: position.provenance.positionProvider,
+      ...live.provenance,
+      contributingSources: [
+        ...new Set([
+          ...current.provenance.contributingSources,
+          ...(fresh?.provenance.contributingSources ?? []),
+          ...(registry?.sources ?? []),
+        ]),
+      ],
     },
   };
-
-  return { flight, registry, contributingSources: sources, fusedAt };
 }
 
 export async function loadSelectedAircraftSources(
   icao24: string,
   signal?: AbortSignal,
-  dependencies: {
-    fetchFresh?: typeof fetchSelectedAircraftFromAdsbLol;
-    lookupRegistry?: typeof lookupAircraftRegistry;
-    now?: () => number;
-  } = {},
+  loaders: SourceLoaders = defaultLoaders,
 ): Promise<SelectedAircraftSources> {
   const normalized = icao24.trim().toLowerCase();
-  const now = dependencies.now ?? Date.now;
-  const cached = selectedAircraftCache.get(normalized);
-  if (cached && now() < cached.expiresAt) return cached.sources;
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const cached = cache.get(normalized);
+  if (cached) return cached;
 
-  const fetchFresh = dependencies.fetchFresh ?? fetchSelectedAircraftFromAdsbLol;
-  const lookupRegistry = dependencies.lookupRegistry ?? lookupAircraftRegistry;
-  const [freshResult, registryResult] = await Promise.allSettled([
-    fetchFresh(normalized, signal),
-    lookupRegistry(normalized, signal),
+  const [fresh, registry] = await Promise.allSettled([
+    loaders.fetchFresh(normalized, signal),
+    loaders.lookupRegistry(normalized, signal),
   ]);
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-  const fetchedAt = now();
   const sources: SelectedAircraftSources = {
     icao24: normalized,
-    fresh: freshResult.status === "fulfilled" ? freshResult.value : null,
-    registry:
-      registryResult.status === "fulfilled" ? registryResult.value : null,
-    fetchedAt,
+    fresh: fresh.status === "fulfilled" ? fresh.value : null,
+    registry: registry.status === "fulfilled" ? registry.value : null,
   };
-  selectedAircraftCache.set(normalized, {
-    expiresAt: fetchedAt + SELECTED_AIRCRAFT_CACHE_TTL_MS,
-    sources,
-  });
+  // A failed lookup is not cached, so the next selection retries it.
+  if (fresh.status === "fulfilled" && registry.status === "fulfilled") {
+    cache.set(normalized, sources, CACHE_TTL_MS);
+  }
   return sources;
 }
 
 export function clearSelectedAircraftCacheForTests(): void {
-  selectedAircraftCache.clear();
+  cache.clear();
 }

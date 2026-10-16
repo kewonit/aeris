@@ -70,8 +70,6 @@ export type FlightState = {
   typeCode?: string | null;
   /** Aircraft registration (e.g. "N12345", "G-KELS") - available from readsb */
   registration?: string | null;
-  /** Two-letter registration country code from the local registry */
-  registrationCountryCode?: string | null;
   /** Registration country flag from the local registry */
   registrationCountryFlag?: string | null;
   /** Aircraft model from the local registry */

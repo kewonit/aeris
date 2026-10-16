@@ -8,10 +8,7 @@
 import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
-import {
-  createFlightProvenance,
-  normalizeFlightTimestamp,
-} from "./flight-provenance";
+import { createFlightProvenance } from "./flight-provenance";
 import { registrationCountry } from "./registration-country";
 
 // ── Unit Conversion Constants ──────────────────────────────────────────
@@ -137,9 +134,6 @@ function parseRawAircraft(
   }
 
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
-  const responseTime =
-    normalizeFlightTimestamp(options?.responseTime) ?? Date.now();
-
   return {
     icao24: raw.hex.toLowerCase(),
     callsign: optionalTrimmedString(raw.flight),
@@ -176,11 +170,7 @@ function parseRawAircraft(
     registration: optionalTrimmedString(raw.r),
     provenance: createFlightProvenance({
       positionProvider: options?.positionProvider ?? "unknown",
-      responseTime,
-      observationTime:
-        typeof raw.seen_pos === "number"
-          ? responseTime - raw.seen_pos * 1000
-          : null,
+      responseTime: options?.responseTime,
       positionAgeSeconds: raw.seen_pos,
     }),
 

@@ -28,7 +28,6 @@ export {
   fetchFlightsByPoint,
   fetchFlightByHex,
   fetchFlightByCallsign,
-  fetchSelectedAircraftFromAdsbLol,
   getProviderOverride,
   setProviderOverride,
   PROVIDER_CHANGE_EVENT,

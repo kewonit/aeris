@@ -566,32 +566,6 @@ export async function fetchFlightsByHex(
   }
 }
 
-/** Fetch one fresh adsb.lol result for selected-aircraft fusion. */
-export async function fetchSelectedAircraftFromAdsbLol(
-  icao24: string,
-  signal?: AbortSignal,
-): Promise<FlightState | null> {
-  const normalized = icao24.trim().toLowerCase();
-  if (!/^[0-9a-f]{6}$/.test(normalized)) return null;
-
-  try {
-    const response = await fetchViaProxy(
-      `/hex/${encodeURIComponent(normalized)}`,
-      "adsb",
-      signal,
-    );
-    return (
-      parseReadsbResponse(response, "adsb", {
-        includeGround: true,
-        requireBaroAltitude: false,
-      }).find((flight) => flight.icao24 === normalized) ?? null
-    );
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    return null;
-  }
-}
-
 /**
  * Fetch all aircraft matching a callsign.
  * Uses OpenSky only after all readsb providers miss or fail.

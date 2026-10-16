@@ -1,87 +1,94 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { RouteAirport } from "./route-lookup";
-import { validateReportedRoute } from "./route-validation";
+import type { ReportedRoute, RouteAirport } from "./route-lookup";
+import {
+  distanceToRouteCorridorNm,
+  isRouteConsistentWithPosition,
+  selectReportedRoute,
+} from "./route-validation";
 
-const sfo: RouteAirport = {
-  iata: "SFO",
-  icao: "KSFO",
-  name: "San Francisco International Airport",
-  municipality: "San Francisco",
-  countryIso: "US",
-  latitude: 37.618999,
-  longitude: -122.375,
-};
-
-const jfk: RouteAirport = {
-  iata: "JFK",
-  icao: "KJFK",
-  name: "John F. Kennedy International Airport",
-  municipality: "New York",
-  countryIso: "US",
-  latitude: 40.639801,
-  longitude: -73.7789,
-};
-
-function context(
-  latitude: number,
-  longitude: number,
-  altitudeMeters = 10_668,
-  onGround = false,
-) {
+function airport(code: string, latitude: number, longitude: number): RouteAirport {
   return {
-    icao24: "abc123",
-    callsign: "DAL1598",
+    iata: code,
+    icao: `X${code}`,
+    name: code,
+    municipality: code,
+    countryIso: "",
     latitude,
     longitude,
-    altitudeMeters,
-    onGround,
-    observationTime: 1_700_000_000_000,
   };
 }
 
-test("accepts an aircraft inside the bounded route corridor", () => {
-  const result = validateReportedRoute(
-    sfo,
-    jfk,
-    context(39.5, -98.5),
-  );
-  assert.equal(result.valid, true);
-  assert.ok(result.corridorToleranceNm >= 50);
-  assert.ok(result.corridorToleranceNm <= 250);
-});
+const SFO = airport("SFO", 37.619, -122.375);
+const JFK = airport("JFK", 40.6398, -73.7789);
+const FRA = airport("FRA", 50.0333, 8.5706);
+const ICN = airport("ICN", 37.4602, 126.4407);
+const HNL = airport("HNL", 21.3187, -157.9225);
+const NRT = airport("NRT", 35.7647, 140.3864);
 
-test("rejects a DAL1598-style conflicting SFO route", () => {
-  const result = validateReportedRoute(
-    sfo,
-    jfk,
-    context(33.6407, -84.4277),
-  );
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, "corridor");
-});
+function route(
+  origin: RouteAirport,
+  destination: RouteAirport,
+  source: ReportedRoute["source"] = "adsbdb",
+): ReportedRoute {
+  return { callsign: "TEST1", origin, destination, source, fetchedAt: 0 };
+}
 
-test("requires a ground aircraft to be within fifteen nautical miles", () => {
+function cruising(latitude: number, longitude: number) {
+  return { latitude, longitude, altitudeMeters: 11_000, onGround: false };
+}
+
+test("accepts a cruising aircraft along the route", () => {
   assert.equal(
-    validateReportedRoute(sfo, jfk, context(37.62, -122.38, 0, true)).valid,
+    isRouteConsistentWithPosition(route(SFO, JFK), cruising(40.5, -100)),
     true,
   );
-  const result = validateReportedRoute(
-    sfo,
-    jfk,
-    context(37.95, -121.95, 0, true),
-  );
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, "ground-endpoint");
 });
 
-test("requires a low aircraft to be near a route endpoint", () => {
-  const result = validateReportedRoute(
-    sfo,
-    jfk,
-    context(39.5, -98.5, 2_000),
+test("rejects a route the aircraft is nowhere near", () => {
+  assert.equal(
+    isRouteConsistentWithPosition(route(SFO, JFK), cruising(45, -30)),
+    false,
   );
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, "low-endpoint");
+});
+
+test("accepts a long-haul routing that bends around closed airspace", () => {
+  // FRA to ICN south of Russia, over Almaty, roughly 900 nm off the great circle.
+  const position = cruising(43.2, 76.9);
+  assert.ok(distanceToRouteCorridorNm(position, FRA, ICN) > 250);
+  assert.equal(isRouteConsistentWithPosition(route(FRA, ICN), position), true);
+});
+
+test("measures the corridor across the antimeridian", () => {
+  for (const longitude of [179.5, -179.5]) {
+    const position = cruising(30.5, longitude);
+    assert.ok(distanceToRouteCorridorNm(position, HNL, NRT) < 50);
+    assert.equal(isRouteConsistentWithPosition(route(HNL, NRT), position), true);
+  }
+});
+
+test("rejects a route when the aircraft is parked at another airport", () => {
+  const atLax = { latitude: 33.9416, longitude: -118.4085, altitudeMeters: 30, onGround: true };
+  assert.equal(isRouteConsistentWithPosition(route(SFO, JFK), atLax), false);
+  const atSfo = { ...atLax, latitude: 37.62, longitude: -122.38 };
+  assert.equal(isRouteConsistentWithPosition(route(SFO, JFK), atSfo), true);
+});
+
+test("rejects a low aircraft far from both ends", () => {
+  const low = { latitude: 40.5, longitude: -100, altitudeMeters: 900, onGround: false };
+  assert.equal(isRouteConsistentWithPosition(route(SFO, JFK), low), false);
+});
+
+test("selects the first provider route that fits the position", () => {
+  const stale = route(FRA, ICN, "adsbdb");
+  const current = route(SFO, JFK, "hexdb");
+  assert.equal(selectReportedRoute([stale, current], cruising(40.5, -100)), current);
+  assert.equal(selectReportedRoute([stale], cruising(40.5, -100)), null);
+});
+
+test("keeps the first route when there is no position to check", () => {
+  const first = route(FRA, ICN);
+  assert.equal(selectReportedRoute([first, route(SFO, JFK)], null), first);
+  assert.equal(selectReportedRoute([], null), null);
 });

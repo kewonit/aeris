@@ -1,80 +1,43 @@
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  normalizeRouteCallsign,
-  resolveRouteFromOpenDatabasesDetailed,
-} from "@/lib/route-resolver";
-import { normalizeRouteRequest } from "@/lib/route-lookup";
+import { normalizeRouteCallsign } from "@/lib/route-lookup";
+import type { RouteLookupResponse } from "@/lib/route-lookup";
+import { resolveReportedRoutes } from "@/lib/route-resolver";
 
+// Responses depend on the callsign alone, so shared caches can serve them.
+// The browser checks each route against the live aircraft position.
 const ROUTE_HIT_CACHE_CONTROL =
-  "public, max-age=300, s-maxage=300, stale-while-revalidate=300";
-const ROUTE_MISS_CACHE_CONTROL = "public, max-age=60, s-maxage=60";
-const SOURCES = ["adsbdb", "hexdb", "opensky"];
+  "public, max-age=300, s-maxage=900, stale-while-revalidate=300";
+const ROUTE_MISS_CACHE_CONTROL = "public, max-age=60, s-maxage=120";
+const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const callsign = normalizeRouteCallsign(
     request.nextUrl.searchParams.get("callsign"),
   );
-  const latitudeValue = request.nextUrl.searchParams.get("latitude");
-  const longitudeValue = request.nextUrl.searchParams.get("longitude");
-  const latitude = latitudeValue === null ? Number.NaN : Number(latitudeValue);
-  const longitude =
-    longitudeValue === null ? Number.NaN : Number(longitudeValue);
-  const altitudeValue = request.nextUrl.searchParams.get("altitudeMeters");
-  const altitudeMeters = altitudeValue ? Number(altitudeValue) : null;
-  const observationTimeValue =
-    request.nextUrl.searchParams.get("observationTime");
-  const observationTime =
-    observationTimeValue === null ? Number.NaN : Number(observationTimeValue);
-  const onGroundValue = request.nextUrl.searchParams.get("onGround");
-  const context = callsign
-    ? normalizeRouteRequest({
-        callsign,
-        icao24: request.nextUrl.searchParams.get("icao24") ?? "",
-        latitude,
-        longitude,
-        altitudeMeters,
-        onGround: onGroundValue === "1",
-        observationTime,
-      })
-    : null;
-
-  if (!context || (onGroundValue !== "0" && onGroundValue !== "1")) {
+  if (!callsign) {
     return NextResponse.json(
-      { error: "Invalid or missing route context" },
-      { status: 400, headers: { "Cache-Control": "no-store" } },
+      { error: "Invalid or missing callsign" },
+      { status: 400, headers: NO_STORE },
     );
   }
 
-  const resolution = await resolveRouteFromOpenDatabasesDetailed(context);
-  const route = resolution.route;
+  const { routes, temporarilyUnavailable } =
+    await resolveReportedRoutes(callsign);
 
-  if (!route) {
-    if (resolution.temporarilyUnavailable) {
-      return NextResponse.json(
-        {
-          error: "Route lookup temporarily unavailable",
-          callsign: context.callsign,
-          sources: SOURCES,
-        },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
-    }
-
-    return NextResponse.json(
-      {
-        error: "Route unavailable",
-        callsign: context.callsign,
-        sources: SOURCES,
-      },
-      {
-        status: 404,
-        headers: { "Cache-Control": ROUTE_MISS_CACHE_CONTROL },
-      },
-    );
+  if (routes.length === 0) {
+    return temporarilyUnavailable
+      ? NextResponse.json(
+          { error: "Route lookup temporarily unavailable", callsign },
+          { status: 503, headers: NO_STORE },
+        )
+      : NextResponse.json(
+          { error: "Route unavailable", callsign },
+          { status: 404, headers: { "Cache-Control": ROUTE_MISS_CACHE_CONTROL } },
+        );
   }
 
-  return NextResponse.json(route, {
-    status: 200,
+  const body: RouteLookupResponse = { ...routes[0], routes };
+  return NextResponse.json(body, {
     headers: { "Cache-Control": ROUTE_HIT_CACHE_CONTROL },
   });
 }

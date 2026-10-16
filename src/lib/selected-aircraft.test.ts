@@ -121,12 +121,12 @@ test("keeps timing and provider with the selected position group", () => {
     },
   });
 
-  const result = fuseSelectedAircraft(current, fresh, null, 25_000);
-  assert.equal(result.flight.provenance.responseTime, 12_000);
-  assert.equal(result.flight.provenance.observationTime, 10_000);
-  assert.equal(result.flight.provenance.positionAgeSeconds, 2);
+  const result = fuseSelectedAircraft(current, fresh, null);
+  assert.equal(result.provenance.responseTime, 12_000);
+  assert.equal(result.provenance.observationTime, 10_000);
+  assert.equal(result.provenance.positionAgeSeconds, 2);
   assert.equal(
-    result.flight.provenance.positionProvider,
+    result.provenance.positionProvider,
     "airplanes.live",
   );
 });
@@ -141,18 +141,17 @@ test("adds preferred registry metadata and all contributing sources", () => {
     model: "172K",
     manufacturer: "CESSNA",
     registrationCountry: "United States",
-    registrationCountryCode: "US",
     registrationCountryFlag: "🇺🇸",
     databaseFlags: "00",
     sources: ["faa", "mictronics"],
   };
 
-  const result = fuseSelectedAircraft(current, fresh, registry, 20_000);
-  assert.equal(result.flight.registration, "N100");
-  assert.equal(result.flight.model, "172K");
-  assert.equal(result.flight.manufacturer, "CESSNA");
-  assert.equal(result.flight.registrationCountry, "United States");
-  assert.deepEqual(result.contributingSources, [
+  const result = fuseSelectedAircraft(current, fresh, registry);
+  assert.equal(result.registration, "N100");
+  assert.equal(result.model, "172K");
+  assert.equal(result.manufacturer, "CESSNA");
+  assert.equal(result.registrationCountry, "United States");
+  assert.deepEqual(result.provenance.contributingSources, [
     "airplanes.live",
     "adsb.lol",
     "faa",
@@ -160,36 +159,40 @@ test("adds preferred registry metadata and all contributing sources", () => {
   ]);
 });
 
-test("caches partial selected-aircraft results for thirty seconds", async () => {
+test("live fields follow the feed once the selection lookup is older", () => {
+  const fresh = makeFlight("adsb.lol", 10_000, { callsign: "OLD1" });
+  const current = makeFlight("airplanes.live", 60_000, { callsign: "NEW2" });
+
+  const result = fuseSelectedAircraft(current, fresh, null);
+  assert.equal(result.callsign, "NEW2");
+  assert.equal(result.provenance.positionProvider, "airplanes.live");
+});
+
+test("caches complete lookups and retries failed ones", async () => {
   clearSelectedAircraftCacheForTests();
   let freshRequests = 0;
   let registryRequests = 0;
-  const dependencies = {
+  let failFresh = true;
+  const loaders = {
     fetchFresh: async () => {
       freshRequests++;
-      throw new Error("temporary failure");
+      if (failFresh) throw new Error("temporary failure");
+      return null;
     },
     lookupRegistry: async () => {
       registryRequests++;
       return null;
     },
-    now: () => 10_000,
   };
 
-  const first = await loadSelectedAircraftSources(
-    "abc123",
-    undefined,
-    dependencies,
-  );
-  const second = await loadSelectedAircraftSources(
-    "abc123",
-    undefined,
-    dependencies,
-  );
-  assert.equal(first.fresh, null);
+  const failed = await loadSelectedAircraftSources("abc123", undefined, loaders);
+  assert.equal(failed.fresh, null);
+  failFresh = false;
+  const first = await loadSelectedAircraftSources("abc123", undefined, loaders);
+  const second = await loadSelectedAircraftSources("abc123", undefined, loaders);
   assert.equal(second, first);
-  assert.equal(freshRequests, 1);
-  assert.equal(registryRequests, 1);
+  assert.equal(freshRequests, 2);
+  assert.equal(registryRequests, 2);
   clearSelectedAircraftCacheForTests();
 });
 

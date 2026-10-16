@@ -11,6 +11,11 @@ export function normalizeFlightTimestamp(value: unknown): number | null {
   );
 }
 
+/**
+ * Builds provenance from whichever timing the provider reports: readsb
+ * gives the position age, OpenSky gives the observation time. The missing
+ * value is derived from the other.
+ */
 export function createFlightProvenance({
   positionProvider,
   responseTime,
@@ -22,25 +27,23 @@ export function createFlightProvenance({
   observationTime?: unknown;
   positionAgeSeconds?: unknown;
 }): FlightProvenance {
-  const normalizedResponseTime =
-    normalizeFlightTimestamp(responseTime) ?? Date.now();
-  const normalizedObservationTime = normalizeFlightTimestamp(observationTime);
-  const explicitAge =
+  const response = normalizeFlightTimestamp(responseTime) ?? Date.now();
+  const age =
     typeof positionAgeSeconds === "number" &&
     Number.isFinite(positionAgeSeconds) &&
     positionAgeSeconds >= 0
       ? positionAgeSeconds
       : null;
-  const derivedAge =
-    normalizedObservationTime !== null
-      ? Math.max(0, (normalizedResponseTime - normalizedObservationTime) / 1000)
-      : null;
+  const observed =
+    normalizeFlightTimestamp(observationTime) ??
+    (age !== null ? Math.round(response - age * 1000) : null);
   const provider = positionProvider.trim() || "unknown";
 
   return {
-    responseTime: normalizedResponseTime,
-    observationTime: normalizedObservationTime,
-    positionAgeSeconds: explicitAge ?? derivedAge,
+    responseTime: response,
+    observationTime: observed,
+    positionAgeSeconds:
+      age ?? (observed !== null ? Math.max(0, (response - observed) / 1000) : null),
     contributingSources: [provider],
     positionProvider: provider,
   };

@@ -9,6 +9,7 @@ import {
   type SelectedAircraftSources,
 } from "@/lib/selected-aircraft";
 
+/** Adds a fresh lookup and registry details to the selected aircraft. */
 export function useSelectedAircraft(
   current: FlightState | null,
 ): FlightState | null {
@@ -18,18 +19,16 @@ export function useSelectedAircraft(
   useEffect(() => {
     if (!icao24) return;
     const controller = new AbortController();
-    void loadSelectedAircraftSources(icao24, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setSources(result);
-      })
-      .catch((error) => {
-        if (error instanceof Error && error.name === "AbortError") return;
-      });
+    loadSelectedAircraftSources(icao24, controller.signal).then(
+      setSources,
+      // Only rejects when this cleanup aborts the request.
+      () => {},
+    );
     return () => controller.abort();
   }, [icao24]);
 
   return useMemo(() => {
     if (!current || sources?.icao24 !== current.icao24) return current;
-    return fuseSelectedAircraft(current, sources.fresh, sources.registry).flight;
+    return fuseSelectedAircraft(current, sources.fresh, sources.registry);
   }, [current, sources]);
 }

@@ -1,22 +1,17 @@
 import {
-  routeCacheKey,
+  normalizeRouteCallsign,
+  ROUTE_HIT_TTL_MS,
+  ROUTE_MISS_TTL_MS,
+  type ReportedRoute,
   type RouteAirport,
-  type RouteInfo,
   type RouteSource,
 } from "./route-lookup";
-import {
-  validateReportedRoute,
-  type RoutePositionContext,
-} from "./route-validation";
+import { createTtlCache } from "./ttl-cache";
 import { findAirportByIcao } from "./airports";
 
 const ADSBDB_BASE = "https://api.adsbdb.com/v0";
 const HEXDB_BASE = "https://hexdb.io/api/v1";
 const OPEN_SKY_ROUTES_BASE = "https://opensky-network.org/api";
-
-const CACHE_HIT_TTL_MS = 5 * 60_000;
-const CACHE_MISS_TTL_MS = 60_000;
-const CACHE_MAX_ENTRIES = 500;
 
 const PROVIDER_TIMEOUT_MS = 6_000;
 
@@ -26,28 +21,13 @@ const PROVIDER_RATE_LIMIT_MS: Record<RouteSource, number> = {
   opensky: 1_100,
 };
 
-const CALLSIGN_RE = /^[A-Z0-9]{1,8}$/i;
-
 export type RouteResolution = {
-  route: RouteInfo | null;
+  /** Every provider's route, in priority order: adsbdb, hexdb, OpenSky. */
+  routes: ReportedRoute[];
   temporarilyUnavailable: boolean;
-  validationConflict: boolean;
 };
 
-export function normalizeRouteCallsign(
-  callsign: string | null | undefined,
-): string | null {
-  if (!callsign) return null;
-  const normalized = callsign.trim().toUpperCase();
-  return normalized && CALLSIGN_RE.test(normalized) ? normalized : null;
-}
-
-type CacheEntry = {
-  route: RouteInfo | null;
-  expiresAt: number;
-};
-
-const cache = new Map<string, CacheEntry>();
+const cache = createTtlCache<ReportedRoute[]>(500);
 const inflight = new Map<string, Promise<RouteResolution>>();
 
 const lastRequestTime: Record<RouteSource, number> = {
@@ -61,28 +41,6 @@ const providerQueues: Record<RouteSource, Promise<void>> = {
   hexdb: Promise.resolve(),
   opensky: Promise.resolve(),
 };
-
-function cacheGet(key: string): RouteInfo | null | undefined {
-  const entry = cache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key);
-    return undefined;
-  }
-  return entry.route;
-}
-
-function cacheSet(key: string, route: RouteInfo | null): void {
-  cache.set(key, {
-    route,
-    expiresAt: Date.now() + (route ? CACHE_HIT_TTL_MS : CACHE_MISS_TTL_MS),
-  });
-
-  if (cache.size > CACHE_MAX_ENTRIES) {
-    const first = cache.keys().next();
-    if (!first.done) cache.delete(first.value);
-  }
-}
 
 async function enforceProviderRateLimit(source: RouteSource) {
   const previous = providerQueues[source];
@@ -160,10 +118,7 @@ type ProviderRouteResult = {
   cacheableMiss: boolean;
 };
 
-type ProviderRoute = Pick<
-  RouteInfo,
-  "callsign" | "origin" | "destination" | "source" | "fetchedAt"
->;
+type ProviderRoute = ReportedRoute;
 
 // ── ADSBDB ──────────────────────────────────────────────────────────────
 
@@ -421,122 +376,45 @@ async function fetchFromOpenSky(callsign: string): Promise<ProviderRouteResult> 
 
 // ── Resolver ────────────────────────────────────────────────────────────
 
-function routeEndpoints(route: ProviderRoute): string {
-  const origin = route.origin?.icao || route.origin?.iata || "";
-  const destination =
-    route.destination?.icao || route.destination?.iata || "";
-  return `${origin}:${destination}`;
-}
-
-function selectValidRoute(
-  routes: ProviderRoute[],
-  context: RoutePositionContext,
-): RouteInfo | null {
-  for (const route of routes) {
-    if (!route.origin || !route.destination) continue;
-    const validation = validateReportedRoute(
-      route.origin,
-      route.destination,
-      context,
-    );
-    if (!validation.valid) continue;
-    const endpoints = routeEndpoints(route);
-    const sources = routes
-      .filter((candidate) => routeEndpoints(candidate) === endpoints)
-      .map((candidate) => candidate.source);
-    return {
-      ...route,
-      icao24: context.icao24,
-      sources: [...new Set(sources)],
-      validation: "valid",
-      validatedAt: Date.now(),
-    };
-  }
-  return null;
-}
-
-export async function resolveRouteFromOpenDatabases(
-  context: RoutePositionContext,
-): Promise<RouteInfo | null> {
-  const resolution = await resolveRouteFromOpenDatabasesDetailed(context);
-  return resolution.route;
-}
-
-export async function resolveRouteFromOpenDatabasesDetailed(
-  context: RoutePositionContext,
+export async function resolveReportedRoutes(
+  rawCallsign: string | null | undefined,
 ): Promise<RouteResolution> {
-  const normalized = normalizeRouteCallsign(context.callsign);
-  const icao24 = context.icao24.trim().toLowerCase();
-  if (!normalized || !/^[0-9a-f]{6}$/.test(icao24)) {
-    return {
-      route: null,
-      temporarilyUnavailable: false,
-      validationConflict: false,
-    };
-  }
-  const normalizedContext = { ...context, callsign: normalized, icao24 };
-  const key = routeCacheKey(normalizedContext);
+  const callsign = normalizeRouteCallsign(rawCallsign);
+  if (!callsign) return { routes: [], temporarilyUnavailable: false };
 
-  const cached = cacheGet(key);
-  if (cached !== undefined) {
-    return {
-      route: cached,
-      temporarilyUnavailable: false,
-      validationConflict: false,
-    };
-  }
+  const cached = cache.get(callsign);
+  if (cached) return { routes: cached, temporarilyUnavailable: false };
 
-  const existing = inflight.get(key);
+  const existing = inflight.get(callsign);
   if (existing) return existing;
 
-  const promise = (async () => {
+  const promise = (async (): Promise<RouteResolution> => {
     try {
-      const [adsbdbResult, hexdbResult, openskyResult] = await Promise.all([
-        fetchFromAdsbdb(normalized),
-        fetchFromHexdb(normalized),
-        fetchFromOpenSky(normalized),
+      const results = await Promise.all([
+        fetchFromAdsbdb(callsign),
+        fetchFromHexdb(callsign),
+        fetchFromOpenSky(callsign),
       ]);
+      const routes = results
+        .map((result) => result.route)
+        .filter((route): route is ProviderRoute => route !== null);
 
-      const routes = [
-        adsbdbResult.route,
-        hexdbResult.route,
-        openskyResult.route,
-      ].filter((route): route is ProviderRoute => route !== null);
       if (routes.length > 0) {
-        const route = selectValidRoute(routes, normalizedContext);
-        cacheSet(key, route);
-        return {
-          route,
-          temporarilyUnavailable: false,
-          validationConflict: route === null,
-        };
+        cache.set(callsign, routes, ROUTE_HIT_TTL_MS);
+        return { routes, temporarilyUnavailable: false };
       }
-
-      const allCacheable =
-        adsbdbResult.cacheableMiss &&
-        hexdbResult.cacheableMiss &&
-        openskyResult.cacheableMiss;
-
-      if (allCacheable) {
-        cacheSet(key, null);
-        return {
-          route: null,
-          temporarilyUnavailable: false,
-          validationConflict: false,
-        };
+      // A provider error leaves the miss uncached so the next request retries.
+      if (results.every((result) => result.cacheableMiss)) {
+        cache.set(callsign, [], ROUTE_MISS_TTL_MS);
+        return { routes: [], temporarilyUnavailable: false };
       }
-
-      return {
-        route: null,
-        temporarilyUnavailable: true,
-        validationConflict: false,
-      };
+      return { routes: [], temporarilyUnavailable: true };
     } finally {
-      inflight.delete(key);
+      inflight.delete(callsign);
     }
   })();
 
-  inflight.set(key, promise);
+  inflight.set(callsign, promise);
   return promise;
 }
 
