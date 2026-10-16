@@ -25,12 +25,16 @@ import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
 import { tintAircraftColor, applySpecialTint } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
 import {
+  type AircraftModelKey,
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
   modelUrl,
   modelYawOffset,
 } from "./aircraft-model-mapping";
-import type { AircraftScreenSize } from "./aircraft-size";
+import {
+  type AircraftScreenSize,
+  recordModelTailShare,
+} from "./aircraft-size";
 
 // Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
@@ -55,7 +59,10 @@ type SceneNode = {
   setMatrix(matrix: number[]): void;
 };
 
-const normalizedScenes = new WeakSet<SceneNode>();
+/** A model's spans along X and Z, as shares of its footprint. */
+export type ModelFootprint = { x: number; z: number };
+
+const normalizedScenes = new WeakMap<SceneNode, ModelFootprint | null>();
 
 /**
  * Centres a model on its origin and scales its footprint, the larger of
@@ -63,36 +70,67 @@ const normalizedScenes = new WeakSet<SceneNode>();
  * and in unrelated units, so without this a model sits beside its position
  * and its size depends on how the file was authored.
  */
-export function normalizeScene<T extends SceneNode>(scene: T): T {
-  if (normalizedScenes.has(scene)) return scene;
+export function normalizeScene(scene: SceneNode): ModelFootprint | null {
+  const known = normalizedScenes.get(scene);
+  if (known !== undefined) return known;
 
   scene.setMatrix(IDENTITY_MATRIX);
   const bounds = scene.getBounds();
+  let footprint: ModelFootprint | null = null;
   if (bounds) {
     const [min, max] = bounds;
     const center = [0, 1, 2].map((axis) => (min[axis] + max[axis]) / 2);
     // Y is up in glTF, so X and Z span the footprint.
-    const footprint = Math.max(max[0] - min[0], max[2] - min[2]);
-    const scale = footprint > 0 ? 1 / footprint : 1;
+    const spanX = max[0] - min[0];
+    const spanZ = max[2] - min[2];
+    const extent = Math.max(spanX, spanZ);
+    const scale = extent > 0 ? 1 / extent : 1;
     scene.setMatrix([
       scale, 0, 0, 0,
       0, scale, 0, 0,
       0, 0, scale, 0,
       -center[0] * scale, -center[1] * scale, -center[2] * scale, 1,
     ]);
+    footprint = { x: spanX * scale, z: spanZ * scale };
   }
-  normalizedScenes.add(scene);
-  return scene;
+  normalizedScenes.set(scene, footprint);
+  return footprint;
+}
+
+/**
+ * How far behind its centre a model's tail sits, as a share of its
+ * footprint. Models turned 90° have their fuselage along X, the rest along
+ * Z. Aiming just inside the tail keeps the trail's end under the model.
+ */
+export function modelTailShareFor(
+  key: AircraftModelKey,
+  footprint: ModelFootprint,
+): number {
+  const length = modelYawOffset(key) % 180 === 0 ? footprint.z : footprint.x;
+  return (0.9 * length) / 2;
 }
 
 type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
 
-/** deck's default scene choice, normalised. */
-const getNormalizedScene: GetScene = (scenegraph) => {
-  const scene =
-    scenegraph?.scenes?.[scenegraph.scene ?? 0] ?? scenegraph?.scenes?.[0];
-  return scene ? normalizeScene(scene) : scene;
-};
+const sceneLoaders = new Map<AircraftModelKey, GetScene>();
+
+/** deck's default scene choice, normalised, recording where its tail is. */
+function sceneLoaderFor(key: AircraftModelKey): GetScene {
+  let loader = sceneLoaders.get(key);
+  if (!loader) {
+    loader = (scenegraph) => {
+      const scene =
+        scenegraph?.scenes?.[scenegraph.scene ?? 0] ?? scenegraph?.scenes?.[0];
+      const footprint = scene ? normalizeScene(scene) : null;
+      if (footprint) {
+        recordModelTailShare(key, modelTailShareFor(key, footprint));
+      }
+      return scene;
+    };
+    sceneLoaders.set(key, loader);
+  }
+  return loader;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -210,7 +248,7 @@ export function buildAircraftModelLayers(
         return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
       },
       scenegraph: modelUrl(modelKey),
-      getScene: getNormalizedScene,
+      getScene: sceneLoaderFor(modelKey),
       // The normalised model is one unit wide and one unit is one pixel, so
       // the scale is the drawn width, less any perspective enlargement.
       getScale: (d) => {

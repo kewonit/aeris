@@ -58,7 +58,11 @@ const HEAD_OPTIONS = {
   zoom: 14,
 };
 
-const SIZE: AircraftScreenSize = { footprintPx: 24, magnification: 1 };
+const SIZE: AircraftScreenSize = {
+  footprintPx: 24,
+  magnification: 1,
+  tailShare: 0.45,
+};
 const HALF_LENGTH = 0.45 * 24 * metersPerPixel(14, 37.5);
 
 /** Unit direction of the head's last segment, as [east, north]. */

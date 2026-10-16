@@ -5,6 +5,7 @@ import type { FlightState } from "@/lib/opensky";
 
 import {
   buildAircraftModelLayers,
+  modelTailShareFor,
   normalizeScene,
 } from "./aircraft-model-layers";
 import type { AircraftScreenSize } from "./aircraft-size";
@@ -60,7 +61,9 @@ test("a model sits on its reported position", () => {
 
 test("a model is drawn at its footprint, less perspective enlargement", () => {
   const { flight, props } = narrowbodyLayer(
-    new Map([["abc123", { footprintPx: 24, magnification: 1.5 }]]),
+    new Map([
+      ["abc123", { footprintPx: 24, magnification: 1.5, tailShare: 0.4 }],
+    ]),
   );
   const scale = props.getScale as unknown as (d: FlightState) => number[];
 
@@ -81,13 +84,24 @@ test("normalizing a scene centres it and scales its footprint to one unit", () =
     },
   };
 
-  normalizeScene(scene);
+  const footprint = normalizeScene(scene);
 
   const scale = 1 / 80;
+  assert.equal(footprint?.x, 1);
+  assert.ok(Math.abs(footprint!.z - 73 / 80) < 1e-12);
   assert.deepEqual(matrix, [
     scale, 0, 0, 0,
     0, scale, 0, 0,
     0, 0, scale, 0,
     -10 * scale, -6.5 * scale, 27.5 * scale, 1,
   ]);
+});
+
+test("the tail share follows each model's fuselage axis", () => {
+  const footprint = { x: 1, z: 0.78 };
+
+  // Turned 90°, the fuselage lies along X; otherwise along Z.
+  assert.equal(modelTailShareFor("narrowbody", footprint), 0.45);
+  const lightProp = modelTailShareFor("light-prop", footprint);
+  assert.ok(Math.abs(lightProp - 0.351) < 1e-9);
 });

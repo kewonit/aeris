@@ -54,6 +54,7 @@ import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import {
   aircraftFootprintPixels,
+  aircraftTailShare,
   aircraftWingspanMeters,
   altitudeMagnification,
   type AircraftScreenSize,
@@ -567,7 +568,8 @@ export function FlightLayers({
     window.addEventListener("pageshow", handlePageResume);
     document.addEventListener("freeze", markPageInactive);
     document.addEventListener("resume", handlePageResume);
-    map?.on("zoom", requestRender);
+    // Sizes and trail heads depend on the camera, so any camera move redraws.
+    map?.on("move", requestRender);
     map?.on("style.load", requestRender);
 
     function buildAndPushLayers(now: number) {
@@ -780,6 +782,7 @@ export function FlightLayers({
         aircraftSizes.clear();
         let project: ((position: [number, number, number]) => number[]) | null =
           null;
+        const bearing = map?.getBearing() ?? 0;
         if (use3DRef.current && !fpvId && map) {
           const canvas = map.getCanvas();
           const center = map.getCenter();
@@ -790,7 +793,7 @@ export function FlightLayers({
             latitude: center.lat,
             zoom: currentZoom,
             pitch: map.getPitch(),
-            bearing: map.getBearing(),
+            bearing,
             padding: map.getPadding(),
           });
           project = (position) => viewport.project(position);
@@ -810,8 +813,10 @@ export function FlightLayers({
                   flight.latitude,
                   altitudeToElevation(flight.baroAltitude, altitudeMode) *
                     elevScale,
+                  bearing,
                 )
               : 1,
+            tailShare: aircraftTailShare(flight, use3DRef.current),
           });
         }
         const footprintOf = (flight: FlightState) =>
@@ -1002,7 +1007,7 @@ export function FlightLayers({
       window.removeEventListener("pageshow", handlePageResume);
       document.removeEventListener("freeze", markPageInactive);
       document.removeEventListener("resume", handlePageResume);
-      map?.off("zoom", requestRender);
+      map?.off("move", requestRender);
       map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);

@@ -1,6 +1,7 @@
 import type { FlightState } from "@/lib/opensky";
 
 import {
+  type AircraftModelKey,
   MODEL_KEY_WINGSPAN,
   resolveModelKeyCached,
 } from "./aircraft-model-mapping";
@@ -9,11 +10,25 @@ import {
 const METERS_PER_PIXEL_AT_ZOOM_0 = 78_271.517;
 
 /**
- * Share of an aircraft's footprint from its centre back to its tail.
- * Models are scaled so their footprint is the larger of wingspan and
- * length, and length is close to wingspan for most aircraft.
+ * Share of an aircraft's footprint from its centre back to its tail, for
+ * 2D icons and for 3D models that have not loaded yet.
  */
-export const TAIL_OFFSET_SHARE = 0.45;
+const DEFAULT_TAIL_SHARE = 0.4;
+
+const modelTailShares = new Map<AircraftModelKey, number>();
+
+/** Records where a loaded model's tail sits, measured from its geometry. */
+export function recordModelTailShare(key: AircraftModelKey, share: number) {
+  modelTailShares.set(key, share);
+}
+
+/** Share of the drawn footprint from an aircraft's centre to its tail. */
+export function aircraftTailShare(flight: FlightState, model: boolean) {
+  if (!model) return DEFAULT_TAIL_SHARE;
+  return (
+    modelTailShares.get(resolveModelKeyCached(flight)) ?? DEFAULT_TAIL_SHARE
+  );
+}
 
 // Wingspans in metres, from manufacturer specs, for types where the class
 // model's wingspan is a poor fit.
@@ -75,6 +90,10 @@ const TYPE_WINGSPAN_OVERRIDE: Readonly<Record<string, number>> = {
   E35L: 20,
   E45X: 20,
   // ── Turboprops ───────────────────────────────────────────────────
+  B350: 18,
+  BE20: 17,
+  BE9L: 15,
+  BE9T: 15,
   DH8D: 28,
   AT76: 27,
   AT72: 27,
@@ -118,6 +137,8 @@ export type AircraftScreenSize = {
   footprintPx: number;
   /** How much perspective enlarges the aircraft at its drawn height. */
   magnification: number;
+  /** Share of the footprint from the centre back to the tail. */
+  tailShare: number;
 };
 
 export function metersPerPixel(zoom: number, latitude: number): number {
@@ -165,24 +186,28 @@ const MAX_MAGNIFICATION = 40;
  * the same thing on the ground below it. Altitudes are exaggerated on the
  * map, which puts high aircraft close to the camera; dividing their size
  * by this keeps every aircraft at its ground-level size.
+ *
+ * Measured with a step across the view, which perspective scales by depth
+ * alone; a step along the view is also foreshortened by the pitch.
  */
 export function altitudeMagnification(
   project: (position: [number, number, number]) => number[],
   longitude: number,
   latitude: number,
   elevation: number,
+  bearing: number,
 ): number {
   if (!(elevation > 0)) return 1;
 
   const step = 0.001;
+  const radians = (bearing * Math.PI) / 180;
+  const stepLng =
+    (step * Math.cos(radians)) / Math.cos((latitude * Math.PI) / 180);
+  const stepLat = -step * Math.sin(radians);
   const span = (z: number) => {
     const origin = project([longitude, latitude, z]);
-    const east = project([longitude + step, latitude, z]);
-    const north = project([longitude, latitude + step, z]);
-    return (
-      Math.hypot(east[0] - origin[0], east[1] - origin[1]) +
-      Math.hypot(north[0] - origin[0], north[1] - origin[1])
-    );
+    const across = project([longitude + stepLng, latitude + stepLat, z]);
+    return Math.hypot(across[0] - origin[0], across[1] - origin[1]);
   };
 
   const ratio = span(elevation) / span(0);

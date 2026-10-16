@@ -6,11 +6,7 @@ import { snapLngToReference } from "@/lib/geo";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailTrack } from "@/lib/trails/types";
 
-import {
-  metersPerPixel,
-  TAIL_OFFSET_SHARE,
-  type AircraftScreenSize,
-} from "./aircraft-size";
+import { metersPerPixel, type AircraftScreenSize } from "./aircraft-size";
 import { projectDisplayedAltitudeMeters } from "./altitude-projection";
 import {
   getTrailGeometry,
@@ -77,9 +73,7 @@ export function buildTrailHead(
   const distance = Math.hypot(aircraftEast, aircraftNorth);
   // The model's half-length on screen, in metres at the aircraft's height.
   const halfLength =
-    (TAIL_OFFSET_SHARE *
-      size.footprintPx *
-      metersPerPixel(options.zoom, lat)) /
+    (size.tailShare * size.footprintPx * metersPerPixel(options.zoom, lat)) /
     size.magnification;
   // Until the aircraft has cleared the anchor, the trail ends under it.
   if (!(distance > halfLength)) return null;
