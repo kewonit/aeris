@@ -33,6 +33,8 @@ export type TrailBody = {
 /** The second-newest sample, where the per-frame head starts. */
 export type TrailHeadAnchor = {
   vertex: TrailVertex;
+  /** Unit direction of the trail arriving here, as [east, north]. */
+  tangent: [number, number] | null;
   color: Rgba;
   /** Opacity at the newest sample, which the aircraft is flying towards. */
   headAlpha: number;
@@ -55,6 +57,7 @@ export type TrailGeometryOptions = {
 type Curves = {
   curves: CurvePoint[][];
   anchor: CurvePoint | null;
+  beforeAnchor: CurvePoint | null;
   fadeStart: number;
   fadeSpan: number;
   tEnd: number;
@@ -270,6 +273,7 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
   const tStart = windowMs == null ? -Infinity : tEnd - windowMs;
   const curves: CurvePoint[][] = [];
   let anchor: CurvePoint | null = null;
+  let beforeAnchor: CurvePoint | null = null;
 
   for (const [index, part] of track.parts.entries()) {
     if (part[part.length - 1].t < tStart) continue;
@@ -281,7 +285,10 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
     if (lastIndex < 0) continue;
 
     const curve = cutBefore(curveThrough(part, lastIndex), tStart);
-    if (isNewest) anchor = curve[curve.length - 1] ?? null;
+    if (isNewest) {
+      anchor = curve[curve.length - 1] ?? null;
+      beforeAnchor = curve[curve.length - 2] ?? null;
+    }
     if (curve.length >= 2) curves.push(curve);
   }
 
@@ -290,15 +297,27 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
   return {
     curves,
     anchor,
+    beforeAnchor,
     fadeStart,
     fadeSpan: Math.max(MIN_FADE_MS, (tEnd - fadeStart) * fadeShare),
     tEnd,
   };
 }
 
+function directionBetween(
+  from: CurvePoint,
+  to: CurvePoint,
+): [number, number] | null {
+  const east =
+    (to.lng - from.lng) * Math.cos(((from.lat + to.lat) / 2) * (Math.PI / 180));
+  const north = to.lat - from.lat;
+  const length = Math.hypot(east, north);
+  return length > 0 ? [east / length, north / length] : null;
+}
+
 function project(
   icao24: string,
-  { curves, anchor, fadeStart, fadeSpan, tEnd }: Curves,
+  { curves, anchor, beforeAnchor, fadeStart, fadeSpan, tEnd }: Curves,
   options: TrailGeometryOptions,
 ): TrailGeometry {
   const alphaAt = (t: number) =>
@@ -330,6 +349,7 @@ function project(
     anchor: anchor
       ? {
           vertex: toVertex(anchor),
+          tangent: beforeAnchor ? directionBetween(beforeAnchor, anchor) : null,
           color: toColor(anchor),
           headAlpha: alphaAt(tEnd),
         }

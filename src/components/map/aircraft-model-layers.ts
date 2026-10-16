@@ -15,7 +15,10 @@
 //    inactive models are omitted entirely to reduce overhead.
 // ────────────────────────────────────────────────────────────────────────
 
-import { ScenegraphLayer } from "@deck.gl/mesh-layers";
+import {
+  ScenegraphLayer,
+  type ScenegraphLayerProps,
+} from "@deck.gl/mesh-layers";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
@@ -24,15 +27,10 @@ import { type PickingInfo } from "@deck.gl/core";
 import {
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
-  modelNormScale,
   modelUrl,
+  modelYawOffset,
 } from "./aircraft-model-mapping";
-import { getAircraftModelCalibration } from "./aircraft-model-calibration";
-import {
-  getAircraftScenegraphSizeScale,
-  getModelSceneUnitPixels,
-} from "./aircraft-model-size";
-import { offsetPositionByTrack } from "./flight-math";
+import type { AircraftScreenSize } from "./aircraft-size";
 
 // Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
@@ -43,6 +41,58 @@ const EMPTY_DATA: FlightState[] = [];
 const modelLastUsed = new Map<string, number>();
 const MODEL_DEACTIVATE_MS = 15_000; // 15 second grace period (covers 3+ poll cycles)
 const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth
+
+/** Turns the glTF Y-up models upright in deck's Z-up world. */
+const BASE_MODEL_ROLL = 90;
+
+/** Pixel size used until a flight's size has been measured this frame. */
+const FALLBACK_FOOTPRINT_PX = 20;
+
+const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+type SceneNode = {
+  getBounds(): number[][] | null;
+  setMatrix(matrix: number[]): void;
+};
+
+const normalizedScenes = new WeakSet<SceneNode>();
+
+/**
+ * Centres a model on its origin and scales its footprint, the larger of
+ * its wingspan and length, to one unit. The source meshes are off-centre
+ * and in unrelated units, so without this a model sits beside its position
+ * and its size depends on how the file was authored.
+ */
+export function normalizeScene<T extends SceneNode>(scene: T): T {
+  if (normalizedScenes.has(scene)) return scene;
+
+  scene.setMatrix(IDENTITY_MATRIX);
+  const bounds = scene.getBounds();
+  if (bounds) {
+    const [min, max] = bounds;
+    const center = [0, 1, 2].map((axis) => (min[axis] + max[axis]) / 2);
+    // Y is up in glTF, so X and Z span the footprint.
+    const footprint = Math.max(max[0] - min[0], max[2] - min[2]);
+    const scale = footprint > 0 ? 1 / footprint : 1;
+    scene.setMatrix([
+      scale, 0, 0, 0,
+      0, scale, 0, 0,
+      0, 0, scale, 0,
+      -center[0] * scale, -center[1] * scale, -center[2] * scale, 1,
+    ]);
+  }
+  normalizedScenes.add(scene);
+  return scene;
+}
+
+type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
+
+/** deck's default scene choice, normalised. */
+const getNormalizedScene: GetScene = (scenegraph) => {
+  const scene =
+    scenegraph?.scenes?.[scenegraph.scene ?? 0] ?? scenegraph?.scenes?.[0];
+  return scene ? normalizeScene(scene) : scene;
+};
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -58,7 +108,8 @@ export interface AircraftLayerParams {
   layersVisible: boolean;
   globeFade: number;
   elevScale: number;
-  currentZoom: number;
+  /** Each aircraft's drawn size this frame, keyed by icao24. */
+  aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
   altColors: boolean;
   defaultColor: [number, number, number, number];
@@ -93,7 +144,7 @@ export function buildAircraftModelLayers(
     layersVisible,
     globeFade,
     elevScale,
-    currentZoom,
+    aircraftSizes,
     altitudeDisplayMode,
     altColors,
     defaultColor,
@@ -128,14 +179,7 @@ export function buildAircraftModelLayers(
     const flights = buckets.get(modelKey) ?? EMPTY_DATA;
     const hasData = flights.length > 0;
 
-    // Pre-compute the yaw offset once per layer (not per-flight per-frame)
-    const meshNormalize = modelNormScale(modelKey);
-    const calibration = getAircraftModelCalibration(modelKey);
-    const normalizedModelExtent = calibration.meshMaxExtent * meshNormalize;
-    const modelUnitPixels = getModelSceneUnitPixels(
-      modelKey,
-      normalizedModelExtent,
-    );
+    const yawOffset = modelYawOffset(modelKey);
 
     return new ScenegraphLayer<FlightState>({
       id: `flight-aircraft-${modelKey}`,
@@ -143,20 +187,10 @@ export function buildAircraftModelLayers(
       data: flights,
       opacity: globeFade,
       getPosition: (d) => {
-        const interp = interpolatedMap.get(d.icao24);
-        const src = interp ?? d;
-        const track = Number.isFinite(src.trueTrack) ? src.trueTrack! : 0;
-        const shifted =
-          src.longitude != null && src.latitude != null
-            ? offsetPositionByTrack(
-                { lng: src.longitude, lat: src.latitude },
-                track,
-                -calibration.tailAnchorMeters,
-              )
-            : { lng: 0, lat: 0 };
+        const src = interpolatedMap.get(d.icao24) ?? d;
         return [
-          shifted.lng,
-          shifted.lat,
+          src.longitude ?? 0,
+          src.latitude ?? 0,
           altitudeToElevation(src.baroAltitude, altitudeDisplayMode) *
             elevScale,
         ];
@@ -167,9 +201,8 @@ export function buildAircraftModelLayers(
         const pitch = pitchByIcao.get(d.icao24) ?? 0;
         const bank = bankByIcao.get(d.icao24) ?? 0;
         const yaw =
-          calibration.yawOffset -
-          (Number.isFinite(src.trueTrack) ? src.trueTrack! : 0);
-        return [pitch, yaw, calibration.baseRoll + bank];
+          yawOffset - (Number.isFinite(src.trueTrack) ? src.trueTrack! : 0);
+        return [pitch, yaw, BASE_MODEL_ROLL + bank];
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
@@ -177,20 +210,25 @@ export function buildAircraftModelLayers(
         return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
       },
       scenegraph: modelUrl(modelKey),
-      getScale: () => {
-        return [meshNormalize, meshNormalize, meshNormalize];
+      getScene: getNormalizedScene,
+      // The normalised model is one unit wide and one unit is one pixel, so
+      // the scale is the drawn width, less any perspective enlargement.
+      getScale: (d) => {
+        const size = aircraftSizes.get(d.icao24);
+        const pixels = size
+          ? size.footprintPx / size.magnification
+          : FALLBACK_FOOTPRINT_PX;
+        return [pixels, pixels, pixels];
       },
-      sizeScale: getAircraftScenegraphSizeScale(
-        calibration.displayScale,
-        currentZoom,
-      ),
+      sizeScale: 1,
+      sizeMinPixels: 1,
+      sizeMaxPixels: 1,
       updateTriggers: {
         getPosition: [frameCounter, elevScale, altitudeDisplayMode],
         getOrientation: frameCounter,
+        getScale: frameCounter,
         getColor: [dataVersion, altColors],
       },
-      sizeMinPixels: modelUnitPixels,
-      sizeMaxPixels: modelUnitPixels,
       _lighting: "pbr",
       pickable: hasData,
       onHover: handleHover,

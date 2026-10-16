@@ -7,7 +7,11 @@ import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailTrack } from "@/lib/trails/types";
-import { type PickingInfo, MapView } from "@deck.gl/core";
+import {
+  type PickingInfo,
+  MapView,
+  WebMercatorViewport,
+} from "@deck.gl/core";
 
 import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
 import {
@@ -20,14 +24,12 @@ import {
   SELECTION_FADE_MS,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
-  BASE_AIRCRAFT_SIZE,
   LOD_3D_ZOOM_IN,
   LOD_3D_ZOOM_OUT,
   type FlightLayerProps,
 } from "./flight-layer-constants";
 
 import {
-  aircraftSizeMultiplier,
   tintAircraftColor,
   applySpecialTint,
   AIRCRAFT_ICON_MAPPING,
@@ -50,6 +52,12 @@ import {
 import { buildSelectionPulseLayers } from "./selection-pulse-layers";
 import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
+import {
+  aircraftFootprintPixels,
+  aircraftWingspanMeters,
+  altitudeMagnification,
+  type AircraftScreenSize,
+} from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import {
@@ -98,6 +106,7 @@ export function FlightLayers({
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailRenderCacheRef = useRef(createTrailRenderCache());
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
+  const aircraftSizesRef = useRef(new Map<string, AircraftScreenSize>());
   const pitchMapRef = useRef(new Map<string, number>());
   const bankMapRef = useRef(new Map<string, number>());
   // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
@@ -752,6 +761,62 @@ export function FlightLayers({
           ? 1
           : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
 
+        // ── LOD: 3D models vs 2D icons ────────────────────────────────
+        // At low zoom, aircraft are too small to distinguish 3D silhouettes.
+        // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
+        // to ScenegraphLayers (3D) above LOD_3D_ZOOM_IN. The hysteresis
+        // band (6.5–7.5) prevents rapid flickering at the boundary.
+        if (use3DRef.current && currentZoom < LOD_3D_ZOOM_OUT) {
+          use3DRef.current = false;
+        } else if (!use3DRef.current && currentZoom >= LOD_3D_ZOOM_IN) {
+          use3DRef.current = true;
+        }
+
+        // Every aircraft's drawn size, shared by models, icons, shadows, and
+        // trail heads so they agree. 3D models are drawn at their exaggerated
+        // height, where perspective would enlarge them, so outside FPV that
+        // enlargement is measured and divided back out.
+        const aircraftSizes = aircraftSizesRef.current;
+        aircraftSizes.clear();
+        let project: ((position: [number, number, number]) => number[]) | null =
+          null;
+        if (use3DRef.current && !fpvId && map) {
+          const canvas = map.getCanvas();
+          const center = map.getCenter();
+          const viewport = new WebMercatorViewport({
+            width: canvas.clientWidth,
+            height: canvas.clientHeight,
+            longitude: center.lng,
+            latitude: center.lat,
+            zoom: currentZoom,
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
+            padding: map.getPadding(),
+          });
+          project = (position) => viewport.project(position);
+        }
+        for (const flight of visibleFlights) {
+          if (flight.longitude == null || flight.latitude == null) continue;
+          aircraftSizes.set(flight.icao24, {
+            footprintPx: aircraftFootprintPixels(
+              aircraftWingspanMeters(flight),
+              currentZoom,
+              flight.latitude,
+            ),
+            magnification: project
+              ? altitudeMagnification(
+                  project,
+                  flight.longitude,
+                  flight.latitude,
+                  altitudeToElevation(flight.baroAltitude, altitudeMode) *
+                    elevScale,
+                )
+              : 1,
+          });
+        }
+        const footprintOf = (flight: FlightState) =>
+          aircraftSizes.get(flight.icao24)?.footprintPx ?? 20;
+
         if (layersVisible && showShadowsRef.current) {
           layers.push(
             new IconLayer<FlightState>({
@@ -762,9 +827,7 @@ export function FlightLayers({
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
             getIcon: () => "aircraft",
-            getSize: (d) =>
-              BASE_AIRCRAFT_SIZE *
-              aircraftSizeMultiplier(d.typeCode, d.category),
+            getSize: footprintOf,
             getColor: () => [0, 0, 0, 60],
             getAngle: (d) =>
               360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -776,6 +839,7 @@ export function FlightLayers({
             updateTriggers: {
               getPosition: visualFrameRef.current,
               getAngle: visualFrameRef.current,
+              getSize: visualFrameRef.current,
             },
             }),
           );
@@ -785,6 +849,8 @@ export function FlightLayers({
           layers.push(
             ...buildTrailLayers({
               flights: visibleFlights,
+              aircraftSizes,
+              zoom: currentZoom,
               trailMap: trailMapRef.current,
               selectedIcao24: selectedIcao24Ref.current,
               trailMinutes: trailMinutesRef.current,
@@ -828,17 +894,6 @@ export function FlightLayers({
           }
         }
 
-        // ── LOD: 3D models vs 2D icons ────────────────────────────────
-        // At low zoom, aircraft are too small to distinguish 3D silhouettes.
-        // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
-        // to ScenegraphLayers (3D) above LOD_3D_ZOOM_IN. The hysteresis
-        // band (6.5–7.5) prevents rapid flickering at the boundary.
-        if (use3DRef.current && currentZoom < LOD_3D_ZOOM_OUT) {
-          use3DRef.current = false;
-        } else if (!use3DRef.current && currentZoom >= LOD_3D_ZOOM_IN) {
-          use3DRef.current = true;
-        }
-
         if (!layersVisible) {
           // Native MapLibre globe layers own low-zoom rendering. Leaving the
           // Deck layer list empty releases its per-layer buffers and work.
@@ -853,7 +908,7 @@ export function FlightLayers({
               layersVisible,
               globeFade,
               elevScale,
-              currentZoom,
+              aircraftSizes,
               altitudeDisplayMode: altitudeMode,
               altColors,
               defaultColor: DEFAULT_COLOR,
@@ -881,9 +936,7 @@ export function FlightLayers({
                 ) * elevScale,
               ],
               getIcon: () => "aircraft",
-              getSize: (d) =>
-                BASE_AIRCRAFT_SIZE *
-                aircraftSizeMultiplier(d.typeCode, d.category),
+              getSize: footprintOf,
               getColor: (d) => {
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
@@ -909,6 +962,7 @@ export function FlightLayers({
                   altitudeMode,
                 ],
                 getAngle: visualFrameRef.current,
+                getSize: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],
               },
             }),

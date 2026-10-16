@@ -24,7 +24,6 @@ export const MAX_ANIM_DURATION_MS = 30_000;
 export const TELEPORT_THRESHOLD = 0.3;
 export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 export const TRACK_DAMPING = 0.18;
-export const BASE_AIRCRAFT_SIZE = 20;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 

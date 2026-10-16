@@ -3,10 +3,11 @@ import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
 
-import { buildAircraftModelLayers } from "./aircraft-model-layers";
-import { getAircraftModelCalibration } from "./aircraft-model-calibration";
-import { BASE_3D_MODEL_SIZE, getModelMaxPixels } from "./aircraft-model-size";
-import { offsetPositionByTrack } from "./flight-math";
+import {
+  buildAircraftModelLayers,
+  normalizeScene,
+} from "./aircraft-model-layers";
+import type { AircraftScreenSize } from "./aircraft-size";
 
 function makeNarrowbodyFlight(): FlightState {
   return {
@@ -22,142 +23,71 @@ function makeNarrowbodyFlight(): FlightState {
   } as FlightState;
 }
 
-function findNarrowbodyLayer(layers: unknown[]) {
-  return layers.find(
-    (layer) =>
-      (layer as { props: { id: string } }).props.id ===
-      "flight-aircraft-narrowbody",
-  ) as {
-    props: {
-      sizeScale: number;
-      sizeMinPixels: number;
-      sizeMaxPixels: number;
-      getScale: () => [number, number, number];
-    };
-  };
+function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
+  const flight = makeNarrowbodyFlight();
+  const layers = buildAircraftModelLayers({
+    rawFlights: [flight],
+    interpolatedMap: new Map([[flight.icao24, flight]]),
+    frameCounter: 0,
+    dataVersion: 0,
+    layersVisible: true,
+    globeFade: 1,
+    elevScale: 1,
+    aircraftSizes,
+    altitudeDisplayMode: "realistic",
+    altColors: false,
+    defaultColor: [255, 255, 255, 255],
+    pitchByIcao: new Map(),
+    bankByIcao: new Map(),
+    handleHover: () => {},
+    handleClick: () => {},
+  });
+  const layer = layers.find(
+    (candidate) => candidate.props.id === "flight-aircraft-narrowbody",
+  );
+  assert.ok(layer);
+  return { flight, props: layer.props };
 }
 
-test("offsetPositionByTrack shifts eastbound aircraft backward along track", () => {
-  const positioned = offsetPositionByTrack({ lng: 8.1, lat: 50.0 }, 90, -18);
+test("a model sits on its reported position", () => {
+  const { flight, props } = narrowbodyLayer(new Map());
+  const position = props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
 
-  assert.ok(positioned.lng < 8.1);
-  assert.equal(positioned.lat, 50.0);
+  assert.deepEqual(position(flight).slice(0, 2), [8.1, 50.0]);
 });
 
-test("buildAircraftModelLayers shifts the rendered aircraft behind the live anchor", () => {
-  const flight = makeNarrowbodyFlight();
-  const layers = buildAircraftModelLayers({
-    rawFlights: [flight],
-    interpolatedMap: new Map([[flight.icao24, flight]]),
-    frameCounter: 0,
-    dataVersion: 0,
-    layersVisible: true,
-    globeFade: 1,
-    elevScale: 1,
-    currentZoom: 6,
-    altitudeDisplayMode: "presentation",
-    altColors: false,
-    defaultColor: [255, 255, 255, 255],
-    pitchByIcao: new Map(),
-    bankByIcao: new Map(),
-    handleHover: () => {},
-    handleClick: () => {},
-  });
+test("a model is drawn at its footprint, less perspective enlargement", () => {
+  const { flight, props } = narrowbodyLayer(
+    new Map([["abc123", { footprintPx: 24, magnification: 1.5 }]]),
+  );
+  const scale = props.getScale as unknown as (d: FlightState) => number[];
 
-  const aircraftLayer = layers[0] as unknown as {
-    props: {
-      getPosition: (flightState: FlightState) => [number, number, number];
-      getOrientation: (flightState: FlightState) => [number, number, number];
-    };
+  assert.equal(props.sizeMinPixels, 1);
+  assert.equal(props.sizeMaxPixels, 1);
+  assert.deepEqual(scale(flight), [16, 16, 16]);
+});
+
+test("normalizing a scene centres it and scales its footprint to one unit", () => {
+  let matrix: number[] = [];
+  const scene = {
+    getBounds: () => [
+      [-30, -5, -64],
+      [50, 18, 9],
+    ],
+    setMatrix: (next: number[]) => {
+      matrix = next;
+    },
   };
 
-  const position = aircraftLayer.props.getPosition(flight);
-  const orientation = aircraftLayer.props.getOrientation(flight);
-  const calibration = getAircraftModelCalibration("narrowbody");
+  normalizeScene(scene);
 
-  assert.ok(position[0] < 8.1);
-  assert.equal(orientation[2], calibration.baseRoll);
-});
-
-test("buildAircraftModelLayers uses the smaller 3D base size at the reference zoom", () => {
-  const flight = makeNarrowbodyFlight();
-  const layers = buildAircraftModelLayers({
-    rawFlights: [flight],
-    interpolatedMap: new Map([[flight.icao24, flight]]),
-    frameCounter: 0,
-    dataVersion: 0,
-    layersVisible: true,
-    globeFade: 1,
-    elevScale: 1,
-    currentZoom: 6,
-    altitudeDisplayMode: "presentation",
-    altColors: false,
-    defaultColor: [255, 255, 255, 255],
-    pitchByIcao: new Map(),
-    bankByIcao: new Map(),
-    handleHover: () => {},
-    handleClick: () => {},
-  });
-
-  const aircraftLayer = findNarrowbodyLayer(layers);
-
-  const calibration = getAircraftModelCalibration("narrowbody");
-  assert.ok(aircraftLayer);
-  assert.equal(
-    aircraftLayer.props.sizeScale,
-    BASE_3D_MODEL_SIZE * calibration.displayScale,
-  );
-});
-
-test("buildAircraftModelLayers keeps 3D aircraft sizing stable across zoom", () => {
-  const flight = makeNarrowbodyFlight();
-  const nearLayers = buildAircraftModelLayers({
-    rawFlights: [flight],
-    interpolatedMap: new Map([[flight.icao24, flight]]),
-    frameCounter: 0,
-    dataVersion: 0,
-    layersVisible: true,
-    globeFade: 1,
-    elevScale: 1,
-    currentZoom: 6,
-    altitudeDisplayMode: "presentation",
-    altColors: false,
-    defaultColor: [255, 255, 255, 255],
-    pitchByIcao: new Map(),
-    bankByIcao: new Map(),
-    handleHover: () => {},
-    handleClick: () => {},
-  });
-  const farLayers = buildAircraftModelLayers({
-    rawFlights: [flight],
-    interpolatedMap: new Map([[flight.icao24, flight]]),
-    frameCounter: 0,
-    dataVersion: 0,
-    layersVisible: true,
-    globeFade: 1,
-    elevScale: 1,
-    currentZoom: 5,
-    altitudeDisplayMode: "presentation",
-    altColors: false,
-    defaultColor: [255, 255, 255, 255],
-    pitchByIcao: new Map(),
-    bankByIcao: new Map(),
-    handleHover: () => {},
-    handleClick: () => {},
-  });
-
-  const nearLayer = findNarrowbodyLayer(nearLayers);
-  const farLayer = findNarrowbodyLayer(farLayers);
-  const calibration = getAircraftModelCalibration("narrowbody");
-  const normalizedModelExtent =
-    calibration.meshMaxExtent * nearLayer.props.getScale()[0];
-  const targetScreenPixels = getModelMaxPixels("narrowbody");
-  const nearScreenPixels =
-    nearLayer.props.sizeMinPixels * normalizedModelExtent;
-
-  assert.equal(farLayer.props.sizeScale, nearLayer.props.sizeScale);
-  assert.ok(Math.abs(nearScreenPixels - targetScreenPixels) < 1e-9);
-  assert.equal(nearLayer.props.sizeMinPixels, nearLayer.props.sizeMaxPixels);
-  assert.equal(farLayer.props.sizeMinPixels, nearLayer.props.sizeMinPixels);
-  assert.equal(farLayer.props.sizeMaxPixels, nearLayer.props.sizeMaxPixels);
+  const scale = 1 / 80;
+  assert.deepEqual(matrix, [
+    scale, 0, 0, 0,
+    0, scale, 0, 0,
+    0, 0, scale, 0,
+    -10 * scale, -6.5 * scale, 27.5 * scale, 1,
+  ]);
 });
