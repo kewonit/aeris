@@ -1,9 +1,14 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { altitudeToColor } from "@/lib/flight-utils";
 import { snapLngToReference } from "@/lib/geo";
+import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
-import { projectTrailElevationMeters } from "./altitude-projection";
+import { aircraftColor } from "./aircraft-appearance";
+import {
+  elevationUnderCeiling,
+  trailElevationMeters,
+} from "./altitude-projection";
 import { horizontalDistanceFromLngLat } from "./flight-math";
 
 export type Rgba = [number, number, number, number];
@@ -21,6 +26,11 @@ const ALTITUDE_GLITCH_METERS = 300;
 const STRAIGHT_TURN_RAD = (2 * Math.PI) / 180;
 const CURVE_STEP_METERS = 250;
 const MAX_CURVE_STEPS = 16;
+/**
+ * How much of the newest trail the head redraws every frame, so the head
+ * can start far enough behind the aircraft to meet its tail straight on.
+ */
+const LEAD_MS = 20_000;
 
 type CurvePoint = { lng: number; lat: number; alt: number | null; t: number };
 
@@ -30,20 +40,29 @@ export type TrailBody = {
   colors: Rgba[];
 };
 
-/** The second-newest sample, where the per-frame head starts. */
-export type TrailHeadAnchor = {
-  vertex: TrailVertex;
-  /** Unit direction of the trail arriving here, as [east, north]. */
-  tangent: [number, number] | null;
-  color: Rgba;
+/**
+ * The newest stretch of trail, up to the second-newest sample. The head
+ * redraws it every frame, cut short where the aircraft has caught up.
+ */
+export type TrailLead = {
+  path: TrailVertex[];
+  colors: Rgba[];
+  /** Unit direction of the trail arriving at each vertex, as [east, north]. */
+  tangents: Array<[number, number] | null>;
   /** Opacity at the newest sample, which the aircraft is flying towards. */
   headAlpha: number;
 };
 
 export type TrailGeometry = {
   bodies: TrailBody[];
-  anchor: TrailHeadAnchor | null;
+  lead: TrailLead | null;
 };
+
+/** The aircraft fields its colour depends on. */
+export type TrailAppearance = Pick<
+  FlightState,
+  "category" | "dbFlags" | "emergencyStatus"
+>;
 
 export type TrailGeometryOptions = {
   /** How much of the trail to show; null shows all of it. */
@@ -52,12 +71,18 @@ export type TrailGeometryOptions = {
   elevScale: number;
   altColors: boolean;
   defaultColor: Rgba;
+  /** Height in metres that no trail is drawn above, as for aircraft. */
+  heightCeiling: number;
+  appearance: TrailAppearance;
 };
 
 type Curves = {
   curves: CurvePoint[][];
-  anchor: CurvePoint | null;
-  beforeAnchor: CurvePoint | null;
+  lead: CurvePoint[];
+  /** The point before the lead, for the direction the lead starts in. */
+  beforeLead: CurvePoint | null;
+  /** The highest altitude anywhere on the trail. */
+  peakAltitude: number | null;
   fadeStart: number;
   fadeSpan: number;
   tEnd: number;
@@ -73,7 +98,7 @@ type CacheEntry = {
 
 export type TrailGeometryCache = Map<string, CacheEntry>;
 
-const EMPTY_GEOMETRY: TrailGeometry = { bodies: [], anchor: null };
+const EMPTY_GEOMETRY: TrailGeometry = { bodies: [], lead: null };
 
 function lerp(a: number, b: number, u: number): number {
   return a + (b - a) * u;
@@ -272,8 +297,8 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
   const tEnd = lastPart?.[lastPart.length - 1]?.t ?? 0;
   const tStart = windowMs == null ? -Infinity : tEnd - windowMs;
   const curves: CurvePoint[][] = [];
-  let anchor: CurvePoint | null = null;
-  let beforeAnchor: CurvePoint | null = null;
+  let lead: CurvePoint[] = [];
+  let beforeLead: CurvePoint | null = null;
 
   for (const [index, part] of track.parts.entries()) {
     if (part[part.length - 1].t < tStart) continue;
@@ -284,20 +309,34 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
     const lastIndex = isNewest ? part.length - 2 : part.length - 1;
     if (lastIndex < 0) continue;
 
-    const curve = cutBefore(curveThrough(part, lastIndex), tStart);
-    if (isNewest) {
-      anchor = curve[curve.length - 1] ?? null;
-      beforeAnchor = curve[curve.length - 2] ?? null;
+    let curve = cutBefore(curveThrough(part, lastIndex), tStart);
+    if (isNewest && curve.length > 0) {
+      let leadFrom = Math.max(0, lastIndex - 1);
+      while (leadFrom > 0 && part[leadFrom].t > part[lastIndex].t - LEAD_MS) {
+        leadFrom -= 1;
+      }
+      const split = curve.findIndex((point) => point.t >= part[leadFrom].t);
+      lead = curve.slice(split);
+      beforeLead = curve[split - 1] ?? null;
+      curve = curve.slice(0, split + 1);
     }
     if (curve.length >= 2) curves.push(curve);
   }
 
-  const fadeStart = curves[0]?.[0]?.t ?? anchor?.t ?? tEnd;
+  let peakAltitude: number | null = null;
+  for (const point of [...curves.flat(), ...lead]) {
+    if (point.alt != null) {
+      peakAltitude = Math.max(peakAltitude ?? point.alt, point.alt);
+    }
+  }
+
+  const fadeStart = curves[0]?.[0]?.t ?? lead[0]?.t ?? tEnd;
   const fadeShare = windowMs == null ? HISTORY_FADE_SHARE : 0.5;
   return {
     curves,
-    anchor,
-    beforeAnchor,
+    lead,
+    beforeLead,
+    peakAltitude,
     fadeStart,
     fadeSpan: Math.max(MIN_FADE_MS, (tEnd - fadeStart) * fadeShare),
     tEnd,
@@ -317,7 +356,7 @@ function directionBetween(
 
 function project(
   icao24: string,
-  { curves, anchor, beforeAnchor, fadeStart, fadeSpan, tEnd }: Curves,
+  { curves, lead, beforeLead, fadeStart, fadeSpan, tEnd }: Curves,
   options: TrailGeometryOptions,
 ): TrailGeometry {
   const alphaAt = (t: number) =>
@@ -327,16 +366,18 @@ function project(
   const toVertex = (point: CurvePoint): TrailVertex => [
     point.lng,
     point.lat,
-    Math.max(
-      0,
-      projectTrailElevationMeters(point.alt, options.altitudeDisplayMode) *
-        options.elevScale,
+    trailElevationMeters(
+      point.alt,
+      options.altitudeDisplayMode,
+      options.elevScale,
+      options.heightCeiling,
     ),
   ];
   const toColor = (point: CurvePoint): Rgba => {
-    const [r, g, b] = options.altColors
+    const base = options.altColors
       ? altitudeToColor(point.alt)
       : options.defaultColor;
+    const [r, g, b] = aircraftColor(base, options.appearance);
     return [r, g, b, alphaAt(point.t)];
   };
 
@@ -346,14 +387,18 @@ function project(
       path: curve.map(toVertex),
       colors: curve.map(toColor),
     })),
-    anchor: anchor
-      ? {
-          vertex: toVertex(anchor),
-          tangent: beforeAnchor ? directionBetween(beforeAnchor, anchor) : null,
-          color: toColor(anchor),
-          headAlpha: alphaAt(tEnd),
-        }
-      : null,
+    lead:
+      lead.length > 0
+        ? {
+            path: lead.map(toVertex),
+            colors: lead.map(toColor),
+            tangents: lead.map((point, index) => {
+              const from = index > 0 ? lead[index - 1] : beforeLead;
+              return from ? directionBetween(from, point) : null;
+            }),
+            headAlpha: alphaAt(tEnd),
+          }
+        : null,
   };
 }
 
@@ -384,16 +429,31 @@ export function getTrailGeometry(
 
   // Two decimals keeps zoom-driven elevation changes from reprojecting
   // every trail on every frame.
+  const elevScale = Number(options.elevScale.toFixed(2));
+  // The ceiling only matters to a trail that reaches up towards it.
+  const peak = trailElevationMeters(
+    entry.curves.peakAltitude,
+    options.altitudeDisplayMode,
+    elevScale,
+    Infinity,
+  );
+  const underCeiling =
+    elevationUnderCeiling(peak, options.heightCeiling) !== peak;
+  const { category, dbFlags, emergencyStatus } = options.appearance;
   const projectionKey = [
     options.altitudeDisplayMode,
-    options.elevScale.toFixed(2),
+    elevScale,
+    underCeiling ? options.heightCeiling : "",
     options.altColors,
     options.defaultColor.join(","),
+    category,
+    dbFlags,
+    emergencyStatus,
   ].join("|");
   if (entry.projectionKey !== projectionKey) {
     entry.geometry = project(track.icao24, entry.curves, {
       ...options,
-      elevScale: Number(options.elevScale.toFixed(2)),
+      elevScale,
     });
     entry.projectionKey = projectionKey;
   }

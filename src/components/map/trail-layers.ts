@@ -6,21 +6,28 @@ import { snapLngToReference } from "@/lib/geo";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailTrack } from "@/lib/trails/types";
 
+import { aircraftColor } from "./aircraft-appearance";
 import { metersPerPixel, type AircraftScreenSize } from "./aircraft-size";
-import { projectDisplayedAltitudeMeters } from "./altitude-projection";
+import { aircraftElevationMeters } from "./altitude-projection";
 import {
   getTrailGeometry,
   type Rgba,
   type TrailBody,
   type TrailGeometryCache,
-  type TrailHeadAnchor,
+  type TrailLead,
   type TrailVertex,
 } from "./trail-geometry";
 
 const METERS_PER_DEGREE = 111_320;
 const HEAD_STEPS = 10;
+/**
+ * The head keeps the lead only where it lies this many half-lengths from
+ * the aircraft's centre, so the curve into the tail has room to turn.
+ */
+const LEAD_CLEARANCE_HALF_LENGTHS = 2;
 
 export type TrailHead = {
+  icao24: string;
   path: TrailVertex[];
   colors: Rgba[];
 };
@@ -38,6 +45,8 @@ type HeadOptions = {
   altColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
   elevScale: number;
+  /** Height in metres that no aircraft or trail is drawn above. */
+  heightCeiling: number;
   defaultColor: Rgba;
   zoom: number;
 };
@@ -48,97 +57,134 @@ function cubic(a: number, b: number, c: number, d: number, u: number) {
 }
 
 /**
- * The stretch from the trail's second-newest sample into the aircraft's
- * tail, rebuilt every frame as the aircraft moves. It leaves the trail
- * along the trail's own direction and arrives along the heading the model
- * is drawn with, so it always enters the tail straight on, whatever the
+ * The newest stretch of trail and the curve from it into the aircraft's
+ * tail, rebuilt every frame as the aircraft moves. The lead is kept up to
+ * where the aircraft has caught up with it; the curve leaves it along the
+ * trail's own direction and arrives along the heading the model is drawn
+ * with, so the trail always enters the tail straight on, whatever the
  * model's size or the aircraft's crab angle.
  */
 export function buildTrailHead(
-  anchor: TrailHeadAnchor,
+  lead: TrailLead,
   flight: FlightState,
   size: AircraftScreenSize,
   options: HeadOptions,
 ): TrailHead | null {
   if (flight.longitude == null || flight.latitude == null) return null;
 
-  const [startLng, startLat, startZ] = anchor.vertex;
-  const lng = snapLngToReference(flight.longitude, startLng);
   const lat = flight.latitude;
+  const lng = snapLngToReference(flight.longitude, lead.path[0][0]);
   const metersPerLng = METERS_PER_DEGREE * Math.cos((lat * Math.PI) / 180);
+  // Positions relative to the aircraft, in metres east and north.
+  const local = ([vertexLng, vertexLat]: TrailVertex): [number, number] => [
+    (vertexLng - lng) * metersPerLng,
+    (vertexLat - lat) * METERS_PER_DEGREE,
+  ];
 
-  // Positions relative to the anchor, in metres east and north.
-  const aircraftEast = (lng - startLng) * metersPerLng;
-  const aircraftNorth = (lat - startLat) * METERS_PER_DEGREE;
-  const distance = Math.hypot(aircraftEast, aircraftNorth);
+  const track = flight.trueTrack;
+  const [lastEast, lastNorth] = local(lead.path[lead.path.length - 1]);
+  const lastDistance = Math.hypot(lastEast, lastNorth);
+  const heading: [number, number] | null =
+    track != null && Number.isFinite(track)
+      ? [Math.sin((track * Math.PI) / 180), Math.cos((track * Math.PI) / 180)]
+      : lastDistance > 0
+        ? [-lastEast / lastDistance, -lastNorth / lastDistance]
+        : null;
+  if (!heading) return null;
+  const [headingEast, headingNorth] = heading;
+
   // The model's half-length on screen, in metres at the aircraft's height.
   const halfLength =
     (size.tailShare * size.footprintPx * metersPerPixel(options.zoom, lat)) /
     size.magnification;
-  // Until the aircraft has cleared the anchor, the trail ends under it.
-  if (!(distance > halfLength)) return null;
+  const tailEast = -headingEast * halfLength;
+  const tailNorth = -headingNorth * halfLength;
+  const behindTail = ([east, north]: [number, number]) =>
+    (tailEast - east) * headingEast + (tailNorth - north) * headingNorth;
+  const clearOfAircraft = (vertex: TrailVertex) => {
+    const position = local(vertex);
+    return (
+      behindTail(position) > 0 &&
+      Math.hypot(position[0], position[1]) >=
+        LEAD_CLEARANCE_HALF_LENGTHS * halfLength
+    );
+  };
 
-  const track = flight.trueTrack;
-  const [headingEast, headingNorth] =
-    track != null && Number.isFinite(track)
-      ? [Math.sin((track * Math.PI) / 180), Math.cos((track * Math.PI) / 180)]
-      : [aircraftEast / distance, aircraftNorth / distance];
-  const tailEast = aircraftEast - headingEast * halfLength;
-  const tailNorth = aircraftNorth - headingNorth * halfLength;
-  const span = Math.hypot(tailEast, tailNorth);
+  // Drop the lead's newest vertices while the aircraft is over them, or
+  // they would end the trail beside the fuselage. A slow aircraft drawn
+  // far larger than life can cover all of it; the join then starts from
+  // the lead's first vertex, where the cached trail ends.
+  let startIndex = lead.path.length - 1;
+  while (startIndex > 0 && !clearOfAircraft(lead.path[startIndex])) {
+    startIndex -= 1;
+  }
+
+  const start = lead.path[startIndex];
+  const [startEast, startNorth] = local(start);
+  const spanEast = tailEast - startEast;
+  const spanNorth = tailNorth - startNorth;
+  const span = Math.hypot(spanEast, spanNorth);
   if (!(span > 0)) return null;
-
-  // A heading that points back at the trail would loop the curve, so the
-  // join is straight then.
-  const curved =
-    (tailEast * headingEast + tailNorth * headingNorth) / span > 0;
-  const [leaveEast, leaveNorth] = anchor.tangent ?? [
-    tailEast / span,
-    tailNorth / span,
-  ];
+  const tangent = lead.tangents[startIndex];
+  // A trail leaving away from the tail would loop, so it leaves towards it.
+  const [leaveEast, leaveNorth] =
+    tangent && tangent[0] * spanEast + tangent[1] * spanNorth > 0
+      ? tangent
+      : [spanEast / span, spanNorth / span];
   const reach = span / 3;
 
   const altitude = flight.onGround ? 0 : flight.baroAltitude;
   // The trail rides just below the aircraft and rises to meet the tail.
+  const startZ = start[2];
   const endZ = Math.max(
     0,
-    projectDisplayedAltitudeMeters(altitude, options.altitudeDisplayMode) *
+    aircraftElevationMeters(
+      altitude,
+      options.altitudeDisplayMode,
       options.elevScale,
+      options.heightCeiling,
+    ),
   );
-  const [r, g, b] = options.altColors
+  const base = options.altColors
     ? altitudeToColor(altitude)
     : options.defaultColor;
-  const endColor: Rgba = [r, g, b, anchor.headAlpha];
+  const [r, g, b] = aircraftColor(base, flight);
+  const endColor: Rgba = [r, g, b, lead.headAlpha];
+  const startColor = lead.colors[startIndex];
 
-  const steps = curved ? HEAD_STEPS : 1;
-  const path: TrailVertex[] = [];
-  const colors: Rgba[] = [];
-  for (let step = 0; step <= steps; step += 1) {
-    const u = step / steps;
-    const east = curved
-      ? cubic(0, leaveEast * reach, tailEast - headingEast * reach, tailEast, u)
-      : tailEast * u;
-    const north = curved
-      ? cubic(
-          0,
-          leaveNorth * reach,
-          tailNorth - headingNorth * reach,
-          tailNorth,
-          u,
-        )
-      : tailNorth * u;
+  const path = lead.path.slice(0, startIndex + 1);
+  const colors = lead.colors.slice(0, startIndex + 1);
+  for (let step = 1; step <= HEAD_STEPS; step += 1) {
+    // Samples bunch up at both ends, so the last segment lies along the
+    // heading rather than cutting the curve at an angle.
+    const t = step / HEAD_STEPS;
+    const u = t * t * (3 - 2 * t);
+    const east = cubic(
+      startEast,
+      startEast + leaveEast * reach,
+      tailEast - headingEast * reach,
+      tailEast,
+      u,
+    );
+    const north = cubic(
+      startNorth,
+      startNorth + leaveNorth * reach,
+      tailNorth - headingNorth * reach,
+      tailNorth,
+      u,
+    );
     path.push([
-      startLng + east / metersPerLng,
-      startLat + north / METERS_PER_DEGREE,
+      lng + east / metersPerLng,
+      lat + north / METERS_PER_DEGREE,
       startZ + (endZ - startZ) * u,
     ]);
     colors.push(
-      anchor.color.map(
+      startColor.map(
         (channel, index) => channel + (endColor[index] - channel) * u,
       ) as Rgba,
     );
   }
-  return { path, colors };
+  return { icao24: flight.icao24, path, colors };
 }
 
 export type TrailLayerParams = HeadOptions & {
@@ -175,13 +221,15 @@ export function buildTrailLayers(params: TrailLayerParams) {
       elevScale: params.elevScale,
       altColors: params.altColors,
       defaultColor: params.defaultColor,
+      heightCeiling: params.heightCeiling,
+      appearance: flight,
     });
     bodies.push(...geometry.bodies);
 
     const size = params.aircraftSizes.get(flight.icao24);
     const head =
-      geometry.anchor && size
-        ? buildTrailHead(geometry.anchor, flight, size, params)
+      geometry.lead && size
+        ? buildTrailHead(geometry.lead, flight, size, params)
         : null;
     if (head) heads.push(head);
   }

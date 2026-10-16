@@ -1,3 +1,5 @@
+import type { FlightState } from "@/lib/opensky";
+
 // ── Category Styling ───────────────────────────────────────────────────
 
 export const CATEGORY_TINT: Record<number, [number, number, number]> = {
@@ -15,7 +17,7 @@ export const CATEGORY_TINT: Record<number, [number, number, number]> = {
   14: [195, 165, 255],
 };
 
-export function tintAircraftColor(
+function tintAircraftColor(
   base: [number, number, number, number],
   category: number | null,
 ): [number, number, number, number] {
@@ -31,7 +33,7 @@ export function tintAircraftColor(
 }
 
 /** Apply military (amber) or emergency (red) tint on top of normal color. */
-export function applySpecialTint(
+function applySpecialTint(
   color: [number, number, number, number],
   dbFlags?: number | null,
   emergencyStatus?: string | null,
@@ -54,6 +56,21 @@ export function applySpecialTint(
     ];
   }
   return color;
+}
+
+/**
+ * The colour an aircraft is drawn in: its base colour tinted by category,
+ * then by military or emergency status. Its trail is drawn in it too.
+ */
+export function aircraftColor(
+  base: [number, number, number, number],
+  flight: Pick<FlightState, "category" | "dbFlags" | "emergencyStatus">,
+): [number, number, number, number] {
+  return applySpecialTint(
+    tintAircraftColor(base, flight.category),
+    flight.dbFlags,
+    flight.emergencyStatus,
+  );
 }
 
 // ── Selection pulse timing ─────────────────────────────────────────────

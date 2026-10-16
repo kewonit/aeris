@@ -4,6 +4,7 @@ import test from "node:test";
 import { altitudeToColor } from "@/lib/flight-utils";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
+import { aircraftColor } from "./aircraft-appearance";
 import {
   getTrailGeometry,
   TRAIL_ALPHA,
@@ -16,6 +17,8 @@ const OPTIONS: TrailGeometryOptions = {
   elevScale: 1,
   altColors: true,
   defaultColor: [180, 220, 255, 200],
+  heightCeiling: Infinity,
+  appearance: { category: null },
 };
 
 let revision = 0;
@@ -60,24 +63,28 @@ test("a new sample leaves every earlier vertex of the trail where it was", () =>
   assert.ok(after.bodies[0].path.length > oldPath.length);
 });
 
-test("the trail stops at the second-newest sample, where the aircraft is coming from", () => {
-  const samples = Array.from({ length: 6 }, (_, index) => turning(index));
+test("the newest 20 s are left to the head, which runs to the second-newest sample", () => {
+  const samples = Array.from({ length: 10 }, (_, index) => turning(index));
   const geometry = getTrailGeometry(new Map(), track([samples]), OPTIONS);
+  const lead = geometry.lead!;
 
   const end = geometry.bodies[0].path.at(-1)!;
   assert.deepEqual(end.slice(0, 2), [samples[4].lng, samples[4].lat]);
-  assert.deepEqual(geometry.anchor?.vertex, end);
+  assert.deepEqual(lead.path[0], end);
+  assert.deepEqual(lead.path.at(-1)!.slice(0, 2), [samples[8].lng, samples[8].lat]);
+  assert.equal(lead.path.length, lead.tangents.length);
+  assert.ok(lead.tangents.every((tangent) => tangent !== null));
 });
 
 test("straight flight is drawn through the samples alone, and turns are curved", () => {
   const straight = getTrailGeometry(
     new Map(),
-    track([Array.from({ length: 6 }, (_, index) => eastbound(index))]),
+    track([Array.from({ length: 10 }, (_, index) => eastbound(index))]),
     OPTIONS,
   );
   const turn = getTrailGeometry(
     new Map(),
-    track([Array.from({ length: 6 }, (_, index) => turning(index))]),
+    track([Array.from({ length: 10 }, (_, index) => turning(index))]),
     OPTIONS,
   );
 
@@ -95,9 +102,10 @@ test("separate parts stay separate lines", () => {
     OPTIONS,
   );
 
-  assert.equal(geometry.bodies.length, 2);
+  // The newer part is short enough to be all lead.
+  assert.equal(geometry.bodies.length, 1);
   assert.equal(geometry.bodies[0].path.at(-1)![0], eastbound(2).lng);
-  assert.equal(geometry.bodies[1].path[0][0], eastbound(80).lng);
+  assert.equal(geometry.lead?.path[0][0], eastbound(80).lng);
 });
 
 test("colors follow the aircraft altitude palette and fade toward the oldest end", () => {
@@ -118,11 +126,39 @@ test("colors follow the aircraft altitude palette and fade toward the oldest end
     assert.ok(colors[index][3] >= colors[index - 1][3]);
   }
 
-  const newest = samples[38];
   assert.deepEqual(
     colors.at(-1)!.slice(0, 3),
-    altitudeToColor(newest.alt).slice(0, 3),
+    altitudeToColor(samples[34].alt).slice(0, 3),
   );
+  assert.deepEqual(
+    geometry.lead?.colors.at(-1)!.slice(0, 3),
+    altitudeToColor(samples[38].alt).slice(0, 3),
+  );
+});
+
+test("a trail takes on its aircraft's tint", () => {
+  const samples = Array.from({ length: 10 }, (_, index) => eastbound(index));
+  const appearance = { category: 2 };
+  const geometry = getTrailGeometry(new Map(), track([samples]), {
+    ...OPTIONS,
+    appearance,
+  });
+
+  const expected = aircraftColor(altitudeToColor(3_000), appearance);
+  assert.deepEqual(geometry.bodies[0].colors.at(-1)!.slice(0, 3), expected.slice(0, 3));
+  assert.deepEqual(geometry.lead?.colors.at(-1)!.slice(0, 3), expected.slice(0, 3));
+});
+
+test("a trail is kept under the height ceiling like its aircraft", () => {
+  const samples = Array.from({ length: 10 }, (_, index) => eastbound(index));
+  const geometry = getTrailGeometry(new Map(), track([samples]), {
+    ...OPTIONS,
+    heightCeiling: 4_000,
+  });
+
+  for (const [, , z] of [...geometry.bodies[0].path, ...geometry.lead!.path]) {
+    assert.ok(z > 2_000 && z < 3_000);
+  }
 });
 
 test("the time window cuts the trail exactly at its oldest visible moment", () => {
@@ -137,7 +173,7 @@ test("the time window cuts the trail exactly at its oldest visible moment", () =
 });
 
 test("a lone altitude glitch does not spike the trail", () => {
-  const samples = Array.from({ length: 6 }, (_, index) => eastbound(index));
+  const samples = Array.from({ length: 10 }, (_, index) => eastbound(index));
   samples[2] = { ...samples[2], alt: 0 };
   const geometry = getTrailGeometry(new Map(), track([samples]), OPTIONS);
 
@@ -154,8 +190,25 @@ test("geometry is reused until the track or the view changes", () => {
 
   const first = getTrailGeometry(cache, steady, OPTIONS);
   assert.equal(getTrailGeometry(cache, steady, OPTIONS), first);
+  // A ceiling far above the trail does not change it.
+  assert.equal(
+    getTrailGeometry(cache, steady, { ...OPTIONS, heightCeiling: 50_000 }),
+    first,
+  );
+  assert.notEqual(
+    getTrailGeometry(cache, steady, { ...OPTIONS, heightCeiling: 4_000 }),
+    first,
+  );
   assert.notEqual(
     getTrailGeometry(cache, steady, { ...OPTIONS, elevScale: 1.5 }),
     first,
+  );
+  assert.notEqual(
+    getTrailGeometry(cache, steady, {
+      ...OPTIONS,
+      elevScale: 1.5,
+      appearance: { category: 2 },
+    }),
+    getTrailGeometry(cache, steady, { ...OPTIONS, elevScale: 1.5 }),
   );
 });

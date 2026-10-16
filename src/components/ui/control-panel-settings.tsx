@@ -645,12 +645,12 @@ export const CHANGELOG: {
       {
         title: "Steadier flight trails",
         description:
-          "Trails follow each aircraft's reported positions in time order, run into the aircraft's tail, and keep their shape as new positions arrive. A selected flight's history no longer folds back on itself. Trail length is now set in minutes, three by default.",
+          "Trails follow each aircraft's reported positions in time order, run straight into the aircraft's tail in its own colour, and keep their shape as new positions arrive. A selected flight's history no longer folds back on itself. Trail length is now set in minutes, three by default.",
       },
       {
         title: "Better-proportioned aircraft",
         description:
-          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed in to an airport, they appear at their real size.",
+          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed in to an airport, they appear at their real size, and high traffic is drawn lower so it stays in view instead of rising past the camera.",
       },
     ],
   },

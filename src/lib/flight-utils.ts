@@ -1,5 +1,3 @@
-import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import { projectDisplayedAltitudeMeters } from "@/components/map/altitude-projection";
 
 const MAX_ALTITUDE_METERS = 13000;
 
@@ -53,13 +51,6 @@ export function altitudeToColor(
 
   const last = ALTITUDE_STOPS[ALTITUDE_STOPS.length - 1];
   return [last.color[0], last.color[1], last.color[2], 210];
-}
-
-export function altitudeToElevation(
-  altitude: number | null,
-  mode: AltitudeDisplayMode = "presentation",
-): number {
-  return projectDisplayedAltitudeMeters(altitude, mode);
 }
 
 export function formatCallsign(callsign: string | null): string {

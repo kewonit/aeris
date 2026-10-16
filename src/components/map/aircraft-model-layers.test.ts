@@ -4,6 +4,7 @@ import test from "node:test";
 import type { FlightState } from "@/lib/opensky";
 
 import {
+  type AircraftLayerParams,
   buildAircraftModelLayers,
   modelTailShareFor,
   normalizeScene,
@@ -24,9 +25,11 @@ function makeNarrowbodyFlight(): FlightState {
   } as FlightState;
 }
 
-function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
+function narrowbodyParams(
+  aircraftSizes: Map<string, AircraftScreenSize>,
+): AircraftLayerParams {
   const flight = makeNarrowbodyFlight();
-  const layers = buildAircraftModelLayers({
+  return {
     rawFlights: [flight],
     interpolatedMap: new Map([[flight.icao24, flight]]),
     frameCounter: 0,
@@ -34,6 +37,7 @@ function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
     layersVisible: true,
     globeFade: 1,
     elevScale: 1,
+    heightCeiling: Infinity,
     aircraftSizes,
     altitudeDisplayMode: "realistic",
     altColors: false,
@@ -42,7 +46,12 @@ function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
     bankByIcao: new Map(),
     handleHover: () => {},
     handleClick: () => {},
-  });
+  };
+}
+
+function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
+  const flight = makeNarrowbodyFlight();
+  const layers = buildAircraftModelLayers(narrowbodyParams(aircraftSizes));
   const layer = layers.find(
     (candidate) => candidate.props.id === "flight-aircraft-narrowbody",
   );
@@ -70,6 +79,24 @@ test("a model is drawn at its footprint, less perspective enlargement", () => {
   assert.equal(props.sizeMinPixels, 1);
   assert.equal(props.sizeMaxPixels, 1);
   assert.deepEqual(scale(flight), [16, 16, 16]);
+});
+
+test("a model is kept under the height ceiling", () => {
+  const flight = { ...makeNarrowbodyFlight(), baroAltitude: 11_000 };
+  const layers = buildAircraftModelLayers({
+    ...narrowbodyParams(new Map()),
+    rawFlights: [flight],
+    interpolatedMap: new Map([[flight.icao24, flight]]),
+    heightCeiling: 6_000,
+  });
+  const layer = layers.find(
+    (candidate) => candidate.props.id === "flight-aircraft-narrowbody",
+  );
+  const position = layer!.props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
+
+  assert.ok(position(flight)[2] < 6_000);
 });
 
 test("normalizing a scene centres it and scales its footprint to one unit", () => {

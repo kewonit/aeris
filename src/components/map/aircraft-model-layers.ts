@@ -21,8 +21,8 @@ import {
 } from "@deck.gl/mesh-layers";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
-import { tintAircraftColor, applySpecialTint } from "./aircraft-appearance";
+import { altitudeToColor } from "@/lib/flight-utils";
+import { aircraftColor } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
 import {
   type AircraftModelKey,
@@ -35,6 +35,7 @@ import {
   type AircraftScreenSize,
   recordModelTailShare,
 } from "./aircraft-size";
+import { aircraftElevationMeters } from "./altitude-projection";
 
 // Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
@@ -146,6 +147,8 @@ export interface AircraftLayerParams {
   layersVisible: boolean;
   globeFade: number;
   elevScale: number;
+  /** Height in metres that no aircraft is drawn above. */
+  heightCeiling: number;
   /** Each aircraft's drawn size this frame, keyed by icao24. */
   aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -182,6 +185,7 @@ export function buildAircraftModelLayers(
     layersVisible,
     globeFade,
     elevScale,
+    heightCeiling,
     aircraftSizes,
     altitudeDisplayMode,
     altColors,
@@ -229,8 +233,12 @@ export function buildAircraftModelLayers(
         return [
           src.longitude ?? 0,
           src.latitude ?? 0,
-          altitudeToElevation(src.baroAltitude, altitudeDisplayMode) *
+          aircraftElevationMeters(
+            src.baroAltitude,
+            altitudeDisplayMode,
             elevScale,
+            heightCeiling,
+          ),
         ];
       },
       getOrientation: (d) => {
@@ -244,8 +252,7 @@ export function buildAircraftModelLayers(
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
-        const catColor = tintAircraftColor(base, d.category);
-        return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
+        return aircraftColor(base, d);
       },
       scenegraph: modelUrl(modelKey),
       getScene: sceneLoaderFor(modelKey),
@@ -262,7 +269,7 @@ export function buildAircraftModelLayers(
       sizeMinPixels: 1,
       sizeMaxPixels: 1,
       updateTriggers: {
-        getPosition: [frameCounter, elevScale, altitudeDisplayMode],
+        getPosition: [frameCounter, elevScale, altitudeDisplayMode, heightCeiling],
         getOrientation: frameCounter,
         getScale: frameCounter,
         getColor: [dataVersion, altColors],

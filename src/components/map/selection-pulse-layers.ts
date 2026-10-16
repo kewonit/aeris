@@ -1,7 +1,6 @@
 import { IconLayer } from "@deck.gl/layers";
 
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import { altitudeToElevation } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 
 import {
@@ -9,6 +8,7 @@ import {
   PULSE_PERIOD_MS,
   RING_MAPPING,
 } from "./aircraft-appearance";
+import { aircraftElevationMeters } from "./altitude-projection";
 import { SELECTION_FADE_MS } from "./flight-layer-constants";
 import { smoothStep } from "./flight-math";
 
@@ -23,6 +23,8 @@ export interface SelectionPulseParams {
   currentZoom: number;
   /** Pre-computed zoom-dependent elevation scale */
   elevScale: number;
+  /** Height in metres that no aircraft is drawn above. */
+  heightCeiling: number;
   altitudeDisplayMode: AltitudeDisplayMode;
   haloUrl: string;
   ringUrl: string;
@@ -48,6 +50,7 @@ export function buildSelectionPulseLayers(
     elapsed,
     globeFade,
     elevScale,
+    heightCeiling,
     altitudeDisplayMode,
     haloUrl,
     ringUrl,
@@ -80,8 +83,12 @@ export function buildSelectionPulseLayers(
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
     const elevation =
       flight && flight.baroAltitude != null
-        ? altitudeToElevation(flight.baroAltitude, altitudeDisplayMode) *
-          elevScale
+        ? aircraftElevationMeters(
+            flight.baroAltitude,
+            altitudeDisplayMode,
+            elevScale,
+            heightCeiling,
+          )
         : 0;
     const pos: [number, number, number] =
       flight && flight.longitude != null && flight.latitude != null

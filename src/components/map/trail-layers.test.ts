@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { altitudeToColor } from "@/lib/flight-utils";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
+import { aircraftColor } from "./aircraft-appearance";
 import type { AircraftScreenSize } from "./aircraft-size";
 import { metersPerPixel } from "./aircraft-size";
 import { horizontalDistanceFromLngLat } from "./flight-math";
-import type { TrailHeadAnchor } from "./trail-geometry";
+import type { TrailLead } from "./trail-geometry";
 import {
   buildTrailHead,
   buildTrailLayers,
@@ -43,10 +45,23 @@ function flight(overrides: Partial<FlightState> = {}): FlightState {
   };
 }
 
-const ANCHOR: TrailHeadAnchor = {
-  vertex: [-122, 37.5, 2_960],
-  tangent: [1, 0],
-  color: [200, 120, 80, 180],
+/** An eastbound lead ending at -122, 0.01° (about 880 m) west of the aircraft. */
+const LEAD: TrailLead = {
+  path: [
+    [-122.02, 37.5, 2_960],
+    [-122.01, 37.5, 2_960],
+    [-122, 37.5, 2_960],
+  ],
+  colors: [
+    [200, 120, 80, 150],
+    [200, 120, 80, 170],
+    [200, 120, 80, 180],
+  ],
+  tangents: [
+    [1, 0],
+    [1, 0],
+    [1, 0],
+  ],
   headAlpha: 210,
 };
 
@@ -54,6 +69,7 @@ const HEAD_OPTIONS = {
   altColors: true,
   altitudeDisplayMode: "realistic" as const,
   elevScale: 1,
+  heightCeiling: Infinity,
   defaultColor: [180, 220, 255, 200] as [number, number, number, number],
   zoom: 14,
 };
@@ -74,30 +90,32 @@ function arrival(path: number[][]): [number, number] {
   return [east / length, north / length];
 }
 
-test("the head runs out of the trail and into the tail", () => {
-  const aircraft = flight();
-  const head = buildTrailHead(ANCHOR, aircraft, SIZE, HEAD_OPTIONS);
-  assert.ok(head);
-
-  const start = head.path[0];
-  const end = head.path.at(-1)!;
-  assert.deepEqual(start, ANCHOR.vertex);
-  assert.ok(end[0] < aircraft.longitude!);
-  const gap = horizontalDistanceFromLngLat(
-    end[0],
-    end[1],
+function gapToAircraft(vertex: number[], aircraft: FlightState) {
+  return horizontalDistanceFromLngLat(
+    vertex[0],
+    vertex[1],
     aircraft.longitude!,
     aircraft.latitude!,
   );
-  assert.ok(Math.abs(gap - HALF_LENGTH) < 0.5);
+}
+
+test("the head redraws the lead and runs on into the tail", () => {
+  const aircraft = flight();
+  const head = buildTrailHead(LEAD, aircraft, SIZE, HEAD_OPTIONS);
+  assert.ok(head);
+
+  assert.deepEqual(head.path.slice(0, 3), LEAD.path);
+  assert.deepEqual(head.colors.slice(0, 3), LEAD.colors);
+  const end = head.path.at(-1)!;
+  assert.ok(end[0] < aircraft.longitude!);
+  assert.ok(Math.abs(gapToAircraft(end, aircraft) - HALF_LENGTH) < 0.5);
   assert.equal(end[2], 3_000);
-  assert.deepEqual(head.colors[0], ANCHOR.color);
-  assert.equal(head.colors.at(-1)![3], ANCHOR.headAlpha);
+  assert.equal(head.colors.at(-1)![3], LEAD.headAlpha);
 });
 
 test("a crabbing aircraft still takes the trail in along its fuselage", () => {
   const head = buildTrailHead(
-    ANCHOR,
+    LEAD,
     flight({ trueTrack: 60 }),
     SIZE,
     HEAD_OPTIONS,
@@ -109,20 +127,52 @@ test("a crabbing aircraft still takes the trail in along its fuselage", () => {
   assert.ok(east * Math.sin(heading) + north * Math.cos(heading) > 0.98);
 });
 
-test("a heading back towards the trail gets a straight join, not a loop", () => {
-  const head = buildTrailHead(
-    ANCHOR,
-    flight({ trueTrack: 270 }),
-    SIZE,
-    HEAD_OPTIONS,
-  );
+test("over the lead's end, the head starts further back and still meets the tail", () => {
+  const aircraft = flight({ longitude: -122 + 20 / 88_300, trueTrack: 80 });
+  const head = buildTrailHead(LEAD, aircraft, SIZE, HEAD_OPTIONS);
+  assert.ok(head);
 
-  assert.equal(head?.path.length, 2);
+  // The lead's last vertex is under the aircraft, so it is dropped.
+  assert.deepEqual(head.path.slice(0, 2), LEAD.path.slice(0, 2));
+  assert.ok(!head.path.some((vertex) => vertex[0] === LEAD.path[2][0]));
+  assert.ok(Math.abs(gapToAircraft(head.path.at(-1)!, aircraft) - HALF_LENGTH) < 0.5);
+  const [east, north] = arrival(head.path);
+  const heading = (80 * Math.PI) / 180;
+  assert.ok(east * Math.sin(heading) + north * Math.cos(heading) > 0.98);
 });
 
-test("no head is drawn while the aircraft still covers the trail's end", () => {
-  const nearby = flight({ longitude: -122 + 20 / 88_300 });
-  assert.equal(buildTrailHead(ANCHOR, nearby, SIZE, HEAD_OPTIONS), null);
+test("an aircraft that has turned back still takes the trail into its tail", () => {
+  const aircraft = flight({ trueTrack: 270 });
+  const head = buildTrailHead(LEAD, aircraft, SIZE, HEAD_OPTIONS);
+  assert.ok(head);
+
+  assert.deepEqual(head.path[0], LEAD.path[0]);
+  const end = head.path.at(-1)!;
+  assert.ok(Math.abs(gapToAircraft(end, aircraft) - HALF_LENGTH) < 0.5);
+  const [east, north] = arrival(head.path);
+  assert.ok(-east > 0.98 && Math.abs(north) < 0.2);
+});
+
+test("an aircraft covering its whole lead still takes the trail into its tail", () => {
+  // Slow and turning: every lead vertex is within the drawn model.
+  const aircraft = flight({ longitude: -122.005, latitude: 37.5005, trueTrack: 20 });
+  const big: AircraftScreenSize = { ...SIZE, footprintPx: 400 };
+  const head = buildTrailHead(LEAD, aircraft, big, HEAD_OPTIONS);
+  assert.ok(head);
+
+  assert.deepEqual(head.path[0], LEAD.path[0]);
+  const halfLength = 0.45 * 400 * metersPerPixel(14, 37.5);
+  assert.ok(
+    Math.abs(gapToAircraft(head.path.at(-1)!, aircraft) - halfLength) < 0.5,
+  );
+});
+
+test("the head ends in the aircraft's own colour", () => {
+  const aircraft = flight({ category: 2 });
+  const head = buildTrailHead(LEAD, aircraft, SIZE, HEAD_OPTIONS);
+
+  const [r, g, b] = aircraftColor(altitudeToColor(3_000), aircraft);
+  assert.deepEqual(head?.colors.at(-1), [r, g, b, LEAD.headAlpha]);
 });
 
 function eastbound(index: number): TrailSample {
@@ -138,7 +188,7 @@ function eastbound(index: number): TrailSample {
 test("trails are drawn only for aircraft on screen, and unchanged trails keep their data", () => {
   const trackFor = (icao24: string, revision: number): TrailTrack => ({
     icao24,
-    parts: [Array.from({ length: 5 }, (_, index) => eastbound(index))],
+    parts: [Array.from({ length: 10 }, (_, index) => eastbound(index))],
     revision,
     hasHistory: false,
   });
@@ -148,7 +198,7 @@ test("trails are drawn only for aircraft on screen, and unchanged trails keep th
   ]);
   const params: TrailLayerParams = {
     ...HEAD_OPTIONS,
-    flights: [flight({ longitude: eastbound(4).lng })],
+    flights: [flight({ longitude: eastbound(9).lng })],
     aircraftSizes: new Map([["abc123", SIZE]]),
     trailMap,
     selectedIcao24: null,

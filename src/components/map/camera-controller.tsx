@@ -8,11 +8,14 @@ import {
   type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
-import { getZoomAdjustedElevationScale } from "./altitude-projection";
+import {
+  aircraftElevationMeters,
+  getZoomAdjustedElevationScale,
+  heightCeilingMeters,
+} from "./altitude-projection";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToElevation } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
@@ -52,14 +55,23 @@ function drawnAircraftCenter(
   if (!coordinates || altitudeMeters == null) return null;
   const [lng, lat] = coordinates;
 
-  const elevationMeters =
-    altitudeToElevation(altitudeMeters, altitudeMode) *
-    getZoomAdjustedElevationScale(map.getZoom(), altitudeMode);
+  const zoom = map.getZoom();
+  const canvas = map.getCanvas();
+  const elevationMeters = aircraftElevationMeters(
+    altitudeMeters,
+    altitudeMode,
+    getZoomAdjustedElevationScale(zoom, altitudeMode),
+    heightCeilingMeters(
+      zoom,
+      map.getCenter().lat,
+      canvas.clientHeight,
+      map.getPitch(),
+    ),
+  );
   const elevated = projectLngLatElevationPixelDelta(map, lng, lat, elevationMeters);
   const ground = projectLngLatElevationPixelDelta(map, lng, lat, 0);
   if (!elevated || !ground) return null;
 
-  const canvas = map.getCanvas();
   const offset = panelVisualOffset(
     { dx: elevated.dx - ground.dx, dy: elevated.dy - ground.dy },
     canvas.clientWidth,

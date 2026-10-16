@@ -30,8 +30,7 @@ import {
 } from "./flight-layer-constants";
 
 import {
-  tintAircraftColor,
-  applySpecialTint,
+  aircraftColor,
   AIRCRAFT_ICON_MAPPING,
   getHaloUrl,
   getRingUrl,
@@ -60,12 +59,12 @@ import {
   type AircraftScreenSize,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
-import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import {
-  altitudeToColor,
-  altitudeToElevation,
-  MLAT_POSITION_ALPHA,
-} from "@/lib/flight-utils";
+  aircraftElevationMeters,
+  getZoomAdjustedElevationScale,
+  heightCeilingMeters,
+} from "./altitude-projection";
+import { altitudeToColor, MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
@@ -762,6 +761,18 @@ export function FlightLayers({
         const elevScale = fpvId
           ? 1
           : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
+        // Zoomed in, heights are eased under a ceiling so high traffic
+        // stays in view. In FPV the camera flies with the traffic and true
+        // heights are kept.
+        const heightCeiling =
+          fpvId || !map
+            ? Infinity
+            : heightCeilingMeters(
+                currentZoom,
+                map.getCenter().lat,
+                map.getCanvas().clientHeight,
+                map.getPitch(),
+              );
 
         // ── LOD: 3D models vs 2D icons ────────────────────────────────
         // At low zoom, aircraft are too small to distinguish 3D silhouettes.
@@ -811,8 +822,12 @@ export function FlightLayers({
                   project,
                   flight.longitude,
                   flight.latitude,
-                  altitudeToElevation(flight.baroAltitude, altitudeMode) *
+                  aircraftElevationMeters(
+                    flight.baroAltitude,
+                    altitudeMode,
                     elevScale,
+                    heightCeiling,
+                  ),
                   bearing,
                 )
               : 1,
@@ -863,6 +878,7 @@ export function FlightLayers({
               altColors,
               altitudeDisplayMode: altitudeMode,
               elevScale,
+              heightCeiling,
               defaultColor: DEFAULT_COLOR,
               opacity: globeFade,
               cache: trailRenderCacheRef.current,
@@ -888,6 +904,7 @@ export function FlightLayers({
             globeFade,
             currentZoom,
             elevScale,
+            heightCeiling,
             altitudeDisplayMode: altitudeMode,
             haloUrl,
             ringUrl,
@@ -913,6 +930,7 @@ export function FlightLayers({
               layersVisible,
               globeFade,
               elevScale,
+              heightCeiling,
               aircraftSizes,
               altitudeDisplayMode: altitudeMode,
               altColors,
@@ -935,10 +953,12 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                altitudeToElevation(
+                aircraftElevationMeters(
                   d.baroAltitude,
                   altitudeMode,
-                ) * elevScale,
+                  elevScale,
+                  heightCeiling,
+                ),
               ],
               getIcon: () => "aircraft",
               getSize: footprintOf,
@@ -946,8 +966,7 @@ export function FlightLayers({
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
                   : DEFAULT_COLOR;
-                const catColor = tintAircraftColor(base, d.category);
-                return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
+                return aircraftColor(base, d);
               },
               getAngle: (d) =>
                 360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -965,6 +984,7 @@ export function FlightLayers({
                   visualFrameRef.current,
                   elevScale,
                   altitudeMode,
+                  heightCeiling,
                 ],
                 getAngle: visualFrameRef.current,
                 getSize: visualFrameRef.current,
