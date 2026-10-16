@@ -2,94 +2,77 @@ name: Refresh aviation data
 
 on:
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
-  refresh:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - name: Check out the production base
-        uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
+          persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.13.1
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - name: Set the UTC schedule values
-        id: schedule
-        shell: bash
-        run: |
-          echo "weekday=$(date -u +%u)" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
-          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore the weekly Mictronics source
-        id: mictronics-cache
-        uses: actions/cache@v4
-        with:
-          path: .cache/aviation/mictronics.zip
-          key: aviation-mictronics-v1-${{ steps.schedule.outputs.week }}
-
-      - name: Download the weekly Mictronics source
-        if: steps.mictronics-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          mkdir -p .cache/aviation
-          curl --location --fail --silent --show-error \
-            --retry 3 --retry-delay 2 --retry-all-errors \
-            --connect-timeout 20 --max-time 180 \
-            --user-agent Mozilla/5.0 \
-            --output .cache/aviation/mictronics.zip \
-            https://raw.githubusercontent.com/Mictronics/aircraft-database/main/aircraft_db.zip
-
-      - name: Build and validate the daily snapshot
-        env:
-          AERIS_MICTRONICS_SOURCE_FILE: .cache/aviation/mictronics.zip
+      - name: Build and check the snapshot
         run: |
           pnpm data:refresh
-          pnpm data:check
           pnpm test:data
 
-      - name: Open or update the weekly review PR
-        if: steps.schedule.outputs.weekday == '1' || github.event_name == 'workflow_dispatch'
-        uses: peter-evans/create-pull-request@v7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aviation-data
+          path: public/data/aviation
+          retention-days: 7
+
+  pull-request:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+
+      - name: Replace the snapshot with the built one
+        run: rm -rf public/data/aviation
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: aviation-data
+          path: public/data/aviation
+
+      - id: date
+        run: echo "today=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
           branch: chore/refresh-open-aviation-data
           base: main
           delete-branch: true
           draft: true
-          commit-message: "data: refresh open aviation data"
-          title: "Refresh open aviation data (${{ steps.schedule.outputs.date }})"
+          commit-message: "Refresh open aviation data"
+          title: "Refresh open aviation data (${{ steps.date.outputs.today }})"
           body: |
-            ## Summary
-
-            Refresh the open aircraft and airport snapshots.
-
-            ## Validation
-
-            - `pnpm data:check`
-            - `pnpm test:data`
-
-            ## Safety
-
-            This draft PR does not deploy or merge changes.
-          add-paths: |
-            public/data/aviation/**
+            Weekly refresh of the Mictronics and FAA aircraft snapshot.
+            The build job ran `pnpm data:refresh` and `pnpm test:data`.
+          add-paths: public/data/aviation/**

@@ -2,12 +2,16 @@ import { createHash } from "node:crypto";
 
 import { unzipSync } from "fflate";
 
-export const AVIATION_SCHEMA_VERSION = 1 as const;
-export const AIRCRAFT_CHUNK_COUNT = 256;
-export const MICRONICS_SOURCE_MASK = 1;
-export const FAA_SOURCE_MASK = 2;
+import {
+  AVIATION_SCHEMA_VERSION,
+  FAA_SOURCE_MASK,
+  MICTRONICS_SOURCE_MASK,
+  type AircraftChunk,
+  type CompactAircraftRecord,
+} from "../../src/lib/aircraft-registry-format";
 
-export type AircraftSource = "faa" | "mictronics";
+/** Buckets above this size are split by the third hex digit. */
+export const CHUNK_SPLIT_THRESHOLD = 4_000;
 
 export type NormalizedAircraftRecord = {
   icao24: string;
@@ -15,44 +19,15 @@ export type NormalizedAircraftRecord = {
   typeCode: string | null;
   model: string | null;
   manufacturer: string | null;
-  registrationCountryCode: string | null;
   databaseFlags: string | null;
   sourceMask: number;
-};
-
-export type CompactAircraftRecord = readonly [
-  registration: string | null,
-  typeCode: string | null,
-  model: string | null,
-  manufacturer: string | null,
-  registrationCountryCode: string | null,
-  databaseFlags: string | null,
-  sourceMask: number,
-];
-
-export type AircraftChunk = {
-  schemaVersion: typeof AVIATION_SCHEMA_VERSION;
-  records: Record<string, CompactAircraftRecord>;
-};
-
-export type AviationAirportRecord = {
-  id: number;
-  ident: string;
-  type: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevationFt: number | null;
-  countryCode: string | null;
-  municipality: string | null;
-  icao: string | null;
-  iata: string | null;
 };
 
 export type SourceManifestEntry = {
   url: string;
   sha256: string;
-  publishedAt: string | null;
+  /** When this exact source file was first downloaded. */
+  retrievedAt: string;
   license: string;
   licenseUrl: string;
   attribution: string;
@@ -61,20 +36,13 @@ export type SourceManifestEntry = {
 
 export type AviationDataManifest = {
   schemaVersion: typeof AVIATION_SCHEMA_VERSION;
-  dataDate: string | null;
+  dataDate: string;
   sources: {
     mictronics: SourceManifestEntry;
     faa: SourceManifestEntry;
-    ourairports: SourceManifestEntry;
   };
-  files: {
-    aircraft: Record<string, { sha256: string; records: number }>;
-    airports: { sha256: string; records: number };
-  };
-  counts: {
-    aircraft: number;
-    airports: number;
-  };
+  files: Record<string, { sha256: string; records: number }>;
+  counts: { aircraft: number };
   privacy: {
     includedAircraftFields: string[];
     excludedFaaFields: string[];
@@ -88,105 +56,11 @@ type MictronicsValue = {
   desc?: unknown;
 };
 
-const REGISTRATION_PREFIXES: readonly [string, string][] = [
-  ["A6-", "AE"],
-  ["A7-", "QA"],
-  ["AP-", "PK"],
-  ["C-", "CA"],
-  ["CS-", "PT"],
-  ["D-", "DE"],
-  ["EC-", "ES"],
-  ["EI-", "IE"],
-  ["F-", "FR"],
-  ["G-", "GB"],
-  ["HA-", "HU"],
-  ["HB-", "CH"],
-  ["HL", "KR"],
-  ["HS-", "TH"],
-  ["HZ-", "SA"],
-  ["I-", "IT"],
-  ["JA", "JP"],
-  ["LN-", "NO"],
-  ["LV-", "AR"],
-  ["N", "US"],
-  ["OE-", "AT"],
-  ["OH-", "FI"],
-  ["OK-", "CZ"],
-  ["OO-", "BE"],
-  ["OY-", "DK"],
-  ["PH-", "NL"],
-  ["PK-", "ID"],
-  ["PP-", "BR"],
-  ["PR-", "BR"],
-  ["PS-", "BR"],
-  ["PT-", "BR"],
-  ["PU-", "BR"],
-  ["RA-", "RU"],
-  ["SE-", "SE"],
-  ["SP-", "PL"],
-  ["SU-", "EG"],
-  ["SX-", "GR"],
-  ["TC-", "TR"],
-  ["UR-", "UA"],
-  ["VH-", "AU"],
-  ["VP-", "BM"],
-  ["VT", "IN"],
-  ["XA-", "MX"],
-  ["XB-", "MX"],
-  ["XC-", "MX"],
-  ["YR-", "RO"],
-  ["ZK-", "NZ"],
-  ["ZS-", "ZA"],
-  ["ZT-", "ZA"],
-  ["ZU-", "ZA"],
-  ["3B-", "MU"],
-  ["3C-", "GQ"],
-  ["3D-", "SZ"],
-  ["3X-", "GN"],
-  ["4K-", "AZ"],
-  ["4L-", "GE"],
-  ["4R-", "LK"],
-  ["4X-", "IL"],
-  ["5B-", "CY"],
-  ["5H-", "TZ"],
-  ["5N-", "NG"],
-  ["5R-", "MG"],
-  ["5X-", "UG"],
-  ["6V-", "SN"],
-  ["7O-", "YE"],
-  ["7T-", "DZ"],
-  ["8P-", "BB"],
-  ["8Q-", "MV"],
-  ["9A-", "HR"],
-  ["9G-", "GH"],
-  ["9H-", "MT"],
-  ["9J-", "ZM"],
-  ["9K-", "KW"],
-  ["9M-", "MY"],
-  ["9N-", "NP"],
-  ["9V-", "SG"],
-  ["B-", "CN"],
-];
-
-const SORTED_REGISTRATION_PREFIXES = [...REGISTRATION_PREFIXES].sort(
-  (left, right) => right[0].length - left[0].length,
-);
+const ICAO24_PATTERN = /^[0-9a-f]{6}$/;
 
 function cleanString(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const clean = value.trim().replace(/\u2014/g, "-");
-  return clean || null;
-}
-
-export function registrationCountryCode(
-  registration: string | null,
-): string | null {
-  if (!registration) return null;
-  const normalized = registration.trim().toUpperCase();
-  for (const [prefix, countryCode] of SORTED_REGISTRATION_PREFIXES) {
-    if (normalized.startsWith(prefix)) return countryCode;
-  }
-  return null;
+  return value.trim() || null;
 }
 
 export function sha256(data: Uint8Array | string): string {
@@ -255,7 +129,7 @@ function cell(
   indexes: Map<string, number>,
   field: string,
 ): string {
-  return row[indexes.get(field) ?? -1]?.trim().replace(/\u2014/g, "-") ?? "";
+  return row[indexes.get(field) ?? -1]?.trim() ?? "";
 }
 
 function decodeText(data: Uint8Array): string {
@@ -286,19 +160,11 @@ export function normalizeMictronicsAircraft(
     }
 
     for (const suffix of Object.keys(parsed).sort()) {
-      if (suffix === "children") {
-        if (
-          !Array.isArray(parsed[suffix]) ||
-          !(parsed[suffix] as unknown[]).every(
-            (value) => typeof value === "string",
-          )
-        ) {
-          throw new Error(`Mictronics child index is invalid: ${fileName}`);
-        }
-        continue;
-      }
+      // Index files list the deeper prefix files instead of holding records.
+      if (suffix === "children") continue;
+
       const icao24 = `${prefix}${suffix}`.toLowerCase();
-      if (!/^[0-9a-f]{6}$/.test(icao24)) {
+      if (!ICAO24_PATTERN.test(icao24)) {
         throw new Error(`Mictronics file has an invalid ICAO address: ${icao24}`);
       }
 
@@ -307,16 +173,14 @@ export function normalizeMictronicsAircraft(
         throw new Error(`Mictronics record is invalid: ${icao24}`);
       }
 
-      const registration = cleanString(value.r)?.toUpperCase() ?? null;
       aircraft.set(icao24, {
         icao24,
-        registration,
+        registration: cleanString(value.r)?.toUpperCase() ?? null,
         typeCode: cleanString(value.t)?.toUpperCase() ?? null,
         model: cleanString(value.desc),
         manufacturer: null,
-        registrationCountryCode: registrationCountryCode(registration),
         databaseFlags: cleanString(value.f)?.toUpperCase() ?? null,
-        sourceMask: MICRONICS_SOURCE_MASK,
+        sourceMask: MICTRONICS_SOURCE_MASK,
       });
     }
   }
@@ -327,10 +191,10 @@ export function normalizeMictronicsAircraft(
   return aircraft;
 }
 
-function parseFaaAircraftReferences(text: string, minimumRecords: number): Map<
-  string,
-  { manufacturer: string | null; model: string | null }
-> {
+function parseFaaAircraftReferences(
+  text: string,
+  minimumRecords: number,
+): Map<string, { manufacturer: string | null; model: string | null }> {
   const rows = iterateCsvRows(text);
   const first = rows.next();
   if (first.done) throw new Error("FAA ACFTREF file is empty");
@@ -354,6 +218,11 @@ function parseFaaAircraftReferences(text: string, minimumRecords: number): Map<
   return references;
 }
 
+/**
+ * Overlays FAA registration, manufacturer, and model onto the Mictronics
+ * records. Only these columns are read, so owner names and addresses in
+ * MASTER.txt never reach the output.
+ */
 export function mergeFaaAircraft(
   archive: Uint8Array,
   aircraft: Map<string, NormalizedAircraftRecord>,
@@ -382,7 +251,7 @@ export function mergeFaaAircraft(
 
   for (const row of rows) {
     const icao24 = cell(row, indexes, "MODE S CODE HEX").toLowerCase();
-    if (!/^[0-9a-f]{6}$/.test(icao24)) continue;
+    if (!ICAO24_PATTERN.test(icao24)) continue;
     const nNumber = cell(row, indexes, "N-NUMBER").replace(/\s+/g, "");
     if (!/^[0-9A-Z]+$/i.test(nNumber)) continue;
 
@@ -394,7 +263,6 @@ export function mergeFaaAircraft(
       typeCode: current?.typeCode ?? null,
       model: reference?.model ?? current?.model ?? null,
       manufacturer: reference?.manufacturer ?? current?.manufacturer ?? null,
-      registrationCountryCode: "US",
       databaseFlags: current?.databaseFlags ?? null,
       sourceMask: (current?.sourceMask ?? 0) | FAA_SOURCE_MASK,
     });
@@ -407,81 +275,6 @@ export function mergeFaaAircraft(
   return count;
 }
 
-export function normalizeAirports(
-  csv: string,
-  minimumRecords = 5_000,
-): AviationAirportRecord[] {
-  const rows = iterateCsvRows(csv);
-  const first = rows.next();
-  if (first.done) throw new Error("OurAirports file is empty");
-  const indexes = headerIndexes(first.value, [
-    "ID",
-    "IDENT",
-    "TYPE",
-    "NAME",
-    "LATITUDE_DEG",
-    "LONGITUDE_DEG",
-    "ELEVATION_FT",
-    "ISO_COUNTRY",
-    "MUNICIPALITY",
-    "ICAO_CODE",
-    "IATA_CODE",
-  ]);
-  const airports: AviationAirportRecord[] = [];
-
-  for (const row of rows) {
-    if (cell(row, indexes, "TYPE") === "closed") continue;
-    const id = Number.parseInt(cell(row, indexes, "ID"), 10);
-    const latitude = Number.parseFloat(cell(row, indexes, "LATITUDE_DEG"));
-    const longitude = Number.parseFloat(cell(row, indexes, "LONGITUDE_DEG"));
-    const elevationValue = cell(row, indexes, "ELEVATION_FT");
-    const elevationFt = elevationValue
-      ? Number.parseFloat(elevationValue)
-      : null;
-    const ident = cell(row, indexes, "IDENT").toUpperCase();
-
-    if (
-      !Number.isInteger(id) ||
-      !ident ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180 ||
-      (elevationFt !== null && !Number.isFinite(elevationFt))
-    ) {
-      throw new Error(`OurAirports record is invalid: ${ident || id}`);
-    }
-
-    const countryCode = cell(row, indexes, "ISO_COUNTRY").toUpperCase();
-    const icao = cell(row, indexes, "ICAO_CODE").toUpperCase();
-    const iata = cell(row, indexes, "IATA_CODE").toUpperCase();
-    airports.push({
-      id,
-      ident,
-      type: cell(row, indexes, "TYPE"),
-      name: cell(row, indexes, "NAME"),
-      latitude,
-      longitude,
-      elevationFt,
-      countryCode: /^[A-Z]{2}$/.test(countryCode) ? countryCode : null,
-      municipality: cleanString(cell(row, indexes, "MUNICIPALITY")),
-      icao: /^[A-Z0-9]{4}$/.test(icao) ? icao : null,
-      iata: /^[A-Z0-9]{3}$/.test(iata) ? iata : null,
-    });
-  }
-
-  airports.sort(
-    (left, right) =>
-      left.ident.localeCompare(right.ident) || left.id - right.id,
-  );
-  if (airports.length < minimumRecords) {
-    throw new Error(`OurAirports record count is too small: ${airports.length}`);
-  }
-  return airports;
-}
-
 export function compactAircraftRecord(
   record: NormalizedAircraftRecord,
 ): CompactAircraftRecord {
@@ -490,64 +283,48 @@ export function compactAircraftRecord(
     record.typeCode,
     record.model,
     record.manufacturer,
-    record.registrationCountryCode,
     record.databaseFlags,
     record.sourceMask,
   ];
 }
 
+/**
+ * Groups records by the first two hex digits of the address, splitting any
+ * group above the threshold by the third digit. Empty chunks are omitted.
+ * Output order is sorted, so the same input always serializes the same way.
+ */
 export function createAircraftChunks(
   aircraft: Map<string, NormalizedAircraftRecord>,
+  splitThreshold = CHUNK_SPLIT_THRESHOLD,
 ): Map<string, AircraftChunk> {
-  const chunks = new Map<string, AircraftChunk>();
-  for (let index = 0; index < AIRCRAFT_CHUNK_COUNT; index++) {
-    const prefix = index.toString(16).padStart(2, "0");
-    chunks.set(prefix, {
-      schemaVersion: AVIATION_SCHEMA_VERSION,
-      records: {},
-    });
+  const groups = new Map<string, string[]>();
+  for (const icao24 of [...aircraft.keys()].sort()) {
+    const prefix = icao24.slice(0, 2);
+    const group = groups.get(prefix);
+    if (group) group.push(icao24);
+    else groups.set(prefix, [icao24]);
   }
 
-  for (const icao24 of [...aircraft.keys()].sort()) {
-    const record = aircraft.get(icao24);
-    if (!record) continue;
-    const chunk = chunks.get(icao24.slice(0, 2));
-    if (!chunk) throw new Error(`Aircraft prefix is invalid: ${icao24}`);
-    chunk.records[icao24] = compactAircraftRecord(record);
+  const chunks = new Map<string, AircraftChunk>();
+  for (const [prefix, addresses] of [...groups].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    const split = addresses.length > splitThreshold;
+    for (const icao24 of addresses) {
+      const id = split ? icao24.slice(0, 3) : prefix;
+      let chunk = chunks.get(id);
+      if (!chunk) {
+        chunk = { schemaVersion: AVIATION_SCHEMA_VERSION, records: {} };
+        chunks.set(id, chunk);
+      }
+      chunk.records[icao24] = compactAircraftRecord(aircraft.get(icao24)!);
+    }
   }
   return chunks;
 }
 
 export function serializeJson(value: unknown): string {
   return `${JSON.stringify(value)}\n`;
-}
-
-export function sourceNamesFromMask(mask: number): AircraftSource[] {
-  const sources: AircraftSource[] = [];
-  if ((mask & FAA_SOURCE_MASK) !== 0) sources.push("faa");
-  if ((mask & MICRONICS_SOURCE_MASK) !== 0) sources.push("mictronics");
-  return sources;
-}
-
-export function validateCompactAircraftRecord(
-  icao24: string,
-  value: unknown,
-): asserts value is CompactAircraftRecord {
-  if (!Array.isArray(value) || value.length !== 7) {
-    throw new Error(`Aircraft record has an invalid shape: ${icao24}`);
-  }
-  for (let index = 0; index < 6; index++) {
-    if (value[index] !== null && typeof value[index] !== "string") {
-      throw new Error(`Aircraft record has an invalid field: ${icao24}`);
-    }
-  }
-  if (!Number.isInteger(value[6]) || value[6] < 1 || value[6] > 3) {
-    throw new Error(`Aircraft record has invalid sources: ${icao24}`);
-  }
-  const countryCode = value[4];
-  if (countryCode !== null && !/^[A-Z]{2}$/.test(countryCode)) {
-    throw new Error(`Aircraft record has an invalid country: ${icao24}`);
-  }
 }
 
 export function validateCountChange(
@@ -562,20 +339,4 @@ export function validateCountChange(
       `${label} record count fell from ${previousCount} to ${nextCount}`,
     );
   }
-}
-
-export function normalizePublishedAt(value: string | null): string | null {
-  if (!value) return null;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
-}
-
-export function latestSourceDate(
-  entries: readonly SourceManifestEntry[],
-): string | null {
-  const dates = entries
-    .map((entry) => entry.publishedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort();
-  return dates.at(-1) ?? null;
 }

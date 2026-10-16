@@ -14,7 +14,6 @@
     "test:trails": "tsx --test \"src/lib/trails/**/*.test.ts\" \"src/hooks/use-trail-system.test.ts\" \"src/components/map/*.test.ts\"",
     "data:refresh": "tsx tools/aviation-data/refresh.ts",
     "data:check": "tsx tools/aviation-data/check.ts",
-    "data:check:sources": "tsx tools/aviation-data/check-sources.ts",
     "test:data": "tsx --test \"tools/aviation-data/**/*.test.ts\" \"src/lib/aircraft-registry.test.ts\""
   },
   "dependencies": {

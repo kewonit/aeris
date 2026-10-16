@@ -124,25 +124,15 @@ Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the
 
 ## Open Aviation Data
 
-Aeris stores reproducible aircraft and airport snapshots in `public/data/aviation`.
-
-- Mictronics supplies global registration, type, model, and database flag data.
-- The FAA supplies US registration, manufacturer, and model data.
-- OurAirports supplies airport codes and coordinates.
-
-The generator copies only approved aircraft fields. It excludes FAA owner names, addresses, and other personal fields.
-
-Run these commands to refresh and check the files:
+`public/data/aviation` holds an aircraft registry snapshot built from the [Mictronics aircraft database](https://github.com/Mictronics/aircraft-database) and the [FAA releasable aircraft database](https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download). Records are split into small chunks by ICAO address, so selecting an aircraft loads one chunk of about 100 KB or less. The generator reads only registration, type, model, manufacturer, and database flags. It never copies FAA owner names or addresses.
 
 ```bash
-pnpm data:refresh
-pnpm data:check
+pnpm data:refresh   # download both sources and rebuild the snapshot
+pnpm data:check     # check the committed files against the manifest
 pnpm test:data
 ```
 
-The automation refreshes FAA data each day and OurAirports data each night. The job starts at 03:17 UTC. It downloads Mictronics data once per UTC week. It validates the combined snapshot each day and opens one draft review PR on Monday when generated files change.
-
-The [aviation data notice](public/data/aviation/NOTICE.md) lists each source and license.
+A workflow rebuilds the snapshot every Monday and opens a draft PR when it changes. [NOTICE.md](public/data/aviation/NOTICE.md) lists the source licenses.
 
 ## License
 

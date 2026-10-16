@@ -1,4 +1,14 @@
-export type AircraftRegistrySource = "faa" | "mictronics";
+import {
+  chunkIdForAddress,
+  isAircraftChunk,
+  isAircraftChunkIndex,
+  sourceNamesFromMask,
+  type AircraftChunk,
+  type AircraftRegistrySource,
+} from "./aircraft-registry-format";
+import { countryFlagEmoji, registrationCountry } from "./registration-country";
+
+export type { AircraftRegistrySource };
 
 export type AircraftRegistryRecord = {
   icao24: string;
@@ -7,99 +17,70 @@ export type AircraftRegistryRecord = {
   model: string | null;
   manufacturer: string | null;
   registrationCountry: string | null;
-  registrationCountryCode: string | null;
   registrationCountryFlag: string | null;
   databaseFlags: string | null;
   sources: AircraftRegistrySource[];
 };
 
-type CompactAircraftRecord = readonly [
-  registration: string | null,
-  typeCode: string | null,
-  model: string | null,
-  manufacturer: string | null,
-  registrationCountryCode: string | null,
-  databaseFlags: string | null,
-  sourceMask: number,
-];
-
-type AircraftChunk = {
-  schemaVersion: 1;
-  records: Record<string, CompactAircraftRecord>;
-};
-
+const BASE_PATH = "/data/aviation/aircraft";
+const MAX_CACHED_CHUNKS = 8;
 const ICAO24_PATTERN = /^[0-9a-f]{6}$/;
+
+let indexRequest: Promise<ReadonlySet<string>> | null = null;
 const chunkCache = new Map<string, Promise<AircraftChunk>>();
-const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
 
-function isCompactRecord(value: unknown): value is CompactAircraftRecord {
-  if (!Array.isArray(value) || value.length !== 7) return false;
-  for (let index = 0; index < 6; index++) {
-    if (value[index] !== null && typeof value[index] !== "string") return false;
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Aircraft registry returned HTTP ${response.status}`);
   }
-  return Number.isInteger(value[6]) && value[6] >= 1 && value[6] <= 3;
+  return response.json();
 }
 
-function parseChunk(value: unknown): AircraftChunk {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Aircraft registry chunk has an invalid shape");
-  }
-  const chunk = value as Partial<AircraftChunk>;
-  if (
-    chunk.schemaVersion !== 1 ||
-    !chunk.records ||
-    typeof chunk.records !== "object" ||
-    Array.isArray(chunk.records)
-  ) {
-    throw new Error("Aircraft registry chunk has an invalid shape");
-  }
-  for (const record of Object.values(chunk.records)) {
-    if (!isCompactRecord(record)) {
-      throw new Error("Aircraft registry record has an invalid shape");
-    }
-  }
-  return chunk as AircraftChunk;
-}
-
-async function loadChunk(prefix: string): Promise<AircraftChunk> {
-  const cached = chunkCache.get(prefix);
-  if (cached) return cached;
-
-  const request = fetch(`/data/aviation/aircraft/${prefix}.json`, {
-    cache: "force-cache",
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`Aircraft registry returned HTTP ${response.status}`);
+function loadIndex(): Promise<ReadonlySet<string>> {
+  indexRequest ??= fetchJson(`${BASE_PATH}/index.json`)
+    .then((value) => {
+      if (!isAircraftChunkIndex(value)) {
+        throw new Error("Aircraft registry index has an invalid shape");
       }
-      return parseChunk(await response.json());
+      return new Set(value.chunks);
     })
     .catch((error) => {
-      chunkCache.delete(prefix);
+      indexRequest = null;
       throw error;
     });
-  chunkCache.set(prefix, request);
+  return indexRequest;
+}
+
+function loadChunk(id: string): Promise<AircraftChunk> {
+  const cached = chunkCache.get(id);
+  if (cached) {
+    // Re-insert to mark the chunk as recently used.
+    chunkCache.delete(id);
+    chunkCache.set(id, cached);
+    return cached;
+  }
+
+  const request = fetchJson(`${BASE_PATH}/${id}.json`)
+    .then((value) => {
+      if (!isAircraftChunk(value)) {
+        throw new Error("Aircraft registry chunk has an invalid shape");
+      }
+      return value;
+    })
+    .catch((error) => {
+      chunkCache.delete(id);
+      throw error;
+    });
+  chunkCache.set(id, request);
+  if (chunkCache.size > MAX_CACHED_CHUNKS) {
+    chunkCache.delete(chunkCache.keys().next().value!);
+  }
   return request;
 }
 
-function sourceNames(sourceMask: number): AircraftRegistrySource[] {
-  const sources: AircraftRegistrySource[] = [];
-  if ((sourceMask & 2) !== 0) sources.push("faa");
-  if ((sourceMask & 1) !== 0) sources.push("mictronics");
-  return sources;
-}
-
-function countryName(countryCode: string | null): string | null {
-  if (!countryCode) return null;
-  const name = regionNames.of(countryCode);
-  return name && name !== countryCode ? name : null;
-}
-
-function countryFlag(countryCode: string | null): string | null {
-  if (!countryCode || !/^[A-Z]{2}$/.test(countryCode)) return null;
-  return String.fromCodePoint(
-    ...[...countryCode].map((character) => character.charCodeAt(0) + 127397),
-  );
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 }
 
 export async function lookupAircraftRegistry(
@@ -108,27 +89,33 @@ export async function lookupAircraftRegistry(
 ): Promise<AircraftRegistryRecord | null> {
   const normalized = icao24.trim().toLowerCase();
   if (!ICAO24_PATTERN.test(normalized)) return null;
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  throwIfAborted(signal);
 
-  const chunk = await loadChunk(normalized.slice(0, 2));
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  const record = chunk.records[normalized];
+  const chunkId = chunkIdForAddress(normalized, await loadIndex());
+  throwIfAborted(signal);
+  if (!chunkId) return null;
+
+  const record = (await loadChunk(chunkId)).records[normalized];
+  throwIfAborted(signal);
   if (!record) return null;
 
+  const [registration, typeCode, model, manufacturer, databaseFlags, mask] =
+    record;
+  const country = registrationCountry(registration);
   return {
     icao24: normalized,
-    registration: record[0],
-    typeCode: record[1],
-    model: record[2],
-    manufacturer: record[3],
-    registrationCountry: countryName(record[4]),
-    registrationCountryCode: record[4],
-    registrationCountryFlag: countryFlag(record[4]),
-    databaseFlags: record[5],
-    sources: sourceNames(record[6]),
+    registration,
+    typeCode,
+    model,
+    manufacturer,
+    registrationCountry: country?.name ?? null,
+    registrationCountryFlag: countryFlagEmoji(country?.code ?? null),
+    databaseFlags,
+    sources: sourceNamesFromMask(mask),
   };
 }
 
 export function clearAircraftRegistryCacheForTests(): void {
+  indexRequest = null;
   chunkCache.clear();
 }

@@ -1,77 +1,31 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
 
-import { normalizePublishedAt } from "./lib";
+const ATTEMPTS = 3;
+const TIMEOUT_MS = 180_000;
 
-const execFileAsync = promisify(execFile);
-
-export type Download = {
-  bytes: Uint8Array;
-  publishedAt: string | null;
-};
-
+/** Reads a local copy when one is given, otherwise downloads the source. */
 export async function downloadSource(
   url: string,
   localFile?: string,
-): Promise<Download> {
-  if (localFile) {
-    const [bytes, fileStat] = await Promise.all([
-      readFile(localFile),
-      stat(localFile),
-    ]);
-    return {
-      bytes,
-      publishedAt: normalizePublishedAt(fileStat.mtime.toUTCString()),
-    };
-  }
+): Promise<Uint8Array> {
+  if (localFile) return readFile(localFile);
 
-  const temporaryDirectory = await mkdtemp(
-    path.join(tmpdir(), "aeris-aviation-data-"),
-  );
-  const dataPath = path.join(temporaryDirectory, "source.data");
-  const headersPath = path.join(temporaryDirectory, "headers.txt");
-
-  try {
-    await execFileAsync(
-      "curl",
-      [
-        "--location",
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--retry",
-        "3",
-        "--retry-delay",
-        "2",
-        "--retry-all-errors",
-        "--connect-timeout",
-        "20",
-        "--max-time",
-        "180",
-        "--user-agent",
-        "Mozilla/5.0",
-        "--dump-header",
-        headersPath,
-        "--output",
-        dataPath,
-        url,
-      ],
-      { maxBuffer: 1024 * 1024 },
-    );
-    const [bytes, headers] = await Promise.all([
-      readFile(dataPath),
-      readFile(headersPath, "utf8"),
-    ]);
-    const modifiedHeaders = [...headers.matchAll(/^last-modified:\s*(.+)$/gim)];
-    const lastModified = modifiedHeaders.at(-1)?.[1]?.trim() ?? null;
-    return {
-      bytes,
-      publishedAt: normalizePublishedAt(lastModified),
-    };
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url, {
+        // The FAA registry rejects requests without a browser-like agent.
+        headers: { "user-agent": "Mozilla/5.0 (compatible; aeris-data)" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
+      return new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+      if (attempt < ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
+      }
+    }
   }
+  throw lastError;
 }
