@@ -6,7 +6,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
 import type {

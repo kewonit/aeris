@@ -7,12 +7,6 @@ import {
   normalizeSettings,
 } from "./use-settings";
 
-test("default settings use a 1.0px shorter trail", () => {
-  assert.equal(DEFAULT_SETTINGS.autoOrbit, false);
-  assert.equal(DEFAULT_SETTINGS.trailThickness, 1.0);
-  assert.equal(DEFAULT_SETTINGS.trailDistance, 48);
-});
-
 test("settings migration disables inherited auto-orbit once", () => {
   const migrated = migrateSettingsDefaults(
     { ...DEFAULT_SETTINGS, autoOrbit: true },

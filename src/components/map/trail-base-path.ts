@@ -1,5 +1,4 @@
-import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import { unwrapLngPath } from "@/lib/geo";
 import {
   adaptiveDownsample,
@@ -51,85 +50,6 @@ export function trailBasePathCacheKey(
       ? trail.altitudes[trail.altitudes.length - 1]
       : null;
   return `${n}|${trailDistance}|${trail.fullHistory ? 1 : 0}|${last?.[0]}|${last?.[1]}|${lastAlt}`;
-}
-
-// ── Incremental Base Path Pinning ──────────────────────────────────────
-
-/**
- * Prevents visual "sliding" of trail points when new GPS data arrives.
- *
- * When a trail grows by 1-2 GPS points, the Catmull-Rom spline
- * recalculation only truly affects the last few segments (where the new
- * control point enters the 4-point window). Points earlier in the path
- * produce identical output but may differ by floating-point noise.
- *
- * This function pins the stable region from the previous cached path
- * and only allows the tail to update, guaranteeing that once a trail
- * point is plotted, it never moves.
- */
-export function pinIncrementalBasePath(
-  oldBasePath: ElevatedPoint[],
-  newBasePath: ElevatedPoint[],
-): ElevatedPoint[] {
-  // Only pin when trail grew (new GPS appended at end).
-  // If the trail shrank or was reset, use the fresh path entirely.
-  if (
-    newBasePath.length <= oldBasePath.length ||
-    oldBasePath.length < 30 ||
-    newBasePath.length < 30
-  ) {
-    return newBasePath;
-  }
-
-  // Quick sanity check: the first few points should be nearly identical.
-  // If they diverge, the trail was likely reset - skip pinning.
-  const dx = Math.abs(oldBasePath[0][0] - newBasePath[0][0]);
-  const dy = Math.abs(oldBasePath[0][1] - newBasePath[0][1]);
-  if (dx > 0.001 || dy > 0.001) {
-    return newBasePath;
-  }
-
-  // The Catmull-Rom spline with 6 segments/pair means each GPS point
-  // generates ~6 output points.  A new GPS point affects the last 3
-  // control points' spline output ≈ 18 output points.  Use 30 for
-  // safety margin (covers edge cases with filtering changes).
-  const TAIL_RECOMPUTE = 30;
-  const pinEnd = Math.min(
-    oldBasePath.length - TAIL_RECOMPUTE,
-    newBasePath.length - TAIL_RECOMPUTE,
-  );
-  if (pinEnd <= 0) return newBasePath;
-
-  // Build result: pinned stable region → short blend → fresh tail.
-  const result: ElevatedPoint[] = new Array(newBasePath.length);
-
-  // Stable region: exact copy from old path (zero visual change).
-  for (let i = 0; i < pinEnd; i++) {
-    result[i] = oldBasePath[i];
-  }
-
-  // Blend region: smooth transition avoids a visual seam between
-  // pinned and freshly-computed regions.
-  const BLEND_LEN = Math.min(12, newBasePath.length - pinEnd);
-  for (let i = 0; i < BLEND_LEN; i++) {
-    const t = (i + 1) / (BLEND_LEN + 1);
-    const idx = pinEnd + i;
-    const oldPt =
-      idx < oldBasePath.length ? oldBasePath[idx] : newBasePath[idx];
-    const newPt = newBasePath[idx];
-    result[idx] = [
-      oldPt[0] * (1 - t) + newPt[0] * t,
-      oldPt[1] * (1 - t) + newPt[1] * t,
-      oldPt[2] * (1 - t) + newPt[2] * t,
-    ];
-  }
-
-  // Fresh tail: newly-computed points from the spline.
-  for (let i = pinEnd + BLEND_LEN; i < newBasePath.length; i++) {
-    result[i] = newBasePath[i];
-  }
-
-  return result;
 }
 
 /**
@@ -321,27 +241,4 @@ export function buildTrailBasePath(
       toElevatedPoints(smoothedPath, altitudeMeters, activeFallbackAlt),
     ),
   );
-}
-
-// ── Visible Trail Point Builder ────────────────────────────────────────
-
-/**
- * Builds the final visible trail points for rendering.
- * When cachedBasePath is provided, skips the expensive smoothing/densification
- * and only normalizes the final points for rendering.
- */
-export function buildVisibleTrailPoints(
-  trail: TrailEntry,
-  _animFlight: FlightState | undefined,
-  trailDistance: number,
-  cachedBasePath?: ElevatedPoint[],
-): ElevatedPoint[] {
-  const denseBasePath =
-    cachedBasePath ?? buildTrailBasePath(trail, trailDistance);
-
-  return denseBasePath.map((p) => [
-    p[0],
-    p[1],
-    Number.isFinite(p[2]) ? Math.max(0, p[2]) : 0,
-  ]);
 }

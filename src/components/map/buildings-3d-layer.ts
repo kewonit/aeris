@@ -127,23 +127,5 @@ export function addBuildings3DLayer(
   }
 }
 
-/**
- * Update the wall color when the theme flips without a full style swap.
- * Safe no-op if the layer isn't present.
- */
-export function setBuildings3DTheme(map: maplibregl.Map, dark: boolean): void {
-  if (!map.getLayer(BUILDINGS_3D_LAYER_ID)) return;
-  try {
-    const paint = buildPaint(dark);
-    map.setPaintProperty(
-      BUILDINGS_3D_LAYER_ID,
-      "fill-extrusion-color",
-      paint["fill-extrusion-color"],
-    );
-  } catch {
-    // setPaintProperty can throw during style transitions - ignore.
-  }
-}
-
 // Exposed for tests.
 export const __internals = { buildPaint };

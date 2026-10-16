@@ -31,7 +31,18 @@ import {
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
-import { SHORTCUTS } from "@/components/ui/keyboard-shortcuts-help";
+
+const SHORTCUTS = [
+  { key: "N", description: "North up" },
+  { key: "R", description: "Reset view" },
+  { key: "O", description: "Toggle orbit" },
+  { key: "/", description: "Open search" },
+  { key: "⌘K", description: "Open search (anywhere)" },
+  { key: "F", description: "First person view" },
+  { key: "?", description: "Shortcuts help" },
+  { key: "A", description: "Toggle ATC panel" },
+  { key: "Esc", description: "Close / Deselect" },
+] as const;
 
 const ORBIT_SPEED_PRESETS = [
   { label: "Slow", value: 0.06 },

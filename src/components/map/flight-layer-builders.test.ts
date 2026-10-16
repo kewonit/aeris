@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { TrailEntry } from "@/hooks/use-trail-history";
 import type { FlightState } from "@/lib/opensky";
 import type {
+  TrailEntry,
   TrailEnvelope,
   TrailSegment,
   TrailSnapshot,

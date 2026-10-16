@@ -42,7 +42,3 @@ export function getAircraftModelCalibration(
     effectiveScale: modelNormScale(key) * displayScale,
   };
 }
-
-export function getEffectiveModelScale(key: AircraftModelKey): number {
-  return getAircraftModelCalibration(key).effectiveScale;
-}

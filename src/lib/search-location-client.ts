@@ -224,10 +224,3 @@ export function locationToCity(loc: SearchLocation): City {
     radius: 2.49,
   };
 }
-
-/**
- * Clear the geocode cache.
- */
-export function clearGeocodeCache(): void {
-  geoCache.clear();
-}

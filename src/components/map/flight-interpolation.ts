@@ -1,5 +1,5 @@
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {

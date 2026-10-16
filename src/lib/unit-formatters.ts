@@ -146,16 +146,6 @@ export function formatDistanceNm(
   return `${Math.round(nm).toLocaleString()} nm`;
 }
 
-export function formatDistanceAxisNm(
-  nm: number,
-  unitSystem: UnitSystem,
-): string {
-  if (!Number.isFinite(nm)) return "-";
-  if (unitSystem === "metric") return `${Math.round(nm * KM_PER_NM)} km`;
-  if (unitSystem === "imperial") return `${Math.round(nm * MI_PER_NM)} mi`;
-  return `${Math.round(nm)} nm`;
-}
-
 export function formatTemperatureC(
   celsius: number | null | undefined,
   unitSystem: UnitSystem,

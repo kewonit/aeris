@@ -23,15 +23,6 @@ const TMZ_RMZ_TYPES = ["tmz", "rmz"];
 const ADIZ_TYPES = ["adiz"];
 const CLASS_AE = ["a", "b", "c", "d", "e"];
 
-/** All airspace `type` values rendered by at least one layer. */
-export const AIRSPACE_RENDERED_TYPES = new Set<string>([
-  ...CONTROLLED_TYPES,
-  ...RESTRICTED_TYPES,
-  ...TMZ_RMZ_TYPES,
-  ...ADIZ_TYPES,
-  "other", // class A–E polygons use type=other + icao_class match
-]);
-
 export const AIRSPACE_LAYERS: LayerSpecification[] = [
   // ── Restricted / Danger / Prohibited / TFR ───────────────────────
   {

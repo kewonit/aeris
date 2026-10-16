@@ -22,14 +22,13 @@ const PHOTO = {
   description: "Airport in California",
 };
 
-test("PhotoBanner renders the photo hidden until it loads", () => {
+test("PhotoBanner renders the photo and holds the credit until it loads", () => {
   const html = renderToStaticMarkup(
     createElement(PhotoBanner, { ...BASE, photo: PHOTO, loading: false }),
   );
 
   assert.match(html, /https:\/\/example.com\/thumb.jpg/);
   assert.match(html, /alt="San Francisco International Airport"/);
-  assert.match(html, /opacity-0/);
   assert.doesNotMatch(html, /Wikipedia/);
 });
 

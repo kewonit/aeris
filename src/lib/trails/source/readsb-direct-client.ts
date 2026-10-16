@@ -36,16 +36,6 @@ export function buildReadsbTraceUrls(
   ];
 }
 
-export function getResponseValidators(headers: Headers): {
-  etag: string | null;
-  lastModified: string | null;
-} {
-  return {
-    etag: headers.get("etag"),
-    lastModified: headers.get("last-modified"),
-  };
-}
-
 export async function fetchReadsbDirectTrack(
   provider: TraceProviderId,
   icao24: string,

@@ -15,10 +15,6 @@ export type FpvCameraPosition = {
   track: number | null;
 };
 
-export function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
 export function smoothstep(t: number): number {
   return t * t * (3 - 2 * t);
 }
