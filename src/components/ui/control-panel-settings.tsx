@@ -219,19 +219,19 @@ export function SettingsContent({
           onChange={(v) => update("showDebugData", v)}
         />
 
-        <div className="mx-3 my-2 h-px bg-foreground/8" />
+        <div className="mx-3 my-2 h-px bg-accent" />
 
         <div className="px-3 pt-2">
           <button
             type="button"
             onClick={reset}
-            className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-[12px] font-medium text-foreground/75 ring-1 ring-foreground/12 transition-colors hover:bg-foreground/5 hover:text-foreground/90"
+            className="inline-flex h-8 items-center justify-center rounded-md px-3 text-label text-muted-foreground ring-1 ring-border transition-colors hover:bg-card hover:text-foreground"
           >
             Reset to defaults
           </button>
         </div>
 
-        <div className="mx-3 my-2 h-px bg-foreground/8" />
+        <div className="mx-3 my-2 h-px bg-accent" />
       </div>
     </ScrollArea>
   );
@@ -245,12 +245,12 @@ export function ShortcutsContent() {
           {SHORTCUTS.map(({ key, description }) => (
             <div
               key={key}
-              className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-foreground/4"
+              className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-card"
             >
-              <span className="text-[13px] font-medium text-foreground/75">
+              <span className="text-small font-medium text-muted-foreground">
                 {description}
               </span>
-              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-md bg-foreground/6 px-2 font-mono text-[11px] font-semibold text-foreground/80 ring-1 ring-foreground/10">
+              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-sm bg-card px-2 font-mono text-caption text-foreground ring-1 ring-border">
                 {key}
               </kbd>
             </div>
@@ -285,16 +285,16 @@ function OrbitSpeedSlider({
   }
 
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         <RotateCw className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/85">
+          <p className="text-small font-medium text-foreground">
             Orbit speed
           </p>
-          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
+          <span className="text-caption text-muted-foreground">
             {activeLabel}
           </span>
         </div>
@@ -319,7 +319,7 @@ function OrbitSpeedSlider({
                 <span
                   key={preset.label}
                   className={`absolute h-1.5 w-1.5 rounded-full -translate-x-1/2 -translate-y-1/2 transition-colors ${
-                    isActive ? "bg-foreground/55" : "bg-foreground/20"
+                    isActive ? "bg-subtle" : "bg-border"
                   }`}
                   style={{ left: `${pct}%` }}
                 />
@@ -340,16 +340,16 @@ function TrailThicknessSlider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         <Layers className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/85">
+          <p className="text-small font-medium text-foreground">
             Trail thickness
           </p>
-          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
+          <span className="text-caption text-muted-foreground">
             {value.toFixed(1)} px
           </span>
         </div>
@@ -374,16 +374,16 @@ function TrailDistanceSlider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         <Route className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/85">
+          <p className="text-small font-medium text-foreground">
             Trail distance
           </p>
-          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
+          <span className="text-caption text-muted-foreground">
             {value} pts
           </span>
         </div>
@@ -408,16 +408,16 @@ function AirspaceOpacitySlider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         <Eye className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/85">
+          <p className="text-small font-medium text-foreground">
             Airspace opacity
           </p>
-          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
+          <span className="text-caption text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -442,16 +442,16 @@ function WeatherRadarOpacitySlider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         <CloudRain className="h-4 w-4" />
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-medium text-foreground/85">
+          <p className="text-small font-medium text-foreground">
             Radar opacity
           </p>
-          <span className="text-[11px] font-semibold text-foreground/55 tabular-nums">
+          <span className="text-caption text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -471,10 +471,10 @@ function WeatherRadarOpacitySlider({
 function SectionHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-      <span className="text-[10px] font-bold tracking-widest text-foreground/45 uppercase">
+      <span className="text-micro text-subtle">
         {title}
       </span>
-      <div className="h-px flex-1 bg-foreground/8" />
+      <div className="h-px flex-1 bg-accent" />
     </div>
   );
 }
@@ -505,25 +505,23 @@ function SettingRow({
       onClick={() => {
         if (!disabled) onChange(!checked);
       }}
-      className={`flex w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left transition-colors ${
+      className={`flex w-full items-center gap-3.5 rounded-lg px-3 py-3 text-left transition-colors ${
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "hover:bg-foreground/4 active:bg-foreground/6"
+          : "hover:bg-card active:bg-card"
       }`}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-[13px] font-medium text-foreground/85">{title}</p>
+          <p className="text-small font-medium text-foreground">{title}</p>
           {badge && (
-            <span className="inline-flex items-center rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-indigo-300 ring-1 ring-indigo-400/20">
-              {badge}
-            </span>
+            <span className="text-label text-tint">{badge}</span>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-foreground/40">
+        <p className="mt-0.5 text-caption leading-relaxed text-subtle">
           {description}
         </p>
       </div>
@@ -546,17 +544,17 @@ function SegmentRow<T extends string | number>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground/50 ring-1 ring-foreground/8">
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         {icon}
       </div>
-      <p className="flex-1 min-w-0 text-[13px] font-medium text-foreground/85">
+      <p className="flex-1 min-w-0 text-small font-medium text-foreground">
         {title}
       </p>
       <div
         role="radiogroup"
         aria-label={title}
-        className="flex shrink-0 rounded-md bg-foreground/4 p-0.5 ring-1 ring-foreground/8"
+        className="flex shrink-0 rounded-sm bg-card p-0.5 ring-1 ring-border"
       >
         {options.map((opt) => {
           const isActive = opt.value === value;
@@ -566,16 +564,16 @@ function SegmentRow<T extends string | number>({
               role="radio"
               aria-checked={isActive}
               onClick={() => onChange(opt.value)}
-              className={`relative rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+              className={`relative rounded-sm px-2 py-1 text-caption font-medium transition-colors ${
                 isActive
-                  ? "text-foreground/90"
-                  : "text-foreground/45 hover:text-foreground/65"
+                  ? "text-foreground"
+                  : "text-subtle hover:text-muted-foreground"
               }`}
             >
               {isActive && (
                 <motion.div
                   layoutId={`seg-${title}`}
-                  className="absolute inset-0 rounded-md bg-foreground/10"
+                  className="absolute inset-0 rounded-sm bg-accent"
                   transition={{
                     type: "spring",
                     stiffness: 500,
@@ -594,19 +592,18 @@ function SegmentRow<T extends string | number>({
 
 function Toggle({ checked }: { checked: boolean }) {
   return (
-    <div
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
-        checked ? "bg-foreground/25" : "bg-foreground/8"
+    <span
+      aria-hidden="true"
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+        checked ? "bg-tint" : "bg-border"
       }`}
     >
-      <motion.div
-        animate={{ x: checked ? 17 : 2 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className={`absolute top-0.75 h-3.5 w-3.5 rounded-full shadow-sm transition-colors duration-200 ${
-          checked ? "bg-foreground" : "bg-foreground/35"
+      <span
+        className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-lift transition-transform ${
+          checked ? "translate-x-4" : ""
         }`}
       />
-    </div>
+    </span>
   );
 }
 
@@ -961,11 +958,11 @@ export function AboutContent() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-5 p-5 pt-3">
-        <h3 className="text-[20px] font-bold tracking-tight text-foreground/90">
+        <h3 className="text-value font-medium text-foreground">
           Aeris
         </h3>
 
-        <div className="space-y-3 text-[13px] leading-relaxed text-foreground/55">
+        <div className="space-y-3 text-small leading-relaxed text-muted-foreground">
           <p>
             Live flight tracking in 3D. The planes you see are real. Position
             data comes from adsb.lol, adsb.fi, airplanes.live, and OpenSky
@@ -980,40 +977,40 @@ export function AboutContent() {
           </p>
         </div>
 
-        <div className="h-px w-full bg-foreground/10" />
+        <div className="h-px w-full bg-accent" />
 
-        <p className="text-[12px] leading-relaxed text-foreground/40">
+        <p className="text-label leading-relaxed text-subtle">
           Built by a human, not just LLMs.{" "}
           <a
             href="https://github.com/kewonit"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
           >
             kewonit
           </a>
           . Open to internships —{" "}
           <a
             href="mailto:kew@edbn.me"
-            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
           >
             kew@edbn.me
           </a>
         </p>
-        <p className="text-[12px] leading-relaxed text-foreground/40">
+        <p className="text-label leading-relaxed text-subtle">
           Source is on{" "}
           <a
             href="https://github.com/kewonit/aeris"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
           >
             GitHub
           </a>
           . Got a question or just wanna say hi?{" "}
           <a
             href="mailto:aeris@edbn.me"
-            className="text-foreground/70 underline decoration-foreground/20 underline-offset-2 hover:text-foreground/90 transition-colors"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
           >
             aeris@edbn.me
           </a>
@@ -1029,22 +1026,22 @@ export function ChangelogContent() {
       <div className="flex flex-col gap-5 py-5 pl-5 pr-10 pt-3">
         {CHANGELOG.map((release, i) => (
           <div key={release.version}>
-            {i > 0 && <div className="mb-5 h-px w-full bg-foreground/10" />}
+            {i > 0 && <div className="mb-5 h-px w-full bg-accent" />}
             <div className="mb-3 flex items-baseline gap-2">
-              <span className="text-[13px] font-semibold tabular-nums text-foreground/85">
+              <span className="text-small font-medium text-foreground">
                 v{release.version}
               </span>
-              <span className="text-[11px] text-foreground/35">
+              <span className="text-caption text-subtle">
                 {release.date}
               </span>
             </div>
             <div className="flex flex-col gap-3 pl-0.5">
               {release.entries.map((entry, j) => (
                 <div key={j} className="min-w-0">
-                  <p className="text-[13px] font-medium text-foreground/80">
+                  <p className="text-small font-medium text-foreground">
                     {entry.title}
                   </p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-foreground/55 text-justify">
+                  <p className="mt-0.5 text-label leading-relaxed text-muted-foreground text-justify">
                     {entry.description}
                   </p>
                 </div>

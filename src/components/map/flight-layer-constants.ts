@@ -1,3 +1,4 @@
+import type { FpvCameraPosition } from "./camera-controller-utils";
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
@@ -78,10 +79,5 @@ export type FlightLayerProps = {
   altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
-  fpvPositionRef?: MutableRefObject<{
-    lng: number;
-    lat: number;
-    alt: number;
-    track: number;
-  } | null>;
+  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
 };

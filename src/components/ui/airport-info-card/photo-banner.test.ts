@@ -6,75 +6,54 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { PhotoBanner } from "./photo-banner";
 
-test("PhotoBanner fallback hero omits the decorative profile badge", () => {
-  const html = renderToStaticMarkup(
-    createElement(PhotoBanner, {
-      photo: null,
-      loading: false,
-      errored: false,
-      onError: () => {},
-      onClose: () => {},
-      airportName: "San Francisco International Airport",
-      iata: "SFO",
-      icao: "KSFO",
-      city: "San Francisco",
-      country: "US",
-    }),
-  );
+const BASE = {
+  errored: false,
+  onError: () => {},
+  airportName: "San Francisco International Airport",
+};
 
-  assert.match(html, /SFO/);
-  assert.match(html, /KSFO/);
-  assert.match(html, /San Francisco International Airport/);
-  assert.doesNotMatch(html, /Airport profile/i);
-  assert.doesNotMatch(html, /bg-foreground\/45/);
-  assert.doesNotMatch(html, /Wikipedia/);
-});
+const PHOTO = {
+  imageUrl: "https://example.com/original.jpg",
+  thumbUrl: "https://example.com/thumb.jpg",
+  width: 500,
+  height: 300,
+  pageUrl: "https://example.com/wiki/SFO",
+  pageTitle: "San Francisco International Airport",
+  description: "Airport in California",
+};
 
-test("PhotoBanner renders Wikimedia credit when a photo exists", () => {
+test("PhotoBanner shows the photo with its Wikipedia credit", () => {
   const html = renderToStaticMarkup(
-    createElement(PhotoBanner, {
-      photo: {
-        imageUrl: "https://example.com/original.jpg",
-        thumbUrl: "https://example.com/thumb.jpg",
-        width: 500,
-        height: 300,
-        pageUrl: "https://example.com/wiki/SFO",
-        pageTitle: "San Francisco International Airport",
-        description: "Airport in California",
-      },
-      loading: false,
-      errored: false,
-      onError: () => {},
-      onClose: () => {},
-      airportName: "San Francisco International Airport",
-      iata: "SFO",
-      icao: "KSFO",
-      city: "San Francisco",
-      country: "US",
-    }),
+    createElement(PhotoBanner, { ...BASE, photo: PHOTO, loading: false }),
   );
 
   assert.match(html, /https:\/\/example.com\/thumb.jpg/);
-  assert.match(html, /Wikipedia/);
+  assert.match(html, /alt="San Francisco International Airport"/);
+  assert.match(html, /href="https:\/\/example.com\/wiki\/SFO"/);
 });
 
-test("PhotoBanner uses the compact sidebar hero without a pulse", () => {
+test("PhotoBanner keeps its space while the photo lookup runs", () => {
   const html = renderToStaticMarkup(
+    createElement(PhotoBanner, { ...BASE, photo: null, loading: true }),
+  );
+
+  assert.notEqual(html, "");
+  assert.doesNotMatch(html, /<img/);
+});
+
+test("PhotoBanner collapses without a usable photo", () => {
+  const missing = renderToStaticMarkup(
+    createElement(PhotoBanner, { ...BASE, photo: null, loading: false }),
+  );
+  const failed = renderToStaticMarkup(
     createElement(PhotoBanner, {
-      photo: null,
-      loading: true,
-      errored: false,
-      onError: () => {},
-      airportName: "San Francisco International Airport",
-      iata: "SFO",
-      icao: "KSFO",
-      city: "San Francisco",
-      country: "US",
-      variant: "sidebar",
+      ...BASE,
+      photo: PHOTO,
+      loading: false,
+      errored: true,
     }),
   );
 
-  assert.match(html, /aeris-airport-hero/);
-  assert.match(html, /h-48/);
-  assert.doesNotMatch(html, /animate-pulse/);
+  assert.equal(missing, "");
+  assert.equal(failed, "");
 });

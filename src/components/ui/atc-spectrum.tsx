@@ -78,18 +78,12 @@ function SegmentedControl({
     <div
       role="tablist"
       aria-label="Audio visualization mode"
-      className="relative flex h-7 w-24 shrink-0 items-center rounded-lg"
-      style={{ backgroundColor: "rgb(var(--ui-fg) / 0.06)" }}
+      className="relative flex h-7 w-24 shrink-0 items-center rounded-md bg-card"
     >
       {/* Sliding capsule indicator */}
       <motion.div
-        className="absolute top-0.5 bottom-0.5 rounded-md"
-        style={{
-          width: `calc(${segW}% - 4px)`,
-          backgroundColor: "rgb(var(--ui-fg) / 0.1)",
-          boxShadow:
-            "0 1px 2px rgb(0 0 0 / 0.25), inset 0 0.5px 0 rgb(var(--ui-fg) / 0.05)",
-        }}
+        className="absolute top-0.5 bottom-0.5 rounded-sm bg-background ring-1 ring-border"
+        style={{ width: `calc(${segW}% - 4px)` }}
         animate={{ left: `calc(${activeIndex * segW}% + 2px)` }}
         transition={{ type: "spring", stiffness: 420, damping: 28 }}
       />
@@ -102,13 +96,9 @@ function SegmentedControl({
           aria-label={m.label}
           title={m.label}
           onClick={() => onChange(m.key)}
-          className="relative z-10 flex h-full flex-1 items-center justify-center transition-colors duration-200"
-          style={{
-            color:
-              mode === m.key
-                ? "rgb(var(--ui-fg) / 0.9)"
-                : "rgb(var(--ui-fg) / 0.3)",
-          }}
+          className={`relative z-10 flex h-full flex-1 items-center justify-center transition-colors ${
+            mode === m.key ? "text-foreground" : "text-subtle hover:text-foreground"
+          }`}
         >
           <m.Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
@@ -424,52 +414,26 @@ export function AtcSpectrum({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
-      className="overflow-hidden rounded-[20px] backdrop-blur-3xl"
-      style={{
-        border: "0.5px solid rgb(var(--ui-fg) / 0.08)",
-        backgroundColor: "rgb(var(--ui-bg) / 0.55)",
-        boxShadow:
-          "0 8px 32px rgb(0 0 0 / 0.3), inset 0 0.5px 0 rgb(var(--ui-fg) / 0.04)",
-      }}
+      className="overflow-hidden rounded-lg border border-border bg-background shadow-lift"
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between gap-3 px-4 py-2.5"
-        style={{ borderBottom: "0.5px solid rgb(var(--ui-fg) / 0.06)" }}
+        className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border"
       >
         {/* Feed info */}
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Live indicator */}
-          <div className="relative flex h-1.5 w-1.5 shrink-0">
-            {active && (
-              <span
-                className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-30"
-                style={{ backgroundColor: "rgb(52, 211, 153)" }}
-              />
-            )}
-            <span
-              className="relative inline-flex h-1.5 w-1.5 rounded-full"
-              style={{
-                backgroundColor: active
-                  ? "rgb(52, 211, 153)"
-                  : "rgb(var(--ui-fg) / 0.15)",
-              }}
-            />
-          </div>
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${active ? "bg-tint" : "bg-border"}`}
+            aria-hidden="true"
+          />
           <div className="flex items-center gap-2 min-w-0">
-            <span
-              className="truncate text-[11px] font-medium"
-              style={{
-                color: "rgb(var(--ui-fg) / 0.55)",
-                letterSpacing: "-0.01em",
-              }}
-            >
+            <span className="truncate text-small text-muted-foreground">
               {feedName ?? "ATC Audio"}
             </span>
             {feedFrequency && (
               <span
-                className="font-mono text-[9px] tabular-nums shrink-0"
-                style={{ color: "rgb(var(--ui-fg) / 0.22)" }}
+                className="font-mono text-micro shrink-0 text-subtle"
               >
                 {feedFrequency}
               </span>

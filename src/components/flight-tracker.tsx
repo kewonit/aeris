@@ -14,10 +14,13 @@ import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView, type MapRef } from "@/components/map/map";
+import type { FpvCameraPosition } from "@/components/map/camera-controller-utils";
 import { CameraController } from "@/components/map/camera-controller";
 import {
   CLOSED_MAP_PANEL_CAMERA_STATE,
   createMapPanelCameraState,
+  MAP_PANEL_EASE_CSS,
+  MAP_PANEL_TRANSITION_MS,
 } from "@/components/map/panel-camera";
 import { AirportLayer } from "@/components/map/airport-layer";
 import { AirspaceLayer } from "@/components/map/airspace-layer";
@@ -137,12 +140,7 @@ function FlightTrackerInner({
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
 
-  const fpvPositionRef = useRef<{
-    lng: number;
-    lat: number;
-    alt: number;
-    track: number;
-  } | null>(null);
+  const fpvPositionRef = useRef<FpvCameraPosition | null>(null);
 
   const [fpvSeedCenter, setFpvSeedCenter] = useState<{
     lng: number;
@@ -321,7 +319,6 @@ function FlightTrackerInner({
 
   const atc = useAtcStream();
 
-  const fpvFlightOrCached = fpvFlight;
   const displayFlight = selectedFlight;
 
   // ── Airport Board state ──────────────────────────────────────────────
@@ -689,6 +686,8 @@ function FlightTrackerInner({
       ? `${leftPanelInsetPx}px`
       : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} - ${AERIS_LEFT_SIDEBAR_OVERLAP_PX}px)`;
   const desktopPanelStyle = {
+    "--panel-duration": `${MAP_PANEL_TRANSITION_MS}ms`,
+    "--panel-ease": MAP_PANEL_EASE_CSS,
     "--aeris-left-sidebar-inset": leftPanelInset,
     "--aeris-left-chrome-shift": `calc(${leftPanelInset} + ${LEFT_CHROME_GAP_PX}px)`,
     "--aeris-map-center-shift": `calc(${leftPanelInset} / 2)`,
@@ -713,7 +712,8 @@ function FlightTrackerInner({
           <CameraController
             city={activeCity}
             followFlight={followFlight}
-            fpvFlight={fpvFlightOrCached}
+            fpvIcao24={fpvIcao24}
+            fpvFlight={fpvFlight}
             fpvPositionRef={fpvPositionRef}
             panelCamera={panelCamera}
           />
@@ -907,8 +907,8 @@ function FlightTrackerInner({
       </div>
 
       <AnimatePresence>
-        {fpvIcao24 && fpvFlightOrCached && (
-          <FpvHud flight={fpvFlightOrCached} onExit={handleExitFpv} />
+        {fpvIcao24 && (
+          <FpvHud key={fpvIcao24} flight={fpvFlight} onExit={handleExitFpv} />
         )}
       </AnimatePresence>
     </main>

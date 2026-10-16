@@ -83,7 +83,7 @@ export function KeyboardShortcutsHelp({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-80 bg-background/60 backdrop-blur-md"
+            className="fixed inset-0 z-80 bg-scrim"
             onClick={onClose}
           />
           <motion.div
@@ -102,24 +102,24 @@ export function KeyboardShortcutsHelp({
             aria-modal="true"
             aria-label="Keyboard shortcuts"
           >
-            <div className="overflow-hidden rounded-2xl border border-foreground/8 bg-popover/95 shadow-[0_40px_100px_rgba(0,0,0,0.8)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.8)] backdrop-blur-3xl">
+            <div className="overflow-hidden rounded-lg border border-border bg-popover/95 shadow-lift">
               <div className="flex items-center justify-between px-5 pt-5 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground/6">
-                    <Keyboard className="h-3.5 w-3.5 text-foreground/50" />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-card">
+                    <Keyboard className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-                  <h2 className="text-[14px] font-semibold tracking-tight text-foreground/90">
+                  <h2 className="text-small font-medium text-foreground">
                     Keyboard Shortcuts
                   </h2>
                 </div>
                 <motion.button
                   onClick={onClose}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/6 transition-colors hover:bg-foreground/12"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-card transition-colors hover:bg-accent"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   aria-label="Close"
                 >
-                  <X className="h-3.5 w-3.5 text-foreground/40" />
+                  <X className="h-3.5 w-3.5 text-subtle" />
                 </motion.button>
               </div>
 
@@ -130,10 +130,10 @@ export function KeyboardShortcutsHelp({
                       key={key}
                       className="flex items-center justify-between py-1.5"
                     >
-                      <span className="text-[13px] font-medium text-foreground/50">
+                      <span className="text-small font-medium text-muted-foreground">
                         {description}
                       </span>
-                      <kbd className="flex h-6 min-w-6 items-center justify-center rounded-md bg-foreground/6 px-2 font-mono text-[11px] font-semibold text-foreground/70 ring-1 ring-foreground/8">
+                      <kbd className="flex h-6 min-w-6 items-center justify-center rounded-sm bg-card px-2 font-mono text-caption text-muted-foreground ring-1 ring-border">
                         {key}
                       </kbd>
                     </div>

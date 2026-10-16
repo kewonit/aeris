@@ -80,6 +80,22 @@ export function isMilitaryAircraft(dbFlags: number | null | undefined): boolean 
   return ((dbFlags ?? 0) & 1) !== 0;
 }
 
+const POSITION_SOURCE_LABELS: Record<NonNullable<FlightState["positionSource"]>, string> = {
+  adsb: "ADS-B",
+  adsc: "ADS-C",
+  asterix: "ASTERIX",
+  flarm: "FLARM",
+  mlat: "MLAT",
+  tisb: "TIS-B",
+  other: "Other",
+};
+
+export function positionSourceLabel(
+  source: FlightState["positionSource"],
+): string | null {
+  return source ? POSITION_SOURCE_LABELS[source] : null;
+}
+
 export function hasEmergencyStatus(status: string | null | undefined): boolean {
   return Boolean(status && status !== "none");
 }

@@ -1,169 +1,65 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { Camera, Plane } from "lucide-react";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
 
 type HeroBannerProps = {
   photo: NormalizedPhoto | null;
   loading: boolean;
   alt: string;
-  variant?: "default" | "sidebar";
 };
 
-export function HeroBanner({
-  photo,
-  loading,
-  alt,
-  variant = "default",
-}: HeroBannerProps) {
-  const isSidebar = variant === "sidebar";
-  const candidates = useMemo(() => {
-    const urls = [photo?.url, photo?.thumbnail]
-      .map((url) => url?.trim())
-      .filter((url): url is string => Boolean(url));
-
-    return Array.from(new Set(urls));
-  }, [photo?.thumbnail, photo?.url]);
+/**
+ * The aircraft photo at the top of the sidebar. While the lookup runs it
+ * holds the space with a plain card surface; with no usable photo it
+ * collapses. The full image is tried first, then the thumbnail.
+ */
+export function HeroBanner({ photo, loading, alt }: HeroBannerProps) {
+  const candidates = useMemo(
+    () => [
+      ...new Set(
+        [photo?.url, photo?.thumbnail]
+          .map((url) => url?.trim())
+          .filter((url): url is string => Boolean(url)),
+      ),
+    ],
+    [photo?.thumbnail, photo?.url],
+  );
   const candidateKey = candidates.join("|");
-  const [imageState, setImageState] = useState({
-    key: candidateKey,
-    loaded: false,
-    failed: false,
-    sourceIndex: 0,
-  });
-  const activeImageState =
-    imageState.key === candidateKey
-      ? imageState
-      : {
-          key: candidateKey,
-          loaded: false,
-          failed: false,
-          sourceIndex: 0,
-        };
-  const { loaded, failed, sourceIndex } = activeImageState;
-  const source = candidates[sourceIndex] ?? null;
+  const [state, setState] = useState({ key: candidateKey, index: 0, loaded: false });
+  const current =
+    state.key === candidateKey
+      ? state
+      : { key: candidateKey, index: 0, loaded: false };
+  const source = candidates[current.index] ?? null;
 
-  const hasPhoto = source != null && !failed;
-  const showLoadingState = loading || (hasPhoto && !loaded);
-  const visible = shouldRenderHeroBanner(photo, loading, failed);
+  if (!loading && !source) return null;
 
   return (
-    <AnimatePresence initial={false}>
-      {visible && (
-        <motion.div
-          key="aircraft-hero"
-          initial={isSidebar ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={isSidebar ? undefined : { height: 0, opacity: 0 }}
-          transition={
-            isSidebar
-              ? { duration: 0 }
-              : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
-          }
-          className={`relative w-full overflow-hidden bg-foreground/[0.04] ${isSidebar ? "aeris-sidebar-hero h-44" : "h-52 sm:h-56"}`}
-        >
-          {showLoadingState &&
-            (isSidebar ? (
-              <div className="aeris-aircraft-photo-loading absolute inset-0 flex items-center justify-center px-8">
-                <div
-                  className="flex w-full max-w-56 flex-col items-center text-center"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span className="aeris-aircraft-photo-loading-icon flex h-11 w-11 items-center justify-center rounded-full">
-                    <Plane
-                      className="h-5 w-5 -rotate-12"
-                      aria-hidden="true"
-                    />
-                  </span>
-                  <span className="mt-3 text-[12px] font-semibold tracking-[-0.01em] text-foreground/72">
-                    {source
-                      ? "Loading aircraft photo"
-                      : "Finding aircraft photo"}
-                  </span>
-                  <span className="mt-1 text-[10px] font-medium leading-4 text-foreground/38">
-                    {source
-                      ? "Preparing the best available image"
-                      : "Checking aircraft photo sources"}
-                  </span>
-                  <span
-                    className="aeris-aircraft-photo-loading-track mt-3 h-0.5 w-24 overflow-hidden rounded-full"
-                    aria-hidden="true"
-                  >
-                    <span className="aeris-aircraft-photo-loading-bar block h-full w-2/5 rounded-full" />
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <span
-                aria-hidden
-                className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
-              />
-            ))}
-
-          {source && !failed && (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element -- Photo sources can use external hosts that are not known at build time. */}
-              <img
-                key={source}
-                src={source}
-                alt={alt}
-                loading="eager"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                onLoad={() =>
-                  setImageState((current) => ({
-                    ...current,
-                    key: candidateKey,
-                    loaded: true,
-                    failed: false,
-                    sourceIndex,
-                  }))
-                }
-                onError={() => {
-                  const nextIndex = sourceIndex + 1;
-                  if (nextIndex < candidates.length) {
-                    setImageState({
-                      key: candidateKey,
-                      loaded: false,
-                      failed: false,
-                      sourceIndex: nextIndex,
-                    });
-                    return;
-                  }
-                  setImageState({
-                    key: candidateKey,
-                    loaded: false,
-                    failed: true,
-                    sourceIndex,
-                  });
-                }}
-                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${loaded ? "opacity-100" : "opacity-0"}`}
-                draggable={false}
-              />
-              {!isSidebar && (
-                <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/55 via-background/5 to-transparent" />
-              )}
-              {photo?.photographer && loaded && (
-                <span className="absolute bottom-2 right-2.5 flex items-center gap-1 rounded-full border border-foreground/[0.06] bg-background/55 px-2.5 py-1 text-[9px] font-medium text-foreground/65 shadow-sm backdrop-blur-md">
-                  <Camera className="h-2.5 w-2.5" aria-hidden="true" />
-                  Photo: {photo.photographer}
-                </span>
-              )}
-            </>
-          )}
-        </motion.div>
+    <figure className="m-0">
+      <div className="relative aspect-video w-full overflow-hidden bg-card">
+        {source && (
+          // eslint-disable-next-line @next/next/no-img-element -- Photo hosts are not known at build time.
+          <img
+            key={source}
+            src={source}
+            alt={alt}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            draggable={false}
+            onLoad={() => setState({ ...current, loaded: true })}
+            onError={() =>
+              setState({ ...current, index: current.index + 1, loaded: false })
+            }
+            className={`absolute inset-0 size-full object-cover transition-opacity duration-300 ${current.loaded ? "opacity-100" : "opacity-0"}`}
+          />
+        )}
+      </div>
+      {photo?.photographer && current.loaded && (
+        <figcaption className="px-6 pt-2 text-micro text-subtle">
+          Photo: {photo.photographer}
+        </figcaption>
       )}
-    </AnimatePresence>
+    </figure>
   );
-}
-
-function shouldRenderHeroBanner(
-  photo: NormalizedPhoto | null,
-  loading: boolean,
-  failed: boolean,
-): boolean {
-  return loading || (photo !== null && !failed);
 }

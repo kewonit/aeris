@@ -2,163 +2,209 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Light mode (default) ─────────────────────────────────────────── */
+/*
+ * Aeris design tokens, after kew.edbn.me: warm neutrals, one accent, one
+ * shadow. The light text colors are darkened slightly from the reference so
+ * small text meets WCAG AA on both the page and card surfaces.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(0.99 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.965 0 0);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.965 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.708 0 0);
-  /* RGB triplets for inline style backward compat */
-  --ui-fg: 0 0 0;
-  --ui-bg: 255 255 255;
-  --sidebar: oklch(0.99 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #fafaf9;
+  --foreground: #121214;
+  --muted-foreground: #636268;
+  --subtle: #6b6a71;
+  --card: #f1f1ef;
+  --accent: #e9e8e5;
+  --border: #e6e5e2;
+  --tint: #6b46c1;
+  --arrival: #1d7a4a;
+  --departure: #9a5b00;
+  --danger: #c22f2a;
+  --scrim: #12121426;
+  --lift:
+    0 1px 1px #1010140f, 0 10px 18px -6px #10101429,
+    0 28px 44px -16px #1010144d;
 }
 
-/* ── Dark mode ────────────────────────────────────────────────────── */
 .dark {
-  --background: oklch(0 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.1 0.002 260);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.055 0.004 270);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.18 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.18 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.45 0 0);
-  /* RGB triplets for inline style backward compat */
-  --ui-fg: 255 255 255;
-  --ui-bg: 0 0 0;
-  --sidebar: oklch(0.055 0.004 270);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.18 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.45 0 0);
+  --background: #121214;
+  --foreground: #f5f5f3;
+  --muted-foreground: #a3a2a8;
+  --subtle: #8a898f;
+  --card: #1b1b1e;
+  --accent: #242428;
+  --border: #2a2a2e;
+  --tint: #a48df2;
+  --arrival: #5fcf8f;
+  --departure: #f0b45a;
+  --danger: #ff7b72;
+  --scrim: #00000073;
+  --lift:
+    0 1px 1px #0000004d, 0 10px 18px -6px #00000080,
+    0 28px 44px -16px #000000b3;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--background);
+  --color-popover-foreground: var(--foreground);
+  --color-muted: var(--card);
+  --color-secondary: var(--card);
+  --color-secondary-foreground: var(--foreground);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--foreground);
+  --color-primary: var(--foreground);
+  --color-primary-foreground: var(--background);
+  --color-destructive: var(--danger);
   --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius: var(--radius);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, monospace;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
+  --color-input: var(--border);
+  --color-ring: var(--subtle);
+  --color-tint: var(--tint);
+  --color-arrival: var(--arrival);
+  --color-departure: var(--departure);
+  --color-danger: var(--danger);
+  --color-warning: var(--departure);
+  --color-scrim: var(--scrim);
+  --color-sidebar: var(--background);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--subtle);
+  --font-sans:
+    var(--font-instrument), ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  --font-mono:
+    var(--font-fragment), ui-monospace, "SF Mono", Menlo, monospace;
+  --shadow-lift: var(--lift);
+}
+
+/*
+ * One type scale, one weight pair, one radius set, one shadow. Clearing the
+ * Tailwind defaults makes any off-scale class compile to nothing, and the
+ * design token test rejects it.
+ */
+@theme {
+  --text-*: initial;
+  --text-micro: 10px;
+  --text-micro--line-height: 1.4;
+  --text-caption: 11px;
+  --text-caption--line-height: 1.4;
+  --text-label: 12px;
+  --text-label--line-height: 1.4;
+  --text-small: 13px;
+  --text-small--line-height: 1.45;
+  --text-body: 15px;
+  --text-body--line-height: 1.55;
+  --text-value: 20px;
+  --text-value--line-height: 1.3;
+  --text-value--letter-spacing: -0.025em;
+  --text-title: 23px;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.035em;
+
+  --font-weight-*: initial;
+  --font-weight-normal: 480;
+  --font-weight-medium: 540;
+
+  --tracking-*: initial;
+
+  --radius-*: initial;
+  --radius-sm: 7px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-*: initial;
+
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-pop: cubic-bezier(0.16, 1, 0.3, 1);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: var(--ease-out);
 }
 
 @layer base {
   * {
     border-color: var(--border);
   }
+
   html {
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+
   body {
+    height: 100%;
+    height: 100dvh;
+    margin: 0;
+    overflow: hidden;
     background: var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.55;
+    font-variant-numeric: tabular-nums;
   }
+
   h1,
   h2,
   h3 {
+    font-weight: var(--font-weight-normal);
     text-wrap: balance;
   }
+
   p {
     text-wrap: pretty;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--tint) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--tint);
+    outline-offset: 2px;
   }
 }
 
 @layer components {
+  /* The map slides aside for the desktop sidebar on the camera's curve.
+     flight-tracker.tsx sets --panel-duration and --panel-ease from
+     map/panel-camera.ts so both stay in step. */
   .aeris-map-surface {
-    clip-path: inset(0 0 0 0 round 0 0 0 0);
-    box-shadow: none;
-    transition: clip-path 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
+    clip-path: inset(0 0 0 0 round 0);
+    transition: clip-path var(--panel-duration) var(--panel-ease);
     will-change: clip-path;
     contain: layout paint style;
     isolation: isolate;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
   }
 
   .aeris-left-chrome {
     transform: translate3d(0, 0, 0);
-    transition: transform 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
+    transition: transform var(--panel-duration) var(--panel-ease);
     will-change: transform;
   }
 
   .aeris-map-centered-chrome {
     transform: translate3d(-50%, 0, 0);
-    transition: transform 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
+    transition: transform var(--panel-duration) var(--panel-ease);
     will-change: transform;
   }
 
   @media (min-width: 640px) {
     .aeris-map-surface[data-panel-open="true"] {
       clip-path: inset(
-        0 0 0 var(--aeris-left-sidebar-inset) round 2.5rem 0 0 2.5rem
+        0 0 0 var(--aeris-left-sidebar-inset) round var(--radius-xl) 0 0
+          var(--radius-xl)
       );
     }
 
@@ -174,532 +220,87 @@
       );
     }
   }
-}
 
-.aeris-sidebar-shell {
-  --aeris-sidebar-material: color-mix(
-    in oklab,
-    var(--sidebar) 88%,
-    transparent
-  );
-  --aeris-sidebar-material-strong: color-mix(
-    in oklab,
-    var(--sidebar) 94%,
-    transparent
-  );
-  --aeris-sidebar-hairline: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 9%,
-    transparent
-  );
-  --aeris-sidebar-tint: oklch(0.57 0.2 255);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-    system-ui, sans-serif;
-  font-optical-sizing: auto;
-}
-
-.dark .aeris-sidebar-shell {
-  --aeris-sidebar-material: oklch(0.105 0.006 270 / 94%);
-  --aeris-sidebar-material-strong: oklch(0.125 0.006 270 / 97%);
-  --aeris-sidebar-hairline: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 12%,
-    transparent
-  );
-  --aeris-sidebar-tint: oklch(0.72 0.16 250);
-}
-
-.aeris-sidebar-shell [data-slot="sidebar-inner"] {
-  overflow: hidden;
-  border-right: 1px solid var(--aeris-sidebar-hairline);
-  background-color: var(--aeris-sidebar-material);
-  box-shadow:
-    inset -1px 0 0 color-mix(in oklab, white 10%, transparent),
-    14px 0 44px -22px color-mix(in oklab, black 48%, transparent);
-}
-
-.aeris-sidebar-toolbar {
-  background-color: var(--aeris-sidebar-material-strong);
-}
-
-.aeris-sidebar-toolbar::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1px;
-  pointer-events: none;
-  background-color: var(--aeris-sidebar-hairline);
-  content: "";
-}
-
-.aeris-sidebar-control {
-  border: 1px solid var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 6%,
-    transparent
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
-    0 3px 12px -6px color-mix(in oklab, black 42%, transparent);
-}
-
-.aeris-sidebar-control:hover {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 10%,
-    transparent
-  );
-}
-
-.aeris-sidebar-scroll {
-  scrollbar-color: color-mix(
-      in oklab,
-      var(--sidebar-foreground) 18%,
-      transparent
-    )
-    transparent;
-}
-
-.aeris-sidebar-shell .aeris-airline-mark {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4.5%,
-    transparent
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, white 12%, transparent),
-    0 10px 26px -22px color-mix(in oklab, black 52%, transparent);
-}
-
-.aeris-sidebar-shell .aeris-airport-header {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 2.5%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-header:hover {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4.5%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-header:active {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 6%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-code {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 52%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-name {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 72%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-location {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 50%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-fact-tile,
-.aeris-sidebar-shell .aeris-airport-traffic-tile {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4%,
-    transparent
-  );
-  box-shadow: inset 0 0 0 1px var(--aeris-sidebar-hairline);
-}
-
-.aeris-sidebar-shell .aeris-airport-fact-label {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 46%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-fact-value {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 88%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell
-  .aeris-airport-traffic-tile[data-tone="arrivals"]
-  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
-.aeris-sidebar-shell
-  .aeris-airport-flight-status:is(
-    [data-status="final"],
-    [data-status="approach"],
-    [data-status="inbound"],
-    [data-status="descending"]
-  ) {
-  color: oklch(0.48 0.13 164);
-}
-
-.aeris-sidebar-shell
-  .aeris-airport-traffic-tile[data-tone="departures"]
-  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
-.aeris-sidebar-shell
-  .aeris-airport-flight-status:is(
-    [data-status="departure"],
-    [data-status="climbing"],
-    [data-status="outbound"]
-  ) {
-  color: oklch(0.53 0.14 75);
-}
-
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-traffic-tile[data-tone="arrivals"]
-  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-flight-status:is(
-    [data-status="final"],
-    [data-status="approach"],
-    [data-status="inbound"],
-    [data-status="descending"]
-  ) {
-  color: oklch(0.78 0.13 164);
-}
-
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-traffic-tile[data-tone="departures"]
-  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value),
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-flight-status:is(
-    [data-status="departure"],
-    [data-status="climbing"],
-    [data-status="outbound"]
-  ) {
-  color: oklch(0.8 0.13 82);
-}
-
-.aeris-sidebar-shell
-  .aeris-airport-traffic-tile[data-tone="overflights"]
-  :is(.aeris-airport-traffic-label, .aeris-airport-traffic-value) {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 64%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell
-  :is(.aeris-airport-main-tabs, .aeris-airport-arrdep-tabs) {
-  border: 1px solid var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4%,
-    transparent
-  );
-  box-shadow: inset 0 1px 0 color-mix(in oklab, white 8%, transparent);
-}
-
-.aeris-sidebar-shell
-  :is(.aeris-airport-main-tab, .aeris-airport-arrdep-tab)[data-state="inactive"] {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 56%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-main-tab[data-state="active"] {
-  background-color: var(--aeris-sidebar-material-strong);
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 92%,
-    transparent
-  );
-  box-shadow:
-    inset 0 0 0 1px var(--aeris-sidebar-hairline),
-    0 3px 10px -7px color-mix(in oklab, black 50%, transparent);
-}
-
-.aeris-sidebar-shell
-  .aeris-airport-arrdep-tab[value="arrivals"][data-state="active"] {
-  color: oklch(0.48 0.13 164);
-}
-
-.aeris-sidebar-shell
-  .aeris-airport-arrdep-tab[value="departures"][data-state="active"] {
-  color: oklch(0.53 0.14 75);
-}
-
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-arrdep-tab[value="arrivals"][data-state="active"] {
-  color: oklch(0.78 0.13 164);
-}
-
-.dark
-  .aeris-sidebar-shell
-  .aeris-airport-arrdep-tab[value="departures"][data-state="active"] {
-  color: oklch(0.8 0.13 82);
-}
-
-.aeris-sidebar-shell .aeris-airport-flight-row {
-  border: 1px solid transparent;
-}
-
-.aeris-sidebar-shell .aeris-airport-flight-row:hover {
-  border-color: var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-flight-callsign {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 88%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-flight-secondary {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 56%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-airport-flight-distance {
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 50%,
-    transparent
-  );
-}
-
-.aeris-sidebar-hero,
-.aeris-airport-hero {
-  border-bottom: 1px solid var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4%,
-    var(--sidebar)
-  );
-}
-
-.aeris-aircraft-photo-loading {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 3.5%,
-    var(--sidebar)
-  );
-}
-
-.aeris-aircraft-photo-loading-icon {
-  border: 1px solid var(--aeris-sidebar-hairline);
-  background-color: var(--aeris-sidebar-material-strong);
-  color: color-mix(in oklab, var(--aeris-sidebar-tint) 78%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, white 12%, transparent),
-    0 8px 22px -18px color-mix(in oklab, black 55%, transparent);
-}
-
-.aeris-aircraft-photo-loading-track {
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 9%,
-    transparent
-  );
-}
-
-.aeris-aircraft-photo-loading-bar {
-  background-color: var(--aeris-sidebar-tint);
-  animation: aeris-aircraft-photo-progress 1.25s
-    cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes aeris-aircraft-photo-progress {
-  from {
-    transform: translateX(-150%);
+  .scrollbar-none {
+    scrollbar-width: none;
   }
-  to {
-    transform: translateX(300%);
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* cmdk renders its own elements, so its states are styled here. */
+  .aeris-cmdk [cmdk-input] {
+    border: none;
+    outline: none;
+    background: transparent;
+  }
+
+  .aeris-cmdk [cmdk-group-heading] {
+    padding: 14px 16px 6px;
+    font-size: var(--text-label);
+    color: var(--subtle);
+    user-select: none;
+  }
+
+  .aeris-cmdk [cmdk-list] {
+    overscroll-behavior: contain;
+  }
+
+  .aeris-cmdk [cmdk-group] + [cmdk-group] {
+    padding-top: 2px;
+  }
+
+  .aeris-cmdk [cmdk-empty] {
+    display: flex;
+  }
+
+  .aeris-cmdk .search-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 6px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+    transition: background-color 150ms var(--ease-out);
+  }
+
+  .aeris-cmdk .search-item[data-selected="true"] {
+    background: var(--card);
+  }
+
+  .aeris-cmdk .search-item:active:not([data-disabled="true"]) {
+    background: var(--accent);
+  }
+
+  .aeris-cmdk .search-item[data-disabled="true"] {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 
-.aeris-sidebar-shell .aeris-sidebar-group,
-.aeris-sidebar-shell .aeris-sidebar-disclosure {
-  border-color: var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 4.5%,
-    transparent
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, white 10%, transparent),
-    0 8px 24px -22px color-mix(in oklab, black 48%, transparent);
+/* Airport name tooltip on hover (map/airport-layer.tsx). */
+.airport-popup .maplibregl-popup-content {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: var(--font-weight-normal) var(--text-label) / 1.4 var(--font-sans);
+  box-shadow: var(--lift);
 }
 
-.aeris-sidebar-shell .aeris-sidebar-disclosure {
-  margin-top: 0.75rem;
-  overflow: clip;
-  border-width: 1px;
-  border-radius: 1rem;
+.airport-popup .maplibregl-popup-tip {
+  border-top-color: var(--background);
 }
 
-.aeris-sidebar-shell .aeris-sidebar-disclosure > summary,
-.aeris-sidebar-shell .aeris-sidebar-disclosure > dl {
-  padding-right: 0.875rem;
-  padding-left: 0.875rem;
-}
-
-.aeris-sidebar-shell .aeris-sidebar-meta {
-  margin-top: 0.75rem;
-  padding: 0.75rem 0.875rem;
-  border: 1px solid var(--aeris-sidebar-hairline);
-  border-radius: 0.875rem;
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 2.75%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-sidebar-primary-action {
-  min-height: 2.75rem;
-  padding: 0 0.875rem;
-  border: 1px solid
-    color-mix(in oklab, var(--aeris-sidebar-tint) 24%, transparent);
-  border-radius: 0.875rem;
-  background-color: color-mix(
-    in oklab,
-    var(--aeris-sidebar-tint) 11%,
-    transparent
-  );
-  color: var(--aeris-sidebar-tint);
-  box-shadow: inset 0 1px 0 color-mix(in oklab, white 10%, transparent);
-}
-
-.aeris-sidebar-shell .aeris-sidebar-primary-action:hover {
-  background-color: color-mix(
-    in oklab,
-    var(--aeris-sidebar-tint) 16%,
-    transparent
-  );
-}
-
-.aeris-sidebar-shell .aeris-sidebar-primary-action:disabled {
-  border-color: var(--aeris-sidebar-hairline);
-  background-color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 3%,
-    transparent
-  );
-  color: color-mix(
-    in oklab,
-    var(--sidebar-foreground) 36%,
-    transparent
-  );
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .aeris-sidebar-shell [data-slot="sidebar-inner"],
-  .aeris-sidebar-toolbar,
-  .aeris-sidebar-control {
-    background-color: var(--sidebar);
-    background-image: none;
-    --tw-backdrop-blur: blur(0);
-    --tw-backdrop-saturate: saturate(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .aeris-aircraft-photo-loading-bar {
-    width: 100%;
-    animation: none;
-    opacity: 0.45;
-    transform: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  .aeris-sidebar-shell [data-slot="sidebar-inner"] {
-    border-right-color: color-mix(
-      in oklab,
-      var(--sidebar-foreground) 48%,
-      transparent
-    );
-    background-color: var(--sidebar);
-    background-image: none;
-  }
-
-  .aeris-sidebar-control,
-  .aeris-sidebar-shell .aeris-sidebar-group,
-  .aeris-sidebar-shell .aeris-sidebar-disclosure,
-  .aeris-sidebar-shell .aeris-sidebar-meta {
-    border-color: color-mix(
-      in oklab,
-      var(--sidebar-foreground) 38%,
-      transparent
-    );
-  }
-}
-
-:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-html,
-body {
-  height: 100%;
-  height: 100dvh;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* Custom attribution component replaces built-in controls */
-.maplibregl-ctrl-attrib {
-  display: none !important;
-}
-
+/* The custom attribution component replaces MapLibre's controls. */
+.maplibregl-ctrl-attrib,
 .maplibregl-ctrl-logo {
   display: none !important;
-}
-
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -711,67 +312,4 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* ── cmdk styles ─────────────────────────────────────────────────────── */
-
-.aeris-cmdk [cmdk-input] {
-  border: none;
-  outline: none;
-  background: transparent;
-}
-
-.aeris-cmdk [cmdk-group-heading] {
-  padding: 14px 16px 6px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: rgb(var(--ui-fg) / 0.35);
-  user-select: none;
-}
-
-.aeris-cmdk [cmdk-list] {
-  overscroll-behavior: contain;
-}
-
-.aeris-cmdk [cmdk-group] + [cmdk-group] {
-  padding-top: 2px;
-}
-
-.aeris-cmdk [cmdk-empty] {
-  display: flex;
-}
-
-.aeris-cmdk .search-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-radius: 14px;
-  padding: 11px 14px;
-  margin: 0 6px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.08s ease;
-  outline: none;
-  user-select: none;
-}
-
-.aeris-cmdk .search-item[data-selected="true"] {
-  background: rgb(var(--ui-fg) / 0.055);
-}
-
-.aeris-cmdk
-  [cmdk-item][data-selected="true"]
-  .group-data-\[selected\=true\]\/item\:opacity-100 {
-  opacity: 1;
-}
-
-.aeris-cmdk .search-item[data-disabled="true"] {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.aeris-cmdk .search-item:active:not([data-disabled="true"]) {
-  background: rgb(var(--ui-fg) / 0.075);
-  transform: scale(0.995);
 }

@@ -1,4 +1,5 @@
 import maplibregl from "maplibre-gl";
+import { normalizeBearing } from "./flight-interpolation";
 
 export const FPV_CAMERA_PITCH = 80;
 export const FPV_DEFAULT_ALTITUDE_METERS = 5_000;
@@ -6,10 +7,11 @@ export const FPV_MIN_CAMERA_ALTITUDE_METERS = 60;
 
 const MAX_MERCATOR_LATITUDE = 85.051129;
 
+/** The FPV aircraft's position. Missing altitude or heading stays null. */
 export type FpvCameraPosition = {
   lng: number;
   lat: number;
-  alt: number;
+  alt: number | null;
   track: number | null;
 };
 
@@ -25,9 +27,6 @@ export function normalizeLng(lng: number): number {
   return ((lng + 540) % 360) - 180;
 }
 
-export function normalizeBearing(bearing: number): number {
-  return ((bearing % 360) + 360) % 360;
-}
 
 export function fpvCameraOptions(
   map: maplibregl.Map,
@@ -46,9 +45,10 @@ export function fpvCameraOptions(
     -MAX_MERCATOR_LATITUDE,
     Math.min(MAX_MERCATOR_LATITUDE, position.lat),
   );
-  const altitude = Number.isFinite(position.alt)
-    ? Math.max(position.alt, FPV_MIN_CAMERA_ALTITUDE_METERS)
-    : FPV_DEFAULT_ALTITUDE_METERS;
+  const altitude =
+    position.alt !== null && Number.isFinite(position.alt)
+      ? Math.max(position.alt, FPV_MIN_CAMERA_ALTITUDE_METERS)
+      : FPV_DEFAULT_ALTITUDE_METERS;
   const bearing = normalizeBearing(
     position.track !== null && Number.isFinite(position.track)
       ? position.track

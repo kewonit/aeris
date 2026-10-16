@@ -119,18 +119,11 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
   const showPhotos = !loading && hasPhotos;
 
   return (
-    <div className="relative h-48 w-full overflow-hidden bg-foreground/[0.04]">
-      {loading && !hasPhotos && (
-        <span
-          aria-hidden
-          className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/[0.04] via-foreground/[0.08] to-foreground/[0.04]"
-        />
-      )}
-
+    <div className="relative h-48 w-full overflow-hidden bg-card">
       {!loading && !hasPhotos && (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-foreground/15">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-subtle">
           <ImageOff className="h-4 w-4" />
-          <span className="text-[9px] font-medium">No photo</span>
+          <span className="text-micro">No photo</span>
         </div>
       )}
 
@@ -139,22 +132,14 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
           ref={scrollRef}
           onScroll={handleScroll}
           className="flex h-full snap-x snap-mandatory overflow-x-auto scrollbar-none"
-          style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
         >
           {photos.map((photo, i) => (
             <div
               key={photo.id}
               className="relative h-full w-full shrink-0 snap-center"
             >
-              {slideLoadState[i] !== "loaded" &&
-                slideLoadState[i] !== "error" && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-0 animate-pulse bg-linear-to-br from-foreground/5 via-foreground/8 to-foreground/5"
-                  />
-                )}
               {slideLoadState[i] === "error" ? (
-                <div className="flex h-full w-full items-center justify-center text-foreground/15">
+                <div className="flex h-full w-full items-center justify-center text-subtle">
                   <ImageOff className="h-5 w-5" />
                 </div>
               ) : mountedSlides.has(i) ? (
@@ -177,12 +162,8 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
         </div>
       )}
 
-      {showPhotos && (
-        <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/50 via-background/5 to-transparent" />
-      )}
-
       {showPhotos && photos[activeSlide]?.photographer && (
-        <span className="absolute bottom-1.5 right-2 z-10 flex items-center gap-0.5 rounded-full bg-background/45 px-1.5 py-0.5 text-[8px] font-medium text-foreground/55 backdrop-blur-sm">
+        <span className="absolute bottom-1.5 right-2 z-10 flex items-center gap-0.5 rounded-full bg-background px-1.5 py-0.5 text-micro text-muted-foreground">
           <Camera className="h-2 w-2" />
           {photos[activeSlide].photographer}
         </span>
@@ -194,12 +175,12 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
             <span
               key={i}
               className={`h-1 w-1 rounded-full transition-colors duration-200 ${
-                i === activeSlide ? "bg-foreground/80" : "bg-foreground/30"
+                i === activeSlide ? "bg-subtle" : "bg-border"
               }`}
             />
           ))}
           {photos.length > 10 && (
-            <span className="text-[7px] leading-none text-foreground/30">
+            <span className="text-micro leading-none text-subtle">
               +{photos.length - 10}
             </span>
           )}
@@ -207,7 +188,7 @@ function PhotoCarouselHero({ photos, loading }: PhotoCarouselHeroProps) {
       )}
 
       {showPhotos && photos.length > 1 && (
-        <span className="absolute top-1.5 right-2 z-10 rounded-full bg-background/45 px-1.5 py-0.5 text-[8px] font-semibold tabular-nums text-foreground/60 backdrop-blur-sm">
+        <span className="absolute top-1.5 right-2 z-10 rounded-full bg-background px-1.5 py-0.5 text-micro text-muted-foreground">
           {activeSlide + 1}/{photos.length}
         </span>
       )}
@@ -275,10 +256,10 @@ export function MobileFlightToast({
 
 
   return (
-    <div className="scrollbar-none relative max-h-[calc(100dvh-1rem)] w-full overflow-y-auto overflow-x-hidden rounded-[28px] border border-foreground/[0.08] bg-background/82 shadow-[0_22px_70px_rgba(0,0,0,0.44)] overscroll-contain backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72">
+    <div className="scrollbar-none relative max-h-[calc(100dvh-1rem)] w-full overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-background shadow-lift overscroll-contain">
       <span
         aria-hidden="true"
-        className="absolute left-1/2 top-2 z-20 h-1 w-9 -translate-x-1/2 rounded-full bg-foreground/28 shadow-sm"
+        className="absolute left-1/2 top-2 z-20 h-1 w-9 -translate-x-1/2 rounded-full bg-border"
       />
       <PhotoCarouselHero
         key={photoKey}
@@ -290,15 +271,9 @@ export function MobileFlightToast({
         {/* Header row: logo + callsign + close */}
         <div className="flex items-center gap-3">
           {/* Airline logo */}
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_22px_rgba(0,0,0,0.18)]">
+          <div className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-card">
             {showLogo ? (
-              <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-[14px] border border-black/5 bg-white/95 p-2.5 shadow-sm">
-                {!logoLoaded && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
-                  />
-                )}
+              <span className="relative grid size-full place-items-center bg-white p-2.5">
                 <Image
                   src={logoUrl ?? undefined}
                   alt={airline ? `${airline} logo` : "Airline logo"}
@@ -332,7 +307,7 @@ export function MobileFlightToast({
                 />
               </span>
             ) : (
-              <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-[14px] border border-foreground/10 bg-background/45 text-foreground/45 shadow-sm">
+              <span className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border border-border bg-background text-subtle">
                 <Plane className="h-6 w-6" aria-hidden="true" />
               </span>
             )}
@@ -341,13 +316,13 @@ export function MobileFlightToast({
           {/* Callsign + identifiers */}
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-[18px] font-semibold leading-tight tracking-tight text-foreground">
+              <p className="truncate text-value font-medium leading-tight text-foreground">
                 {formatCallsign(flight.callsign)}
               </p>
               <PositionSourceBadge source={flight.positionSource} />
               <OnGroundBadge onGround={flight.onGround} />
             </div>
-            <p className="mt-1 truncate text-[11px] font-medium tracking-wide text-foreground/42 uppercase">
+            <p className="mt-1 truncate text-caption text-subtle">
               {flight.icao24}
               {flightNum ? ` · #${flightNum}` : ""}
             </p>
@@ -357,17 +332,17 @@ export function MobileFlightToast({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-foreground/[0.06] bg-foreground/[0.05] text-foreground/50 transition-colors active:bg-foreground/10"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors active:bg-accent"
             aria-label="Close aircraft details"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
         {/* Airline / model */}
-        <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+        <div className="mt-4 overflow-hidden rounded-lg border border-border bg-card">
           {airline && (
             <MobileGroupedRow icon={<Building2 className="h-3.5 w-3.5" />}>
-              <p className="truncate text-[13px] font-medium text-foreground/74">
+              <p className="truncate text-small font-medium text-muted-foreground">
                 Airline: {airline}
               </p>
             </MobileGroupedRow>
@@ -377,7 +352,7 @@ export function MobileFlightToast({
               icon={<Plane className="h-3.5 w-3.5" />}
               divided={Boolean(airline)}
             >
-              <p className="truncate text-[13px] text-foreground/58">
+              <p className="truncate text-small text-muted-foreground">
                 {airframeLine}
               </p>
             </MobileGroupedRow>
@@ -388,15 +363,11 @@ export function MobileFlightToast({
           hasEmergencyStatus(flight.emergencyStatus)) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {isMilitaryAircraft(flight.dbFlags) && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-amber-300/85">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-300/80" />
-                Military
-              </span>
+              <span className="text-label text-warning">Military</span>
             )}
             {hasEmergencyStatus(flight.emergencyStatus) && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-red-300/90">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                {flight.emergencyStatus}
+              <span className="text-label text-danger" role="status">
+                Emergency: {flight.emergencyStatus}
               </span>
             )}
           </div>
@@ -404,7 +375,7 @@ export function MobileFlightToast({
       </div>
 
       {/* Metrics 4-column grid */}
-      <div className="mx-4 mb-4 grid grid-cols-4 gap-1.5 rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="mx-4 mb-4 grid grid-cols-4 gap-1.5 rounded-lg border border-border bg-card p-1.5">
         <MiniMetric
           icon={<ArrowUp className="h-2.5 w-2.5" />}
           label="ALT"
@@ -435,11 +406,11 @@ export function MobileFlightToast({
       </div>
 
       {/* Info section: origin, heading + coords, squawk */}
-      <div className="mx-4 mb-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="mx-4 mb-4 overflow-hidden rounded-lg border border-border bg-card">
         {/* Registration country */}
         {flight.registrationCountry && (
           <MobileGroupedRow icon={<Globe className="h-3.5 w-3.5" />}>
-            <p className="text-[13px] text-foreground/65">
+            <p className="text-small text-muted-foreground">
               Registration country: {flight.registrationCountry}
             </p>
           </MobileGroupedRow>
@@ -461,13 +432,13 @@ export function MobileFlightToast({
             }
             divided={Boolean(flight.registrationCountry)}
           >
-            <p className="text-[13px] text-foreground/65">
+            <p className="text-small text-muted-foreground">
               Heading {cardinal}
               {flight.latitude !== null &&
                 flight.longitude !== null &&
                 Number.isFinite(flight.latitude) &&
                 Number.isFinite(flight.longitude) && (
-                  <span className="text-foreground/35">
+                  <span className="text-subtle">
                     {" "}
                     · {Math.abs(flight.latitude).toFixed(2)}°
                     {flight.latitude >= 0 ? "N" : "S"},{" "}
@@ -484,10 +455,10 @@ export function MobileFlightToast({
           <MobileGroupedRow
             icon={
               <span
-                className={`text-[9px] font-bold leading-none ${
+                className={`text-micro font-medium leading-none ${
                   isEmergencySquawk(flight.squawk)
-                    ? "text-red-300"
-                    : "text-foreground/45"
+                    ? "text-danger"
+                    : "text-subtle"
                 }`}
               >
                 SQ
@@ -496,15 +467,15 @@ export function MobileFlightToast({
             divided
           >
             <p
-              className={`font-mono text-[13px] tabular-nums ${
+              className={`font-mono text-small ${
                 isEmergencySquawk(flight.squawk)
-                  ? "text-red-300"
-                  : "text-foreground/65"
+                  ? "text-danger"
+                  : "text-muted-foreground"
               }`}
             >
               {flight.squawk}
               {isEmergencySquawk(flight.squawk) && (
-                <span className="ml-2 font-sans text-[11px] font-medium tracking-wide text-red-300/85">
+                <span className="ml-2 font-sans text-label text-danger">
                   {squawkLabel(flight.squawk)}
                 </span>
               )}
@@ -515,17 +486,17 @@ export function MobileFlightToast({
 
       {/* FPV button */}
       {onToggleFpv && (
-        <div className="mx-4 mb-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+        <div className="mx-4 mb-4 overflow-hidden rounded-lg border border-border bg-card">
           <button
             type="button"
             onClick={() => onToggleFpv(flight.icao24)}
             disabled={!canEnterFpv}
-            className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-foreground/[0.07] disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
           >
             <MobileIconCell>
               <Eye className="h-3.5 w-3.5" />
             </MobileIconCell>
-            <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground/72">
+            <span className="min-w-0 flex-1 text-small font-medium text-muted-foreground">
               First person view
             </span>
           </button>
@@ -537,7 +508,7 @@ export function MobileFlightToast({
 
 function MobileIconCell({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/36 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border bg-background text-subtle">
       {children}
     </span>
   );
@@ -556,7 +527,7 @@ function MobileGroupedRow({
     <div
       className={cn(
         "flex min-h-11 items-center gap-3 px-3.5 py-2.5",
-        divided && "border-t border-foreground/[0.06]",
+        divided && "border-t border-border",
       )}
     >
       <MobileIconCell>{icon}</MobileIconCell>
@@ -575,14 +546,14 @@ function MiniMetric({
   value: string;
 }) {
   return (
-    <div className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-[16px] border border-foreground/[0.055] bg-background/35 px-1.5 py-2">
-      <div className="flex items-center gap-1 text-foreground/38">
+    <div className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-md border border-border bg-background px-1.5 py-2">
+      <div className="flex items-center gap-1 text-subtle">
         {icon}
-        <span className="text-[8px] font-semibold tracking-wide uppercase">
+        <span className="text-micro">
           {label}
         </span>
       </div>
-      <p className="max-w-full text-center text-[11px] font-semibold leading-tight tabular-nums text-foreground/90 [overflow-wrap:anywhere]">
+      <p className="max-w-full text-center text-caption leading-tight text-foreground [overflow-wrap:anywhere]">
         {value}
       </p>
     </div>

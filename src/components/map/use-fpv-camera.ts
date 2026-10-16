@@ -3,16 +3,17 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import type maplibregl from "maplibre-gl";
 import {
-  FPV_DEFAULT_ALTITUDE_METERS,
   fpvCameraOptions,
-  normalizeBearing,
   setMapInteractionsEnabled,
+  type FpvCameraPosition,
 } from "./camera-controller-utils";
+import { normalizeBearing } from "./flight-interpolation";
 import type { FlightState } from "@/lib/opensky";
 import { ACTIVE_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
 
 const FPV_ENTER_DURATION_MS = 1_100;
-const FPV_BEARING_ALPHA = 0.18;
+/** Time for the camera heading to cover about 63% of a turn. */
+const FPV_BEARING_TIME_CONSTANT_MS = 170;
 const FPV_SKY_RESTORE_MS = 600;
 const EMPTY_PADDING = { top: 0, right: 0, bottom: 0, left: 0 } as const;
 const FPV_DARK_SKY: maplibregl.SkySpecification = {
@@ -32,45 +33,39 @@ const FPV_LIGHT_SKY: maplibregl.SkySpecification = {
   "atmosphere-blend": 0.9,
 };
 
-type FpvPosition = { lng: number; lat: number; alt: number; track: number };
+function fpvSky(): maplibregl.SkySpecification {
+  return document.documentElement.classList.contains("dark")
+    ? FPV_DARK_SKY
+    : FPV_LIGHT_SKY;
+}
 
+/**
+ * Flies the camera into the cockpit of the FPV aircraft and keeps it there.
+ *
+ * The effect is keyed on the aircraft id, not on its latest state, so a
+ * poll that misses the aircraft holds the last camera instead of leaving
+ * FPV. Entry waits for the first known position, which also covers deep
+ * links that open before the first poll.
+ */
 export function useFpvCamera(
   map: maplibregl.Map | null,
   isLoaded: boolean,
-  fpvFlight: FlightState | null,
+  fpvIcao24: string | null,
   fpvFlightRef: MutableRefObject<FlightState | null>,
-  fpvPosRef: MutableRefObject<MutableRefObject<FpvPosition | null> | undefined>,
+  fpvPosRef: MutableRefObject<
+    MutableRefObject<FpvCameraPosition | null> | undefined
+  >,
   isFpvActiveRef: MutableRefObject<boolean>,
 ) {
+  // The sky to restore after FPV. It is captured once per FPV session, so
+  // switching aircraft inside the restore delay keeps the original sky.
+  const savedSkyRef = useRef<{
+    sky: maplibregl.SkySpecification | undefined;
+  } | null>(null);
   const skyRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!map || !isLoaded) {
-      isFpvActiveRef.current = false;
-      return;
-    }
-
-    const fpv = fpvFlightRef.current;
-    if (!fpv || fpv.longitude == null || fpv.latitude == null) {
-      isFpvActiveRef.current = false;
-      return;
-    }
-
-    const fallbackBearing = map.getBearing();
-    const initialPosition = {
-      lng: fpv.longitude,
-      lat: fpv.latitude,
-      alt: Number.isFinite(fpv.baroAltitude)
-        ? fpv.baroAltitude!
-        : FPV_DEFAULT_ALTITUDE_METERS,
-      track: Number.isFinite(fpv.trueTrack) ? fpv.trueTrack! : null,
-    };
-    const initialCamera = fpvCameraOptions(
-      map,
-      initialPosition,
-      fallbackBearing,
-    );
-    if (!initialCamera) {
+    if (!map || !isLoaded || !fpvIcao24) {
       isFpvActiveRef.current = false;
       return;
     }
@@ -79,14 +74,14 @@ export function useFpvCamera(
       clearTimeout(skyRestoreTimerRef.current);
       skyRestoreTimerRef.current = null;
     }
-    const previousSky = map.getSky() as
-      | maplibregl.SkySpecification
-      | undefined;
-    map.setSky(
-      document.documentElement.classList.contains("dark")
-        ? FPV_DARK_SKY
-        : FPV_LIGHT_SKY,
-    );
+    savedSkyRef.current ??= { sky: map.getSky() };
+    map.setSky(fpvSky());
+    // A style change replaces the sky, so save the new style's sky instead.
+    const onStyleLoad = () => {
+      savedSkyRef.current = { sky: map.getSky() };
+      map.setSky(fpvSky());
+    };
+    map.on("style.load", onStyleLoad);
 
     isFpvActiveRef.current = true;
     map.stop();
@@ -95,147 +90,91 @@ export function useFpvCamera(
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const enterDuration = reduceMotion ? 0 : FPV_ENTER_DURATION_MS;
-
-    if (reduceMotion) {
-      map.jumpTo({ ...initialCamera, padding: EMPTY_PADDING });
-    } else {
-      map.flyTo({
-        ...initialCamera,
-        padding: EMPTY_PADDING,
-        duration: enterDuration,
-        essential: false,
-      });
-    }
-
     let frameId: number | null = null;
-    let startupTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastRenderedAt = 0;
-    let cameraBearing = normalizeBearing(
-      initialPosition.track ?? fallbackBearing,
-    );
+    let lastFrameAt = 0;
+    let enteredUntil: number | null = null;
+    let cameraBearing = normalizeBearing(map.getBearing());
 
-    const isPageActive = () =>
-      document.visibilityState === "visible" &&
-      (typeof document.hasFocus !== "function" || document.hasFocus());
-
-    function scheduleFrame() {
-      if (
-        frameId == null &&
-        startupTimer == null &&
-        isFpvActiveRef.current &&
-        isPageActive()
-      ) {
-        frameId = requestAnimationFrame(updateCamera);
-      }
-    }
-
-    function suspendFrames() {
-      if (frameId != null) cancelAnimationFrame(frameId);
-      frameId = null;
-      lastRenderedAt = 0;
-    }
-
-    function syncPageActivity() {
-      if (isPageActive()) {
-        scheduleFrame();
-      } else {
-        suspendFrames();
-      }
-    }
-
-    function updateCamera(now: number) {
-      frameId = null;
-      if (!isFpvActiveRef.current || !map) return;
-
-      if (!isPageActive()) {
-        lastRenderedAt = 0;
-        return;
-      }
-
-      if (!isFrameDue(lastRenderedAt, now, ACTIVE_FRAME_INTERVAL_MS)) {
-        scheduleFrame();
-        return;
-      }
-      lastRenderedAt = now;
-
-      const interpolated = fpvPosRef.current?.current ?? null;
+    const currentPosition = (): FpvCameraPosition | null => {
+      const interpolated = fpvPosRef.current?.current;
+      if (interpolated) return interpolated;
       const live = fpvFlightRef.current;
-      const lng = interpolated?.lng ?? live?.longitude ?? null;
-      const lat = interpolated?.lat ?? live?.latitude ?? null;
-      const altitude =
-        interpolated?.alt ??
-        live?.baroAltitude ??
-        FPV_DEFAULT_ALTITUDE_METERS;
-      const track = interpolated?.track ?? live?.trueTrack ?? null;
+      if (live?.longitude == null || live.latitude == null) return null;
+      return {
+        lng: live.longitude,
+        lat: live.latitude,
+        alt: live.baroAltitude,
+        track: live.trueTrack,
+      };
+    };
 
-      if (lng !== null && lat !== null) {
-        if (track !== null && Number.isFinite(track)) {
-          const bearingDelta = ((track - cameraBearing + 540) % 360) - 180;
-          cameraBearing = normalizeBearing(
-            cameraBearing + bearingDelta * FPV_BEARING_ALPHA,
-          );
-        }
-
-        const camera = fpvCameraOptions(
-          map,
-          { lng, lat, alt: altitude, track: cameraBearing },
-          cameraBearing,
-        );
-        if (camera) {
-          map.jumpTo({ ...camera, padding: EMPTY_PADDING });
-        }
+    const enter = (position: FpvCameraPosition, now: number) => {
+      if (position.track !== null) {
+        cameraBearing = normalizeBearing(position.track);
       }
+      const camera = fpvCameraOptions(map, position, cameraBearing);
+      if (!camera) return;
+      const duration = reduceMotion ? 0 : FPV_ENTER_DURATION_MS;
+      if (duration === 0) {
+        map.jumpTo({ ...camera, padding: EMPTY_PADDING });
+      } else {
+        map.flyTo({
+          ...camera,
+          padding: EMPTY_PADDING,
+          duration,
+          essential: false,
+        });
+      }
+      enteredUntil = now + duration;
+    };
 
-      scheduleFrame();
-    }
+    const follow = (position: FpvCameraPosition, elapsedMs: number) => {
+      if (position.track !== null) {
+        const delta = ((position.track - cameraBearing + 540) % 360) - 180;
+        const weight = 1 - Math.exp(-elapsedMs / FPV_BEARING_TIME_CONSTANT_MS);
+        cameraBearing = normalizeBearing(cameraBearing + delta * weight);
+      }
+      const camera = fpvCameraOptions(
+        map,
+        { ...position, track: cameraBearing },
+        cameraBearing,
+      );
+      if (camera) map.jumpTo({ ...camera, padding: EMPTY_PADDING });
+    };
 
-    document.addEventListener("visibilitychange", syncPageActivity);
-    window.addEventListener("blur", syncPageActivity);
-    window.addEventListener("focus", syncPageActivity);
-    window.addEventListener("pagehide", suspendFrames);
-    window.addEventListener("pageshow", syncPageActivity);
-    document.addEventListener("freeze", suspendFrames);
-    document.addEventListener("resume", syncPageActivity);
+    const onFrame = (now: number) => {
+      frameId = requestAnimationFrame(onFrame);
+      if (!isFrameDue(lastFrameAt, now, ACTIVE_FRAME_INTERVAL_MS)) return;
+      const elapsedMs = lastFrameAt > 0 ? now - lastFrameAt : 0;
+      lastFrameAt = now;
 
-    startupTimer = setTimeout(() => {
-      startupTimer = null;
-      scheduleFrame();
-    }, enterDuration);
+      const position = currentPosition();
+      if (!position) return;
+      if (enteredUntil === null) enter(position, now);
+      else if (now >= enteredUntil) follow(position, elapsedMs);
+    };
+    frameId = requestAnimationFrame(onFrame);
 
     return () => {
-      if (startupTimer) clearTimeout(startupTimer);
-      suspendFrames();
-      document.removeEventListener("visibilitychange", syncPageActivity);
-      window.removeEventListener("blur", syncPageActivity);
-      window.removeEventListener("focus", syncPageActivity);
-      window.removeEventListener("pagehide", suspendFrames);
-      window.removeEventListener("pageshow", syncPageActivity);
-      document.removeEventListener("freeze", suspendFrames);
-      document.removeEventListener("resume", syncPageActivity);
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      map.off("style.load", onStyleLoad);
       map.stop();
       setMapInteractionsEnabled(map, true);
       isFpvActiveRef.current = false;
+      // Wait for the exit transition before putting the sky back, unless
+      // another FPV session starts first and cancels this.
       skyRestoreTimerRef.current = setTimeout(() => {
+        skyRestoreTimerRef.current = null;
+        const saved = savedSkyRef.current;
+        savedSkyRef.current = null;
         try {
-          (
-            map as unknown as {
-              setSky: (sky?: maplibregl.SkySpecification) => unknown;
-            }
-          ).setSky(previousSky);
+          // Style.setSky accepts undefined to clear a sky the style never
+          // had; the Map typing omits that case.
+          map.setSky(saved?.sky as maplibregl.SkySpecification);
         } catch {
-          // The map may have been disposed while the exit transition finished.
-        } finally {
-          skyRestoreTimerRef.current = null;
+          // The map was removed during the delay.
         }
       }, FPV_SKY_RESTORE_MS);
     };
-  }, [
-    map,
-    isLoaded,
-    fpvFlight?.icao24,
-    fpvFlightRef,
-    fpvPosRef,
-    isFpvActiveRef,
-  ]);
+  }, [map, isLoaded, fpvIcao24, fpvFlightRef, fpvPosRef, isFpvActiveRef]);
 }

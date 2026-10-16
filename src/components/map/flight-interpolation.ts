@@ -48,7 +48,7 @@ export function getSafeInterpolationProgress(input: {
   return { rawT, tPos: Math.min(rawT, 1) };
 }
 
-function normalizeBearing(bearing: number): number {
+export function normalizeBearing(bearing: number): number {
   return ((bearing % 360) + 360) % 360;
 }
 

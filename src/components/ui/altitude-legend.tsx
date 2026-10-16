@@ -13,17 +13,12 @@ export function AltitudeLegend() {
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.6 }}
-      className="flex flex-col gap-2 rounded-xl border p-3 backdrop-blur-2xl"
-      style={{
-        borderColor: "rgb(var(--ui-fg) / 0.06)",
-        backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-      }}
+      className="flex flex-col gap-2 rounded-lg border p-3 border-border bg-background"
       role="img"
       aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}
     >
       <p
-        className="text-[10px] font-semibold tracking-widest uppercase"
-        style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
+        className="text-micro text-subtle"
       >
         Altitude
       </p>
@@ -39,8 +34,7 @@ export function AltitudeLegend() {
           {ticks.map((tick) => (
             <span
               key={tick}
-              className="text-[10px] font-medium"
-              style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
+              className="text-micro text-muted-foreground"
             >
               {formatAltitude(tick, settings.unitSystem)}
             </span>

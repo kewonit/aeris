@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Eye, Plane } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, Plane } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import type {
-  AircraftDetails,
-  NormalizedPhoto,
-} from "@/hooks/use-aircraft-photos";
-import type { FlightState } from "@/lib/opensky";
-import { isFiniteNumber } from "@/lib/opensky-parsing";
 import { useSettings, type UnitSystem } from "@/hooks/use-settings";
-import { headingToCardinal } from "@/lib/flight-utils";
-import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
 import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { useRouteInfo } from "@/hooks/use-route-info";
+import type { FlightState } from "@/lib/opensky";
+import { isFiniteNumber } from "@/lib/opensky-parsing";
+import { headingToCardinal } from "@/lib/flight-utils";
+import { lookupAirline } from "@/lib/airlines";
 import { formatAirportCode } from "@/lib/route-lookup";
 import {
   formatAltitude,
@@ -28,11 +24,10 @@ import {
   formatAircraftFreshness,
   hasEmergencyStatus,
   isMilitaryAircraft,
+  positionSourceLabel,
 } from "@/lib/aircraft-sidebar";
 import { AirlineLogo } from "@/components/ui/airline-logo";
-import { PositionSourceBadge } from "@/components/ui/flight-badges";
 import { HeroBanner } from "@/components/ui/hero-banner";
-import { cn } from "@/lib/utils";
 
 type FlightCardProps = {
   flight: FlightState;
@@ -41,314 +36,157 @@ type FlightCardProps = {
 
 export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
   const { settings } = useSettings();
+  const units = settings.unitSystem;
   const routeInfo = useRouteInfo(flight);
   const airline = lookupAirline(flight.callsign);
-  const {
-    photos,
-    aircraft: photoAircraft,
-    loading: photosLoading,
-  } = useAircraftPhotos(flight.icao24, flight.registration);
-
-  return (
-    <FlightCardContent
-      flight={flight}
-      airline={airline}
-      photoAircraft={photoAircraft}
-      heroPhoto={photos[0] ?? null}
-      photosLoading={photosLoading}
-      routeInfo={routeInfo}
-      unitSystem={settings.unitSystem}
-      showDebugData={settings.showDebugData}
-      onToggleFpv={onToggleFpv}
-    />
+  const { photos, aircraft: photoAircraft, loading: photosLoading } =
+    useAircraftPhotos(flight.icao24, flight.registration);
+  const details = buildAircraftSidebarViewModel(flight, airline, photoAircraft);
+  const freshness = useFreshness(
+    flight.provenance.observationTime ?? flight.provenance.responseTime,
   );
-}
-
-type FlightCardContentProps = {
-  flight: FlightState;
-  airline: string | null;
-  photoAircraft: AircraftDetails | null;
-  heroPhoto: NormalizedPhoto | null;
-  photosLoading: boolean;
-  routeInfo: FlightRouteInfo;
-  unitSystem: UnitSystem;
-  showDebugData: boolean;
-  onToggleFpv?: (icao24: string) => void;
-};
-
-function FlightCardContent({
-  flight,
-  airline,
-  photoAircraft,
-  heroPhoto,
-  photosLoading,
-  routeInfo,
-  unitSystem,
-  showDebugData,
-  onToggleFpv,
-}: FlightCardContentProps) {
-  const details = buildAircraftSidebarViewModel(
-    flight,
-    airline,
-    photoAircraft,
-  );
-  const updatedAt =
-    flight.provenance.observationTime ?? flight.provenance.responseTime;
-  const freshness = useFreshness(updatedAt);
   const sources = formatAircraftDataSources(
     flight.provenance.contributingSources,
   );
-  const flightNumber = details.airline
-    ? parseFlightNumber(flight.callsign)
-    : null;
-  const heading = flight.trueTrack;
-  const cardinal = heading !== null ? headingToCardinal(heading) : null;
-  const verticalRate = flight.verticalRate ?? flight.geomRate ?? null;
-  const canEnterFpv =
-    flight.longitude !== null &&
-    flight.latitude !== null &&
-    !flight.onGround;
+
   const identity =
     cleanText(flight.callsign) ??
     details.registration ??
     flight.icao24.toUpperCase();
-  const statusItems = [
-    flight.onGround ? "On ground" : "Airborne",
+  const meta = [
+    flight.icao24.toUpperCase(),
+    details.registration,
+    details.typeCode,
     isMilitaryAircraft(flight.dbFlags) ? "Military" : null,
-    hasEmergencyStatus(flight.emergencyStatus)
-      ? flight.emergencyStatus
-      : null,
-  ].filter((value): value is string => Boolean(value));
-  const primaryFields = [
-    hasPosition(flight)
-      ? {
-          label: "Position",
-          value: formatPosition(flight.latitude, flight.longitude),
-        }
-      : null,
-    isFiniteNumber(flight.baroAltitude)
-      ? {
-          label: "Altitude",
-          value: formatAltitude(flight.baroAltitude, unitSystem),
-        }
-      : null,
-    isFiniteNumber(flight.velocity)
-      ? {
-          label: "Speed",
-          value: formatSpeed(flight.velocity, unitSystem),
-        }
-      : null,
-    { label: "Status", value: statusItems.join(", ") },
-  ].filter((field): field is { label: string; value: string } => field !== null);
+  ].filter(Boolean);
+  const heading = isFiniteNumber(flight.trueTrack) ? flight.trueTrack : null;
+  const verticalRate = flight.verticalRate ?? flight.geomRate ?? null;
+  const canEnterFpv =
+    isFiniteNumber(flight.longitude) &&
+    isFiniteNumber(flight.latitude) &&
+    !flight.onGround;
 
   return (
-    <div
-      className="aeris-sidebar-scroll h-full overflow-y-auto overscroll-contain bg-transparent text-foreground [scrollbar-width:thin]"
-    >
+    <div className="h-full overflow-y-auto overscroll-contain pb-6 [scrollbar-width:thin]">
       <HeroBanner
-        photo={heroPhoto}
+        photo={photos[0] ?? null}
         loading={photosLoading}
         alt={`${identity} aircraft`}
-        variant="sidebar"
       />
 
-      <div className="px-4 pb-6 pt-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "aeris-airline-mark flex shrink-0 items-center justify-center border border-foreground/[0.08] bg-foreground/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-              "h-14 w-14 rounded-[17px]",
-            )}
-          >
-            {airline ? (
-              <span
-                className={cn(
-                  "flex items-center justify-center overflow-hidden border border-black/5 bg-white/95 shadow-sm",
-              "h-12 w-12 rounded-[14px]",
-                )}
-              >
-                <AirlineLogo
-                  callsign={flight.callsign}
-                  airlineName={airline}
-                  size={36}
-                  className="rounded-none bg-transparent"
-                />
-              </span>
-            ) : (
-              <Plane
-                className="h-7 w-7 text-foreground/45"
-                aria-hidden="true"
-              />
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <h3 className="truncate text-[19px] font-semibold leading-tight tracking-tight">
-                {identity}
-              </h3>
-              <PositionSourceBadge source={flight.positionSource} />
-            </div>
-            <p className="mt-1 flex min-w-0 items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground/45">
-              <span className="truncate">ICAO {flight.icao24}</span>
-              {flightNumber && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="shrink-0">Flight {flightNumber}</span>
-                </>
-              )}
-            </p>
+      <div className="px-6">
+        <header className="flex min-h-16 items-center gap-3.5 py-5">
+          <AirlineMark callsign={flight.callsign} airline={airline} />
+          <div className="min-w-0">
+            <h2 className="truncate text-title text-foreground">{identity}</h2>
             {details.airline && (
-              <p className="mt-1 truncate text-[12px] text-foreground/62">
+              <p className="truncate text-small text-muted-foreground">
                 {details.airline}
               </p>
             )}
+            <p className="mt-0.5 truncate font-mono text-micro text-subtle">
+              {meta.join(" · ")}
+            </p>
           </div>
+        </header>
 
-        </div>
+        {hasEmergencyStatus(flight.emergencyStatus) && (
+          <p className="mb-4 text-small text-danger" role="status">
+            Emergency: {flight.emergencyStatus}
+          </p>
+        )}
 
         <RouteSummary routeInfo={routeInfo} />
 
-        <dl className="aeris-sidebar-group mt-3 grid grid-cols-2 overflow-hidden rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035]">
-          {primaryFields.map((field, index) => (
-            <PrimaryField
-              key={field.label}
-              label={field.label}
-              value={field.value}
-              dividedTop={index >= 2}
-              dividedRight={index % 2 === 0 && index < primaryFields.length - 1}
-            />
-          ))}
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5">
+          <Fact label="Altitude" value={formatAltitude(flight.baroAltitude, units)} />
+          <Fact label="Speed" value={formatSpeed(flight.velocity, units)} />
+          <Fact
+            label="Heading"
+            value={
+              heading === null
+                ? "-"
+                : `${Math.round(heading)}° ${headingToCardinal(heading)}`
+            }
+          />
+          <Fact
+            label="Vertical speed"
+            value={formatVerticalSpeed(verticalRate, units)}
+          />
         </dl>
-
-        <div className="aeris-sidebar-meta border-b border-foreground/10 px-0.5 py-3 text-xs text-foreground/65">
-          <p>{freshness}</p>
-          {sources.length > 0 && (
-            <p className="mt-1">Sources: {sources.join(", ")}</p>
-          )}
-        </div>
-
-        <details
-          key={flight.icao24}
-          className="aeris-sidebar-disclosure group border-b border-foreground/10"
-        >
-          <summary className="flex min-h-11 cursor-pointer touch-manipulation list-none items-center justify-between py-3 text-sm font-medium marker:content-none active:bg-foreground/[0.045]">
-            Details
-            <ChevronDown className="h-4 w-4 text-foreground/45 transition-transform group-open:rotate-180" />
-          </summary>
-          <dl className="pb-3">
-            <DetailRow label="Registration" value={details.registration} />
-            <DetailRow
-              label="Registration country"
-              value={joinValues(
-                details.registrationCountryFlag,
-                details.registrationCountry,
-              )}
-            />
-            <DetailRow label="Manufacturer" value={details.manufacturer} />
-            <DetailRow label="Model" value={details.model} />
-            <DetailRow label="Type code" value={details.typeCode} />
-            <DetailRow
-              label="Heading"
-              value={
-                isFiniteNumber(heading)
-                  ? `${Math.round(heading)}° ${cardinal}`
-                  : null
-              }
-            />
-            <DetailRow
-              label="Vertical speed"
-              value={
-                isFiniteNumber(verticalRate)
-                  ? formatVerticalSpeed(verticalRate, unitSystem)
-                  : null
-              }
-            />
-            <DetailRow
-              label="GPS altitude"
-              value={
-                isFiniteNumber(flight.geoAltitude)
-                  ? formatAltitude(flight.geoAltitude, unitSystem)
-                  : null
-              }
-            />
-            <DetailRow
-              label="True airspeed"
-              value={
-                isFiniteNumber(flight.tas)
-                  ? formatSpeedFromKnots(flight.tas, unitSystem)
-                  : null
-              }
-            />
-            <DetailRow label="Squawk" value={cleanText(flight.squawk)} />
-            <DetailRow
-              label="Position method"
-              value={formatPositionMethod(flight.positionSource)}
-            />
-            {showDebugData && (
-              <>
-                <DetailRow
-                  label="NACp"
-                  value={formatDebugNumber(flight.debugData?.nacP)}
-                />
-                <DetailRow
-                  label="NIC"
-                  value={formatDebugNumber(flight.debugData?.nic)}
-                />
-                <DetailRow
-                  label="ADS-B version"
-                  value={formatDebugNumber(flight.debugData?.version)}
-                />
-              </>
-            )}
-          </dl>
-        </details>
 
         {onToggleFpv && (
           <button
             type="button"
             onClick={() => onToggleFpv(flight.icao24)}
             disabled={!canEnterFpv}
-            className="aeris-sidebar-primary-action mt-3 flex min-h-10 w-full touch-manipulation items-center gap-2 text-left text-sm font-semibold text-foreground/70 [transition-duration:100ms] [transition-property:background-color,color,scale] hover:text-foreground active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-border text-small text-tint transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-subtle"
           >
-            <Eye className="h-4 w-4" aria-hidden="true" />
             First person view
+            <ChevronRight className="size-4" aria-hidden="true" />
           </button>
         )}
+
+        <AircraftDetails
+          key={flight.icao24}
+          flight={flight}
+          details={details}
+          units={units}
+          showDebugData={settings.showDebugData}
+        />
+
+        <p className="mt-4 text-micro text-subtle">
+          {[freshness, sources.join(", ")].filter(Boolean).join(" · ")}
+        </p>
       </div>
     </div>
   );
 }
 
+function AirlineMark({
+  callsign,
+  airline,
+}: {
+  callsign: string | null;
+  airline: string | null;
+}) {
+  if (!airline) {
+    return (
+      <span className="grid size-14 shrink-0 place-items-center rounded-lg bg-card text-subtle">
+        <Plane className="size-6" aria-hidden="true" />
+      </span>
+    );
+  }
+  return (
+    <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-white">
+      <AirlineLogo
+        callsign={callsign}
+        airlineName={airline}
+        size={40}
+        className="rounded-none bg-transparent"
+      />
+    </span>
+  );
+}
+
 export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
-  if (!routeInfo.available) return null;
-
-  const origin = routeInfo.origin ? formatAirportCode(routeInfo.origin) : null;
-  const destination = routeInfo.destination
-    ? formatAirportCode(routeInfo.destination)
-    : null;
-
+  if (!routeInfo.available || !routeInfo.origin || !routeInfo.destination) {
+    return null;
+  }
+  const origin = formatAirportCode(routeInfo.origin);
+  const destination = formatAirportCode(routeInfo.destination);
   if (!origin || !destination) return null;
 
   return (
-    <section className="aeris-sidebar-group mt-4 rounded-[14px] border border-foreground/[0.07] bg-foreground/[0.035] px-4 py-3.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">
-        Reported route
-      </p>
-      <div className="mt-2 flex items-center gap-3">
-        <RouteEndpoint
-          code={origin}
-          municipality={routeInfo.origin?.municipality}
-        />
-        <div className="flex shrink-0 items-center gap-1.5 text-foreground/38">
-          <span className="h-px w-4 bg-foreground/12" aria-hidden="true" />
-          <Plane className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="h-px w-4 bg-foreground/12" aria-hidden="true" />
-        </div>
+    <section aria-label="Reported route" className="border-t border-border py-4">
+      <p className="text-label text-subtle">Reported route</p>
+      <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <RouteEndpoint code={origin} place={routeInfo.origin.municipality} />
+        <ArrowRight className="size-4 text-subtle" aria-label="to" />
         <RouteEndpoint
           code={destination}
-          municipality={routeInfo.destination?.municipality}
-          align="right"
+          place={routeInfo.destination.municipality}
+          alignEnd
         />
       </div>
     </section>
@@ -357,112 +195,124 @@ export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
 
 function RouteEndpoint({
   code,
-  municipality,
-  align = "left",
+  place,
+  alignEnd = false,
 }: {
   code: string;
-  municipality?: string | null;
-  align?: "left" | "right";
+  place: string;
+  alignEnd?: boolean;
 }) {
   return (
-    <div className={cn("min-w-0 flex-1", align === "right" && "text-right")}>
-      <p className="text-[17px] font-semibold tracking-tight text-foreground/92">
-        {code}
-      </p>
-      {municipality && (
-        <p className="mt-0.5 truncate text-[11px] font-medium text-foreground/45">
-          {municipality}
-        </p>
-      )}
+    <div className={alignEnd ? "min-w-0 text-right" : "min-w-0"}>
+      <p className="text-value text-foreground">{code}</p>
+      {place && <p className="truncate text-label text-subtle">{place}</p>}
     </div>
   );
 }
 
-function PrimaryField({
-  label,
-  value,
-  dividedTop,
-  dividedRight,
-}: {
-  label: string;
-  value: string;
-  dividedTop: boolean;
-  dividedRight: boolean;
-}) {
+/** A fact with its unit set smaller, as in "31,000 ft". */
+function Fact({ label, value }: { label: string; value: string }) {
+  const unitStart = value.lastIndexOf(" ");
+  const amount = unitStart > 0 ? value.slice(0, unitStart) : value;
+  const unit = unitStart > 0 ? value.slice(unitStart + 1) : null;
   return (
-    <div
-      className={cn(
-        "min-h-[70px] min-w-0 px-3.5 py-3",
-        dividedTop && "border-t border-foreground/[0.06]",
-        dividedRight && "border-r border-foreground/[0.06]",
-      )}
-    >
-      <dt className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">
-        {label}
-      </dt>
-      <dd className="mt-1 truncate text-sm font-medium tabular-nums text-foreground/90">
-        {value}
+    <div className="min-w-0">
+      <dt className="text-label text-subtle">{label}</dt>
+      <dd className="mt-1 truncate text-value text-foreground">
+        {amount}
+        {unit && <span className="ml-1 text-label text-subtle">{unit}</span>}
       </dd>
     </div>
   );
 }
 
-function DetailRow({
-  label,
-  value,
+function AircraftDetails({
+  flight,
+  details,
+  units,
+  showDebugData,
 }: {
-  label: string;
-  value: string | null;
+  flight: FlightState;
+  details: ReturnType<typeof buildAircraftSidebarViewModel>;
+  units: UnitSystem;
+  showDebugData: boolean;
 }) {
-  if (!value) return null;
+  const country = [details.registrationCountryFlag, details.registrationCountry]
+    .filter(Boolean)
+    .join(" ");
+  const rows: [string, string | null][] = [
+    ["Registration", details.registration],
+    ["Registered in", country || null],
+    ["Manufacturer", details.manufacturer],
+    ["Model", details.model],
+    ["Type code", details.typeCode],
+    ["Status", flight.onGround ? "On ground" : "Airborne"],
+    [
+      "Position",
+      isFiniteNumber(flight.latitude) && isFiniteNumber(flight.longitude)
+        ? formatPosition(flight.latitude, flight.longitude)
+        : null,
+    ],
+    [
+      "GPS altitude",
+      isFiniteNumber(flight.geoAltitude)
+        ? formatAltitude(flight.geoAltitude, units)
+        : null,
+    ],
+    [
+      "True airspeed",
+      isFiniteNumber(flight.tas) ? formatSpeedFromKnots(flight.tas, units) : null,
+    ],
+    ["Squawk", cleanText(flight.squawk)],
+    ["Position method", positionSourceLabel(flight.positionSource)],
+  ];
+  if (showDebugData) {
+    rows.push(
+      ["NACp", formatDebugNumber(flight.debugData?.nacP)],
+      ["NIC", formatDebugNumber(flight.debugData?.nic)],
+      ["ADS-B version", formatDebugNumber(flight.debugData?.version)],
+    );
+  }
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 border-t border-foreground/[0.06] py-2 text-xs first:border-t-0">
-      <dt className="text-foreground/50">{label}</dt>
-      <dd className="min-w-0 text-right text-foreground/80">{value}</dd>
-    </div>
+    <details className="group border-b border-border">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-small text-foreground marker:content-none">
+        Details
+        <ChevronDown
+          className="size-4 text-subtle transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <dl className="pb-3">
+        {rows
+          .filter((row): row is [string, string] => Boolean(row[1]))
+          .map(([label, value]) => (
+            <div
+              key={label}
+              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 py-1.5 text-small"
+            >
+              <dt className="text-subtle">{label}</dt>
+              <dd className="min-w-0 text-right text-foreground">{value}</dd>
+            </div>
+          ))}
+      </dl>
+    </details>
   );
 }
 
 function useFreshness(updatedAt: number): string {
   const [now, setNow] = useState(updatedAt);
-
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
-
   return formatAircraftFreshness(updatedAt, now);
-}
-
-function hasPosition(
-  flight: FlightState,
-): flight is FlightState & { latitude: number; longitude: number } {
-  return isFiniteNumber(flight.latitude) && isFiniteNumber(flight.longitude);
 }
 
 function formatPosition(latitude: number, longitude: number): string {
   const latitudeDirection = latitude >= 0 ? "N" : "S";
   const longitudeDirection = longitude >= 0 ? "E" : "W";
-  return `${Math.abs(latitude).toFixed(2)}°${latitudeDirection}, ${Math.abs(longitude).toFixed(2)}°${longitudeDirection}`;
-}
-
-function formatPositionMethod(
-  source: FlightState["positionSource"],
-): string | null {
-  if (!source) return null;
-  if (source === "adsb") return "ADS-B";
-  return source.toUpperCase();
-}
-
-function joinValues(
-  first: string | null,
-  second: string | null,
-): string | null {
-  const values = [first, second].filter(
-    (value): value is string => Boolean(value),
-  );
-  return values.length > 0 ? values.join(" ") : null;
+  return `${Math.abs(latitude).toFixed(2)}° ${latitudeDirection}, ${Math.abs(longitude).toFixed(2)}° ${longitudeDirection}`;
 }
 
 function formatDebugNumber(value: number | null | undefined): string | null {

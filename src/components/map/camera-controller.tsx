@@ -5,6 +5,7 @@ import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
   projectLngLatElevationPixelDelta,
+  type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
@@ -36,7 +37,6 @@ const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
 
-type FpvPosition = { lng: number; lat: number; alt: number; track: number };
 
 /**
  * Returns the map center that puts the aircraft as drawn (lifted by its
@@ -72,14 +72,17 @@ function drawnAircraftCenter(
 export function CameraController({
   city,
   followFlight = null,
+  fpvIcao24 = null,
   fpvFlight = null,
   fpvPositionRef,
   panelCamera,
 }: {
   city: City;
   followFlight?: FlightState | null;
+  /** The FPV selection. Stays set while a poll misses the aircraft. */
+  fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
-  fpvPositionRef?: MutableRefObject<FpvPosition | null>;
+  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
   panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
@@ -103,7 +106,7 @@ export function CameraController({
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
-  const fpvKey = fpvFlight?.icao24 ?? null;
+  const fpvKey = fpvIcao24;
 
   useEffect(() => {
     fpvPosRef.current = fpvPositionRef;
@@ -359,11 +362,10 @@ export function CameraController({
     followFlight?.trueTrack,
   ]);
 
-  // FPV camera hook
   useFpvCamera(
     map,
     isLoaded,
-    fpvFlight,
+    fpvIcao24,
     fpvFlightRef,
     fpvPosRef,
     isFpvActiveRef,

@@ -709,10 +709,8 @@ export function FlightLayers({
             fpvPosOut.current = {
               lng: fpvF.longitude!,
               lat: fpvF.latitude!,
-              alt: Number.isFinite(fpvF.baroAltitude)
-                ? fpvF.baroAltitude!
-                : 5000,
-              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack! : 0,
+              alt: Number.isFinite(fpvF.baroAltitude) ? fpvF.baroAltitude : null,
+              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack : null,
             };
           } else {
             fpvPosOut.current = null;
@@ -733,17 +731,6 @@ export function FlightLayers({
         // ── Globe dots ────────────────────────────────────────────────
         updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
-        // FPV uses this loop for the interpolated aircraft position only.
-        // Map icons, models, trails, selection effects, and shadows turn the
-        // forward view back into a cluttered overview and can intersect the
-        // camera at the tracked aircraft's location.
-        if (fpvId) {
-          overlay.setProps({ layers: [] });
-          continueAnimating = true;
-          scheduleFrame();
-          return;
-        }
-
         if (!layersVisible) {
           overlay.setProps({ layers: [] });
           continueAnimating = false;
@@ -751,7 +738,17 @@ export function FlightLayers({
         }
 
         const altColors = showAltColorsRef.current;
-        const visibleFlights = interpolated;
+        // In FPV the camera sits inside this aircraft, so its own icon,
+        // model, shadow, and trail would block the view. Other traffic stays.
+        const visibleFlights = fpvId
+          ? interpolated.filter((flight) => flight.icao24 !== fpvId)
+          : interpolated;
+        const visibleTrails = fpvId
+          ? currentTrails.filter((trail) => trail.icao24 !== fpvId)
+          : currentTrails;
+        const modelFlights = fpvId
+          ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
+          : currentFlights;
 
         // Pitch/bank change slowly - recompute at ~10fps regardless of
         // animation frame rate. Values are retained in pitchMapRef/bankMapRef
@@ -819,9 +816,9 @@ export function FlightLayers({
         if (layersVisible && showTrailsRef.current) {
           layers.push(
             ...buildTrailLayers({
-            interpolated,
+            interpolated: visibleFlights,
             interpolatedMap: interpolatedMapRef.current,
-            currentTrails,
+            currentTrails: visibleTrails,
             trailMap: trailMapRef.current,
             selectedIcao24: selectedIcao24Ref.current,
             selectedEnvelope: selectedEnvelopeRef.current,
@@ -851,6 +848,7 @@ export function FlightLayers({
         // constructing 4 IconLayer objects + deck.gl diffing per frame.
         if (
           layersVisible &&
+          !fpvId &&
           (selectedIcao24Ref.current || prevSelectedRef.current)
         ) {
           const pulseResult = buildSelectionPulseLayers({
@@ -892,7 +890,7 @@ export function FlightLayers({
           // 3D: one ScenegraphLayer per model type
           layers.push(
             ...buildAircraftModelLayers({
-              rawFlights: currentFlights,
+              rawFlights: modelFlights,
               interpolatedMap: interpolatedMapRef.current,
               frameCounter: visualFrameRef.current,
               dataVersion: dataVersionRef.current,

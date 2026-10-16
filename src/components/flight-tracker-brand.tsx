@@ -8,7 +8,7 @@ import {
 
 export function Brand() {
   return (
-    <h1 className="text-sm font-semibold tracking-wide text-foreground/70">
+    <h1 className="text-small font-medium text-muted-foreground">
       aeris
     </h1>
   );
@@ -21,33 +21,14 @@ export function GitHubBadge({ stars }: { stars: number | null }) {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Open GitHub repository"
-      className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-      style={{
-        borderWidth: 1,
-        borderColor: "rgb(var(--ui-fg) / 0.06)",
-        backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-        color: "rgb(var(--ui-fg) / 0.5)",
-      }}
-      title={
-        stars != null
-          ? `GitHub · ${formatStarCount(stars)} stars`
-          : "Open GitHub repository"
-      }
+      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-label text-muted-foreground transition-colors hover:text-foreground"
     >
-      <Github className="h-4 w-4" />
+      <Github className="size-4" aria-hidden="true" />
       {stars != null && (
-        <span
-          className="pointer-events-none absolute -bottom-1 -right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
-          style={{
-            backgroundColor: "rgb(var(--ui-bg) / 0.95)",
-            border: "1px solid rgb(var(--ui-fg) / 0.1)",
-            color: "rgb(var(--ui-fg) / 0.55)",
-          }}
-        >
-          <span className="flex items-center gap-0.5">
-            <Star className="h-2 w-2" />
-            {formatStarCount(stars)}
-          </span>
+        <span className="flex items-center gap-0.5">
+          <Star className="size-3" aria-hidden="true" />
+          {formatStarCount(stars)}
+          <span className="sr-only">stars</span>
         </span>
       )}
     </a>

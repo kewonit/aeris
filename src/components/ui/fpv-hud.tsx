@@ -21,7 +21,6 @@ import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
-  loadedAirlineLogoUrls,
   trackAirlineLogoLoaded,
   markAirlineLogoFailed,
   wasAirlineLogoRecentlyFailed,
@@ -41,7 +40,8 @@ import {
 } from "@/lib/unit-formatters";
 
 type FpvHudProps = {
-  flight: FlightState;
+  /** Null while a poll misses the aircraft; the HUD keeps its last reading. */
+  flight: FlightState | null;
   onExit: () => void;
 };
 
@@ -67,6 +67,9 @@ function CompassRibbon({ heading }: { heading: number | null }) {
 
     const isDark = document.documentElement.classList.contains("dark");
     const fg = isDark ? "255,255,255" : "0,0,0";
+    const styles = getComputedStyle(document.documentElement);
+    const tint = styles.getPropertyValue("--tint").trim();
+    const font = getComputedStyle(document.body).fontFamily;
 
     const dpr = window.devicePixelRatio ?? 1;
     const w = 260;
@@ -103,7 +106,7 @@ function CompassRibbon({ heading }: { heading: number | null }) {
 
         const label = COMPASS_LABELS[normDeg] ?? `${normDeg}`;
         ctx.fillStyle = `rgba(${fg},0.55)`;
-        ctx.font = "bold 9px Inter, system-ui, sans-serif";
+        ctx.font = `540 10px ${font}`;
         ctx.textAlign = "center";
         ctx.fillText(label, x, h - 14);
       } else if (isMinor) {
@@ -123,7 +126,7 @@ function CompassRibbon({ heading }: { heading: number | null }) {
       }
     }
 
-    ctx.fillStyle = "rgba(56, 189, 248, 0.8)";
+    ctx.fillStyle = tint;
     ctx.beginPath();
     ctx.moveTo(cx - 4, 0);
     ctx.lineTo(cx + 4, 0);
@@ -131,12 +134,14 @@ function CompassRibbon({ heading }: { heading: number | null }) {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+    ctx.strokeStyle = tint;
+    ctx.globalAlpha = 0.5;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, 6);
     ctx.lineTo(cx, h);
     ctx.stroke();
+    ctx.globalAlpha = 1;
   }, [heading]);
 
   return (
@@ -151,7 +156,21 @@ function CompassRibbon({ heading }: { heading: number | null }) {
   );
 }
 
-export function FpvHud({ flight, onExit }: FpvHudProps) {
+export function FpvHud({ flight: liveFlight, onExit }: FpvHudProps) {
+  const [lastFlight, setLastFlight] = useState(liveFlight);
+  if (liveFlight && liveFlight !== lastFlight) setLastFlight(liveFlight);
+  const flight = liveFlight ?? lastFlight;
+  if (!flight) return null;
+  return <FpvInstruments flight={flight} onExit={onExit} />;
+}
+
+function FpvInstruments({
+  flight,
+  onExit,
+}: {
+  flight: FlightState;
+  onExit: () => void;
+}) {
   const { settings } = useSettings();
   const altDisplay = altitudeValueFromMeters(
     flight.baroAltitude,
@@ -222,9 +241,6 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
   const [logoIndexByAirline, setLogoIndexByAirline] = useState<
     Record<string, number>
   >({});
-  const [logoLoadedByKey, setLogoLoadedByKey] = useState<
-    Record<string, boolean>
-  >({});
   const [genericFailedByAirline, setGenericFailedByAirline] = useState<
     Record<string, boolean>
   >({});
@@ -240,11 +256,6 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
     return idx;
   }, [baseLogoIndex, logoCandidates]);
   const logoUrl = logoCandidates[resolvedLogoIndex] ?? null;
-  const logoLoadKey = `${airlineKey}:${resolvedLogoIndex}`;
-  const logoLoaded =
-    logoUrl !== null &&
-    (loadedAirlineLogoUrls.has(logoUrl) ||
-      (logoLoadedByKey[logoLoadKey] ?? false));
   const genericLogoFailed = genericFailedByAirline[airlineKey] ?? false;
   const genericLogoUrl = "/airline-logos/envoy-air.png";
   const vsIcon =
@@ -267,33 +278,27 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
       className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
     >
       <div
-        className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-xl border border-foreground/8 bg-background/70 pb-1 shadow-[0_8px_32px_rgba(0,0,0,0.3)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-3xl md:w-max"
+        className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-lg border border-border bg-background pb-1 shadow-lift md:w-max"
         role="status"
         aria-live="polite"
         aria-label="First person view flight instruments"
       >
-        <div className="w-full border-b border-foreground/6 px-2 pt-1.5 pb-0.5 sm:px-2.5">
+        <div className="w-full border-b border-border px-2 pt-1.5 pb-0.5 sm:px-2.5">
           <div
-            className="mx-auto w-fit overflow-hidden rounded-md"
+            className="mx-auto w-fit overflow-hidden rounded-sm"
             style={{ width: 260 }}
           >
             <CompassRibbon heading={heading} />
           </div>
-          <p className="mt-0 text-center text-[10px] font-bold tabular-nums text-sky-400/70">
+          <p className="mt-0 text-center font-mono text-micro text-tint">
             {heading !== null ? `${Math.round(heading)}° ${cardinal}` : "-"}
           </p>
         </div>
 
         <div className="flex w-full items-stretch">
-          <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-foreground/6 px-2 py-1.5 sm:px-3 sm:py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 border-r border-border px-2 py-1.5 sm:px-3 sm:py-2">
             {logoUrl ? (
-              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 shadow-sm ring-1 ring-foreground/20">
-                {!logoLoaded && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 animate-pulse bg-linear-to-br from-white/85 via-neutral-200/65 to-white/80"
-                  />
-                )}
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-border">
                 <Image
                   src={logoUrl}
                   alt={airline ? `${airline} logo` : "Airline logo"}
@@ -301,13 +306,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                   sizes="32px"
                   className="relative object-contain p-1"
                   unoptimized
-                  onLoad={() => {
-                    if (logoUrl) trackAirlineLogoLoaded(logoUrl);
-                    setLogoLoadedByKey((current) => ({
-                      ...current,
-                      [logoLoadKey]: true,
-                    }));
-                  }}
+                  onLoad={() => trackAirlineLogoLoaded(logoUrl)}
                   onError={() => {
                     if (logoUrl) markAirlineLogoFailed(logoUrl);
                     if (resolvedLogoIndex + 1 < logoCandidates.length) {
@@ -325,10 +324,10 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 />
               </span>
             ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-foreground/10">
-                <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white/95 ring-1 ring-foreground/15">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card ring-1 ring-border">
+                <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-border">
                   {genericLogoFailed ? (
-                    <span className="text-[12px] font-semibold text-background/25">
+                    <span className="text-label text-background">
                       -
                     </span>
                   ) : (
@@ -352,78 +351,72 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-1">
-                <p className="truncate text-[12px] font-bold tracking-wide text-foreground/90 sm:text-[13px]">
+                <p className="truncate text-label text-foreground sm:text-small">
                   {formatCallsign(flight.callsign)}
                 </p>
                 {isMilitary ? (
-                  <span className="flex shrink-0 items-center gap-0.5 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-px text-[7px] font-bold uppercase tracking-wider text-amber-400">
+                  <span className="flex shrink-0 items-center gap-0.5 text-micro text-warning">
                     <Shield className="h-2 w-2" />
                     MIL
                   </span>
                 ) : null}
                 {emergencyStatus ? (
-                  <span className="flex shrink-0 items-center gap-0.5 rounded border border-red-500/40 bg-red-500/15 px-1 py-px text-[7px] font-bold uppercase tracking-wider text-red-400 animate-pulse">
+                  <span className="flex shrink-0 items-center gap-0.5 text-micro text-danger">
                     <AlertTriangle className="h-2 w-2" />
                     {emergencyStatus}
                   </span>
                 ) : null}
               </div>
-              <p className="truncate text-[9px] font-medium uppercase tracking-widest text-foreground/30">
+              <p className="truncate text-micro text-subtle">
                 {airline ?? flight.registrationCountry}
               </p>
             </div>
           </div>
 
-          <div className="flex min-w-12 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-foreground/30">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-border px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-subtle">
               <ArrowUp className="h-2 w-2" />
-              <span className="text-[8px] font-semibold uppercase tracking-wider">
+              <span className="text-micro">
                 ALT
               </span>
             </div>
-            <p className="text-[13px] font-bold tabular-nums text-foreground/90">
+            <p className="text-small font-medium text-foreground">
                {altDisplay !== null ? altDisplay.toLocaleString() : "-"}
              </p>
-            <p className="text-[8px] font-medium text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</p>
+            <p className="text-micro text-subtle">{altitudeUnitLabel(settings.unitSystem)}</p>
           </div>
 
-          <div className="flex min-w-11 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-foreground/30">
+          <div className="flex min-w-11 flex-col items-center justify-center border-r border-border px-2.5 py-1.5 sm:min-w-14 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-subtle">
               <Gauge className="h-2 w-2" />
-              <span className="text-[8px] font-semibold uppercase tracking-wider">
+              <span className="text-micro">
                 SPD
               </span>
             </div>
-            <p className="text-[13px] font-bold tabular-nums text-foreground/90">
+            <p className="text-small font-medium text-foreground">
                {speedDisplay ?? "-"}
              </p>
-            <p className="text-[8px] font-medium text-foreground/25">{speedUnitLabel(settings.unitSystem)}</p>
+            <p className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</p>
           </div>
 
-          <div className="flex min-w-12 flex-col items-center justify-center border-r border-foreground/6 px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
-            <div className="flex items-center gap-0.5 text-foreground/30">
+          <div className="flex min-w-12 flex-col items-center justify-center border-r border-border px-2.5 py-1.5 sm:min-w-16 sm:px-2.5">
+            <div className="flex items-center gap-0.5 text-subtle">
               {vsIcon ?? <Minus className="h-2 w-2" />}
-              <span className="text-[8px] font-semibold uppercase tracking-wider">
+              <span className="text-micro">
                 V/S
               </span>
             </div>
             <p
-              className={`text-[13px] font-bold tabular-nums ${
-                 vs !== null && vs > 0.5
-                   ? "text-emerald-400/80"
-                 : vs !== null && vs < -0.5
-                    ? "text-amber-400/80"
-                    : "text-foreground/90"
-              }`}
+              className="text-small font-medium text-foreground"
             >
                {vsDisplay.text ?? "-"}
              </p>
-            <p className="text-[8px] font-medium text-foreground/25">{verticalSpeedUnitLabel(settings.unitSystem)}</p>
+            <p className="text-micro text-subtle">{verticalSpeedUnitLabel(settings.unitSystem)}</p>
           </div>
 
           <button
             onClick={onExit}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-foreground/40 transition-colors hover:bg-foreground/5 hover:text-foreground/60 sm:px-2.5"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-subtle transition-colors hover:bg-card hover:text-muted-foreground sm:px-2.5"
             aria-label="Exit first person view"
             title="Exit FPV (Esc)"
           >
@@ -433,62 +426,62 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
 
         {/* ── Avionics strip (IAS, Mach, Wind, OAT) ──────────────── */}
         {hasAvionicsRow && (
-          <div className="flex w-full items-center justify-center gap-3 border-t border-foreground/6 px-3 py-1 sm:gap-4">
+          <div className="flex w-full items-center justify-center gap-3 border-t border-border px-3 py-1 sm:gap-4">
             {iasDisplay !== null && (
-              <span className="flex items-center gap-1 text-[10px] tabular-nums text-foreground/50">
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-1 text-micro text-muted-foreground">
+                <span className="text-micro text-subtle">
                   IAS
                 </span>
-                <span className="font-bold text-foreground/70">
+                <span className="font-medium text-muted-foreground">
                   {iasDisplay}
                 </span>
-                <span className="text-[8px] text-foreground/25">{speedUnitLabel(settings.unitSystem)}</span>
+                <span className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {machNum !== null && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <span className="text-micro text-subtle">
                   M
                 </span>
-                <span className="font-bold text-foreground/70">
+                <span className="font-medium text-muted-foreground">
                   {machNum.toFixed(2)}
                 </span>
               </span>
             )}
             {windDir !== null && windSpd !== null && (
-              <span className="flex items-center gap-1 text-[10px] tabular-nums text-foreground/50">
-                <Wind className="h-2.5 w-2.5 text-foreground/30" />
-                <span className="font-bold text-foreground/70">
+              <span className="flex items-center gap-1 text-micro text-muted-foreground">
+                <Wind className="h-2.5 w-2.5 text-subtle" />
+                <span className="font-medium text-muted-foreground">
                   {Math.round(windDir)}°
                 </span>
-                <span className="text-foreground/60">/</span>
-                <span className="font-bold text-foreground/70">
+                <span className="text-muted-foreground">/</span>
+                <span className="font-medium text-muted-foreground">
                   {Math.round(windSpd)}
                 </span>
-                <span className="text-[8px] text-foreground/25">{speedUnitLabel(settings.unitSystem)}</span>
+                <span className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {oatC !== null && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <Thermometer className="h-2.5 w-2.5 text-foreground/30" />
-                <span className="font-bold text-foreground/70">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <Thermometer className="h-2.5 w-2.5 text-subtle" />
+                <span className="font-medium text-muted-foreground">
                   {formatTemperatureC(oatC, settings.unitSystem)}
                 </span>
               </span>
             )}
             {(rollDeg !== null && Math.abs(rollDeg) > 1) ||
             (trackRateVal !== null && Math.abs(trackRateVal) >= 0.1) ? (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <span className="text-micro text-subtle">
                   BANK
                 </span>
-                <span className="font-bold text-foreground/70">
+                <span className="font-medium text-muted-foreground">
                   {rollDeg !== null && Math.abs(rollDeg) > 1
                     ? `${rollDeg > 0 ? "R" : "L"}${Math.round(Math.abs(rollDeg))}°`
                     : "-"}
                   {trackRateVal !== null &&
                     Math.abs(trackRateVal) >= 0.1 && (
-                      <span className="ml-1 text-foreground/50">
+                      <span className="ml-1 text-muted-foreground">
                         {trackRateVal > 0 ? "R" : "L"}
                         {Math.abs(trackRateVal).toFixed(1)}°/s
                       </span>
@@ -497,11 +490,11 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
               </span>
             ) : null}
             {qnhValue !== null && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <span className="text-micro text-subtle">
                   QNH
                 </span>
-                <span className="font-bold text-foreground/70">
+                <span className="font-medium text-muted-foreground">
                   {formatPressureHpa(qnhValue, settings.unitSystem)}
                 </span>
               </span>
@@ -511,15 +504,13 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
 
         {/* ── Autopilot / selected altitude strip ────────────────── */}
         {hasAutopilotRow && (
-          <div className="flex w-full items-center justify-center gap-2 border-t border-foreground/6 px-3 py-1">
+          <div className="flex w-full items-center justify-center gap-2 border-t border-border px-3 py-1">
             {navModes !== null &&
               navModes.map((mode) => (
                 <span
                   key={mode}
-                  className={`rounded px-1.5 py-px text-[8px] font-bold uppercase tracking-wider ${
-                    mode === "tcas"
-                      ? "border border-amber-500/30 bg-amber-500/10 text-amber-400"
-                      : "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400/90"
+                  className={`font-mono text-micro ${
+                    mode === "tcas" ? "text-warning" : "text-tint"
                   }`}
                 >
                   {mode === "autopilot"
@@ -530,36 +521,36 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 </span>
               ))}
             {selAlt !== null && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <Target className="h-2.5 w-2.5 text-cyan-400/50" />
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <Target className="h-2.5 w-2.5 text-subtle" />
+                <span className="text-micro text-subtle">
                   MCP
                 </span>
-                <span className="font-bold text-cyan-400/70">
+                <span className="text-tint">
                   {selAlt.toLocaleString()}
                 </span>
-                <span className="text-[8px] text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</span>
+                <span className="text-micro text-subtle">{altitudeUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {fmsAlt !== null && fmsAlt !== selAlt && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <Target className="h-2.5 w-2.5 text-cyan-400/50" />
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <Target className="h-2.5 w-2.5 text-subtle" />
+                <span className="text-micro text-subtle">
                   FMS
                 </span>
-                <span className="font-bold text-cyan-400/70">
+                <span className="text-tint">
                   {fmsAlt.toLocaleString()}
                 </span>
-                <span className="text-[8px] text-foreground/25">{altitudeUnitLabel(settings.unitSystem)}</span>
+                <span className="text-micro text-subtle">{altitudeUnitLabel(settings.unitSystem)}</span>
               </span>
             )}
             {selHdg !== null && (
-              <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-foreground/50">
-                <Navigation className="h-2.5 w-2.5 text-cyan-400/50" />
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-foreground/30">
+              <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
+                <Navigation className="h-2.5 w-2.5 text-subtle" />
+                <span className="text-micro text-subtle">
                   HDG
                 </span>
-                <span className="font-bold text-cyan-400/70">{selHdg}°</span>
+                <span className="text-tint">{selHdg}°</span>
               </span>
             )}
           </div>
