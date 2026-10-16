@@ -32,6 +32,14 @@ test("settings normalization clamps trail thickness and length to whole minutes"
   assert.equal(settings.trailMinutes, 1);
 });
 
+test("trails default to three minutes and stop at ten", () => {
+  assert.equal(DEFAULT_SETTINGS.trailMinutes, 3);
+  assert.equal(
+    normalizeSettings({ ...DEFAULT_SETTINGS, trailMinutes: 30 }).trailMinutes,
+    10,
+  );
+});
+
 test("settings migration lowers only legacy trail defaults", () => {
   const migratedLegacy = migrateSettingsDefaults(
     { ...DEFAULT_SETTINGS, trailThickness: 1.3 },
