@@ -8,6 +8,7 @@
 import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
+import { registrationCountry } from "./registration-country";
 
 // ── Unit Conversion Constants ──────────────────────────────────────────
 
@@ -19,88 +20,6 @@ const KT_TO_MS = 0.514444;
 
 /** Feet per minute → Meters per second */
 const FTPM_TO_MS = 0.00508;
-
-// ── Registration → Country Lookup ──────────────────────────────────────
-//
-// readsb doesn't provide originCountry. We derive it from the
-// registration prefix. Sorted by prefix length descending so longer
-// prefixes match first (e.g. "EC-" before "E").
-
-const REG_PREFIX_TO_COUNTRY: readonly [string, string][] = [
-  // 3-char prefixes
-  ["EC-", "Spain"],
-  ["HB-", "Switzerland"],
-  ["OE-", "Austria"],
-  ["PH-", "Netherlands"],
-  ["SE-", "Sweden"],
-  ["OY-", "Denmark"],
-  ["OH-", "Finland"],
-  ["LN-", "Norway"],
-  ["9V-", "Singapore"],
-  ["9M-", "Malaysia"],
-  ["HS-", "Thailand"],
-  ["PK-", "Indonesia"],
-  ["VH-", "Australia"],
-  ["ZK-", "New Zealand"],
-  ["PP-", "Brazil"],
-  ["PT-", "Brazil"],
-  ["XA-", "Mexico"],
-  ["LV-", "Argentina"],
-  ["A6-", "UAE"],
-  ["A7-", "Qatar"],
-  ["HZ-", "Saudi Arabia"],
-  ["4X-", "Israel"],
-  ["TC-", "Turkey"],
-  ["SU-", "Egypt"],
-  ["5N-", "Nigeria"],
-  ["ZS-", "South Africa"],
-  ["AP-", "Pakistan"],
-  ["EI-", "Ireland"],
-  ["OO-", "Belgium"],
-  ["CS-", "Portugal"],
-  ["SX-", "Greece"],
-  ["SP-", "Poland"],
-  ["OK-", "Czech Republic"],
-  ["HA-", "Hungary"],
-  ["YR-", "Romania"],
-  ["UR-", "Ukraine"],
-  ["RA-", "Russia"],
-  ["VP-", "Bermuda"],
-  // 2-char prefixes
-  ["C-", "Canada"],
-  ["G-", "United Kingdom"],
-  ["D-", "Germany"],
-  ["F-", "France"],
-  ["I-", "Italy"],
-  ["B-", "China"],
-  // 2-char prefixes (no hyphen)
-  ["JA", "Japan"],
-  ["HL", "South Korea"],
-  ["VT", "India"],
-  // 1-char prefix
-  ["N", "United States"],
-];
-
-// Pre-build Maps by prefix length for O(1) lookup instead of O(42) linear scan
-const REG_BY_3 = new Map<string, string>();
-const REG_BY_2 = new Map<string, string>();
-const REG_BY_1 = new Map<string, string>();
-for (const [prefix, country] of REG_PREFIX_TO_COUNTRY) {
-  if (prefix.length >= 3) REG_BY_3.set(prefix, country);
-  else if (prefix.length === 2) REG_BY_2.set(prefix, country);
-  else REG_BY_1.set(prefix, country);
-}
-
-function countryFromRegistration(reg: unknown): string {
-  if (typeof reg !== "string" || !reg) return "Unknown";
-  const upper = reg.toUpperCase();
-  return (
-    REG_BY_3.get(upper.slice(0, 3)) ??
-    REG_BY_2.get(upper.slice(0, 2)) ??
-    REG_BY_1.get(upper[0]) ??
-    "Unknown"
-  );
-}
 
 // ── Category Conversion ────────────────────────────────────────────────
 //
@@ -215,7 +134,7 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
   return {
     icao24: raw.hex.toLowerCase(),
     callsign: optionalTrimmedString(raw.flight),
-    originCountry: countryFromRegistration(raw.r),
+    originCountry: registrationCountry(raw.r)?.name ?? "Unknown",
     longitude: raw.lon,
     latitude: raw.lat,
     baroAltitude: altitude,
