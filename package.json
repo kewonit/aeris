@@ -1,6 +1,6 @@
 {
   "name": "aeris",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "description": "Real-time 3D flight tracking - altitude-aware, visually stunning.",
   "author": "kewonit",
   "license": "AGPL-3.0",
@@ -43,7 +43,6 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-wrap-balancer": "^1.1.1",
-    "recharts": "3.8.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
   },

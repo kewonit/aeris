@@ -368,6 +368,8 @@ export function FlightLayers({
     if (!map || !isLoaded) return;
 
     function onMapClick(e: maplibregl.MapMouseEvent) {
+      if (e.defaultPrevented) return;
+
       const overlay = overlayRef.current;
       if (!overlay) {
         onClick(null);

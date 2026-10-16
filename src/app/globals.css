@@ -133,13 +133,10 @@
 
 @layer components {
   .aeris-map-surface {
-    transform: translate3d(0, 0, 0);
-    transform-origin: left center;
+    clip-path: inset(0 0 0 0 round 0 0 0 0);
     box-shadow: none;
-    transition-property: transform, border-radius;
-    transition-duration: 660ms;
-    transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
-    will-change: transform;
+    transition: clip-path 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
+    will-change: clip-path;
     contain: layout paint style;
     isolation: isolate;
     backface-visibility: hidden;
@@ -148,24 +145,20 @@
 
   .aeris-left-chrome {
     transform: translate3d(0, 0, 0);
-    transition: transform 640ms cubic-bezier(0.19, 1, 0.22, 1);
+    transition: transform 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
     will-change: transform;
   }
 
   .aeris-map-centered-chrome {
     transform: translate3d(-50%, 0, 0);
-    transition: transform 640ms cubic-bezier(0.19, 1, 0.22, 1);
+    transition: transform 480ms cubic-bezier(0.333333, 1, 0.666667, 1);
     will-change: transform;
   }
 
   @media (min-width: 640px) {
     .aeris-map-surface[data-panel-open="true"] {
-      border-top-left-radius: 2.5rem;
-      border-bottom-left-radius: 2.5rem;
-      transform: translate3d(
-        calc(var(--aeris-left-sidebar-width) - 4px),
-        0,
-        0
+      clip-path: inset(
+        0 0 0 var(--aeris-left-sidebar-inset) round 2.5rem 0 0 2.5rem
       );
     }
 
