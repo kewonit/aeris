@@ -7,6 +7,7 @@ import { useClock } from "./use-clock";
 type Props = {
   elevationFt: number | null;
   unitSystem: UnitSystem;
+  runways: number;
   arrivals: number;
   departures: number;
   overflights: number;
@@ -19,18 +20,19 @@ type Props = {
 export function AirportFacts({
   elevationFt,
   unitSystem,
+  runways,
   arrivals,
   departures,
   overflights,
   onShowTraffic,
   activeTraffic,
 }: Props) {
-  const { utc, local } = useClock();
+  const { utc } = useClock();
   return (
     <dl className="grid grid-cols-3 gap-x-4 gap-y-5 border-y border-border py-5">
       <Fact label="Elevation" value={formatElevation(elevationFt, unitSystem)} />
       <Fact label="UTC" value={utc} mono />
-      <Fact label="Local" value={local} mono />
+      <Fact label="Runways" value={runways > 0 ? String(runways) : "-"} />
       <TrafficFact
         label="Arrivals"
         count={arrivals}

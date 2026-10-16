@@ -155,6 +155,7 @@ export function AirportInfoCard({
           <AirportFacts
             elevationFt={airport.elevation_ft}
             unitSystem={settings.unitSystem}
+            runways={runways.length}
             arrivals={board.arrivals.length}
             departures={board.departures.length}
             overflights={board.overflights.length}
