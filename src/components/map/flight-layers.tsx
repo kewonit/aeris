@@ -492,9 +492,9 @@ export function FlightLayers({
       180, 220, 255, 200,
     ];
 
-    const isPageActive = () =>
-      document.visibilityState === "visible" &&
-      (typeof document.hasFocus !== "function" || document.hasFocus());
+    // Only a hidden page pauses the map. A visible but unfocused window, such
+    // as one on a second screen, keeps animating.
+    const isPageActive = () => document.visibilityState === "visible";
     let lastRenderedAt = 0;
     let needsRender = true;
     let continueAnimating = true;
@@ -554,8 +554,6 @@ export function FlightLayers({
     }
     pageActiveRef.current = isPageActive();
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("blur", markPageInactive);
-    window.addEventListener("focus", handlePageResume);
     window.addEventListener("pagehide", markPageInactive);
     window.addEventListener("pageshow", handlePageResume);
     document.addEventListener("freeze", markPageInactive);
@@ -566,9 +564,7 @@ export function FlightLayers({
     function buildAndPushLayers(now: number) {
       animFrameRef.current = 0;
 
-      // Skip rendering while the tab is hidden or the window is blurred.
-      // Focus can be lost while the page remains visible, so checking only
-      // document.hidden still lets stale trail/aircraft frames churn.
+      // Skip rendering while the tab is hidden.
       if (!isPageActive()) {
         if (pageActiveRef.current) {
           markPageInactive();
@@ -948,8 +944,6 @@ export function FlightLayers({
         animFrameRef.current = 0;
       }
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("blur", markPageInactive);
-      window.removeEventListener("focus", handlePageResume);
       window.removeEventListener("pagehide", markPageInactive);
       window.removeEventListener("pageshow", handlePageResume);
       document.removeEventListener("freeze", markPageInactive);
