@@ -19,10 +19,10 @@ export type FlightRouteInfo = {
   available: boolean;
   /** The lookup finished without a route that fits. */
   unavailable: boolean;
+  /** Providers reported a route, but it does not fit the position. */
+  mismatch: boolean;
   source: RouteSource | null;
 };
-
-const LOOKUP_TIMEOUT_MS = 15_000;
 
 /**
  * Looks up the routes providers report for the flight's callsign, then
@@ -40,18 +40,11 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
   useEffect(() => {
     if (!callsign) return;
     let cancelled = false;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
-
-    void lookupReportedRoutes(callsign, controller.signal).then((routes) => {
-      clearTimeout(timeout);
+    void lookupReportedRoutes(callsign).then((routes) => {
       if (!cancelled) setLookup({ callsign, routes });
     });
-
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
-      controller.abort();
     };
   }, [callsign]);
 
@@ -63,6 +56,7 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
           longitude: flight.longitude,
           altitudeMeters: flight.baroAltitude,
           onGround: flight.onGround,
+          verticalRate: flight.verticalRate ?? flight.geomRate ?? null,
         }
       : null;
   const route = routes ? selectReportedRoute(routes, position) : null;
@@ -73,6 +67,7 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
     loading: callsign !== null && routes === null,
     available: route !== null,
     unavailable: routes !== null && route === null,
+    mismatch: routes !== null && routes.length > 0 && route === null,
     source: route?.source ?? null,
   };
 }

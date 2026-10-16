@@ -92,3 +92,39 @@ test("keeps the first route when there is no position to check", () => {
   assert.equal(selectReportedRoute([first, route(SFO, JFK)], null), first);
   assert.equal(selectReportedRoute([], null), null);
 });
+
+test("rejects a route the aircraft is flying in reverse", () => {
+  // Climbing east out of SFO with a reported JFK to SFO route.
+  const departingSfo = {
+    latitude: 37.9,
+    longitude: -121.6,
+    altitudeMeters: 6_000,
+    onGround: false,
+    verticalRate: 8,
+  };
+  assert.equal(isRouteConsistentWithPosition(route(JFK, SFO), departingSfo), false);
+  assert.equal(isRouteConsistentWithPosition(route(SFO, JFK), departingSfo), true);
+});
+
+test("keeps the route for a go-around close to the destination", () => {
+  const goAround = {
+    latitude: 37.7,
+    longitude: -122.3,
+    altitudeMeters: 600,
+    onGround: false,
+    verticalRate: 10,
+  };
+  assert.equal(isRouteConsistentWithPosition(route(JFK, SFO), goAround), true);
+});
+
+test("keeps the route through a step climb at cruise", () => {
+  // Past halfway on SFO to JFK, climbing from FL350 to FL370.
+  const stepClimb = {
+    latitude: 40.8,
+    longitude: -85,
+    altitudeMeters: 10_900,
+    onGround: false,
+    verticalRate: 6,
+  };
+  assert.equal(isRouteConsistentWithPosition(route(SFO, JFK), stepClimb), true);
+});

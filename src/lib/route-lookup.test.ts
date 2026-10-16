@@ -115,3 +115,18 @@ test("skips invalid callsigns without a request", async () => {
     },
   );
 });
+
+test("concurrent lookups share one request that no caller can cancel", async () => {
+  let resolveResponse: (response: Response) => void = () => {};
+  await withFetch(
+    () => new Promise<Response>((resolve) => (resolveResponse = resolve)),
+    async (urls) => {
+      const first = lookupReportedRoutes("UAL123");
+      const second = lookupReportedRoutes("UAL123");
+      resolveResponse(Response.json({ ...route, routes: [route] }));
+      assert.deepEqual(await first, [route]);
+      assert.deepEqual(await second, [route]);
+      assert.equal(urls.length, 1);
+    },
+  );
+});

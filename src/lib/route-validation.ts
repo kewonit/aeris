@@ -3,12 +3,18 @@ import type { ReportedRoute, RouteAirport } from "./route-lookup";
 
 const EARTH_RADIUS_NM = 3_440.065;
 const LOW_ALTITUDE_METERS = 5_000 * 0.3048;
+/** About 800 ft per minute: a clear climb, not level-flight noise. */
+const CLIMBING_METERS_PER_SECOND = 4;
+/** Below this, a climb is a departure rather than a step climb at cruise. */
+const DEPARTURE_CLIMB_CEILING_METERS = 20_000 * 0.3048;
 
 export type RoutePosition = {
   latitude: number;
   longitude: number;
   altitudeMeters: number | null;
   onGround: boolean;
+  /** Vertical rate in m/s, positive when climbing. */
+  verticalRate?: number | null;
 };
 
 type Point = { latitude: number; longitude: number };
@@ -76,7 +82,8 @@ export function distanceToRouteCorridorNm(
  * Rejects a reported route only when the aircraft clearly is not flying it:
  * far outside a corridor that widens with route length (airways around
  * closed airspace can bend a long route by hundreds of miles), parked at a
- * different airport, or low and nowhere near either end.
+ * different airport, low and nowhere near either end, or climbing out
+ * near the destination, which means the route runs the other way.
  */
 export function isRouteConsistentWithPosition(
   route: Pick<ReportedRoute, "origin" | "destination">,
@@ -93,6 +100,21 @@ export function isRouteConsistentWithPosition(
     distanceNm(position, destination),
   );
   if (position.onGround) return nearestEndpointNm <= 15;
+
+  const toDestinationNm = distanceNm(position, destination);
+  const departing =
+    position.verticalRate != null &&
+    position.verticalRate > CLIMBING_METERS_PER_SECOND &&
+    position.altitudeMeters !== null &&
+    position.altitudeMeters < DEPARTURE_CLIMB_CEILING_METERS;
+  // Past 20 nm so a go-around at the destination still counts as arriving.
+  if (
+    departing &&
+    toDestinationNm > 20 &&
+    toDestinationNm < distanceNm(position, origin)
+  ) {
+    return false;
+  }
   if (
     position.altitudeMeters !== null &&
     position.altitudeMeters < LOW_ALTITUDE_METERS

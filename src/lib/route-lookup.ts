@@ -30,6 +30,7 @@ export type RouteLookupResponse = ReportedRoute & { routes: ReportedRoute[] };
 
 export const ROUTE_HIT_TTL_MS = 15 * 60_000;
 export const ROUTE_MISS_TTL_MS = 2 * 60_000;
+const LOOKUP_TIMEOUT_MS = 15_000;
 const CALLSIGN_PATTERN = /^[A-Z0-9]{1,8}$/;
 const ROUTE_SOURCES: readonly RouteSource[] = ["adsbdb", "hexdb", "opensky"];
 
@@ -71,10 +72,14 @@ function isReportedRoute(value: unknown, callsign: string): value is ReportedRou
   );
 }
 
-/** Fetches every provider's reported route for a callsign. */
+/**
+ * Fetches every provider's reported route for a callsign. Concurrent
+ * callers share one request, so it carries its own timeout instead of any
+ * caller's abort signal; a caller that no longer needs the answer simply
+ * ignores it.
+ */
 export async function lookupReportedRoutes(
   rawCallsign: string,
-  signal?: AbortSignal,
 ): Promise<ReportedRoute[]> {
   const callsign = normalizeRouteCallsign(rawCallsign);
   if (!callsign) return [];
@@ -87,7 +92,10 @@ export async function lookupReportedRoutes(
     try {
       const response = await fetch(
         `/api/routes?callsign=${encodeURIComponent(callsign)}`,
-        { headers: { Accept: "application/json" }, signal },
+        {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+        },
       );
       if (response.status === 404) {
         cache.set(callsign, [], ROUTE_MISS_TTL_MS);
