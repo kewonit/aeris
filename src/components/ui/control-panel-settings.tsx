@@ -622,7 +622,7 @@ export const CHANGELOG: {
       {
         title: "Open aviation data updates",
         description:
-          "Added deterministic refresh and validation commands for open aircraft, registration, and airport data. Scheduled source checks can open a weekly review PR when generated data changes.",
+          "Added deterministic refresh and validation commands for open aircraft and registration data. Scheduled source checks can open a weekly review PR when generated data changes.",
       },
       {
         title: "Aircraft data and route trust",

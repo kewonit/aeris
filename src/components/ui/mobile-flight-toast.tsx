@@ -22,7 +22,12 @@ import {
   PositionSourceBadge,
 } from "@/components/ui/flight-badges";
 import { useSettings } from "@/hooks/use-settings";
-import type { FlightState, FlightTrack } from "@/lib/opensky";
+import type { FlightState } from "@/lib/opensky";
+import {
+  buildAircraftSidebarViewModel,
+  hasEmergencyStatus,
+  isMilitaryAircraft,
+} from "@/lib/aircraft-sidebar";
 import {
   formatCallsign,
   headingToCardinal,
@@ -45,10 +50,8 @@ import { cn } from "@/lib/utils";
 
 type MobileFlightToastProps = {
   flight: FlightState;
-  track?: FlightTrack | null;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
-  isFpvActive?: boolean;
 };
 
 const EMERGENCY_SQUAWKS = new Set(["7500", "7600", "7700"]);
@@ -69,14 +72,6 @@ function squawkLabel(squawk: string): string {
     default:
       return "";
   }
-}
-
-function isMilitary(dbFlags?: number | null): boolean {
-  return ((dbFlags ?? 0) & 1) !== 0;
-}
-
-function isEmergencyStatus(status?: string | null): boolean {
-  return !!status && status !== "none";
 }
 
 type PhotoCarouselHeroProps = {
@@ -224,12 +219,26 @@ export function MobileFlightToast({
   flight,
   onClose,
   onToggleFpv,
-  isFpvActive = false,
 }: MobileFlightToastProps) {
   const { settings } = useSettings();
   const airline = lookupAirline(flight.callsign);
   const flightNum = airline ? parseFlightNumber(flight.callsign) : null;
-  const company = airline;
+
+  // Aircraft photos and details.
+  const {
+    photos,
+    aircraft: aircraftDetails,
+    loading: photosLoading,
+  } = useAircraftPhotos(flight.icao24, flight.registration);
+  const photoKey = photos.map((p) => p.id).join(",");
+  const details = buildAircraftSidebarViewModel(flight, airline, aircraftDetails);
+  const airframeLine = [
+    details.registration,
+    details.model ?? details.typeCode,
+    details.manufacturer,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
@@ -264,13 +273,6 @@ export function MobileFlightToast({
     (logoLoadedByKey[logoLoadKey] ?? false);
   const showLogo = Boolean(logoUrl);
 
-  // Aircraft photos and details.
-  const {
-    photos,
-    aircraft: aircraftDetails,
-    loading: photosLoading,
-  } = useAircraftPhotos(flight.icao24, flight.registration);
-  const photoKey = photos.map((p) => p.id).join(",");
 
   return (
     <div className="scrollbar-none relative max-h-[calc(100dvh-1rem)] w-full overflow-y-auto overflow-x-hidden rounded-[28px] border border-foreground/[0.08] bg-background/82 shadow-[0_22px_70px_rgba(0,0,0,0.44)] overscroll-contain backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72">
@@ -299,7 +301,7 @@ export function MobileFlightToast({
                 )}
                 <Image
                   src={logoUrl ?? undefined}
-                  alt={company ? `${company} logo` : "Airline logo"}
+                  alt={airline ? `${airline} logo` : "Airline logo"}
                   width={40}
                   height={40}
                   className={`relative h-9 w-9 object-contain transition-opacity duration-200 ${
@@ -363,53 +365,35 @@ export function MobileFlightToast({
         </div>
         {/* Airline / model */}
         <div className="mt-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-          {company && (
+          {airline && (
             <MobileGroupedRow icon={<Building2 className="h-3.5 w-3.5" />}>
               <p className="truncate text-[13px] font-medium text-foreground/74">
-                Airline: {company}
+                Airline: {airline}
               </p>
             </MobileGroupedRow>
           )}
-          {(flight.registration ||
-            aircraftDetails?.registration ||
-            flight.model ||
-            flight.typeDescription ||
-            aircraftDetails?.type ||
-            flight.typeCode ||
-            aircraftDetails?.typeCode ||
-            flight.manufacturer ||
-            aircraftDetails?.manufacturer) && (
-              <MobileGroupedRow
-                icon={<Plane className="h-3.5 w-3.5" />}
-                divided={Boolean(company)}
-              >
-                <p className="truncate text-[13px] text-foreground/58">
-                  {[
-                    flight.registration ?? aircraftDetails?.registration,
-                    flight.model ??
-                      flight.typeDescription ??
-                      aircraftDetails?.type ??
-                      flight.typeCode ??
-                      aircraftDetails?.typeCode,
-                    flight.manufacturer ?? aircraftDetails?.manufacturer,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              </MobileGroupedRow>
-            )}
+          {airframeLine && (
+            <MobileGroupedRow
+              icon={<Plane className="h-3.5 w-3.5" />}
+              divided={Boolean(airline)}
+            >
+              <p className="truncate text-[13px] text-foreground/58">
+                {airframeLine}
+              </p>
+            </MobileGroupedRow>
+          )}
         </div>
         {/* Military / Emergency indicators */}
-        {(isMilitary(flight.dbFlags) ||
-          isEmergencyStatus(flight.emergencyStatus)) && (
+        {(isMilitaryAircraft(flight.dbFlags) ||
+          hasEmergencyStatus(flight.emergencyStatus)) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {isMilitary(flight.dbFlags) && (
+            {isMilitaryAircraft(flight.dbFlags) && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-amber-300/85">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-300/80" />
                 Military
               </span>
             )}
-            {isEmergencyStatus(flight.emergencyStatus) && (
+            {hasEmergencyStatus(flight.emergencyStatus) && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-red-300/90">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
                 {flight.emergencyStatus}
@@ -534,30 +518,15 @@ export function MobileFlightToast({
         <div className="mx-4 mb-4 overflow-hidden rounded-[22px] border border-foreground/[0.07] bg-foreground/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
           <button
             type="button"
-            onClick={() =>
-              (isFpvActive || canEnterFpv) && onToggleFpv(flight.icao24)
-            }
-            disabled={!isFpvActive && !canEnterFpv}
-            className={`flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-foreground/[0.07] ${
-              !isFpvActive && !canEnterFpv
-                ? "cursor-not-allowed opacity-30"
-                : ""
-            }`}
-            aria-label={
-              isFpvActive ? "Exit first person view" : "Enter first person view"
-            }
+            onClick={() => onToggleFpv(flight.icao24)}
+            disabled={!canEnterFpv}
+            className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-foreground/[0.07] disabled:cursor-not-allowed disabled:opacity-30"
           >
-            <MobileIconCell active={isFpvActive}>
-              <Eye
-                className={`h-3.5 w-3.5 ${isFpvActive ? "text-emerald-300" : ""}`}
-              />
+            <MobileIconCell>
+              <Eye className="h-3.5 w-3.5" />
             </MobileIconCell>
-            <span
-              className={`min-w-0 flex-1 text-[13px] font-medium ${
-                isFpvActive ? "text-emerald-300/90" : "text-foreground/72"
-              }`}
-            >
-              {isFpvActive ? "Exit FPV" : "First Person View"}
+            <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground/72">
+              First person view
             </span>
           </button>
         </div>
@@ -566,21 +535,9 @@ export function MobileFlightToast({
   );
 }
 
-function MobileIconCell({
-  children,
-  active = false,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-}) {
+function MobileIconCell({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className={cn(
-        "flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/36 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]",
-        active &&
-          "border-emerald-300/20 bg-emerald-400/10 text-emerald-300/90",
-      )}
-    >
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-foreground/[0.06] bg-background/45 text-foreground/36 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
       {children}
     </span>
   );

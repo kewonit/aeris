@@ -4,6 +4,8 @@ import {
   buildAircraftSidebarViewModel,
   formatAircraftDataSources,
   formatAircraftFreshness,
+  hasEmergencyStatus,
+  isMilitaryAircraft,
 } from "./aircraft-sidebar";
 
 test("sidebar data does not infer an operator from a country", () => {
@@ -26,7 +28,7 @@ test("sidebar data does not infer an operator from a country", () => {
   assert.doesNotMatch(JSON.stringify(view), /operator/i);
 });
 
-test("sidebar data includes only supported identity fields", () => {
+test("feed and registry fields win over photo metadata", () => {
   const view = buildAircraftSidebarViewModel(
     {
       manufacturer: "Boeing",
@@ -39,10 +41,10 @@ test("sidebar data includes only supported identity fields", () => {
     },
     "Delta Air Lines",
     {
-      manufacturer: "Unsupported fallback",
-      registration: "Unsupported fallback",
-      type: "Unsupported fallback",
-      typeCode: "Unsupported fallback",
+      manufacturer: "Photo manufacturer",
+      registration: "Photo registration",
+      type: "Photo type",
+      typeCode: "Photo type code",
     },
   );
 
@@ -55,6 +57,41 @@ test("sidebar data includes only supported identity fields", () => {
     model: "737-832",
     typeCode: "B738",
   });
+});
+
+test("photo metadata fills fields the feed and registry lack", () => {
+  const view = buildAircraftSidebarViewModel(
+    {
+      manufacturer: null,
+      model: null,
+      registration: null,
+      registrationCountry: null,
+      registrationCountryFlag: null,
+      typeCode: null,
+      typeDescription: null,
+    },
+    null,
+    {
+      manufacturer: "Boeing",
+      registration: "N3749D",
+      type: "737-832",
+      typeCode: "B738",
+    },
+  );
+
+  assert.equal(view.registration, "N3749D");
+  assert.equal(view.model, "737-832");
+  assert.equal(view.manufacturer, "Boeing");
+  assert.equal(view.typeCode, "B738");
+});
+
+test("reads military and emergency flags", () => {
+  assert.equal(isMilitaryAircraft(1), true);
+  assert.equal(isMilitaryAircraft(2), false);
+  assert.equal(isMilitaryAircraft(null), false);
+  assert.equal(hasEmergencyStatus("general"), true);
+  assert.equal(hasEmergencyStatus("none"), false);
+  assert.equal(hasEmergencyStatus(null), false);
 });
 
 test("sidebar source and freshness text stays factual", () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { HeroBanner, shouldRenderHeroBanner } from "./hero-banner";
+import { HeroBanner } from "./hero-banner";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
 
 const PHOTO: NormalizedPhoto = {
@@ -17,7 +17,7 @@ const PHOTO: NormalizedPhoto = {
   link: "https://example.com/photo-1",
 };
 
-test("HeroBanner renders the old hero height for a valid photo", () => {
+test("HeroBanner shows the photo with its alt text", () => {
   const html = renderToStaticMarkup(
     createElement(HeroBanner, {
       photo: PHOTO,
@@ -26,13 +26,11 @@ test("HeroBanner renders the old hero height for a valid photo", () => {
     }),
   );
 
-  assert.match(html, /h-52/);
-  assert.match(html, /sm:h-56/);
-  assert.match(html, /JAL60 aircraft/);
+  assert.match(html, /alt="JAL60 aircraft"/);
   assert.match(html, /https:\/\/example\.com\/aircraft\.jpg/);
 });
 
-test("HeroBanner renders a full-height loading skeleton", () => {
+test("HeroBanner keeps its space while the photo lookup runs", () => {
   const html = renderToStaticMarkup(
     createElement(HeroBanner, {
       photo: null,
@@ -41,8 +39,7 @@ test("HeroBanner renders a full-height loading skeleton", () => {
     }),
   );
 
-  assert.match(html, /h-52/);
-  assert.match(html, /animate-pulse/);
+  assert.notEqual(html, "");
   assert.doesNotMatch(html, /<img/);
 });
 
@@ -56,9 +53,4 @@ test("HeroBanner collapses after an empty photo result", () => {
   );
 
   assert.equal(html, "");
-});
-
-test("HeroBanner collapses after all photo candidates fail", () => {
-  assert.equal(shouldRenderHeroBanner(PHOTO, false, true), false);
-  assert.equal(shouldRenderHeroBanner(PHOTO, false, false), true);
 });

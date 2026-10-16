@@ -70,7 +70,16 @@ const SOURCE_LABELS: Record<string, string> = {
   opensky: "OpenSky",
 };
 
-function cleanText(value: string | null | undefined): string | null {
+export function cleanText(value: string | null | undefined): string | null {
   const cleaned = value?.trim();
   return cleaned ? cleaned : null;
+}
+
+/** readsb sets bit 0 of dbFlags for military aircraft. */
+export function isMilitaryAircraft(dbFlags: number | null | undefined): boolean {
+  return ((dbFlags ?? 0) & 1) !== 0;
+}
+
+export function hasEmergencyStatus(status: string | null | undefined): boolean {
+  return Boolean(status && status !== "none");
 }

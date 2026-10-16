@@ -41,12 +41,10 @@ export type AirportInfoCardProps = {
   /** Shared ATC stream - when provided, frequency rows become interactive. */
   atc?: UseAtcStreamReturn;
   /**
-   * Layout variant:
-   * - `"desktop"` (default): fixed width, max-height minus top bar, mounted/exit slides up.
-   * - `"sidebar"`: fills the shared left sidebar without its own outer card chrome.
-   * - `"mobile"`: full width, taller max-height, subdued entrance (parent handles drag).
+   * `"sidebar"` fills the desktop left sidebar. `"mobile"` is a bottom sheet
+   * that slides up and can be dragged down to close.
    */
-  variant?: "desktop" | "mobile" | "sidebar";
+  variant: "mobile" | "sidebar";
 };
 
 /**
@@ -61,7 +59,7 @@ export function AirportInfoCard({
   selectedIcao24,
   onClose,
   atc,
-  variant = "desktop",
+  variant,
 }: AirportInfoCardProps) {
   const airport: Airport | null = board.airport;
   const { settings } = useSettings();
@@ -128,47 +126,23 @@ export function AirportInfoCard({
   if (!airport || !board.isActive) return null;
 
   const isMobile = variant === "mobile";
-  const isSidebar = variant === "sidebar";
+  const isSidebar = !isMobile;
   const contentInsetClass = isSidebar ? "px-5" : "px-4";
   const outerClass = isMobile
     ? "pointer-events-auto fixed inset-x-0 bottom-0 z-40 w-full px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
-    : isSidebar
-      ? "h-full w-full"
-      : "w-80 sm:w-96";
-  const innerMaxH = isMobile
-    ? "max-h-[85dvh]"
-    : isSidebar
-      ? "h-full"
-      : "max-h-[calc(100dvh-5rem)]";
-
-  const cardInitial = reduceMotion || isSidebar
-    ? false
-    : isMobile
-      ? { y: "100%" as const }
-      : { opacity: 0, y: 12, scale: 0.97 };
-  const cardAnimate = isSidebar
-    ? undefined
-    : isMobile
-      ? { y: 0 }
-      : { opacity: 1, y: 0, scale: 1 };
-  const cardExit = isSidebar
-    ? undefined
-    : reduceMotion
-      ? { opacity: 0 }
-      : isMobile
-        ? { y: "100%" as const }
-        : { opacity: 0, y: 12, scale: 0.97 };
+    : "h-full w-full";
+  const innerMaxH = isMobile ? "max-h-[85dvh]" : "h-full";
+  const slide = isMobile && !reduceMotion;
 
   return (
     <motion.div
-      layout={isMobile || isSidebar ? false : "position"}
-      initial={cardInitial}
-      animate={cardAnimate}
-      exit={cardExit}
+      initial={slide ? { y: "100%" } : false}
+      animate={slide ? { y: 0 } : undefined}
+      exit={slide ? { y: "100%" } : isMobile ? { opacity: 0 } : undefined}
       transition={
-        reduceMotion || isSidebar
-          ? { duration: 0 }
-          : { type: "spring", stiffness: 400, damping: 28, mass: 0.8 }
+        slide
+          ? { type: "spring", stiffness: 400, damping: 28, mass: 0.8 }
+          : { duration: 0 }
       }
       className={outerClass}
       role="complementary"
@@ -219,7 +193,8 @@ export function AirportInfoCard({
           icao={icao}
           city={airport.city}
           country={airport.country}
-          onClose={isMobile || isSidebar ? undefined : onClose}
+          // The sidebar has its own close button in the header.
+          onClose={isMobile ? onClose : undefined}
         />
 
         <CardHeader

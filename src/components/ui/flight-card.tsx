@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, Eye, Plane, X } from "lucide-react";
+import { ChevronDown, Eye, Plane } from "lucide-react";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
 import type {
   AircraftDetails,
   NormalizedPhoto,
 } from "@/hooks/use-aircraft-photos";
-import type { FlightState, FlightTrack } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { FlightState } from "@/lib/opensky";
+import { isFiniteNumber } from "@/lib/opensky-parsing";
 import { useSettings, type UnitSystem } from "@/hooks/use-settings";
 import { headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline, parseFlightNumber } from "@/lib/airlines";
@@ -24,8 +23,11 @@ import {
 } from "@/lib/unit-formatters";
 import {
   buildAircraftSidebarViewModel,
+  cleanText,
   formatAircraftDataSources,
   formatAircraftFreshness,
+  hasEmergencyStatus,
+  isMilitaryAircraft,
 } from "@/lib/aircraft-sidebar";
 import { AirlineLogo } from "@/components/ui/airline-logo";
 import { PositionSourceBadge } from "@/components/ui/flight-badges";
@@ -33,32 +35,21 @@ import { HeroBanner } from "@/components/ui/hero-banner";
 import { cn } from "@/lib/utils";
 
 type FlightCardProps = {
-  flight: FlightState | null;
-  trail?: TrailEntry | null;
-  track?: FlightTrack | null;
-  onClose: () => void;
+  flight: FlightState;
   onToggleFpv?: (icao24: string) => void;
-  isFpvActive?: boolean;
-  variant?: "floating" | "sidebar";
 };
 
-export function FlightCard({
-  flight,
-  onClose,
-  onToggleFpv,
-  isFpvActive = false,
-  variant = "floating",
-}: FlightCardProps) {
+export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
   const { settings } = useSettings();
   const routeInfo = useRouteInfo(flight);
-  const airline = flight ? lookupAirline(flight.callsign) : null;
+  const airline = lookupAirline(flight.callsign);
   const {
     photos,
     aircraft: photoAircraft,
     loading: photosLoading,
-  } = useAircraftPhotos(flight?.icao24 ?? null, flight?.registration);
+  } = useAircraftPhotos(flight.icao24, flight.registration);
 
-  const cardContent = flight ? (
+  return (
     <FlightCardContent
       flight={flight}
       airline={airline}
@@ -68,42 +59,8 @@ export function FlightCard({
       routeInfo={routeInfo}
       unitSystem={settings.unitSystem}
       showDebugData={settings.showDebugData}
-      onClose={onClose}
       onToggleFpv={onToggleFpv}
-      isFpvActive={isFpvActive}
-      isSidebar={variant === "sidebar"}
     />
-  ) : null;
-
-  if (variant === "sidebar") {
-    return flight ? (
-      <div
-        className="h-full w-full"
-        role="complementary"
-        aria-label="Selected aircraft details"
-      >
-        {cardContent}
-      </div>
-    ) : null;
-  }
-
-  return (
-    <AnimatePresence mode="wait">
-      {flight && (
-        <motion.div
-          key={flight.icao24}
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -12 }}
-          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="w-[22rem] max-w-[calc(100vw-1rem)]"
-          role="complementary"
-          aria-label="Selected aircraft details"
-        >
-          {cardContent}
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }
 
@@ -116,10 +73,7 @@ type FlightCardContentProps = {
   routeInfo: FlightRouteInfo;
   unitSystem: UnitSystem;
   showDebugData: boolean;
-  onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
-  isFpvActive: boolean;
-  isSidebar: boolean;
 };
 
 function FlightCardContent({
@@ -131,10 +85,7 @@ function FlightCardContent({
   routeInfo,
   unitSystem,
   showDebugData,
-  onClose,
   onToggleFpv,
-  isFpvActive,
-  isSidebar,
 }: FlightCardContentProps) {
   const details = buildAircraftSidebarViewModel(
     flight,
@@ -152,7 +103,7 @@ function FlightCardContent({
     : null;
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
-  const verticalRate = finiteValue(flight.verticalRate ?? flight.geomRate);
+  const verticalRate = flight.verticalRate ?? flight.geomRate ?? null;
   const canEnterFpv =
     flight.longitude !== null &&
     flight.latitude !== null &&
@@ -163,8 +114,8 @@ function FlightCardContent({
     flight.icao24.toUpperCase();
   const statusItems = [
     flight.onGround ? "On ground" : "Airborne",
-    isMilitary(flight.dbFlags) ? "Military" : null,
-    isEmergencyStatus(flight.emergencyStatus)
+    isMilitaryAircraft(flight.dbFlags) ? "Military" : null,
+    hasEmergencyStatus(flight.emergencyStatus)
       ? flight.emergencyStatus
       : null,
   ].filter((value): value is string => Boolean(value));
@@ -175,13 +126,13 @@ function FlightCardContent({
           value: formatPosition(flight.latitude, flight.longitude),
         }
       : null,
-    finiteValue(flight.baroAltitude) !== null
+    isFiniteNumber(flight.baroAltitude)
       ? {
           label: "Altitude",
           value: formatAltitude(flight.baroAltitude, unitSystem),
         }
       : null,
-    finiteValue(flight.velocity) !== null
+    isFiniteNumber(flight.velocity)
       ? {
           label: "Speed",
           value: formatSpeed(flight.velocity, unitSystem),
@@ -192,12 +143,7 @@ function FlightCardContent({
 
   return (
     <div
-      className={cn(
-        "h-full overflow-y-auto overscroll-contain text-foreground [scrollbar-width:thin]",
-        isSidebar
-          ? "bg-sidebar/80 supports-[backdrop-filter]:bg-sidebar/70"
-          : "rounded-2xl border border-foreground/10 bg-background/90 shadow-2xl backdrop-blur-xl",
-      )}
+      className="h-full overflow-y-auto overscroll-contain bg-sidebar/80 text-foreground [scrollbar-width:thin] supports-[backdrop-filter]:bg-sidebar/70"
     >
       <HeroBanner
         photo={heroPhoto}
@@ -248,16 +194,6 @@ function FlightCardContent({
             )}
           </div>
 
-          {!isSidebar && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground/55 transition-colors hover:text-foreground"
-              aria-label="Close aircraft details"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
         </div>
 
         <RouteSummary routeInfo={routeInfo} />
@@ -275,9 +211,7 @@ function FlightCardContent({
         </dl>
 
         <div className="border-b border-foreground/10 px-0.5 py-3 text-xs text-foreground/65">
-          <p aria-live="off" aria-atomic="false">
-            {freshness}
-          </p>
+          <p>{freshness}</p>
           {sources.length > 0 && (
             <p className="mt-1">Sources: {sources.join(", ")}</p>
           )}
@@ -306,15 +240,15 @@ function FlightCardContent({
             <DetailRow
               label="Heading"
               value={
-                finiteValue(heading) !== null
-                  ? `${Math.round(heading ?? 0)}° ${cardinal}`
+                isFiniteNumber(heading)
+                  ? `${Math.round(heading)}° ${cardinal}`
                   : null
               }
             />
             <DetailRow
               label="Vertical speed"
               value={
-                verticalRate !== null
+                isFiniteNumber(verticalRate)
                   ? formatVerticalSpeed(verticalRate, unitSystem)
                   : null
               }
@@ -322,7 +256,7 @@ function FlightCardContent({
             <DetailRow
               label="GPS altitude"
               value={
-                finiteValue(flight.geoAltitude) !== null
+                isFiniteNumber(flight.geoAltitude)
                   ? formatAltitude(flight.geoAltitude, unitSystem)
                   : null
               }
@@ -330,7 +264,7 @@ function FlightCardContent({
             <DetailRow
               label="True airspeed"
               value={
-                finiteValue(flight.tas) !== null
+                isFiniteNumber(flight.tas)
                   ? formatSpeedFromKnots(flight.tas, unitSystem)
                   : null
               }
@@ -344,15 +278,15 @@ function FlightCardContent({
               <>
                 <DetailRow
                   label="NACp"
-                  value={formatNumber(flight.debugData?.nacP)}
+                  value={formatDebugNumber(flight.debugData?.nacP)}
                 />
                 <DetailRow
                   label="NIC"
-                  value={formatNumber(flight.debugData?.nic)}
+                  value={formatDebugNumber(flight.debugData?.nic)}
                 />
                 <DetailRow
                   label="ADS-B version"
-                  value={formatNumber(flight.debugData?.version)}
+                  value={formatDebugNumber(flight.debugData?.version)}
                 />
               </>
             )}
@@ -362,21 +296,12 @@ function FlightCardContent({
         {onToggleFpv && (
           <button
             type="button"
-            onClick={() =>
-              (isFpvActive || canEnterFpv) && onToggleFpv(flight.icao24)
-            }
-            disabled={!isFpvActive && !canEnterFpv}
+            onClick={() => onToggleFpv(flight.icao24)}
+            disabled={!canEnterFpv}
             className="mt-3 flex min-h-10 w-full items-center gap-2 text-left text-sm font-medium text-foreground/70 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
-            aria-label={
-              isFpvActive
-                ? "Exit first person view"
-                : canEnterFpv
-                  ? "Enter first person view"
-                  : "First person view unavailable"
-            }
           >
             <Eye className="h-4 w-4" aria-hidden="true" />
-            {isFpvActive ? "Exit first person view" : "First person view"}
+            First person view
           </button>
         )}
       </div>
@@ -502,10 +427,7 @@ function useFreshness(updatedAt: number): string {
 function hasPosition(
   flight: FlightState,
 ): flight is FlightState & { latitude: number; longitude: number } {
-  return (
-    finiteValue(flight.latitude) !== null &&
-    finiteValue(flight.longitude) !== null
-  );
+  return isFiniteNumber(flight.latitude) && isFiniteNumber(flight.longitude);
 }
 
 function formatPosition(latitude: number, longitude: number): string {
@@ -522,15 +444,6 @@ function formatPositionMethod(
   return source.toUpperCase();
 }
 
-function finiteValue(value: number | null | undefined): number | null {
-  return value != null && Number.isFinite(value) ? value : null;
-}
-
-function cleanText(value: string | null | undefined): string | null {
-  const cleaned = value?.trim();
-  return cleaned ? cleaned : null;
-}
-
 function joinValues(
   first: string | null,
   second: string | null,
@@ -541,14 +454,6 @@ function joinValues(
   return values.length > 0 ? values.join(" ") : null;
 }
 
-function formatNumber(value: number | null | undefined): string | null {
-  return value != null && Number.isFinite(value) ? String(value) : null;
-}
-
-function isMilitary(dbFlags?: number | null): boolean {
-  return ((dbFlags ?? 0) & 1) !== 0;
-}
-
-function isEmergencyStatus(status?: string | null): boolean {
-  return Boolean(status && status !== "none");
+function formatDebugNumber(value: number | null | undefined): string | null {
+  return isFiniteNumber(value) ? String(value) : null;
 }

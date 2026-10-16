@@ -9,8 +9,7 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import { X } from "lucide-react";
-import type { FlightState, FlightTrack } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { FlightState } from "@/lib/opensky";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import {
@@ -35,15 +34,11 @@ export type AerisLeftPanel =
   | { kind: "airport" };
 
 export const AERIS_LEFT_SIDEBAR_WIDTH = "clamp(22rem, 30vw, 28rem)";
-const AERIS_LEFT_SIDEBAR_OVERLAP_PX = 4;
+/** How far the sidebar tucks under the rounded map edge. */
+export const AERIS_LEFT_SIDEBAR_OVERLAP_PX = 4;
 
 type AerisLeftPanelSnapshot =
-  | {
-      kind: "flight";
-      flight: FlightState;
-      trail: TrailEntry | null;
-      track: FlightTrack | null;
-    }
+  | { kind: "flight"; flight: FlightState }
   | {
       kind: "airport";
       board: AirportBoardData;
@@ -54,11 +49,8 @@ type AerisLeftSidebarProps = {
   leftPanel: AerisLeftPanel | null;
   onClose: () => void;
   displayFlight: FlightState | null;
-  selectedTrail: TrailEntry | null;
-  selectedTrack: FlightTrack | null;
   onCloseFlight: () => void;
   onToggleFpv: (icao24: string) => void;
-  isFpvActive: boolean;
   airportBoard: AirportBoardData;
   onSelectAirportFlight: (icao24: string) => void;
   selectedIcao24: string | null;
@@ -72,11 +64,8 @@ export function AerisLeftSidebar({
   leftPanel,
   onClose,
   displayFlight,
-  selectedTrail,
-  selectedTrack,
   onCloseFlight,
   onToggleFpv,
-  isFpvActive,
   airportBoard,
   onSelectAirportFlight,
   selectedIcao24,
@@ -90,12 +79,7 @@ export function AerisLeftSidebar({
   const currentSnapshot = useMemo<AerisLeftPanelSnapshot | null>(
     () =>
       leftPanel?.kind === "flight" && displayFlight
-        ? {
-            kind: "flight",
-            flight: displayFlight,
-            trail: selectedTrail,
-            track: selectedTrack,
-          }
+        ? { kind: "flight", flight: displayFlight }
         : leftPanel?.kind === "airport" &&
             airportBoard.isActive &&
             airportBoard.airport
@@ -105,14 +89,7 @@ export function AerisLeftSidebar({
               selectedIcao24,
             }
           : null,
-    [
-      airportBoard,
-      displayFlight,
-      leftPanel,
-      selectedIcao24,
-      selectedTrack,
-      selectedTrail,
-    ],
+    [airportBoard, displayFlight, leftPanel, selectedIcao24],
   );
   const [snapshotMemory, setSnapshotMemory] = useState<{
     observed: AerisLeftPanelSnapshot | null;
@@ -179,7 +156,6 @@ export function AerisLeftSidebar({
       }}
       persistState={false}
       keyboardShortcut={false}
-      data-sidebar-open={isOpen}
       ref={sidebarRootRef}
       className="pointer-events-none fixed inset-0 z-40 min-h-0 w-auto overflow-visible bg-transparent"
       style={
@@ -227,12 +203,7 @@ export function AerisLeftSidebar({
             {snapshot?.kind === "flight" ? (
               <FlightCard
                 flight={snapshot.flight}
-                trail={snapshot.trail}
-                track={snapshot.track}
-                onClose={onCloseFlight}
                 onToggleFpv={onToggleFpv}
-                isFpvActive={isFpvActive}
-                variant="sidebar"
               />
             ) : snapshot?.kind === "airport" ? (
               <AirportInfoCard

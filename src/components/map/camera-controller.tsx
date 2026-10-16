@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToElevation } from "@/lib/flight-utils";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
@@ -36,6 +37,37 @@ const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
 
 type FpvPosition = { lng: number; lat: number; alt: number; track: number };
+
+/**
+ * Returns the map center that puts the aircraft as drawn (lifted by its
+ * altitude) where its ground position would be, or null when no correction
+ * is needed.
+ */
+function drawnAircraftCenter(
+  map: maplibregl.Map,
+  panel: MapPanelCameraState,
+  altitudeMode: AltitudeDisplayMode,
+): [number, number] | null {
+  const { coordinates, altitudeMeters } = panel;
+  if (!coordinates || altitudeMeters == null) return null;
+  const [lng, lat] = coordinates;
+
+  const elevationMeters =
+    altitudeToElevation(altitudeMeters, altitudeMode) *
+    getZoomAdjustedElevationScale(map.getZoom(), altitudeMode);
+  const elevated = projectLngLatElevationPixelDelta(map, lng, lat, elevationMeters);
+  const ground = projectLngLatElevationPixelDelta(map, lng, lat, 0);
+  if (!elevated || !ground) return null;
+
+  const canvas = map.getCanvas();
+  const offset = panelVisualOffset(
+    { dx: elevated.dx - ground.dx, dy: elevated.dy - ground.dy },
+    canvas.clientWidth,
+    canvas.clientHeight,
+  );
+  if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return null;
+  return centerLngLatForScreenOffset(map, lng, lat, offset);
+}
 
 export function CameraController({
   city,
@@ -90,14 +122,17 @@ export function CameraController({
     if (city.id === prevCityRef.current) return;
 
     prevCityRef.current = city.id;
-    if (panelCamera.open && panelCamera.kind === "flight") {
+    // Read the panel through its ref: depending on the panel object would
+    // re-run this effect on every panel update, and the cleanup would cancel
+    // the timer that clears the transition target.
+    const panel = panelCameraRef.current;
+    if (panel.open && panel.kind === "flight") {
       cityTransitionTargetRef.current = null;
       return;
     }
 
     cityTransitionTargetRef.current = city.coordinates;
-    const isAirportPanelNavigation =
-      panelCamera.open && panelCamera.kind === "airport";
+    const isAirportPanelNavigation = panel.open && panel.kind === "airport";
     const reducePanelMotion =
       isAirportPanelNavigation &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -114,12 +149,12 @@ export function CameraController({
       zoom: DEFAULT_ZOOM,
       pitch: DEFAULT_PITCH,
       bearing: DEFAULT_BEARING,
-      padding: mapPanelPadding(panelCamera),
+      padding: mapPanelPadding(panel),
       ...transitionOptions,
     });
 
     return () => window.clearTimeout(clearTargetTimer);
-  }, [map, isLoaded, city, panelCamera]);
+  }, [map, isLoaded, city]);
 
   useEffect(() => {
     if (!map || !isLoaded) return;
@@ -183,125 +218,35 @@ export function CameraController({
       (shouldCenter || insetChanged);
     if (!shouldCorrectFlightAltitude || !focusKey) return;
 
-    let correctionTimer: number | null = null;
-    let refinementTimer: number | null = null;
-    correctionTimer = window.setTimeout(() => {
-      const currentPanel = panelCameraRef.current;
-      if (!currentPanel.open || currentPanel.focusKey !== focusKey) return;
-
-      const currentCoordinates = currentPanel.coordinates;
-      const altitudeMeters = currentPanel.altitudeMeters;
-      if (!currentCoordinates || altitudeMeters == null) return;
-
-      const elevationMeters =
-        altitudeToElevation(
-          altitudeMeters,
-          settings.altitudeDisplayMode,
-        ) *
-        getZoomAdjustedElevationScale(
-          map.getZoom(),
-          settings.altitudeDisplayMode,
-        );
-      const elevatedPoint = projectLngLatElevationPixelDelta(
-        map,
-        currentCoordinates[0],
-        currentCoordinates[1],
-        elevationMeters,
-      );
-      const groundPoint = projectLngLatElevationPixelDelta(
-        map,
-        currentCoordinates[0],
-        currentCoordinates[1],
-        0,
-      );
-      if (!elevatedPoint || !groundPoint) return;
-
-      const canvas = map.getCanvas();
-      const offset = panelVisualOffset(
-        {
-          dx: elevatedPoint.dx - groundPoint.dx,
-          dy: elevatedPoint.dy - groundPoint.dy,
-        },
-        canvas.clientWidth,
-        canvas.clientHeight,
-      );
-      if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return;
-
-      const correctedCenter = centerLngLatForScreenOffset(
-        map,
-        currentCoordinates[0],
-        currentCoordinates[1],
-        offset,
-      );
-      if (!correctedCenter) return;
-
+    // Center the drawn aircraft, which sits above its ground position, then
+    // correct once more for the residual left by the first ease.
+    const altitudeMode = settings.altitudeDisplayMode;
+    const easeToDrawnAircraft = (duration: number): boolean => {
+      const panel = panelCameraRef.current;
+      if (!panel.open || panel.focusKey !== focusKey) return false;
+      const center = drawnAircraftCenter(map, panel, altitudeMode);
+      if (!center) return false;
       map.easeTo({
-        center: correctedCenter,
-        padding: mapPanelPadding(currentPanel),
-        duration: reduceMotion ? 0 : PANEL_VISUAL_EASE_MS,
+        center,
+        padding: mapPanelPadding(panel),
+        duration: reduceMotion ? 0 : duration,
         easing: panelMotion.easing,
         essential: false,
       });
+      return true;
+    };
 
-      refinementTimer = window.setTimeout(() => {
-        const refinedPanel = panelCameraRef.current;
-        if (!refinedPanel.open || refinedPanel.focusKey !== focusKey) return;
-
-        const refinedCoordinates = refinedPanel.coordinates;
-        const refinedAltitudeMeters = refinedPanel.altitudeMeters;
-        if (!refinedCoordinates || refinedAltitudeMeters == null) return;
-
-        const refinedElevationMeters =
-          altitudeToElevation(
-            refinedAltitudeMeters,
-            settings.altitudeDisplayMode,
-          ) *
-          getZoomAdjustedElevationScale(
-            map.getZoom(),
-            settings.altitudeDisplayMode,
-          );
-        const elevatedResidual = projectLngLatElevationPixelDelta(
-          map,
-          refinedCoordinates[0],
-          refinedCoordinates[1],
-          refinedElevationMeters,
-        );
-        const groundResidual = projectLngLatElevationPixelDelta(
-          map,
-          refinedCoordinates[0],
-          refinedCoordinates[1],
-          0,
-        );
-        if (!elevatedResidual || !groundResidual) return;
-
-        const refinedOffset = panelVisualOffset(
-          {
-            dx: elevatedResidual.dx - groundResidual.dx,
-            dy: elevatedResidual.dy - groundResidual.dy,
-          },
-          canvas.clientWidth,
-          canvas.clientHeight,
-        );
-        const refinedCenter = centerLngLatForScreenOffset(
-          map,
-          refinedCoordinates[0],
-          refinedCoordinates[1],
-          refinedOffset,
-        );
-        if (!refinedCenter) return;
-
-        map.easeTo({
-          center: refinedCenter,
-          padding: mapPanelPadding(refinedPanel),
-          duration: reduceMotion ? 0 : PANEL_VISUAL_REFINEMENT_MS,
-          easing: panelMotion.easing,
-          essential: false,
-        });
-      }, reduceMotion ? 0 : PANEL_VISUAL_EASE_MS + 40);
+    let refinementTimer: number | null = null;
+    const correctionTimer = window.setTimeout(() => {
+      if (!easeToDrawnAircraft(PANEL_VISUAL_EASE_MS)) return;
+      refinementTimer = window.setTimeout(
+        () => easeToDrawnAircraft(PANEL_VISUAL_REFINEMENT_MS),
+        reduceMotion ? 0 : PANEL_VISUAL_EASE_MS + 40,
+      );
     }, reduceMotion ? 0 : MAP_PANEL_TRANSITION_MS + 80);
 
     return () => {
-      if (correctionTimer !== null) window.clearTimeout(correctionTimer);
+      window.clearTimeout(correctionTimer);
       if (refinementTimer !== null) window.clearTimeout(refinementTimer);
     };
   }, [

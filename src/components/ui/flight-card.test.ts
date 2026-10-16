@@ -29,10 +29,8 @@ const VALID_ROUTE: FlightRouteInfo = {
   loading: false,
   available: true,
   unavailable: false,
-  routeDisplay: "SFO to JFK",
+  mismatch: false,
   source: "adsbdb",
-  sources: ["adsbdb"],
-  validatedAt: 1_800_000_000_000,
 };
 
 test("RouteSummary labels a valid result as a reported route", () => {

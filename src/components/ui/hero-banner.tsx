@@ -118,7 +118,7 @@ export function HeroBanner({
   );
 }
 
-export function shouldRenderHeroBanner(
+function shouldRenderHeroBanner(
   photo: NormalizedPhoto | null,
   loading: boolean,
   failed: boolean,
