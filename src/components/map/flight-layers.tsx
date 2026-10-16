@@ -6,21 +6,16 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/lib/trails/types";
+import type { TrailTrack } from "@/lib/trails/types";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
-import type {
-  DeckGLOverlay,
-  ElevatedPoint,
-  Snapshot,
-} from "./flight-layer-constants";
+import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
 import {
   DEFAULT_ANIM_DURATION_MS,
   MIN_ANIM_DURATION_MS,
   MAX_ANIM_DURATION_MS,
   TELEPORT_THRESHOLD,
   TRACK_DAMPING,
-  MLAT_POSITION_ALPHA,
   AIRCRAFT_PICK_RADIUS_PX,
   SELECTION_FADE_MS,
   GLOBE_FADE_ZOOM_FLOOR,
@@ -52,13 +47,16 @@ import {
   updateInterpolatedInPlace,
 } from "./flight-interpolation";
 
-import { buildTrailLayers } from "./flight-layer-builders";
-import { buildSelectionPulseLayers } from "./flight-layer-builders";
+import { buildSelectionPulseLayers } from "./selection-pulse-layers";
+import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import { preloadAllModels } from "./aircraft-model-mapping";
-import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import {
+  altitudeToColor,
+  altitudeToElevation,
+  MLAT_POSITION_ALPHA,
+} from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
@@ -70,12 +68,11 @@ import {
 export function FlightLayers({
   flights,
   trails,
-  selectedEnvelope = null,
   onClick,
   selectedIcao24,
   showTrails,
   trailThickness,
-  trailDistance,
+  trailMinutes,
   showShadows,
   showAltitudeColors,
   altitudeDisplayMode,
@@ -99,29 +96,13 @@ export function FlightLayers({
   const recentIntervalsRef = useRef<number[]>([]);
 
   // Persistent caches reused across animation frames to reduce GC pressure
-  const trailBasePathCacheRef = useRef(
-    new Map<string, { key: string; basePath: ElevatedPoint[] }>(),
-  );
+  const trailRenderCacheRef = useRef(createTrailRenderCache());
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
   const pitchMapRef = useRef(new Map<string, number>());
   const bankMapRef = useRef(new Map<string, number>());
-  // Reusable containers for buildTrailLayers - clear+reuse each frame
-  const handledIdsRef = useRef(new Set<string>());
-  const visibleTrailCacheRef = useRef(new Map<string, ElevatedPoint[]>());
-  const activeIcaosRef = useRef(new Set<string>());
-  // Persistent caches for slope-limited trail paths and colors across frames
-  const trailPathCacheRef = useRef(
-    new Map<string, { key: string; result: [number, number, number][] }>(),
-  );
-  const trailColorCacheRef = useRef(
-    new Map<
-      string,
-      { key: string; result: [number, number, number, number][] }
-    >(),
-  );
   // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
-  const trailMapRef = useRef(new Map<string, TrailEntry>());
-  const lastTrailsForMapRef = useRef<TrailEntry[] | null>(null);
+  const trailMapRef = useRef(new Map<string, TrailTrack>());
+  const lastTrailsForMapRef = useRef<TrailTrack[] | null>(null);
 
   // Interpolation pool - reuse FlightState objects between animation frames
   // to avoid ~18K object allocations/sec from spread syntax
@@ -141,11 +122,10 @@ export function FlightLayers({
 
   const flightsRef = useRef(flights);
   const trailsRef = useRef(trails);
-  const selectedEnvelopeRef = useRef(selectedEnvelope);
   const onClickRef = useRef(onClick);
   const showTrailsRef = useRef(showTrails);
   const trailThicknessRef = useRef(trailThickness);
-  const trailDistanceRef = useRef(trailDistance);
+  const trailMinutesRef = useRef(trailMinutes);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const altitudeDisplayModeRef = useRef(altitudeDisplayMode);
@@ -175,10 +155,9 @@ export function FlightLayers({
     updateGlobeDotsRef.current = updateGlobeDots;
     flightsRef.current = flights;
     trailsRef.current = trails;
-    selectedEnvelopeRef.current = selectedEnvelope;
     showTrailsRef.current = showTrails;
     trailThicknessRef.current = trailThickness;
-    trailDistanceRef.current = trailDistance;
+    trailMinutesRef.current = trailMinutes;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
@@ -196,11 +175,10 @@ export function FlightLayers({
     updateGlobeDots,
     flights,
     trails,
-    selectedEnvelope,
     onClick,
     showTrails,
     trailThickness,
-    trailDistance,
+    trailMinutes,
     showShadows,
     showAltitudeColors,
     altitudeDisplayMode,
@@ -456,9 +434,7 @@ export function FlightLayers({
         overlayRef.current = null;
       }
       const restoredOverlay = createOverlay();
-      trailBasePathCacheRef.current.clear();
-      trailPathCacheRef.current.clear();
-      trailColorCacheRef.current.clear();
+      trailRenderCacheRef.current = createTrailRenderCache();
       requestRenderRef.current();
       deckCanvas = restoredOverlay.getCanvas();
       if (deckCanvas && deckCanvas !== mapCanvas) {
@@ -549,11 +525,6 @@ export function FlightLayers({
       animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
       lastFlightsForInterpRef.current = null;
       resumeSnapRef.current = true;
-
-      trailBasePathCacheRef.current.clear();
-      trailPathCacheRef.current.clear();
-      trailColorCacheRef.current.clear();
-      visibleTrailCacheRef.current.clear();
     }
 
     function markPageInactive() {
@@ -570,8 +541,6 @@ export function FlightLayers({
       freezeAtCurrentSnapshots();
 
       if (pageActiveRef.current) {
-        // Preserve existing trails but reset bootstrap counter so gaps fill quickly.
-        trailStore.handleVisibilityResume();
         requestRender();
       }
     }
@@ -744,9 +713,6 @@ export function FlightLayers({
         const visibleFlights = fpvId
           ? interpolated.filter((flight) => flight.icao24 !== fpvId)
           : interpolated;
-        const visibleTrails = fpvId
-          ? currentTrails.filter((trail) => trail.icao24 !== fpvId)
-          : currentTrails;
         const modelFlights = fpvId
           ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
           : currentFlights;
@@ -822,29 +788,17 @@ export function FlightLayers({
         if (layersVisible && showTrailsRef.current) {
           layers.push(
             ...buildTrailLayers({
-            interpolated: visibleFlights,
-            interpolatedMap: interpolatedMapRef.current,
-            currentTrails: visibleTrails,
-            trailMap: trailMapRef.current,
-            selectedIcao24: selectedIcao24Ref.current,
-            selectedEnvelope: selectedEnvelopeRef.current,
-            trailDistance: trailDistanceRef.current,
-            trailThickness: trailThicknessRef.current,
-            altColors,
-            altitudeDisplayMode: altitudeMode,
-            defaultColor: DEFAULT_COLOR,
-            elapsed,
-            visualFrame: visualFrameRef.current,
-            globeFade,
-            currentZoom,
-            elevScale,
-            visible: true,
-            trailBasePathCache: trailBasePathCacheRef.current,
-            trailPathCache: trailPathCacheRef.current,
-            trailColorCache: trailColorCacheRef.current,
-            handledIdsSet: handledIdsRef.current,
-            visibleTrailCacheMap: visibleTrailCacheRef.current,
-            activeIcaosSet: activeIcaosRef.current,
+              flights: visibleFlights,
+              trailMap: trailMapRef.current,
+              selectedIcao24: selectedIcao24Ref.current,
+              trailMinutes: trailMinutesRef.current,
+              thickness: trailThicknessRef.current,
+              altColors,
+              altitudeDisplayMode: altitudeMode,
+              elevScale,
+              defaultColor: DEFAULT_COLOR,
+              opacity: globeFade,
+              cache: trailRenderCacheRef.current,
             }),
           );
         }

@@ -10,7 +10,7 @@ import { getTraceProviderPolicy, type TraceProviderId } from "../providers";
 import type { TrailOutcome } from "../types";
 import {
   normalizeTrackWaypoints,
-  parseReadsbTrace,
+  parseReadsbTraces,
 } from "./parse-readsb-trace";
 
 const TRACE_TIMEOUT_MS = 5_000;
@@ -134,67 +134,60 @@ async function fetchReadsbTrace(
     requestHeaders.set("Referer", policy.proxyHeaders.referer);
   }
 
-  const urls: Array<{
-    url: string;
-    outcome: Extract<TrailOutcome, "full-history" | "partial-history">;
-  }> = makeTraceUrls(providerId, icao24).map((url, index) => ({
-    url,
-    outcome: index === 0 ? "full-history" : "partial-history",
-  }));
-
-  for (const candidate of urls) {
-    try {
-      const response = await fetchWithTimeout(
-        candidate.url,
-        {
-          headers: requestHeaders,
-          cache: "no-store",
-        },
-        TRACE_TIMEOUT_MS,
-      );
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const contentType = response.headers.get("content-type") ?? "";
-      if (
-        contentType.includes("text/html") ||
-        contentType.includes("text/xml")
-      ) {
-        continue;
-      }
-
-      const payload = (await response.json()) as unknown;
-      const track = parseReadsbTrace(icao24, payload);
-      if (!track || track.path.length < 2) {
-        continue;
-      }
-
-      const validators = {
-        etag: response.headers.get("etag"),
-        lastModified: response.headers.get("last-modified"),
-      };
-
-      return {
-        status: 200,
-        headers: buildHeaders(SUCCESS_CACHE_CONTROL, { validators }),
-        payload: {
-          hex: icao24,
-          track,
-          source: providerId,
-          outcome: candidate.outcome,
-          creditsRemaining: null,
-          retryAfterSeconds: null,
-          validators,
-        },
-      };
-    } catch {
-      // Try the next URL/provider.
-    }
+  const urls = makeTraceUrls(providerId, icao24);
+  if (urls.length === 0) {
+    return null;
   }
 
-  return null;
+  // trace_full lags by minutes and trace_recent covers only the end, so
+  // fetch both and merge them.
+  const [full, recent] = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const response = await fetchWithTimeout(
+          url,
+          { headers: requestHeaders, cache: "no-store" },
+          TRACE_TIMEOUT_MS,
+        );
+        const contentType = response.headers.get("content-type") ?? "";
+        if (
+          !response.ok ||
+          contentType.includes("text/html") ||
+          contentType.includes("text/xml")
+        ) {
+          return null;
+        }
+        return { response, payload: (await response.json()) as unknown };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const track = parseReadsbTraces(icao24, [full?.payload, recent?.payload]);
+  if (!track) {
+    return null;
+  }
+
+  const validatorSource = (full ?? recent)!.response;
+  const validators = {
+    etag: validatorSource.headers.get("etag"),
+    lastModified: validatorSource.headers.get("last-modified"),
+  };
+
+  return {
+    status: 200,
+    headers: buildHeaders(SUCCESS_CACHE_CONTROL, { validators }),
+    payload: {
+      hex: icao24,
+      track,
+      source: providerId,
+      outcome: full ? "full-history" : "partial-history",
+      creditsRemaining: null,
+      retryAfterSeconds: null,
+      validators,
+    },
+  };
 }
 
 export function parseOpenSkyTrack(

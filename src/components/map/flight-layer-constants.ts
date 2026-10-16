@@ -3,7 +3,7 @@ import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import type { TrailEntry, TrailEnvelope } from "@/lib/trails/types";
+import type { TrailTrack } from "@/lib/trails/types";
 import type { MutableRefObject } from "react";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
@@ -23,14 +23,7 @@ export const MIN_ANIM_DURATION_MS = 1_000;
 export const MAX_ANIM_DURATION_MS = 30_000;
 export const TELEPORT_THRESHOLD = 0.3;
 export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
-export const STARTUP_TRAIL_POLLS = 3;
-export const STARTUP_TRAIL_STEP_SEC = 12;
 export const TRACK_DAMPING = 0.18;
-/** EMA alpha for MLAT position smoothing. MLAT accuracy (~100m) is 10x
- *  worse than ADS-B (~10m), so we blend toward the previous position to
- *  suppress jitter. 0.65 retains responsiveness while cutting noise. */
-export const MLAT_POSITION_ALPHA = 0.65;
-export const TRAIL_SMOOTHING_ITERATIONS = 3;
 export const BASE_AIRCRAFT_SIZE = 20;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
@@ -60,17 +53,14 @@ export type Snapshot = {
   track: number;
 };
 
-export type ElevatedPoint = [number, number, number];
-
 export type FlightLayerProps = {
   flights: FlightState[];
-  trails: TrailEntry[];
-  selectedEnvelope?: TrailEnvelope | null;
+  trails: TrailTrack[];
   onClick: (info: PickingInfo<FlightState> | null) => void;
   selectedIcao24: string | null;
   showTrails: boolean;
   trailThickness: number;
-  trailDistance: number;
+  trailMinutes: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;

@@ -21,75 +21,55 @@ test("settings migration disables inherited auto-orbit once", () => {
   assert.equal(explicitV6.autoOrbit, true);
 });
 
-test("settings normalization keeps 0.5px as the minimum selectable trail thickness", () => {
+test("settings normalization clamps trail thickness and length to whole minutes", () => {
   const settings = normalizeSettings({
     ...DEFAULT_SETTINGS,
     trailThickness: 0.1,
-    trailDistance: 12.4,
+    trailMinutes: 0.4,
   });
 
   assert.equal(settings.trailThickness, 0.5);
-  assert.equal(settings.trailDistance, 12);
+  assert.equal(settings.trailMinutes, 1);
 });
 
 test("settings migration lowers only legacy trail defaults", () => {
   const migratedLegacy = migrateSettingsDefaults(
-    {
-      ...DEFAULT_SETTINGS,
-      trailThickness: 1.3,
-      trailDistance: 80,
-    },
+    { ...DEFAULT_SETTINGS, trailThickness: 1.3 },
     3,
+    80,
   );
   const migratedCustom = migrateSettingsDefaults(
-    {
-      ...DEFAULT_SETTINGS,
-      trailThickness: 2,
-      trailDistance: 96,
-    },
+    { ...DEFAULT_SETTINGS, trailThickness: 2 },
     3,
+    96,
   );
 
   assert.equal(migratedLegacy.trailThickness, 1.0);
-  assert.equal(migratedLegacy.trailDistance, 48);
   assert.equal(migratedCustom.trailThickness, 2);
-  assert.equal(migratedCustom.trailDistance, 96);
 });
 
 test("settings migration upgrades the old untouched default trail pair from version 4", () => {
   const migrated = migrateSettingsDefaults(
-    {
-      ...DEFAULT_SETTINGS,
-      trailThickness: 0.5,
-      trailDistance: 48,
-    },
+    { ...DEFAULT_SETTINGS, trailThickness: 0.5 },
     4,
+    48,
   );
 
   assert.equal(migrated.trailThickness, 1.0);
-  assert.equal(migrated.trailDistance, 48);
 });
 
 test("settings migration preserves partial custom trail settings", () => {
   const customThickness = migrateSettingsDefaults(
-    {
-      ...DEFAULT_SETTINGS,
-      trailThickness: 2,
-      trailDistance: 80,
-    },
+    { ...DEFAULT_SETTINGS, trailThickness: 2 },
     3,
+    80,
   );
   const customDistance = migrateSettingsDefaults(
-    {
-      ...DEFAULT_SETTINGS,
-      trailThickness: 1.3,
-      trailDistance: 96,
-    },
+    { ...DEFAULT_SETTINGS, trailThickness: 1.3 },
     3,
+    96,
   );
 
   assert.equal(customThickness.trailThickness, 2);
-  assert.equal(customThickness.trailDistance, 80);
   assert.equal(customDistance.trailThickness, 1.3);
-  assert.equal(customDistance.trailDistance, 96);
 });

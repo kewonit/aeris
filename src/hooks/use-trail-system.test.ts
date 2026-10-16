@@ -9,15 +9,15 @@ import {
 test("OpenSky refresh slows down as credits fall", () => {
   assert.equal(
     getHistoryRefreshMs({ provider: "opensky", creditsRemaining: 300 }),
-    15_000,
+    60_000,
   );
   assert.equal(
     getHistoryRefreshMs({ provider: "opensky", creditsRemaining: 120 }),
-    30_000,
+    120_000,
   );
   assert.equal(
     getHistoryRefreshMs({ provider: "opensky", creditsRemaining: 25 }),
-    60_000,
+    300_000,
   );
   assert.equal(
     getHistoryRefreshMs({ provider: "opensky", creditsRemaining: 0 }),
@@ -28,7 +28,7 @@ test("OpenSky refresh slows down as credits fall", () => {
 test("non-OpenSky providers keep the normal refresh cadence", () => {
   assert.equal(
     getHistoryRefreshMs({ provider: "adsb-lol", creditsRemaining: null }),
-    15_000,
+    60_000,
   );
 });
 

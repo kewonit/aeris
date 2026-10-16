@@ -1,7 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseReadsbTrace } from "./parse-readsb-trace";
+import { parseReadsbTraces } from "./parse-readsb-trace";
+
+const parseReadsbTrace = (hex: string, payload: unknown) =>
+  parseReadsbTraces(hex, [payload]);
+
+test("parseReadsbTraces merges payloads by time and drops repeated points", () => {
+  const track = parseReadsbTraces("3c66b0", [
+    {
+      timestamp: 1_000,
+      trace: [
+        [0, 50.1, 8.1, 1_000, 180, 15, 0],
+        [30, 50.2, 8.3, 1_200, 190, 20, 0],
+      ],
+    },
+    {
+      timestamp: 1_020,
+      trace: [
+        [10, 50.2, 8.3, 1_200, 190, 20, 0],
+        [40, 50.3, 8.5, 1_300, 190, 20, 0],
+      ],
+    },
+    null,
+  ]);
+
+  assert.deepEqual(
+    track?.path.map((waypoint) => waypoint.time),
+    [1_000, 1_030, 1_060],
+  );
+});
 
 test("parseReadsbTrace skips stale points and trims to the last flagged leg", () => {
   const track = parseReadsbTrace("3c66b0", {

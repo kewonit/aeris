@@ -23,8 +23,8 @@ import {
   WEATHER_RADAR_OPACITY_MAX,
   TRAIL_THICKNESS_MIN,
   TRAIL_THICKNESS_MAX,
-  TRAIL_DISTANCE_MIN,
-  TRAIL_DISTANCE_MAX,
+  TRAIL_MINUTES_MIN,
+  TRAIL_MINUTES_MAX,
   type OrbitDirection,
   type UnitSystem,
   type Settings,
@@ -126,9 +126,9 @@ export function SettingsContent({
               value={settings.trailThickness}
               onChange={(v) => update("trailThickness", v)}
             />
-            <TrailDistanceSlider
-              value={settings.trailDistance}
-              onChange={(v) => update("trailDistance", v)}
+            <TrailLengthSlider
+              value={settings.trailMinutes}
+              onChange={(v) => update("trailMinutes", v)}
             />
           </>
         )}
@@ -377,7 +377,7 @@ function TrailThicknessSlider({
   );
 }
 
-function TrailDistanceSlider({
+function TrailLengthSlider({
   value,
   onChange,
 }: {
@@ -392,19 +392,19 @@ function TrailDistanceSlider({
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-small font-medium text-foreground">
-            Trail distance
+            Trail length
           </p>
           <span className="text-caption text-muted-foreground">
-            {value} pts
+            {value} min
           </span>
         </div>
         <Slider
-          min={TRAIL_DISTANCE_MIN}
-          max={TRAIL_DISTANCE_MAX}
+          min={TRAIL_MINUTES_MIN}
+          max={TRAIL_MINUTES_MAX}
           step={1}
           value={[value]}
           onValueChange={(vals) => onChange(vals[0])}
-          aria-label="Trail distance"
+          aria-label="Trail length"
         />
       </div>
     </div>
@@ -641,6 +641,11 @@ export const CHANGELOG: {
         title: "Simpler aircraft details",
         description:
           "Restored the aircraft photo header and flight summary. The sidebar hides unsupported labels. The map keeps selected aircraft centered during panel transitions.",
+      },
+      {
+        title: "Steadier flight trails",
+        description:
+          "Trails follow each aircraft's reported positions in time order, stay attached to the aircraft, and keep their shape as new positions arrive. A selected flight's history no longer folds back on itself. Trail length is now set in minutes.",
       },
     ],
   },

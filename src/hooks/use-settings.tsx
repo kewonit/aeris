@@ -23,7 +23,8 @@ export type Settings = {
   orbitDirection: OrbitDirection;
   showTrails: boolean;
   trailThickness: number;
-  trailDistance: number;
+  /** How many minutes of each aircraft's path to draw. */
+  trailMinutes: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -40,8 +41,8 @@ export type Settings = {
 
 export const TRAIL_THICKNESS_MIN = 0.5;
 export const TRAIL_THICKNESS_MAX = 8;
-export const TRAIL_DISTANCE_MIN = 12;
-export const TRAIL_DISTANCE_MAX = 120;
+export const TRAIL_MINUTES_MIN = 1;
+export const TRAIL_MINUTES_MAX = 30;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
@@ -62,11 +63,11 @@ export function normalizeSettings(input: Settings): Settings {
           TRAIL_THICKNESS_MAX,
         )
       : DEFAULT_SETTINGS.trailThickness,
-    trailDistance: Number.isFinite(input.trailDistance)
+    trailMinutes: Number.isFinite(input.trailMinutes)
       ? Math.round(
-          clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
+          clamp(input.trailMinutes, TRAIL_MINUTES_MIN, TRAIL_MINUTES_MAX),
         )
-      : DEFAULT_SETTINGS.trailDistance,
+      : DEFAULT_SETTINGS.trailMinutes,
     fpvChaseDistance: Number.isFinite(input.fpvChaseDistance)
       ? clamp(
           input.fpvChaseDistance,
@@ -97,7 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   orbitDirection: "clockwise",
   showTrails: true,
   trailThickness: 1.0,
-  trailDistance: 48,
+  trailMinutes: 5,
   showShadows: true,
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
@@ -113,7 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 6;
+const STORAGE_VERSION = 7;
 const WRITE_DEBOUNCE_MS = 300;
 
 const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
@@ -126,9 +127,15 @@ type StorageEnvelope = {
   data: Settings;
 };
 
+/**
+ * @param legacyTrailDistance The trail length in points that settings before
+ *   version 7 stored; it only decides whether the old thickness default was
+ *   left untouched.
+ */
 export function migrateSettingsDefaults(
   input: Settings,
   fromVersion: number,
+  legacyTrailDistance?: number,
 ): Settings {
   if (fromVersion >= STORAGE_VERSION) {
     return input;
@@ -147,19 +154,17 @@ export function migrateSettingsDefaults(
   if (
     fromVersion < 4 &&
     next.trailThickness === LEGACY_TRAIL_THICKNESS_DEFAULT &&
-    next.trailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
+    legacyTrailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
   ) {
     next.trailThickness = DEFAULT_SETTINGS.trailThickness;
-    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
   }
 
   if (
     fromVersion < 5 &&
     next.trailThickness === PREVIOUS_TRAIL_THICKNESS_DEFAULT &&
-    next.trailDistance === PREVIOUS_TRAIL_DISTANCE_DEFAULT
+    legacyTrailDistance === PREVIOUS_TRAIL_DISTANCE_DEFAULT
   ) {
     next.trailThickness = DEFAULT_SETTINGS.trailThickness;
-    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
   }
 
   return next;
@@ -179,10 +184,10 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.trailThickness) &&
     s.trailThickness >= TRAIL_THICKNESS_MIN &&
     s.trailThickness <= TRAIL_THICKNESS_MAX &&
-    typeof s.trailDistance === "number" &&
-    Number.isFinite(s.trailDistance) &&
-    s.trailDistance >= TRAIL_DISTANCE_MIN &&
-    s.trailDistance <= TRAIL_DISTANCE_MAX &&
+    typeof s.trailMinutes === "number" &&
+    Number.isFinite(s.trailMinutes) &&
+    s.trailMinutes >= TRAIL_MINUTES_MIN &&
+    s.trailMinutes <= TRAIL_MINUTES_MAX &&
     typeof s.showShadows === "boolean" &&
     typeof s.showAltitudeColors === "boolean" &&
     (s.altitudeDisplayMode === "presentation" ||
@@ -218,6 +223,7 @@ function loadSettings(): Settings {
     const envelope: StorageEnvelope = JSON.parse(raw);
     if (envelope.v !== STORAGE_VERSION || !isValidSettings(envelope.data)) {
       const merged = { ...DEFAULT_SETTINGS };
+      let legacyTrailDistance: number | undefined;
       if (typeof envelope.data === "object" && envelope.data !== null) {
         const d = envelope.data as Record<string, unknown>;
         for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
@@ -225,9 +231,14 @@ function loadSettings(): Settings {
             (merged as Record<string, unknown>)[key] = d[key];
           }
         }
+        if (typeof d.trailDistance === "number") {
+          legacyTrailDistance = d.trailDistance;
+        }
       }
       const version = Number.isFinite(envelope.v) ? envelope.v : 0;
-      return normalizeSettings(migrateSettingsDefaults(merged, version));
+      return normalizeSettings(
+        migrateSettingsDefaults(merged, version, legacyTrailDistance),
+      );
     }
     return normalizeSettings(
       migrateSettingsDefaults(
