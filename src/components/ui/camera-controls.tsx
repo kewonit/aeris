@@ -77,8 +77,7 @@ function ControlButton({
   return (
     <motion.button
       type="button"
-      className="flex h-8 w-8 items-center justify-center select-none"
-      style={{ color: "rgb(var(--ui-fg) / 0.45)" }}
+      className="flex h-8 w-8 items-center justify-center select-none text-subtle"
       whileHover={{ scale: 1.12 }}
       whileTap={{ scale: 0.88 }}
       aria-label={label}
@@ -96,8 +95,7 @@ function ControlButton({
 function Divider() {
   return (
     <div
-      className="mx-auto h-px w-4"
-      style={{ backgroundColor: "rgb(var(--ui-fg) / 0.06)" }}
+      className="mx-auto h-px w-4 bg-card"
     />
   );
 }
@@ -150,8 +148,7 @@ function ActionButton({
   return (
     <motion.button
       type="button"
-      className="flex h-8 w-8 items-center justify-center select-none"
-      style={{ color: "rgb(var(--ui-fg) / 0.45)" }}
+      className="flex h-8 w-8 items-center justify-center select-none text-subtle"
       whileHover={{ scale: 1.12 }}
       whileTap={{ scale: 0.88 }}
       aria-label={label}
@@ -240,11 +237,7 @@ export function CameraControls() {
         damping: 24,
         delay: 0.55,
       }}
-      className="flex flex-col items-center rounded-xl border backdrop-blur-2xl"
-      style={{
-        borderColor: "rgb(var(--ui-fg) / 0.06)",
-        backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-      }}
+      className="flex flex-col items-center rounded-lg border border-border bg-background"
       role="toolbar"
       aria-label="Camera controls"
     >
@@ -262,8 +255,7 @@ export function CameraControls() {
       </ControlButton>
 
       <div
-        className="mx-auto my-0.5 h-px w-6"
-        style={{ backgroundColor: "rgb(var(--ui-fg) / 0.10)" }}
+        className="mx-auto my-0.5 h-px w-6 bg-border"
       />
 
       <ControlButton
@@ -285,8 +277,7 @@ export function CameraControls() {
       </ControlButton>
 
       <div
-        className="mx-auto my-0.5 h-px w-6"
-        style={{ backgroundColor: "rgb(var(--ui-fg) / 0.10)" }}
+        className="mx-auto my-0.5 h-px w-6 bg-border"
       />
 
       <ControlButton
@@ -308,8 +299,7 @@ export function CameraControls() {
       </ControlButton>
 
       <div
-        className="mx-auto my-0.5 h-px w-6"
-        style={{ backgroundColor: "rgb(var(--ui-fg) / 0.10)" }}
+        className="mx-auto my-0.5 h-px w-6 bg-border"
       />
 
       <ActionButton

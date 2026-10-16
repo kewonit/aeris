@@ -65,12 +65,12 @@ function AirlineLogoInner({
   if (!currentSrc || failed) {
     return (
       <span
-        className={`inline-flex items-center justify-center rounded-md bg-foreground/5 ${className}`}
+        className={`inline-flex items-center justify-center rounded-sm bg-card ${className}`}
         style={{ width: size, height: size }}
         aria-hidden="true"
       >
         <Plane
-          className="text-foreground/25"
+          className="text-subtle"
           style={{ width: size * 0.6, height: size * 0.6 }}
         />
       </span>
@@ -79,15 +79,9 @@ function AirlineLogoInner({
 
   return (
     <span
-      className={`relative inline-flex items-center justify-center rounded-md bg-white/5 overflow-hidden ${className}`}
+      className={`relative inline-flex items-center justify-center overflow-hidden rounded-sm ${className}`}
       style={{ width: size, height: size }}
     >
-      {!loaded && (
-        <span
-          className="absolute inset-0 animate-pulse bg-foreground/8"
-          aria-hidden="true"
-        />
-      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={currentSrc} // fresh DOM node for each candidate

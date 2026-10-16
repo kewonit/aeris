@@ -118,20 +118,13 @@ export function StatusBar({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="flex items-center gap-2.5 rounded-xl border border-amber-500/15 bg-amber-500/6 px-3.5 py-2 backdrop-blur-2xl"
+            className="flex items-center gap-2.5 rounded-full border border-border bg-background px-3.5 py-2 text-label text-warning"
             role="alert"
           >
-            <ShieldAlert className="h-3.5 w-3.5 text-amber-400/80" />
-            <span className="text-[11px] font-medium tracking-wide text-amber-300/70">
-              Rate limited
-            </span>
+            <ShieldAlert className="size-3.5" aria-hidden="true" />
+            Rate limited
             {retryIn > 0 && (
-              <>
-                <div className="h-3 w-px bg-amber-400/10" />
-                <span className="font-mono text-[11px] font-semibold tabular-nums text-amber-400/60">
-                  {retryIn}s
-                </span>
-              </>
+              <span className="font-mono text-subtle">retry in {retryIn}s</span>
             )}
           </motion.div>
         )}
@@ -147,11 +140,7 @@ export function StatusBar({
             damping: 24,
             delay: 0.4,
           }}
-          className="flex items-center gap-3 rounded-xl border px-3.5 py-2 backdrop-blur-2xl"
-          style={{
-            borderColor: "rgb(var(--ui-fg) / 0.06)",
-            backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-          }}
+          className="flex items-center gap-3 rounded-lg border px-3.5 py-2 border-border bg-background"
           aria-live="polite"
           aria-atomic="true"
         >
@@ -163,30 +152,25 @@ export function StatusBar({
           />
 
           <div
-            className="h-3 w-px"
-            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+            className="h-3 w-px bg-border"
           />
 
           <div className="flex items-center gap-1.5">
             <Plane
-              className="h-3 w-3"
-              style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
+              className="h-3 w-3 text-subtle"
             />
             <span
-              className="text-[11px] font-semibold tracking-wide"
-              style={{ color: "rgb(var(--ui-fg) / 0.6)" }}
+              className="text-caption text-muted-foreground"
             >
               {flightCount}
             </span>
           </div>
 
           <div
-            className="h-3 w-px"
-            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+            className="h-3 w-px bg-border"
           />
           <span
-            className="text-[11px] font-medium tracking-wide"
-            style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+            className="text-caption text-subtle"
             title={cityName}
           >
             {cityName}
@@ -210,19 +194,14 @@ export function StatusBar({
             damping: 24,
             delay: 0.48,
           }}
-          className="flex items-center gap-3 rounded-xl border px-3.5 py-2 backdrop-blur-2xl"
-          style={{
-            borderColor: "rgb(var(--ui-fg) / 0.06)",
-            backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-          }}
+          className="flex items-center gap-3 rounded-lg border px-3.5 py-2 border-border bg-background"
         >
           <button
             type="button"
             onClick={onNorthUp}
             aria-label="North up"
             title="North up"
-            className="text-[11px] font-medium tracking-wide transition-colors"
-            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+            className="text-caption transition-colors text-muted-foreground"
           >
             <svg
               aria-hidden="true"
@@ -234,28 +213,24 @@ export function StatusBar({
             </svg>
           </button>
           <div
-            className="h-3 w-px"
-            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+            className="h-3 w-px bg-border"
           />
           <button
             type="button"
             onClick={onResetView}
-            className="text-[11px] font-medium tracking-wide transition-colors"
-            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+            className="text-caption transition-colors text-muted-foreground"
           >
             Reset
           </button>
           <div
-            className="h-3 w-px"
-            style={{ backgroundColor: "rgb(var(--ui-fg) / 0.08)" }}
+            className="h-3 w-px bg-border"
           />
           <button
             type="button"
             onClick={onRandomAirport}
             aria-label="Random airport"
             title="Random airport"
-            className="inline-flex items-center gap-1 text-[11px] font-medium tracking-wide transition-colors"
-            style={{ color: "rgb(var(--ui-fg) / 0.55)" }}
+            className="inline-flex items-center gap-1 text-caption transition-colors text-muted-foreground"
           >
             <Dices className="h-3 w-3" />
             Random

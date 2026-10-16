@@ -45,18 +45,26 @@ test("RouteSummary labels a valid result as a reported route", () => {
   assert.doesNotMatch(html, />-</);
 });
 
-test("RouteSummary hides unavailable and incomplete results", () => {
-  const unavailable = renderToStaticMarkup(
+test("RouteSummary keeps its row while loading and when no route is reported", () => {
+  const loading = renderToStaticMarkup(
     createElement(RouteSummary, {
-      routeInfo: { ...VALID_ROUTE, available: false },
+      routeInfo: { ...VALID_ROUTE, available: false, loading: true },
     }),
   );
-  const incomplete = renderToStaticMarkup(
+  const missing = renderToStaticMarkup(
     createElement(RouteSummary, {
-      routeInfo: { ...VALID_ROUTE, destination: null },
+      routeInfo: { ...VALID_ROUTE, available: false, origin: null, destination: null },
     }),
   );
 
-  assert.equal(unavailable, "");
-  assert.equal(incomplete, "");
+  const mismatch = renderToStaticMarkup(
+    createElement(RouteSummary, {
+      routeInfo: { ...VALID_ROUTE, available: false, mismatch: true },
+    }),
+  );
+
+  assert.match(loading, /Looking up the route/);
+  assert.match(missing, /No route reported/);
+  assert.match(mismatch, /route doesn’t match this aircraft/);
+  assert.doesNotMatch(missing, /SFO|JFK/);
 });

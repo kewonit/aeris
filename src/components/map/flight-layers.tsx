@@ -6,7 +6,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import { type PickingInfo, MapView } from "@deck.gl/core";
 
 import type {
@@ -59,8 +59,13 @@ import { preloadAllModels } from "./aircraft-model-mapping";
 import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
-import { OVERVIEW_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
+import {
+  ACTIVE_FRAME_INTERVAL_MS,
+  OVERVIEW_FRAME_INTERVAL_MS,
+  isFrameDue,
+} from "./frame-rate";
 
 export function FlightLayers({
   flights,
@@ -602,7 +607,10 @@ export function FlightLayers({
         return;
       }
 
-      if (!isFrameDue(lastRenderedAt, now, OVERVIEW_FRAME_INTERVAL_MS)) {
+      const frameInterval = fpvIcao24Ref.current
+        ? ACTIVE_FRAME_INTERVAL_MS
+        : OVERVIEW_FRAME_INTERVAL_MS;
+      if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
         return;
       }
@@ -702,10 +710,8 @@ export function FlightLayers({
             fpvPosOut.current = {
               lng: fpvF.longitude!,
               lat: fpvF.latitude!,
-              alt: Number.isFinite(fpvF.baroAltitude)
-                ? fpvF.baroAltitude!
-                : 5000,
-              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack! : 0,
+              alt: Number.isFinite(fpvF.baroAltitude) ? fpvF.baroAltitude : null,
+              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack : null,
             };
           } else {
             fpvPosOut.current = null;
@@ -733,7 +739,17 @@ export function FlightLayers({
         }
 
         const altColors = showAltColorsRef.current;
-        const visibleFlights = interpolated;
+        // In FPV the camera sits inside this aircraft, so its own icon,
+        // model, shadow, and trail would block the view. Other traffic stays.
+        const visibleFlights = fpvId
+          ? interpolated.filter((flight) => flight.icao24 !== fpvId)
+          : interpolated;
+        const visibleTrails = fpvId
+          ? currentTrails.filter((trail) => trail.icao24 !== fpvId)
+          : currentTrails;
+        const modelFlights = fpvId
+          ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
+          : currentFlights;
 
         // Pitch/bank change slowly - recompute at ~10fps regardless of
         // animation frame rate. Values are retained in pitchMapRef/bankMapRef
@@ -762,12 +778,17 @@ export function FlightLayers({
 
         const layers = [];
 
+        // The FPV camera sits at the aircraft's true altitude, so traffic is
+        // drawn at true altitudes too. Otherwise the exaggerated presentation
+        // heights would float every other aircraft far above the horizon.
+        const altitudeMode: AltitudeDisplayMode = fpvId
+          ? "realistic"
+          : altitudeDisplayModeRef.current;
         // Tie the height ramp to the actual flight-layer visibility window so
         // aircraft and trails do not appear overly flattened as they fade in.
-        const elevScale = getZoomAdjustedElevationScale(
-          currentZoom,
-          altitudeDisplayModeRef.current,
-        );
+        const elevScale = fpvId
+          ? 1
+          : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
 
         if (layersVisible && showShadowsRef.current) {
           layers.push(
@@ -801,16 +822,16 @@ export function FlightLayers({
         if (layersVisible && showTrailsRef.current) {
           layers.push(
             ...buildTrailLayers({
-            interpolated,
+            interpolated: visibleFlights,
             interpolatedMap: interpolatedMapRef.current,
-            currentTrails,
+            currentTrails: visibleTrails,
             trailMap: trailMapRef.current,
             selectedIcao24: selectedIcao24Ref.current,
             selectedEnvelope: selectedEnvelopeRef.current,
             trailDistance: trailDistanceRef.current,
             trailThickness: trailThicknessRef.current,
             altColors,
-            altitudeDisplayMode: altitudeDisplayModeRef.current,
+            altitudeDisplayMode: altitudeMode,
             defaultColor: DEFAULT_COLOR,
             elapsed,
             visualFrame: visualFrameRef.current,
@@ -833,6 +854,7 @@ export function FlightLayers({
         // constructing 4 IconLayer objects + deck.gl diffing per frame.
         if (
           layersVisible &&
+          !fpvId &&
           (selectedIcao24Ref.current || prevSelectedRef.current)
         ) {
           const pulseResult = buildSelectionPulseLayers({
@@ -845,7 +867,7 @@ export function FlightLayers({
             globeFade,
             currentZoom,
             elevScale,
-            altitudeDisplayMode: altitudeDisplayModeRef.current,
+            altitudeDisplayMode: altitudeMode,
             haloUrl,
             ringUrl,
             layersVisible,
@@ -874,7 +896,7 @@ export function FlightLayers({
           // 3D: one ScenegraphLayer per model type
           layers.push(
             ...buildAircraftModelLayers({
-              rawFlights: currentFlights,
+              rawFlights: modelFlights,
               interpolatedMap: interpolatedMapRef.current,
               frameCounter: visualFrameRef.current,
               dataVersion: dataVersionRef.current,
@@ -882,7 +904,7 @@ export function FlightLayers({
               globeFade,
               elevScale,
               currentZoom,
-              altitudeDisplayMode: altitudeDisplayModeRef.current,
+              altitudeDisplayMode: altitudeMode,
               altColors,
               defaultColor: DEFAULT_COLOR,
               pitchByIcao,
@@ -905,7 +927,7 @@ export function FlightLayers({
                 d.latitude!,
                 altitudeToElevation(
                   d.baroAltitude,
-                  altitudeDisplayModeRef.current,
+                  altitudeMode,
                 ) * elevScale,
               ],
               getIcon: () => "aircraft",
@@ -934,7 +956,7 @@ export function FlightLayers({
                 getPosition: [
                   visualFrameRef.current,
                   elevScale,
-                  altitudeDisplayModeRef.current,
+                  altitudeMode,
                 ],
                 getAngle: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],

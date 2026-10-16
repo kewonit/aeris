@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { FlightState } from "@/lib/opensky";
-
-import { buildTrailBasePath, buildVisibleTrailPoints } from "./trail-base-path";
+import { buildTrailBasePath } from "./trail-base-path";
 
 function maxHeadingDeltaDeg(points: [number, number, number][]): number {
   let maxDelta = 0;
@@ -84,49 +82,6 @@ test("fullHistory base path is densified through the shared smoothing path", () 
     basePath[basePath.length - 1]?.slice(0, 2),
     path[path.length - 1],
   );
-});
-
-test("buildVisibleTrailPoints keeps the fixed trail body unchanged while aircraft interpolates", () => {
-  const trail = {
-    icao24: "abc123",
-    path: [
-      [8.0, 50.0],
-      [8.05, 50.0],
-      [8.1, 50.0],
-    ] as [number, number][],
-    altitudes: [1000, 1020, 1040],
-    timestamps: [1, 2, 3],
-    baroAltitude: 1040,
-  };
-
-  const basePath = buildTrailBasePath(trail, 80);
-
-  const first = buildVisibleTrailPoints(
-    trail,
-    {
-      icao24: "abc123",
-      longitude: 8.12,
-      latitude: 50.0,
-      baroAltitude: 1045,
-    } as FlightState,
-    80,
-    basePath,
-  );
-
-  const second = buildVisibleTrailPoints(
-    trail,
-    {
-      icao24: "abc123",
-      longitude: 8.15,
-      latitude: 50.0,
-      baroAltitude: 1050,
-    } as FlightState,
-    80,
-    basePath,
-  );
-
-  assert.deepStrictEqual(first, basePath);
-  assert.deepStrictEqual(second, basePath);
 });
 
 test("buildTrailBasePath removes short alternating needle kinks from active trails", () => {

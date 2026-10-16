@@ -77,3 +77,24 @@ test("getSafeInterpolationProgress bounds active dead reckoning to a small windo
   assert.equal(progress.rawT, 1.25);
   assert.equal(progress.tPos, 1);
 });
+
+test("resolveDisplayTrack corrects for shorter longitude degrees away from the equator", () => {
+  // About one kilometre along a true 125° track at 37° N.
+  const resolved = resolveDisplayTrack({
+    reportedTrack: null,
+    previousPosition: { lng: -122, lat: 37 },
+    currentPosition: { lng: -122 + 0.009214, lat: 37 - 0.005153 },
+  });
+
+  assert.ok(Math.abs(resolved - 125) < 0.5, `got ${resolved}`);
+});
+
+test("resolveDisplayTrack takes the short way across the antimeridian", () => {
+  const resolved = resolveDisplayTrack({
+    reportedTrack: null,
+    previousPosition: { lng: 179.99, lat: 0 },
+    currentPosition: { lng: -179.99, lat: 0 },
+  });
+
+  assert.ok(Math.abs(resolved - 90) < 0.5, `got ${resolved}`);
+});

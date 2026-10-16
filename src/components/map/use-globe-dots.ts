@@ -5,7 +5,7 @@ import maplibregl from "maplibre-gl";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor } from "@/lib/flight-utils";
 import { type PickingInfo } from "@deck.gl/core";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import {
   densifyGreatCircle2D,
   splitAtAntimeridian,

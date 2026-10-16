@@ -4,6 +4,7 @@ import {
   buildAircraftSidebarViewModel,
   formatAircraftDataSources,
   formatAircraftFreshness,
+  formatAircraftName,
   hasEmergencyStatus,
   isMilitaryAircraft,
 } from "./aircraft-sidebar";
@@ -107,4 +108,16 @@ test("sidebar source and freshness text stays factual", () => {
     formatAircraftFreshness(1_000, 2_000),
     "Updated 1 second ago",
   );
+});
+
+test("names the aircraft by maker and model", () => {
+  const name = (manufacturer: string | null, model: string | null, typeCode: string | null = null) =>
+    formatAircraftName({ manufacturer, model, typeCode });
+
+  assert.equal(name("BOEING", "737-8H4"), "Boeing 737-8H4");
+  assert.equal(name("EMBRAER S A", "ERJ 170-200 LR"), "Embraer ERJ 170-200 LR");
+  assert.equal(name(null, "Boeing 767-332"), "Boeing 767-332");
+  assert.equal(name("Boeing", "Boeing 777-300ER"), "Boeing 777-300ER");
+  assert.equal(name(null, null, "B763"), "B763");
+  assert.equal(name(null, null), null);
 });

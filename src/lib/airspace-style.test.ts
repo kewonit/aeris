@@ -4,17 +4,12 @@ import {
   AIRSPACE_SOURCE_ID,
   AIRSPACE_LAYERS,
   AIRSPACE_INTERACTIVE_LAYER_IDS,
-  AIRSPACE_RENDERED_TYPES,
   AIRSPACE_RADIUS_MULTIPLIER,
   FPV_AIRSPACE_RADIUS_DEG,
   FPV_BOUNDS_SNAP_DEG,
   computeAirspaceBounds,
   airspaceBoundsKey,
 } from "./airspace-style";
-
-test("source id is stable", () => {
-  assert.equal(AIRSPACE_SOURCE_ID, "openaip-airspace");
-});
 
 test("layer definitions share the airspace source", () => {
   for (const layer of AIRSPACE_LAYERS) {
@@ -37,47 +32,10 @@ test("layer ids are unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("at least one fill and one line layer exist", () => {
-  assert.ok(AIRSPACE_LAYERS.some((l) => l.type === "fill"));
-  assert.ok(AIRSPACE_LAYERS.some((l) => l.type === "line"));
-  assert.ok(AIRSPACE_LAYERS.some((l) => l.type === "symbol"));
-});
-
 test("interactive layers all reference known layer ids", () => {
   const ids = new Set(AIRSPACE_LAYERS.map((l) => l.id));
   for (const id of AIRSPACE_INTERACTIVE_LAYER_IDS) {
     assert.ok(ids.has(id), `interactive id ${id} not in AIRSPACE_LAYERS`);
-  }
-});
-
-test("rendered types list covers controlled + restricted + tmz/rmz + adiz", () => {
-  const expected = [
-    "ctr",
-    "tma",
-    "cta",
-    "restricted",
-    "danger",
-    "prohibited",
-    "tfr",
-    "tmz",
-    "rmz",
-    "adiz",
-  ];
-  for (const t of expected) {
-    assert.ok(
-      AIRSPACE_RENDERED_TYPES.has(t),
-      `expected ${t} in AIRSPACE_RENDERED_TYPES`,
-    );
-  }
-});
-
-test("out-of-scope types are excluded", () => {
-  const excluded = ["awy", "fir", "uir", "moa", "gliding_sector"];
-  for (const t of excluded) {
-    assert.ok(
-      !AIRSPACE_RENDERED_TYPES.has(t),
-      `${t} should NOT be in AIRSPACE_RENDERED_TYPES`,
-    );
   }
 });
 

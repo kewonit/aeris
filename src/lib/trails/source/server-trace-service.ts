@@ -58,16 +58,6 @@ export type ServerTraceResult = {
   payload: ServerTracePayload;
 };
 
-export function createOpenSkyCooldownMs(params: {
-  retryAfterHeader: string | null;
-}): number {
-  const raw = Number.parseFloat(params.retryAfterHeader ?? "");
-  if (!Number.isFinite(raw) || raw <= 0) {
-    return 60_000;
-  }
-  return Math.round(raw * 1000);
-}
-
 export function preferNextProvider(
   current: ProxyProviderId,
   succeeding: ProxyProviderId,

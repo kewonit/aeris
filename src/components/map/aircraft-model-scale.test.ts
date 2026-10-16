@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getEffectiveModelScale } from "./aircraft-model-calibration";
 import { aircraftSizeMultiplier } from "./aircraft-appearance";
 import {
   BASE_3D_MODEL_SIZE,
@@ -53,11 +52,5 @@ test("scenegraph size scale keeps A380 larger than narrowbody without zoom compe
   assert.equal(
     getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 5),
     getAircraftScenegraphSizeScale(modelDisplayScale("narrowbody"), 8),
-  );
-});
-
-test("effective 3D scale keeps A380 larger than narrowbody", () => {
-  assert.ok(
-    getEffectiveModelScale("a380") > getEffectiveModelScale("narrowbody"),
   );
 });

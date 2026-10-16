@@ -1,5 +1,5 @@
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {
@@ -48,7 +48,7 @@ export function getSafeInterpolationProgress(input: {
   return { rawT, tPos: Math.min(rawT, 1) };
 }
 
-function normalizeBearing(bearing: number): number {
+export function normalizeBearing(bearing: number): number {
   return ((bearing % 360) + 360) % 360;
 }
 
@@ -56,7 +56,13 @@ function bearingFromLngLat(
   previousPosition: { lng: number; lat: number },
   currentPosition: { lng: number; lat: number },
 ): number | null {
-  const dx = currentPosition.lng - previousPosition.lng;
+  // A degree of longitude shrinks with latitude, so scale it before taking
+  // the angle. Without this a 125° track reads as 119° at 37° N.
+  const midLatitude =
+    ((previousPosition.lat + currentPosition.lat) / 2) * (Math.PI / 180);
+  const dx =
+    (((currentPosition.lng - previousPosition.lng + 540) % 360) - 180) *
+    Math.cos(midLatitude);
   const dy = currentPosition.lat - previousPosition.lat;
   const distanceMeters = horizontalDistanceFromLngLat(
     previousPosition.lng,

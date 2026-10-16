@@ -40,16 +40,6 @@ const TYPE_LABELS: Record<AtcFeedType, string> = {
   combined: "CMB",
 };
 
-const TYPE_COLORS: Record<AtcFeedType, string> = {
-  tower: "rgb(52, 211, 153)",
-  ground: "rgb(251, 191, 36)",
-  approach: "rgb(96, 165, 250)",
-  departure: "rgb(167, 139, 250)",
-  atis: "rgb(148, 163, 184)",
-  center: "rgb(244, 114, 182)",
-  combined: "rgb(156, 163, 175)",
-};
-
 function sortFeeds(feeds: AtcFeed[]): AtcFeed[] {
   return [...feeds].sort(
     (a, b) => FEED_TYPE_PRIORITY[a.type] - FEED_TYPE_PRIORITY[b.type],
@@ -131,51 +121,29 @@ export function AtcFeedDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-[18px] backdrop-blur-3xl sm:w-70 sm:max-w-none"
-          style={{
-            border: "0.5px solid rgb(var(--ui-fg) / 0.08)",
-            backgroundColor: "rgb(var(--ui-bg) / 0.7)",
-            boxShadow:
-              "0 12px 40px rgb(0 0 0 / 0.4), inset 0 0.5px 0 rgb(var(--ui-fg) / 0.04)",
-          }}
+          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div
-            className="flex items-center justify-between px-4 py-2.5"
-            style={{ borderBottom: "0.5px solid rgb(var(--ui-fg) / 0.06)" }}
-          >
-            <div className="flex items-center gap-2">
-              <Radio className="h-3 w-3 text-emerald-400/70" />
-              <span
-                className="text-[10px] font-semibold tracking-widest uppercase"
-                style={{ color: "rgb(var(--ui-fg) / 0.35)" }}
-              >
-                Frequencies
-              </span>
+          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+            <div className="flex items-center gap-2 text-label text-subtle">
+              <Radio className="size-3" aria-hidden="true" />
+              Frequencies
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-foreground/5 active:bg-foreground/10"
+              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
               aria-label="Close feed selector"
             >
-              <X
-                className="h-3 w-3"
-                style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
-              />
+              <X className="size-3.5" />
             </button>
           </div>
 
           {/* Feed list */}
           {feeds.length === 0 ? (
-            <div className="px-3.5 py-5 text-center">
-              <span
-                className="text-[10px]"
-                style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
-              >
-                No feeds for this area
-              </span>
-            </div>
+            <p className="px-4 py-5 text-center text-small text-subtle">
+              No feeds for this area
+            </p>
           ) : (
             <ScrollArea className="max-h-65">
               <div className="py-1">
@@ -196,64 +164,44 @@ export function AtcFeedDropdown({
                           key={feed.id}
                           type="button"
                           onClick={() => handleSelectFeed(feed)}
-                          className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-all duration-150 ${
-                            isSelected
-                              ? "bg-foreground/6"
-                              : "hover:bg-foreground/3 active:bg-foreground/6 active:scale-[0.99]"
+                          className={`group flex w-full items-center gap-2.5 px-4 py-2 transition-colors ${
+                            isSelected ? "bg-card" : "hover:bg-card"
                           }`}
                         >
                           {/* Inline icon */}
                           <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                             {isLoading ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-emerald-400/70" />
+                              <Loader2 className="size-3 animate-spin text-subtle" />
                             ) : isFeedError ? (
-                              <AlertTriangle className="h-3 w-3 text-amber-400/70" />
+                              <AlertTriangle className="size-3 text-warning" />
                             ) : isPlaying ? (
-                              <Square className="h-2.5 w-2.5 text-emerald-400" />
+                              <Square className="size-2.5 text-tint" />
                             ) : (
-                              <Play
-                                className="h-3 w-3 opacity-40 transition-opacity group-hover:opacity-80"
-                                style={{ color: "rgb(var(--ui-fg) / 0.5)" }}
-                              />
+                              <Play className="size-3 text-subtle transition-colors group-hover:text-foreground" />
                             )}
                           </div>
 
                           {/* Feed name + frequency */}
-                          <div className="flex min-w-0 flex-1 flex-col gap-0 text-left">
+                          <div className="flex min-w-0 flex-1 flex-col text-left">
                             <span
-                              className="truncate text-[11px] font-medium leading-snug"
-                              style={{
-                                color: isPlaying
-                                  ? "rgb(var(--ui-fg) / 0.85)"
+                              className={`truncate text-small ${
+                                isPlaying
+                                  ? "text-foreground"
                                   : isFeedError
-                                    ? "rgb(251 191 36 / 0.7)"
-                                    : "rgb(var(--ui-fg) / 0.55)",
-                              }}
+                                    ? "text-warning"
+                                    : "text-muted-foreground"
+                              }`}
                             >
                               {feed.name}
                             </span>
-                            {isFeedError && atc.error ? (
-                              <span className="truncate text-[9px] text-amber-300/50">
-                                {atc.error}
-                              </span>
-                            ) : (
-                              <span
-                                className="font-mono text-[9px] tabular-nums leading-snug"
-                                style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-                              >
-                                {feed.frequency}
-                              </span>
-                            )}
+                            <span
+                              className={`truncate font-mono text-micro ${isFeedError && atc.error ? "text-warning" : "text-subtle"}`}
+                            >
+                              {isFeedError && atc.error ? atc.error : feed.frequency}
+                            </span>
                           </div>
 
-                          {/* Type badge */}
-                          <span
-                            className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
-                            style={{
-                              backgroundColor: `${TYPE_COLORS[feed.type]}12`,
-                              color: `${TYPE_COLORS[feed.type]}`,
-                            }}
-                          >
+                          <span className="shrink-0 font-mono text-micro text-subtle">
                             {TYPE_LABELS[feed.type]}
                           </span>
                         </button>
@@ -317,25 +265,17 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -12 }}
         transition={{ type: "spring", stiffness: 400, damping: 28 }}
-        className="flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-[20px] px-4 py-3 backdrop-blur-3xl sm:w-auto sm:max-w-none sm:gap-3.5 sm:px-4"
-        style={{
-          border: isError
-            ? "0.5px solid rgb(251 191 36 / 0.15)"
-            : "0.5px solid rgb(var(--ui-fg) / 0.06)",
-          backgroundColor: "rgb(var(--ui-bg) / 0.5)",
-          boxShadow:
-            "0 8px 32px rgb(0 0 0 / 0.25), inset 0 0.5px 0 rgb(var(--ui-fg) / 0.04)",
-        }}
+        className="flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lift sm:w-auto sm:max-w-none"
       >
         {/* Waveform or blocked play icon (left) */}
         {isBlocked ? (
           <button
             type="button"
             onClick={() => atc.resume()}
-            className="flex h-7 w-13 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-foreground/5 active:bg-foreground/10"
+            className="flex h-7 w-13 shrink-0 items-center justify-center rounded-sm text-tint transition-colors hover:bg-card"
             aria-label="Tap to start"
           >
-            <Play className="h-4 w-4 text-emerald-400/80" />
+            <Play className="size-4" />
           </button>
         ) : (
           <AtcWaveform
@@ -352,21 +292,18 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         >
           <div className="flex items-center gap-1.5">
             {atc.status === "loading" ? (
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-400/70" />
+              <Loader2 className="size-3 shrink-0 animate-spin text-subtle" />
             ) : isError ? (
-              <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400/70" />
+              <AlertTriangle className="size-3 shrink-0 text-warning" />
             ) : null}
             <span
-              className="truncate text-[12px] font-medium leading-tight"
-              style={{
-                color: isBlocked
-                  ? "rgb(var(--ui-fg) / 0.55)"
-                  : isError
-                    ? "rgb(251 191 36 / 0.7)"
-                    : isStreaming
-                      ? "rgb(var(--ui-fg) / 0.75)"
-                      : "rgb(var(--ui-fg) / 0.45)",
-              }}
+              className={`truncate text-small ${
+                isError && !isBlocked
+                  ? "text-warning"
+                  : isStreaming
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+              }`}
             >
               {isBlocked
                 ? "Tap to listen"
@@ -376,18 +313,12 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span
-              className="font-mono text-[9px] tabular-nums"
-              style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-            >
+            <span className="font-mono text-micro text-subtle">
               {atc.feed.frequency}
             </span>
             {atc.usingProxy && atc.status === "playing" && (
-              <span
-                className="flex items-center gap-0.5 text-[9px]"
-                style={{ color: "rgb(var(--ui-fg) / 0.2)" }}
-              >
-                <Server className="h-1.5 w-1.5" />
+              <span className="flex items-center gap-0.5 text-micro text-subtle">
+                <Server className="size-2" aria-hidden="true" />
                 proxy
               </span>
             )}
@@ -399,18 +330,11 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
           <button
             type="button"
             onClick={() => setSpectrumOpen((prev) => !prev)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all hover:bg-foreground/5 active:bg-foreground/8 active:scale-[0.92]"
+            className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors hover:bg-card ${spectrumOpen ? "text-tint" : "text-subtle hover:text-foreground"}`}
             aria-label={spectrumOpen ? "Hide spectrum" : "Show spectrum"}
-            title={spectrumOpen ? "Hide spectrum (Esc)" : "Show audio spectrum"}
+            aria-pressed={spectrumOpen}
           >
-            <AudioLines
-              className="h-3.5 w-3.5 transition-colors"
-              style={{
-                color: spectrumOpen
-                  ? "rgb(52, 211, 153)"
-                  : "rgb(var(--ui-fg) / 0.25)",
-              }}
-            />
+            <AudioLines className="size-3.5" />
           </button>
         )}
 
@@ -418,13 +342,10 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         <button
           type="button"
           onClick={() => atc.stop()}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all hover:bg-foreground/5 active:bg-foreground/8 active:scale-[0.92]"
+          className="grid size-8 shrink-0 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
           aria-label="Stop and close"
         >
-          <X
-            className="h-3.5 w-3.5"
-            style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-          />
+          <X className="size-3.5" />
         </button>
       </motion.div>
     </div>
@@ -452,20 +373,12 @@ export function AtcTrigger({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center rounded p-1 transition-colors hover:bg-foreground/5 active:bg-foreground/10 sm:p-0.5"
+      className={`inline-flex items-center rounded-sm p-1 transition-colors hover:bg-card ${
+        isPlaying ? "text-tint" : isError ? "text-warning" : "text-subtle"
+      }`}
       aria-label="Live ATC (A)"
-      title="Live ATC (A)"
     >
-      <ChevronUp
-        className={`h-3 w-3 transition-colors ${isError ? "animate-pulse" : ""}`}
-        style={{
-          color: isPlaying
-            ? "rgb(52, 211, 153)"
-            : isError
-              ? "rgb(251, 191, 36)"
-              : "rgb(var(--ui-fg) / 0.35)",
-        }}
-      />
+      <ChevronUp className="size-3" />
     </button>
   );
 }

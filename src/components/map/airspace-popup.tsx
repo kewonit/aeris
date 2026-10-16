@@ -33,15 +33,15 @@ export function AirspacePopup(props: AirspacePopupProps) {
   const showTypeLine = props.icao_class && props.icao_class !== "unclassified";
 
   return (
-    <div className="min-w-[180px] max-w-[260px] rounded-md bg-card/90 p-3 text-xs text-foreground shadow-lg backdrop-blur">
-      <div className="font-semibold text-sm leading-tight">{title}</div>
-      <div className="mt-2 font-mono text-[11px] leading-snug">
+    <div className="min-w-[180px] max-w-[260px] rounded-sm bg-card/90 p-3 text-label text-foreground shadow-lift">
+      <div className="font-medium text-small leading-tight">{title}</div>
+      <div className="mt-2 font-mono text-caption leading-snug">
         <div>{upper}</div>
         <div className="my-0.5 text-muted-foreground">────────</div>
         <div>{lower}</div>
       </div>
       {showTypeLine && (
-        <div className="mt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className="mt-2 text-micro text-muted-foreground">
           {props.type}
         </div>
       )}

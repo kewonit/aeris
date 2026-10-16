@@ -8,7 +8,6 @@ import {
   BUILDINGS_3D_MIN_ZOOM,
   BUILDINGS_3D_SOURCE_LAYER,
   findVectorSource,
-  setBuildings3DTheme,
 } from "./buildings-3d-layer";
 
 // ─── Minimal MapLibre stub ─────────────────────────────────────────────────
@@ -202,39 +201,4 @@ test("base expression coalesces render_min_height, min_height, then 0", () => {
   assert.deepEqual(coalesce[1], ["get", "render_min_height"]);
   assert.deepEqual(coalesce[2], ["get", "min_height"]);
   assert.equal(coalesce[3], 0);
-});
-
-// ─── setBuildings3DTheme ───────────────────────────────────────────────────
-
-test("setBuildings3DTheme updates wall color when layer exists", () => {
-  const style = freshStyle();
-  const { map, paintChanges } = makeStubMap(style);
-  addBuildings3DLayer(map as never, { dark: true });
-  setBuildings3DTheme(map as never, false);
-  assert.equal(paintChanges.length, 1);
-  assert.equal(paintChanges[0].layer, BUILDINGS_3D_LAYER_ID);
-  assert.equal(paintChanges[0].prop, "fill-extrusion-color");
-  assert.equal(paintChanges[0].value, "hsl(0, 0%, 80%)");
-});
-
-test("setBuildings3DTheme is a no-op when layer is absent", () => {
-  const { map, paintChanges } = makeStubMap(freshStyle());
-  setBuildings3DTheme(map as never, false);
-  assert.equal(paintChanges.length, 0);
-});
-
-test("setBuildings3DTheme swallows setPaintProperty errors", () => {
-  const style = freshStyle();
-  style.layers.push({
-    id: BUILDINGS_3D_LAYER_ID,
-    type: "fill-extrusion",
-  });
-  const map = {
-    getStyle: () => style,
-    getLayer: (id: string) => style.layers.find((l) => l.id === id),
-    setPaintProperty: () => {
-      throw new Error("style not ready");
-    },
-  } as never;
-  assert.doesNotThrow(() => setBuildings3DTheme(map, true));
 });
