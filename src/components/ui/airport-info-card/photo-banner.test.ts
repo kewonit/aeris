@@ -22,14 +22,15 @@ const PHOTO = {
   description: "Airport in California",
 };
 
-test("PhotoBanner shows the photo with its Wikipedia credit", () => {
+test("PhotoBanner renders the photo hidden until it loads", () => {
   const html = renderToStaticMarkup(
     createElement(PhotoBanner, { ...BASE, photo: PHOTO, loading: false }),
   );
 
   assert.match(html, /https:\/\/example.com\/thumb.jpg/);
   assert.match(html, /alt="San Francisco International Airport"/);
-  assert.match(html, /href="https:\/\/example.com\/wiki\/SFO"/);
+  assert.match(html, /opacity-0/);
+  assert.doesNotMatch(html, /Wikipedia/);
 });
 
 test("PhotoBanner keeps its space while the photo lookup runs", () => {
@@ -41,7 +42,7 @@ test("PhotoBanner keeps its space while the photo lookup runs", () => {
   assert.doesNotMatch(html, /<img/);
 });
 
-test("PhotoBanner collapses without a usable photo", () => {
+test("PhotoBanner keeps its frame without a usable photo", () => {
   const missing = renderToStaticMarkup(
     createElement(PhotoBanner, { ...BASE, photo: null, loading: false }),
   );
@@ -54,6 +55,8 @@ test("PhotoBanner collapses without a usable photo", () => {
     }),
   );
 
-  assert.equal(missing, "");
-  assert.equal(failed, "");
+  for (const html of [missing, failed]) {
+    assert.match(html, /No photo of this airport/);
+    assert.doesNotMatch(html, /<img/);
+  }
 });

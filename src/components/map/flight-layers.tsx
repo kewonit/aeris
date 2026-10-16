@@ -59,6 +59,7 @@ import { preloadAllModels } from "./aircraft-model-mapping";
 import { trailStore } from "@/lib/trails/store/trail-store";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
 import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
   ACTIVE_FRAME_INTERVAL_MS,
@@ -777,12 +778,17 @@ export function FlightLayers({
 
         const layers = [];
 
+        // The FPV camera sits at the aircraft's true altitude, so traffic is
+        // drawn at true altitudes too. Otherwise the exaggerated presentation
+        // heights would float every other aircraft far above the horizon.
+        const altitudeMode: AltitudeDisplayMode = fpvId
+          ? "realistic"
+          : altitudeDisplayModeRef.current;
         // Tie the height ramp to the actual flight-layer visibility window so
         // aircraft and trails do not appear overly flattened as they fade in.
-        const elevScale = getZoomAdjustedElevationScale(
-          currentZoom,
-          altitudeDisplayModeRef.current,
-        );
+        const elevScale = fpvId
+          ? 1
+          : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
 
         if (layersVisible && showShadowsRef.current) {
           layers.push(
@@ -825,7 +831,7 @@ export function FlightLayers({
             trailDistance: trailDistanceRef.current,
             trailThickness: trailThicknessRef.current,
             altColors,
-            altitudeDisplayMode: altitudeDisplayModeRef.current,
+            altitudeDisplayMode: altitudeMode,
             defaultColor: DEFAULT_COLOR,
             elapsed,
             visualFrame: visualFrameRef.current,
@@ -861,7 +867,7 @@ export function FlightLayers({
             globeFade,
             currentZoom,
             elevScale,
-            altitudeDisplayMode: altitudeDisplayModeRef.current,
+            altitudeDisplayMode: altitudeMode,
             haloUrl,
             ringUrl,
             layersVisible,
@@ -898,7 +904,7 @@ export function FlightLayers({
               globeFade,
               elevScale,
               currentZoom,
-              altitudeDisplayMode: altitudeDisplayModeRef.current,
+              altitudeDisplayMode: altitudeMode,
               altColors,
               defaultColor: DEFAULT_COLOR,
               pitchByIcao,
@@ -921,7 +927,7 @@ export function FlightLayers({
                 d.latitude!,
                 altitudeToElevation(
                   d.baroAltitude,
-                  altitudeDisplayModeRef.current,
+                  altitudeMode,
                 ) * elevScale,
               ],
               getIcon: () => "aircraft",
@@ -950,7 +956,7 @@ export function FlightLayers({
                 getPosition: [
                   visualFrameRef.current,
                   elevScale,
-                  altitudeDisplayModeRef.current,
+                  altitudeMode,
                 ],
                 getAngle: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],

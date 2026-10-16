@@ -47,6 +47,25 @@ export function buildAircraftSidebarViewModel(
   };
 }
 
+/**
+ * A readable aircraft name such as "Boeing 737-8H4". Registries often
+ * store the maker apart from the model and in capitals ("BOEING",
+ * "737-8H4"), so the maker's first word is title-cased and prefixed when
+ * the model does not already name it. Falls back to the ICAO type code.
+ */
+export function formatAircraftName(
+  details: Pick<AircraftSidebarViewModel, "manufacturer" | "model" | "typeCode">,
+): string | null {
+  const model = details.model;
+  const maker = details.manufacturer?.split(/\s+/)[0];
+  if (!model) return details.typeCode;
+  if (!maker || model.toLowerCase().includes(maker.toLowerCase())) return model;
+  const brand = /[a-z]/.test(maker)
+    ? maker
+    : maker.charAt(0) + maker.slice(1).toLowerCase();
+  return `${brand} ${model}`;
+}
+
 export function formatAircraftDataSources(sources: string[]): string[] {
   const labels = sources.map((source) => SOURCE_LABELS[source] ?? source);
   return [...new Set(labels.filter(Boolean))];

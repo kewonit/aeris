@@ -23,6 +23,7 @@ import {
   formatAircraftDataSources,
   formatAircraftFreshness,
   hasEmergencyStatus,
+  formatAircraftName,
   isMilitaryAircraft,
   positionSourceLabel,
 } from "@/lib/aircraft-sidebar";
@@ -53,12 +54,14 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
     cleanText(flight.callsign) ??
     details.registration ??
     flight.icao24.toUpperCase();
-  const meta = [
-    flight.icao24.toUpperCase(),
-    details.registration,
-    details.typeCode,
-    isMilitaryAircraft(flight.dbFlags) ? "Military" : null,
-  ].filter(Boolean);
+  const aircraftName = formatAircraftName(details);
+  // Both lines always render, so details that arrive later (registry,
+  // photo metadata) fill them in place instead of pushing content down.
+  const subtitle = details.airline ?? aircraftName ?? "Unknown aircraft";
+  const airframe =
+    [details.airline ? aircraftName : null, details.registration]
+      .filter(Boolean)
+      .join(" · ") || `ICAO ${flight.icao24.toUpperCase()}`;
   const heading = isFiniteNumber(flight.trueTrack) ? flight.trueTrack : null;
   const verticalRate = flight.verticalRate ?? flight.geomRate ?? null;
   const canEnterFpv =
@@ -79,13 +82,14 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           <AirlineMark callsign={flight.callsign} airline={airline} />
           <div className="min-w-0">
             <h2 className="truncate text-title text-foreground">{identity}</h2>
-            {details.airline && (
-              <p className="truncate text-small text-muted-foreground">
-                {details.airline}
-              </p>
-            )}
-            <p className="mt-0.5 truncate font-mono text-micro text-subtle">
-              {meta.join(" · ")}
+            <p className="truncate text-small text-muted-foreground">
+              {subtitle}
+            </p>
+            <p className="truncate text-label text-subtle">
+              {airframe}
+              {isMilitaryAircraft(flight.dbFlags) && (
+                <span className="text-warning"> · Military</span>
+              )}
             </p>
           </div>
         </header>
@@ -169,26 +173,38 @@ function AirlineMark({
   );
 }
 
+/**
+ * The reported route, or a note while it loads or when none is reported.
+ * Every state keeps the same height so the facts below never move.
+ */
 export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
-  if (!routeInfo.available || !routeInfo.origin || !routeInfo.destination) {
-    return null;
-  }
-  const origin = formatAirportCode(routeInfo.origin);
-  const destination = formatAirportCode(routeInfo.destination);
-  if (!origin || !destination) return null;
+  const origin = routeInfo.available ? formatAirportCode(routeInfo.origin) : "";
+  const destination = routeInfo.available
+    ? formatAirportCode(routeInfo.destination)
+    : "";
 
   return (
     <section aria-label="Reported route" className="border-t border-border py-4">
       <p className="text-label text-subtle">Reported route</p>
-      <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <RouteEndpoint code={origin} place={routeInfo.origin.municipality} />
-        <ArrowRight className="size-4 text-subtle" aria-label="to" />
-        <RouteEndpoint
-          code={destination}
-          place={routeInfo.destination.municipality}
-          alignEnd
-        />
-      </div>
+      {origin && destination ? (
+        <div className="mt-1 grid h-11 grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <RouteEndpoint code={origin} place={routeInfo.origin?.municipality ?? ""} />
+          <ArrowRight className="size-4 text-subtle" aria-label="to" />
+          <RouteEndpoint
+            code={destination}
+            place={routeInfo.destination?.municipality ?? ""}
+            alignEnd
+          />
+        </div>
+      ) : (
+        <p className="mt-1 flex h-11 items-center text-small text-subtle">
+          {routeInfo.loading
+            ? "Looking up the route…"
+            : routeInfo.mismatch
+              ? "The reported route doesn’t match this aircraft"
+              : "No route reported for this flight"}
+        </p>
+      )}
     </section>
   );
 }
@@ -241,6 +257,7 @@ function AircraftDetails({
     .filter(Boolean)
     .join(" ");
   const rows: [string, string | null][] = [
+    ["ICAO address", flight.icao24.toUpperCase()],
     ["Registration", details.registration],
     ["Registered in", country || null],
     ["Manufacturer", details.manufacturer],

@@ -25,6 +25,7 @@ import { useSettings } from "@/hooks/use-settings";
 import type { FlightState } from "@/lib/opensky";
 import {
   buildAircraftSidebarViewModel,
+  formatAircraftName,
   hasEmergencyStatus,
   isMilitaryAircraft,
 } from "@/lib/aircraft-sidebar";
@@ -213,13 +214,11 @@ export function MobileFlightToast({
   } = useAircraftPhotos(flight.icao24, flight.registration);
   const photoKey = photos.map((p) => p.id).join(",");
   const details = buildAircraftSidebarViewModel(flight, airline, aircraftDetails);
-  const airframeLine = [
-    details.registration,
-    details.model ?? details.typeCode,
-    details.manufacturer,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // Always filled, so registry details arriving later do not add a row.
+  const airframeLine =
+    [formatAircraftName(details), details.registration]
+      .filter(Boolean)
+      .join(" · ") || `ICAO ${flight.icao24.toUpperCase()}`;
   const heading = flight.trueTrack;
   const cardinal = heading !== null ? headingToCardinal(heading) : null;
   const canEnterFpv =
@@ -347,16 +346,14 @@ export function MobileFlightToast({
               </p>
             </MobileGroupedRow>
           )}
-          {airframeLine && (
-            <MobileGroupedRow
-              icon={<Plane className="h-3.5 w-3.5" />}
-              divided={Boolean(airline)}
-            >
-              <p className="truncate text-small text-muted-foreground">
-                {airframeLine}
-              </p>
-            </MobileGroupedRow>
-          )}
+          <MobileGroupedRow
+            icon={<Plane className="h-3.5 w-3.5" />}
+            divided={Boolean(airline)}
+          >
+            <p className="truncate text-small text-muted-foreground">
+              {airframeLine}
+            </p>
+          </MobileGroupedRow>
         </div>
         {/* Military / Emergency indicators */}
         {(isMilitaryAircraft(flight.dbFlags) ||

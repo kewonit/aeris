@@ -56,7 +56,13 @@ function bearingFromLngLat(
   previousPosition: { lng: number; lat: number },
   currentPosition: { lng: number; lat: number },
 ): number | null {
-  const dx = currentPosition.lng - previousPosition.lng;
+  // A degree of longitude shrinks with latitude, so scale it before taking
+  // the angle. Without this a 125° track reads as 119° at 37° N.
+  const midLatitude =
+    ((previousPosition.lat + currentPosition.lat) / 2) * (Math.PI / 180);
+  const dx =
+    (((currentPosition.lng - previousPosition.lng + 540) % 360) - 180) *
+    Math.cos(midLatitude);
   const dy = currentPosition.lat - previousPosition.lat;
   const distanceMeters = horizontalDistanceFromLngLat(
     previousPosition.lng,

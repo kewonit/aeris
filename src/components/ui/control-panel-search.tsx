@@ -24,8 +24,8 @@ import { useSettings } from "@/hooks/use-settings";
 import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
 import { lookupAirline, flightQueryMatches } from "@/lib/airlines";
 import { CountryFlag } from "@/components/ui/country-flag";
+import { positionSourceLabel } from "@/lib/aircraft-sidebar";
 import { AirlineLogo } from "@/components/ui/airline-logo";
-import { PositionSourceBadge } from "@/components/ui/flight-badges";
 import { searchFlightsGlobal } from "@/lib/search-flight-client";
 import {
   searchLocalLocations,
@@ -377,49 +377,31 @@ export function SearchContent({
           />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-small font-medium text-foreground">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <p className="shrink-0 text-small font-medium text-foreground">
               <HighlightMatch text={cs} query={query} />
             </p>
-            {activeFlightIcao24 === flight.icao24 && (
-              <span className="shrink-0 text-label text-tint">Active</span>
-            )}
-            {isGlobal && (
-              <span className="shrink-0 text-label text-subtle">Global</span>
-            )}
-            <PositionSourceBadge source={flight.positionSource} />
+            <p className="min-w-0 truncate text-label text-subtle">
+              {activeFlightIcao24 === flight.icao24 && (
+                <span className="mr-2 text-tint">Active</span>
+              )}
+              {[isGlobal ? "Global" : null, positionSourceLabel(flight.positionSource)]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-label text-muted-foreground mt-0.5">
+          <p className="mt-0.5 truncate text-label text-subtle">
             <span className="font-mono">
               <HighlightMatch
                 text={flight.icao24.toUpperCase()}
                 query={query}
               />
             </span>
-            {(flight.typeCode || flight.typeDescription) && (
-              <>
-                <span className="text-subtle">·</span>
-                <span className="truncate">
-                  {flight.typeCode ?? flight.typeDescription}
-                </span>
-              </>
-            )}
-            {flight.registration && (
-              <>
-                <span className="text-subtle">·</span>
-                <span className="font-mono truncate">
-                  {flight.registration}
-                </span>
-              </>
-            )}
-            <span className="text-subtle">·</span>
-            <CountryFlag
-              country={flight.registrationCountry ?? "Unknown"}
-              size={11}
-              className="rounded-sm"
-            />
-            <span className="truncate">{flight.registrationCountry}</span>
-          </div>
+            {[flight.typeDescription ?? flight.typeCode, flight.registration]
+              .filter(Boolean)
+              .map((part) => ` · ${part}`)
+              .join("")}
+          </p>
         </div>
 
         {/* Flight info chips */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Plane } from "lucide-react";
 import type { NormalizedPhoto } from "@/hooks/use-aircraft-photos";
 
 type HeroBannerProps = {
@@ -10,9 +11,10 @@ type HeroBannerProps = {
 };
 
 /**
- * The aircraft photo at the top of the sidebar. While the lookup runs it
- * holds the space with a plain card surface; with no usable photo it
- * collapses. The full image is tried first, then the thumbnail.
+ * The aircraft photo at the top of the sidebar. The 16:9 frame and the
+ * credit line always hold their space, so nothing below moves when the
+ * lookup finishes, the image loads, or no photo exists. The full image is
+ * tried first, then the thumbnail.
  */
 export function HeroBanner({ photo, loading, alt }: HeroBannerProps) {
   const candidates = useMemo(
@@ -32,8 +34,7 @@ export function HeroBanner({ photo, loading, alt }: HeroBannerProps) {
       ? state
       : { key: candidateKey, index: 0, loaded: false };
   const source = candidates[current.index] ?? null;
-
-  if (!loading && !source) return null;
+  const showPlaceholder = !loading && !source;
 
   return (
     <figure className="m-0">
@@ -54,12 +55,20 @@ export function HeroBanner({ photo, loading, alt }: HeroBannerProps) {
             className={`absolute inset-0 size-full object-cover transition-opacity duration-300 ${current.loaded ? "opacity-100" : "opacity-0"}`}
           />
         )}
+        {showPlaceholder && (
+          <Plane
+            className="absolute inset-0 m-auto size-8 -rotate-45 text-border"
+            aria-hidden="true"
+          />
+        )}
       </div>
-      {photo?.photographer && current.loaded && (
-        <figcaption className="px-6 pt-2 text-micro text-subtle">
-          Photo: {photo.photographer}
-        </figcaption>
-      )}
+      <figcaption className="h-7 truncate px-6 pt-2 text-micro text-subtle">
+        {showPlaceholder
+          ? "No photo of this aircraft"
+          : photo?.photographer && current.loaded
+            ? `Photo: ${photo.photographer}`
+            : null}
+      </figcaption>
     </figure>
   );
 }
