@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   ACTIVE_FRAME_INTERVAL_MS,
-  CAMERA_FRAME_INTERVAL_MS,
+  FPV_FRAME_INTERVAL_MS,
   OVERVIEW_FRAME_INTERVAL_MS,
   frameIntervalMs,
   isFrameDue,
@@ -32,16 +32,21 @@ test("a moving camera rebuilds at 60fps on 60Hz and 120Hz displays", () => {
   assert.equal(isFrameDue(100, 100 + 2000 / 120, interval), true);
 });
 
-test("a still camera falls back to the overview cadence, and FPV keeps the camera's", () => {
+test("a still camera falls back to the overview cadence", () => {
   assert.equal(
     frameIntervalMs({ fpv: false, cameraMoving: false }),
     OVERVIEW_FRAME_INTERVAL_MS,
   );
-  // The cockpit camera moves every frame, even between camera events.
-  assert.equal(
-    frameIntervalMs({ fpv: true, cameraMoving: false }),
-    CAMERA_FRAME_INTERVAL_MS,
-  );
+});
+
+test("first person view redraws every third frame at 120Hz and every other at 60Hz", () => {
+  const interval = frameIntervalMs({ fpv: true, cameraMoving: true });
+  assert.equal(interval, FPV_FRAME_INTERVAL_MS);
+
+  assert.equal(isFrameDue(100, 100 + 2000 / 120, interval), false);
+  assert.equal(isFrameDue(100, 100 + 3000 / 120, interval), true);
+  assert.equal(isFrameDue(100, 100 + 1000 / 60, interval), false);
+  assert.equal(isFrameDue(100, 100 + 2000 / 60, interval), true);
 });
 
 test("frame gate recovers safely from invalid clocks", () => {

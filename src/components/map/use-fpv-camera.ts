@@ -178,11 +178,17 @@ export function useFpvCamera(
     } | null = null;
     let entered = reduceMotion;
     let wasPaused = false;
+    // The flight layers publish a new position each time they redraw. In
+    // between, the camera has nowhere new to go, and moving it anyway would
+    // only make the map render again for the same picture.
+    let lastDrawn: FpvDrawnPosition | null = null;
 
     const onFrame = (frameTime: number) => {
       frameId = requestAnimationFrame(onFrame);
       const drawn = drawnRef.current;
       if (!drawn) return;
+      if (drawn === lastDrawn && !transition) return;
+      lastDrawn = drawn;
       const target = fpvFollowCamera(map, drawn, lastBearing);
       if (!target) return;
       lastBearing = target.bearing ?? lastBearing;

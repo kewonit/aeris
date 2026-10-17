@@ -9,10 +9,18 @@ export const OVERVIEW_FRAME_INTERVAL_MS = 1000 / OVERVIEW_FRAME_RATE;
 export const CAMERA_FRAME_RATE = 60;
 /** A little under 60 fps, so a 120 Hz display rebuilds every other frame. */
 export const CAMERA_FRAME_INTERVAL_MS = (1000 / CAMERA_FRAME_RATE) * 0.8;
+/**
+ * First person view redraws the map and every aircraft each frame for as
+ * long as it is open, which at 60 fps keeps the GPU and the fans busy.
+ * This rate is every third frame on a 120 Hz display and every other
+ * frame on a 60 Hz one, so frames stay evenly spaced either way.
+ */
+export const FPV_FRAME_RATE = 40;
+export const FPV_FRAME_INTERVAL_MS = (1000 / FPV_FRAME_RATE) * 0.8;
 
 /**
- * How long to wait between layer rebuilds. The cockpit camera moves every
- * frame, so first person keeps traffic up with it at the camera's rate.
+ * How long to wait between layer rebuilds. The follow camera moves with
+ * the aircraft each time it is redrawn, so this is also the camera's rate.
  */
 export function frameIntervalMs({
   fpv,
@@ -21,9 +29,8 @@ export function frameIntervalMs({
   fpv: boolean;
   cameraMoving: boolean;
 }): number {
-  return fpv || cameraMoving
-    ? CAMERA_FRAME_INTERVAL_MS
-    : OVERVIEW_FRAME_INTERVAL_MS;
+  if (fpv) return FPV_FRAME_INTERVAL_MS;
+  return cameraMoving ? CAMERA_FRAME_INTERVAL_MS : OVERVIEW_FRAME_INTERVAL_MS;
 }
 
 export function isFrameDue(
