@@ -13,6 +13,9 @@ function isAbortError(error: unknown): boolean {
 }
 
 export function getDirectTraceProviders(): TraceProviderId[] {
+  if (process.env.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA !== "true") {
+    return [];
+  }
   return getDirectTraceProviderPolicies().map((provider) => provider.id);
 }
 

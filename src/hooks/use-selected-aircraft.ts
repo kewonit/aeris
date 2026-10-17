@@ -17,7 +17,9 @@ export function useSelectedAircraft(
   const icao24 = current?.icao24 ?? null;
 
   useEffect(() => {
-    if (!icao24) return;
+    if (!icao24 || current?.provenance.positionProvider === "aeris-relay") {
+      return;
+    }
     const controller = new AbortController();
     loadSelectedAircraftSources(icao24, controller.signal).then(
       setSources,
@@ -25,10 +27,16 @@ export function useSelectedAircraft(
       () => {},
     );
     return () => controller.abort();
-  }, [icao24]);
+  }, [icao24, current?.provenance.positionProvider]);
 
   return useMemo(() => {
-    if (!current || sources?.icao24 !== current.icao24) return current;
+    if (
+      !current ||
+      current.provenance.positionProvider === "aeris-relay" ||
+      sources?.icao24 !== current.icao24
+    ) {
+      return current;
+    }
     return fuseSelectedAircraft(current, sources.fresh, sources.registry);
   }, [current, sources]);
 }

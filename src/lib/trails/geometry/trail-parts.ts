@@ -8,6 +8,8 @@ export const MAX_PART_GAP_MS = 5 * 60_000;
 const MAX_PLAUSIBLE_SPEED_MPS = 450;
 /** Allowance for position noise between samples close in time. */
 const POSITION_NOISE_METERS = 1_500;
+/** The relay ends a track after this long without a fix. */
+const RELAY_MAX_GAP_MS = 30_000;
 const METERS_PER_DEGREE = 111_320;
 
 function sampleDistanceMeters(a: TrailSample, b: TrailSample): number {
@@ -21,11 +23,36 @@ function sampleDistanceMeters(a: TrailSample, b: TrailSample): number {
   );
 }
 
+/**
+ * The relay's rule for one track: the same identity, no silence longer
+ * than 30 s, and no wrap across the antimeridian.
+ */
+function isSameRelayTrack(previous: TrailSample, next: TrailSample): boolean {
+  return (
+    previous.trackId === next.trackId &&
+    previous.sourceEpoch === next.sourceEpoch &&
+    previous.positionSource === next.positionSource &&
+    previous.altitudeReference === next.altitudeReference &&
+    next.t - previous.t <= RELAY_MAX_GAP_MS &&
+    Math.abs(next.lng - previous.lng) <= 180
+  );
+}
+
 /** Whether an aircraft could have flown from one sample to the next. */
 export function isContinuous(
   previous: TrailSample,
   next: TrailSample,
 ): boolean {
+  if (next.discontinuity) {
+    return false;
+  }
+  if (
+    (previous.trackId !== undefined || next.trackId !== undefined) &&
+    !isSameRelayTrack(previous, next)
+  ) {
+    return false;
+  }
+
   const elapsedMs = next.t - previous.t;
   if (!(elapsedMs > 0) || elapsedMs > MAX_PART_GAP_MS) {
     return false;
@@ -159,15 +186,28 @@ export function sampleFromFlight(flight: FlightState): TrailSample | null {
     return null;
   }
 
-  return {
+  const altitude = flight.baroAltitude ?? flight.geoAltitude;
+  const sample: TrailSample = {
     t,
     lng: flight.longitude,
     lat: flight.latitude,
     alt: flight.onGround
       ? 0
-      : flight.baroAltitude != null && Number.isFinite(flight.baroAltitude)
-        ? flight.baroAltitude
+      : altitude != null && Number.isFinite(altitude)
+        ? altitude
         : null,
     onGround: flight.onGround,
   };
+
+  // Only the relay names its tracks. Other feeds switch position source
+  // and altitude datum freely, and splitting on those would break every
+  // trail at takeoff.
+  if (flight.trackId !== undefined) {
+    sample.trackId = flight.trackId;
+    sample.sourceEpoch = flight.sourceEpoch;
+    sample.positionSource = flight.positionSource ?? undefined;
+    sample.altitudeReference = flight.altitudeReference;
+    if (flight.discontinuity) sample.discontinuity = true;
+  }
+  return sample;
 }

@@ -3,13 +3,39 @@ import type { NextConfig } from "next";
 import { getDirectTraceProviderPolicies } from "./src/lib/trails/providers";
 
 const isDev = process.env.NODE_ENV === "development";
-const directTraceConnectSrc = Array.from(
-  new Set(
-    getDirectTraceProviderPolicies().map(
-      (provider) => new URL(provider.baseUrl).origin,
-    ),
-  ),
-).join(" ");
+
+export function getFlightDataConnectSrc(
+  environment: Record<string, string | undefined> = process.env,
+): string[] {
+  const result = new Set<string>();
+  if (environment.NEXT_PUBLIC_AUTHORIZED_DIRECT_FLIGHT_DATA === "true") {
+    result.add("https://opensky-network.org");
+    result.add("https://api.airplanes.live");
+    result.add("https://api.adsb.lol");
+    for (const provider of getDirectTraceProviderPolicies()) {
+      result.add(new URL(provider.baseUrl).origin);
+    }
+  }
+
+  const streamUrl = environment.NEXT_PUBLIC_FLIGHT_STREAM_URL?.trim();
+  if (streamUrl) {
+    try {
+      const parsed = new URL(streamUrl);
+      if (
+        (parsed.protocol === "wss:" || parsed.protocol === "ws:") &&
+        !parsed.username &&
+        !parsed.password
+      ) {
+        result.add(parsed.origin);
+      }
+    } catch {
+      // Invalid public configuration is ignored so it cannot weaken CSP.
+    }
+  }
+  return [...result];
+}
+
+const flightDataConnectSrc = getFlightDataConnectSrc().join(" ");
 
 // Content Security Policy - allows only the external resources Aeris actually uses.
 // https://nextjs.org/docs/app/guides/content-security-policy
@@ -24,7 +50,7 @@ const cspHeader = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
-  connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com ${directTraceConnectSrc};
+  connect-src 'self' data: https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://res.cloudinary.com https://api.rainviewer.com ${flightDataConnectSrc};
   worker-src 'self' blob:;
   child-src blob:;
   object-src 'none';

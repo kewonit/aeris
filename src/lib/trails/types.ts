@@ -3,7 +3,8 @@ export type TrailProviderId =
   | "adsb-fi"
   | "adsb-lol"
   | "airplanes-live"
-  | "opensky";
+  | "opensky"
+  | "aeris-relay";
 
 export type TrailOutcome =
   | "full-history"
@@ -21,6 +22,16 @@ export type TrailSample = {
   /** Barometric altitude in meters, or null when unknown. */
   alt: number | null;
   onGround: boolean;
+  /**
+   * Relay track identity. Only relay samples carry these, and a trail never
+   * joins samples whose identity differs.
+   */
+  trackId?: string;
+  sourceEpoch?: string;
+  positionSource?: string;
+  altitudeReference?: "barometric" | "geometric" | "ground" | "unknown";
+  /** True when the relay requires a visual break before this sample. */
+  discontinuity?: boolean;
 };
 
 /**

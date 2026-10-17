@@ -8,7 +8,10 @@
 import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
-import { createFlightProvenance } from "./flight-provenance";
+import {
+  createFlightProvenance,
+  normalizeFlightTimestamp,
+} from "./flight-provenance";
 import { registrationCountry } from "./registration-country";
 
 // ── Unit Conversion Constants ──────────────────────────────────────────
@@ -134,8 +137,20 @@ function parseRawAircraft(
   }
 
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
+  const relayFixTime = normalizeFlightTimestamp(raw.fix_time);
+
   return {
     icao24: raw.hex.toLowerCase(),
+    ...(typeof raw.track_id === "string" && raw.track_id.length <= 128
+      ? { trackId: raw.track_id }
+      : {}),
+    altitudeReference: onGround
+      ? "ground"
+      : altitude !== null
+        ? "barometric"
+        : typeof raw.alt_geom === "number" && Number.isFinite(raw.alt_geom)
+          ? "geometric"
+          : "unknown",
     callsign: optionalTrimmedString(raw.flight),
     registrationCountry: registrationCountry(raw.r)?.name ?? null,
     longitude: raw.lon,
@@ -171,6 +186,7 @@ function parseRawAircraft(
     provenance: createFlightProvenance({
       positionProvider: options?.positionProvider ?? "unknown",
       responseTime: options?.responseTime,
+      observationTime: relayFixTime,
       positionAgeSeconds: raw.seen_pos,
     }),
 
