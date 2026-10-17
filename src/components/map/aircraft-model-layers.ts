@@ -28,8 +28,8 @@ import {
   type AircraftModelKey,
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
+  modelNoseTurn,
   modelUrl,
-  modelYawOffset,
 } from "./aircraft-model-mapping";
 import {
   type AircraftScreenSize,
@@ -49,6 +49,8 @@ const MODEL_LAST_USED_MAX = 50; // bound the Map to prevent unbounded growth
 
 /** Turns the glTF Y-up models upright in deck's Z-up world. */
 const BASE_MODEL_ROLL = 90;
+/** Yaw that points a normalised model, nose along +X, due north. */
+const NORTH_YAW = 90;
 
 /** Pixel size used until a flight's size has been measured this frame. */
 const FALLBACK_FOOTPRINT_PX = 20;
@@ -66,12 +68,17 @@ export type ModelFootprint = { x: number; z: number };
 const normalizedScenes = new WeakMap<SceneNode, ModelFootprint | null>();
 
 /**
- * Centres a model on its origin and scales its footprint, the larger of
- * its wingspan and length, to one unit. The source meshes are off-centre
- * and in unrelated units, so without this a model sits beside its position
- * and its size depends on how the file was authored.
+ * Centres a model on its origin, turns it about its up axis so its nose
+ * points along +X, and scales its footprint, the larger of its wingspan and
+ * length, to one unit. The source meshes are off-centre, in unrelated units
+ * and face different ways, so without this a model sits beside its
+ * position, its size depends on how the file was authored, and pitch and
+ * bank tilt it about the wrong axes.
  */
-export function normalizeScene(scene: SceneNode): ModelFootprint | null {
+export function normalizeScene(
+  scene: SceneNode,
+  noseTurnDegrees = 0,
+): ModelFootprint | null {
   const known = normalizedScenes.get(scene);
   if (known !== undefined) return known;
 
@@ -80,19 +87,30 @@ export function normalizeScene(scene: SceneNode): ModelFootprint | null {
   let footprint: ModelFootprint | null = null;
   if (bounds) {
     const [min, max] = bounds;
-    const center = [0, 1, 2].map((axis) => (min[axis] + max[axis]) / 2);
+    const [cx, cy, cz] = [0, 1, 2].map((axis) => (min[axis] + max[axis]) / 2);
     // Y is up in glTF, so X and Z span the footprint.
     const spanX = max[0] - min[0];
     const spanZ = max[2] - min[2];
     const extent = Math.max(spanX, spanZ);
     const scale = extent > 0 ? 1 / extent : 1;
+    // Turns are whole quarter turns, so round away floating-point dust.
+    const radians = (noseTurnDegrees * Math.PI) / 180;
+    const cos = Math.round(Math.cos(radians) * 1e9) / 1e9;
+    const sin = Math.round(Math.sin(radians) * 1e9) / 1e9;
+    // Columns of scale · turn about Y · move the centre to the origin.
     scene.setMatrix([
-      scale, 0, 0, 0,
+      scale * cos, 0, -scale * sin, 0,
       0, scale, 0, 0,
-      0, 0, scale, 0,
-      -center[0] * scale, -center[1] * scale, -center[2] * scale, 1,
+      scale * sin, 0, scale * cos, 0,
+      -scale * (cos * cx + sin * cz),
+      -scale * cy,
+      -scale * (cos * cz - sin * cx),
+      1,
     ]);
-    footprint = { x: spanX * scale, z: spanZ * scale };
+    footprint = {
+      x: (Math.abs(cos) * spanX + Math.abs(sin) * spanZ) * scale,
+      z: (Math.abs(sin) * spanX + Math.abs(cos) * spanZ) * scale,
+    };
   }
   normalizedScenes.set(scene, footprint);
   return footprint;
@@ -100,15 +118,25 @@ export function normalizeScene(scene: SceneNode): ModelFootprint | null {
 
 /**
  * How far behind its centre a model's tail sits, as a share of its
- * footprint. Models turned 90° have their fuselage along X, the rest along
- * Z. Aiming just inside the tail keeps the trail's end under the model.
+ * footprint. Every normalised model has its fuselage along X. Aiming just
+ * inside the tail keeps the trail's end under the model.
  */
-export function modelTailShareFor(
-  key: AircraftModelKey,
-  footprint: ModelFootprint,
-): number {
-  const length = modelYawOffset(key) % 180 === 0 ? footprint.z : footprint.x;
-  return (0.9 * length) / 2;
+export function modelTailShareFor(footprint: ModelFootprint): number {
+  return (0.9 * footprint.x) / 2;
+}
+
+/**
+ * deck's [pitch, yaw, roll] for a normalised model. deck turns by roll,
+ * then pitch, then yaw, each about a fixed axis; with the nose along +X
+ * that is heading, then pitch, then bank in the aircraft's own frame.
+ * Negative pitch raises the nose and positive bank lowers the right wing.
+ */
+export function aircraftOrientation(
+  track: number,
+  pitch: number,
+  bank: number,
+): [number, number, number] {
+  return [pitch, NORTH_YAW - track, BASE_MODEL_ROLL + bank];
 }
 
 type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
@@ -127,9 +155,11 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
         typeof scenegraph.scene === "object"
           ? scenegraph.scene
           : scenegraph.scenes[scenegraph.scene || 0];
-      const footprint = scene ? normalizeScene(scene) : null;
+      const footprint = scene
+        ? normalizeScene(scene, modelNoseTurn(key))
+        : null;
       if (footprint) {
-        recordModelTailShare(key, modelTailShareFor(key, footprint));
+        recordModelTailShare(key, modelTailShareFor(footprint));
       }
       return scene;
     };
@@ -221,8 +251,6 @@ export function buildAircraftModelLayers(
     const flights = buckets.get(modelKey) ?? EMPTY_DATA;
     const hasData = flights.length > 0;
 
-    const yawOffset = modelYawOffset(modelKey);
-
     return new ScenegraphLayer<FlightState>({
       id: `flight-aircraft-${modelKey}`,
       visible: hasData && layersVisible,
@@ -237,13 +265,12 @@ export function buildAircraftModelLayers(
         ];
       },
       getOrientation: (d) => {
-        const interp = interpolatedMap.get(d.icao24);
-        const src = interp ?? d;
-        const pitch = pitchByIcao.get(d.icao24) ?? 0;
-        const bank = bankByIcao.get(d.icao24) ?? 0;
-        const yaw =
-          yawOffset - (Number.isFinite(src.trueTrack) ? src.trueTrack! : 0);
-        return [pitch, yaw, BASE_MODEL_ROLL + bank];
+        const src = interpolatedMap.get(d.icao24) ?? d;
+        return aircraftOrientation(
+          Number.isFinite(src.trueTrack) ? src.trueTrack! : 0,
+          pitchByIcao.get(d.icao24) ?? 0,
+          bankByIcao.get(d.icao24) ?? 0,
+        );
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;

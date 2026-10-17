@@ -123,8 +123,8 @@ export const MODEL_KEY_WINGSPAN: Readonly<Record<AircraftModelKey, number>> = {
 // ── Per-Model Yaw Offset ───────────────────────────────────────────────
 //
 // Each GLB was authored/exported with a different nose direction in model space.
-// These offsets rotate each model so that at yaw=0 the nose faces North.
-// Combined formula: yaw = MODEL_YAW_OFFSET[key] - trueTrack
+// These offsets rotate each model so that at yaw=0 the nose faces North:
+// 90 means the nose lies along +X, 180 along +Z, and 0 along -Z.
 //
 // Determined by analysing each model's node rotations and nose-indicator
 // node translations (CockpitWindows, pilot_tubes, windscreen, etc.).
@@ -146,9 +146,13 @@ const MODEL_YAW_OFFSET: Readonly<Record<AircraftModelKey, number>> = {
   drone: 180, // identical mesh to light-prop
 };
 
-/** Returns the yaw offset in degrees to orient the model's nose North */
-export function modelYawOffset(key: AircraftModelKey): number {
-  return MODEL_YAW_OFFSET[key];
+/**
+ * The turn about the model's up axis, in degrees, that points its nose
+ * along +X, so every model shares one frame and pitch and bank turn each
+ * about the same axes.
+ */
+export function modelNoseTurn(key: AircraftModelKey): number {
+  return MODEL_YAW_OFFSET[key] - 90;
 }
 
 // ── Category → Model Key (DO-260B emitter categories) ──────────────────
