@@ -62,6 +62,7 @@ import {
   aircraftWingspanMeters,
   altitudeMagnification,
   type AircraftScreenSize,
+  metersPerPixel,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
 import { aircraftElevationMeters } from "./altitude-projection";
@@ -137,6 +138,8 @@ export function FlightLayers({
   const recentIntervalsRef = useRef<number[]>([]);
   // How quickly each provider's answers reach us, to time its reports.
   const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
+  /** The fastest reported ground speed, which paces the overview's redraws. */
+  const maxVelocityRef = useRef(0);
   // The first person aircraft's own smoothed path, which it is drawn on so
   // that it flies on steadily through late and missing reports, started
   // afresh for each aircraft followed.
@@ -248,6 +251,11 @@ export function FlightLayers({
     const elapsed = now - dataTimestampRef.current;
     // Every report is placed where its aircraft is as the poll arrives.
     const receivedAt = Date.now();
+    let fastest = 0;
+    for (const f of flights) {
+      if (f.velocity != null && f.velocity > fastest) fastest = f.velocity;
+    }
+    maxVelocityRef.current = fastest;
     noteReceipt(receiptDelaysRef.current, flights, receivedAt);
     const reported = (f: FlightState) =>
       carryForward(f, reportLeadMs(f, receivedAt, receiptDelaysRef.current));
@@ -664,8 +672,18 @@ export function FlightLayers({
     }
     map?.on("move", onCameraMove);
     map?.on("style.load", requestRender);
-    // Hover picking happens in deck's frame, which only a rebuild runs.
-    map?.on("mousemove", requestRender);
+    // Hover picking happens in deck's frame. A mouse move runs one, at most
+    // once a display frame, without rebuilding the layers.
+    let pickFrameId = 0;
+    function onMouseMove() {
+      if (pickFrameId !== 0) return;
+      pickFrameId = requestAnimationFrame(() => {
+        pickFrameId = 0;
+        const overlay = overlayRef.current;
+        if (overlay) drawDeckFrame(overlay);
+      });
+    }
+    map?.on("mousemove", onMouseMove);
 
     function buildAndPushLayers(now: number) {
       animFrameRef.current = 0;
@@ -681,6 +699,14 @@ export function FlightLayers({
       const frameInterval = frameIntervalMs({
         fpv: Boolean(fpvIcao24Ref.current),
         cameraMoving,
+        fading:
+          (selectedIcao24Ref.current != null ||
+            prevSelectedRef.current != null) &&
+          now - selectionChangeTimeRef.current < SELECTION_FADE_MS,
+        maxPixelsPerSecond: map
+          ? maxVelocityRef.current /
+            metersPerPixel(map.getZoom(), map.getCenter().lat)
+          : Infinity,
       });
       if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
@@ -1090,7 +1116,8 @@ export function FlightLayers({
       document.removeEventListener("freeze", markPageInactive);
       document.removeEventListener("resume", handlePageResume);
       map?.off("move", onCameraMove);
-      map?.off("mousemove", requestRender);
+      map?.off("mousemove", onMouseMove);
+      if (pickFrameId !== 0) cancelAnimationFrame(pickFrameId);
       map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
