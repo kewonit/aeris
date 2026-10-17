@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useDragControls } from "motion/react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -153,6 +153,9 @@ function FlightTrackerInner({
   } | null>(null);
 
   const lookupAbortRef = useRef<AbortController | null>(null);
+  // The phone's flight card is dragged from its photo and header only, so
+  // the rest of it scrolls normally.
+  const flightSheetDrag = useDragControls();
   const [selectedAirportIata, setSelectedAirportIata] = useState<string | null>(
     null,
   );
@@ -882,10 +885,12 @@ function FlightTrackerInner({
                 mass: 0.8,
               }}
               drag="y"
+              dragListener={false}
+              dragControls={flightSheetDrag}
               dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0, bottom: 0.6 }}
+              dragElastic={{ top: 0, bottom: 0.8 }}
               onDragEnd={(_, info) => {
-                if (info.offset.y > 80 || info.velocity.y > 300) {
+                if (info.offset.y > 60 || info.velocity.y > 250) {
                   handleDeselectFlight();
                 }
               }}
@@ -894,6 +899,7 @@ function FlightTrackerInner({
                 flight={displayFlight}
                 onClose={handleDeselectFlight}
                 onToggleFpv={handleToggleFpv}
+                onGrab={(event) => flightSheetDrag.start(event)}
               />
             </motion.div>
           )}

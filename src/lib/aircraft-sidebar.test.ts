@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { FlightState } from "@/lib/opensky";
+
 import {
+  aircraftVerticalRate,
+  buildAircraftDetailRows,
   buildAircraftSidebarViewModel,
+  describeMissingRoute,
   formatAircraftDataSources,
   formatAircraftFreshness,
+  formatAircraftIdentity,
   formatAircraftName,
   hasEmergencyStatus,
   isMilitaryAircraft,
@@ -120,4 +126,87 @@ test("names the aircraft by maker and model", () => {
   assert.equal(name("Boeing", "Boeing 777-300ER"), "Boeing 777-300ER");
   assert.equal(name(null, null, "B763"), "B763");
   assert.equal(name(null, null), null);
+});
+
+const DETAILS = {
+  airline: null,
+  registration: "N834SK",
+  registrationCountry: "United States",
+  registrationCountryFlag: "🇺🇸",
+  manufacturer: "BOMBARDIER",
+  model: "CL-600-2D24",
+  typeCode: "CRJ9",
+};
+
+test("an aircraft is named by callsign, then registration, then ICAO address", () => {
+  const flight = { icao24: "ab68d0", callsign: " EDV5216 " };
+
+  assert.equal(formatAircraftIdentity(flight, DETAILS), "EDV5216");
+  assert.equal(
+    formatAircraftIdentity({ ...flight, callsign: null }, DETAILS),
+    "N834SK",
+  );
+  assert.equal(
+    formatAircraftIdentity(
+      { ...flight, callsign: "  " },
+      { registration: null },
+    ),
+    "AB68D0",
+  );
+});
+
+test("the vertical rate falls back to the GPS rate", () => {
+  assert.equal(aircraftVerticalRate({ verticalRate: -5, geomRate: -6 }), -5);
+  assert.equal(aircraftVerticalRate({ verticalRate: null, geomRate: -6 }), -6);
+  assert.equal(aircraftVerticalRate({ verticalRate: null }), null);
+});
+
+test("a missing route says why", () => {
+  assert.match(describeMissingRoute({ loading: true, mismatch: false }), /Looking/);
+  assert.match(describeMissingRoute({ loading: false, mismatch: true }), /match/);
+  assert.match(describeMissingRoute({ loading: false, mismatch: false }), /No route/);
+});
+
+test("detail rows come in order, without unknowns, with debug rows on request", () => {
+  const flight = {
+    icao24: "ab68d0",
+    onGround: false,
+    latitude: 40.44,
+    longitude: -73.9,
+    geoAltitude: null,
+    tas: 250,
+    squawk: "5770",
+    positionSource: "adsb",
+    debugData: { nacP: 9, nic: 8, version: 2 },
+  } as unknown as FlightState;
+
+  const rows = buildAircraftDetailRows(flight, DETAILS, "aviation", false);
+  assert.deepEqual(
+    rows.map((row) => row.key),
+    [
+      "icao",
+      "registration",
+      "country",
+      "manufacturer",
+      "model",
+      "typeCode",
+      "status",
+      "position",
+      "trueAirspeed",
+      "squawk",
+      "positionMethod",
+    ],
+  );
+  assert.equal(rows[2].value, "🇺🇸 United States");
+  assert.equal(rows[7].value, "40.44° N, 73.90° W");
+
+  const debug = buildAircraftDetailRows(flight, DETAILS, "aviation", true);
+  assert.deepEqual(
+    debug.slice(-3).map((row) => [row.label, row.value]),
+    [
+      ["NACp", "9"],
+      ["NIC", "8"],
+      ["ADS-B version", "2"],
+    ],
+  );
 });

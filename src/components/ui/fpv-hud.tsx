@@ -17,7 +17,8 @@ import {
   Navigation,
 } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
-import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
+import { cleanText, formatAircraftIdentity } from "@/lib/aircraft-sidebar";
+import { headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
@@ -352,7 +353,9 @@ function FpvInstruments({
             <div className="min-w-0">
               <div className="flex items-center gap-1">
                 <p className="truncate text-label text-foreground sm:text-small">
-                  {formatCallsign(flight.callsign)}
+                  {formatAircraftIdentity(flight, {
+                    registration: cleanText(flight.registration),
+                  })}
                 </p>
                 {isMilitary ? (
                   <span className="flex shrink-0 items-center gap-0.5 text-micro text-warning">
