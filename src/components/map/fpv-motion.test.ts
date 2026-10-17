@@ -136,11 +136,52 @@ test("without speed it holds still, and missing track or altitude keep the last"
   assert.equal(motion.stateAt(11_000)?.alt, 3_000);
 });
 
-test("dead reckoning stops 20 s after the last report", () => {
+test("flies on for a minute and a half after the last report, then holds", () => {
   const motion = createFpvMotion();
   motion.observe(flight(), 0);
 
-  assert.deepEqual(motion.stateAt(60_000), motion.stateAt(20_000));
+  const [east] = fromStart(motion.stateAt(60_000));
+  assert.ok(Math.abs(east - 12_000) < 1);
+  assert.deepEqual(motion.stateAt(120_000), motion.stateAt(90_000));
+});
+
+test("a descent that stops being reported touches down and rolls out", () => {
+  const motion = createFpvMotion();
+  // 60 m up at 70 m/s, coming down at 4 m/s: on the runway in 15 s.
+  motion.observe(
+    flight({ baroAltitude: 60, velocity: 70, verticalRate: -4 }),
+    0,
+  );
+
+  assert.ok(Math.abs(motion.stateAt(7_500)!.alt! - 30) < 1e-6);
+  assert.equal(motion.stateAt(15_000)!.alt, 0);
+  assert.equal(motion.stateAt(40_000)!.alt, 0);
+  // Braking at 2 m/s² from 70 m/s reaches taxiing speed 31 s after touchdown.
+  const metresEast = (at: number) => fromStart(motion.stateAt(at))[0];
+  // Metres covered in the second around a moment.
+  const speedAt = (at: number) => metresEast(at + 500) - metresEast(at - 500);
+  assert.ok(Math.abs(speedAt(10_000) - 70) < 0.5);
+  assert.ok(Math.abs(speedAt(25_000) - 50) < 0.5);
+  assert.ok(Math.abs(speedAt(60_000) - 8) < 0.5);
+});
+
+test("on the ground it rolls at its reported speed, straight down the runway", () => {
+  const motion = createFpvMotion();
+  motion.observe(flight({ trueTrack: 0 }), 0);
+  motion.observe(
+    flight({
+      onGround: true,
+      baroAltitude: null,
+      velocity: 6,
+      trueTrack: 10,
+      provenance: { ...flight().provenance, observationTime: 5_000 },
+    }),
+    5_000,
+  );
+  const later = motion.stateAt(15_000)!;
+  assert.equal(later.alt, 0);
+  // The turn between the two reports is not carried on along the ground.
+  assert.ok(Math.abs(later.track! - 10) < 1e-6);
 });
 
 test("a report's position age places it that far back in time", () => {

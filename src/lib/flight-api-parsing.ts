@@ -236,6 +236,11 @@ function parseRawAircraft(
 export interface ParseOptions {
   /** Include aircraft on the ground. Default: false. */
   includeGround?: boolean;
+  /**
+   * An aircraft kept even on the ground: the first person aircraft, whose
+   * landing roll the view follows.
+   */
+  keepOnGround?: string | null;
   /** Require barometric altitude. Default: true. */
   requireBaroAltitude?: boolean;
   /** Provider that supplied this response. */
@@ -264,7 +269,13 @@ export function parseAircraftList(
     if (!state) continue;
 
     // Filter ground aircraft unless specifically requested
-    if (!includeGround && state.onGround) continue;
+    if (
+      !includeGround &&
+      state.onGround &&
+      state.icao24 !== options?.keepOnGround
+    ) {
+      continue;
+    }
 
     // Filter aircraft without barometric altitude if required
     if (requireBaroAltitude && state.baroAltitude === null) continue;

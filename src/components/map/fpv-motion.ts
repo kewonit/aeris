@@ -1,8 +1,16 @@
 import type { FlightState } from "@/lib/opensky";
 
 const METERS_PER_DEGREE = 111_320;
-/** Dead reckoning stops this long after the last report, holding still. */
-const MAX_DEAD_RECKON_S = 20;
+/**
+ * Dead reckoning stops this long after the last report, holding still. An
+ * airliner flies straight and level for minutes, so flying on is closer to
+ * the truth than stopping in mid-air when reports drop out.
+ */
+const MAX_DEAD_RECKON_S = 90;
+/** On the ground the aircraft brakes at about this rate... */
+const ROLLOUT_DECELERATION_MPS2 = 2;
+/** ...down to taxiing speed. */
+const TAXI_SPEED_MPS = 8;
 /** Integration step for the turning path. */
 const STEP_S = 0.25;
 /** No airliner turns faster than this; faster means noisy tracks. */
@@ -64,30 +72,50 @@ function turnBetween(from: number, to: number): number {
   return ((to - from + 540) % 360) - 180;
 }
 
-/** Where an observation's aircraft is `seconds` later, flying its turn. */
+/** Degrees the aircraft has turned `seconds` after an observation. */
+function turnedBy(observation: Observation, seconds: number): number {
+  // The turn fades out, so heading(t) = track + rate * T * (1 - e^(-t/T)).
+  return (
+    observation.turnRate * TURN_FADE_S * (1 - Math.exp(-seconds / TURN_FADE_S))
+  );
+}
+
+/**
+ * Where an observation's aircraft is `seconds` later: flying its turn and
+ * climb, and once a descent reaches the ground, touching down and braking
+ * along its track to taxiing speed. Reports often stop at touchdown, when
+ * receivers lose the aircraft behind buildings, so the landing is flown
+ * out rather than left hanging over the runway.
+ */
 function flyOn(observation: Observation, seconds: number): FpvState {
   const duration = Math.min(Math.max(seconds, 0), MAX_DEAD_RECKON_S);
+  const { alt, climb, speed, track } = observation;
+  let touchdownAt = Infinity;
+  if (alt !== null && alt <= 0) touchdownAt = 0;
+  else if (alt !== null && climb < 0) touchdownAt = alt / -climb;
+  const speedAt = (t: number) =>
+    t < touchdownAt || speed <= TAXI_SPEED_MPS
+      ? speed
+      : Math.max(
+          TAXI_SPEED_MPS,
+          speed - ROLLOUT_DECELERATION_MPS2 * (t - touchdownAt),
+        );
+
   let east = 0;
   let north = 0;
-  let heading = observation.track;
-  if (heading !== null && observation.speed > 0) {
-    // The turn fades out, so heading(t) = track + rate * T * (1 - e^(-t/T)).
+  let heading = track;
+  if (track !== null && speed > 0) {
     for (let t = 0; t < duration; t += STEP_S) {
       const step = Math.min(STEP_S, duration - t);
       const middle = t + step / 2;
-      const turned =
-        observation.turnRate *
-        TURN_FADE_S *
-        (1 - Math.exp(-middle / TURN_FADE_S));
-      const radians = ((observation.track! + turned) * Math.PI) / 180;
-      east += observation.speed * step * Math.sin(radians);
-      north += observation.speed * step * Math.cos(radians);
+      // A landed aircraft rolls straight down the runway.
+      const turned = turnedBy(observation, Math.min(middle, touchdownAt));
+      const radians = ((track + turned) * Math.PI) / 180;
+      east += speedAt(middle) * step * Math.sin(radians);
+      north += speedAt(middle) * step * Math.cos(radians);
     }
     heading = wrapDegrees(
-      observation.track! +
-        observation.turnRate *
-          TURN_FADE_S *
-          (1 - Math.exp(-duration / TURN_FADE_S)),
+      track + turnedBy(observation, Math.min(duration, touchdownAt)),
     );
   }
 
@@ -95,10 +123,7 @@ function flyOn(observation: Observation, seconds: number): FpvState {
   return {
     lng: observation.lng + east / (METERS_PER_DEGREE * Math.max(cosLat, 1e-6)),
     lat: observation.lat + north / METERS_PER_DEGREE,
-    alt:
-      observation.alt === null
-        ? null
-        : Math.max(0, observation.alt + observation.climb * duration),
+    alt: alt === null ? null : Math.max(0, alt + climb * duration),
     track: heading,
   };
 }
@@ -114,6 +139,7 @@ function offsetMeters(from: FpvState, to: FpvState): [number, number] {
 
 /**
  * A smooth, continuous path for the first person aircraft between reports.
+ * Altitudes are heights above the map, which puts the ground at zero.
  *
  * Reports arrive every few seconds. Between them the aircraft flies on at
  * its reported speed, climb and turn. When a report arrives, the difference
@@ -195,11 +221,19 @@ export function createFpvMotion() {
       at,
       lng: flight.longitude,
       lat: flight.latitude,
-      alt: finite(flight.baroAltitude) ? flight.baroAltitude : (last?.alt ?? null),
+      // On the ground a report carries no altitude; the aircraft is at zero.
+      alt: flight.onGround
+        ? 0
+        : finite(flight.baroAltitude)
+          ? flight.baroAltitude
+          : (last?.alt ?? null),
       track,
       speed: finite(flight.velocity) && flight.velocity > 0 ? flight.velocity : 0,
-      climb: finite(flight.verticalRate) ? flight.verticalRate : 0,
-      turnRate,
+      climb:
+        !flight.onGround && finite(flight.verticalRate)
+          ? flight.verticalRate
+          : 0,
+      turnRate: flight.onGround ? 0 : turnRate,
     };
 
     const next = predicted(receivedAt)!;

@@ -227,3 +227,10 @@ test("reports carried forward to their arrival are a poll's flight apart", () =>
     assert.ok(Math.abs(seconds - 5.3) < 0.01, `step ${i}: ${seconds}`);
   }
 });
+
+test("a report's lead can go uncapped, for a stale report to sit when it was true", () => {
+  const delays: ReceiptDelays = new Map();
+  const stale = reportFrom("x", 1_000, 45);
+  assert.equal(reportLeadMs(stale, 1_000, delays), MAX_REPORT_LEAD_MS);
+  assert.equal(reportLeadMs(stale, 1_000, delays, Infinity), 45_000);
+});

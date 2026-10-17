@@ -69,4 +69,6 @@ export type FlightLayerProps = {
   altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
+  /** Added to pressure altitudes in FPV to sit them above the map. */
+  fpvHeightOffsetMeters?: number;
 };

@@ -122,3 +122,21 @@ test("malformed optional values are normalized instead of throwing", () => {
   assert.equal(flights[0].navModes, null);
   assert.equal(flights[0].debugData?.messages, null);
 });
+
+test("leaves aircraft on the ground out, except the one kept", () => {
+  const onGround = (hex: string): RawAircraft => ({
+    hex,
+    lat: 41.98,
+    lon: -87.9,
+    alt_baro: "ground",
+    gs: 40,
+  });
+  const flights = parseAircraftList(
+    [onGround("a1bfb2"), onGround("abc123")],
+    { keepOnGround: "a1bfb2" },
+  );
+  assert.deepEqual(
+    flights.map((flight) => [flight.icao24, flight.onGround]),
+    [["a1bfb2", true]],
+  );
+});

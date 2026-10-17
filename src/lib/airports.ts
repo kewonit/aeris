@@ -90689,6 +90689,16 @@ export function findByIata(iata: string): Airport | undefined {
   return IATA_LOOKUP.get(code);
 }
 
+/**
+ * Whether an airport takes airliners rather than seaplanes or helicopters,
+ * which have local codes with digits or say so in their names.
+ */
+export function isRunwayAirport(airport: Airport): boolean {
+  return (
+    /^[A-Z]{4}$/.test(airport.icao) && !/seaplane|heli/i.test(airport.name)
+  );
+}
+
 export function findAirportByIcao(icao: string): Airport | undefined {
   const code = icao.toUpperCase();
   return ICAO_LOOKUP.get(code);

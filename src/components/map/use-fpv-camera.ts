@@ -9,6 +9,14 @@ import {
 } from "./camera-controller-utils";
 import { createFpvMotion, type FpvMotion } from "./fpv-motion";
 import {
+  createHorizonHaze,
+  fpvCameraPitch,
+  FPV_LEVEL_PITCH,
+  highlightAeroways,
+  MAX_FPV_PITCH,
+} from "./fpv-scenery";
+import { attitudeFor } from "./aircraft-attitude";
+import {
   normalizeBearing,
   noteReceipt,
   reportLeadMs,
@@ -16,15 +24,19 @@ import {
 } from "./flight-interpolation";
 import type { FlightState } from "@/lib/opensky";
 
-const FPV_ENTER_DURATION_MS = 1_100;
+export const FPV_ENTER_DURATION_MS = 1_100;
 /**
  * Near the ground the cockpit camera sits closer to its centre than the
  * map's usual zoom limit allows; clamped, the camera would leave the
  * aircraft. The limit is raised for the session.
  */
-const FPV_MAX_ZOOM = 20;
+const FPV_MAX_ZOOM = 22;
+/** The view's pitch eases towards the nose's over about this long. */
+const PITCH_EASE_MS = 1_500;
 const FPV_SKY_RESTORE_MS = 600;
 const EMPTY_PADDING = { top: 0, right: 0, bottom: 0, left: 0 } as const;
+const FPV_DARK_HAZE = "rgba(24, 36, 49, 0.95)";
+const FPV_LIGHT_HAZE = "rgba(238, 242, 244, 0.95)";
 const FPV_DARK_SKY: maplibregl.SkySpecification = {
   "sky-color": "#080d16",
   "horizon-color": "#182431",
@@ -42,10 +54,12 @@ const FPV_LIGHT_SKY: maplibregl.SkySpecification = {
   "atmosphere-blend": 0.9,
 };
 
+function isDarkTheme(): boolean {
+  return document.documentElement.classList.contains("dark");
+}
+
 function fpvSky(): maplibregl.SkySpecification {
-  return document.documentElement.classList.contains("dark")
-    ? FPV_DARK_SKY
-    : FPV_LIGHT_SKY;
+  return isDarkTheme() ? FPV_DARK_SKY : FPV_LIGHT_SKY;
 }
 
 type CameraPose = {
@@ -114,15 +128,24 @@ function blendCamera(
  * poll that misses the aircraft keeps it flying on its last report. Entry
  * waits for the first report, which also covers deep links that open
  * before the first poll.
+ *
+ * @param heightOffsetMeters Added to the aircraft's pressure altitude to
+ *   place it above the map, which has no terrain (fpv-height).
+ * @param aircraftPositionRef Set every frame to where the aircraft is, so
+ *   leaving the cockpit can centre on it.
  */
 export function useFpvCamera(
   map: maplibregl.Map | null,
   isLoaded: boolean,
   fpvIcao24: string | null,
   fpvFlight: FlightState | null,
+  heightOffsetMeters: number,
   isFpvActiveRef: MutableRefObject<boolean>,
+  aircraftPositionRef: MutableRefObject<[number, number] | null>,
 ) {
   const motionRef = useRef<{ icao24: string; motion: FpvMotion } | null>(null);
+  // Where the view's pitch is heading, from the aircraft's attitude.
+  const targetPitchRef = useRef(FPV_LEVEL_PITCH);
   // How quickly answers reach us, so a cached report is timed correctly.
   const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
   // The sky to restore after FPV. It is captured once per FPV session, so
@@ -132,17 +155,26 @@ export function useFpvCamera(
   } | null>(null);
   const skyRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Each poll's report of the aircraft feeds its motion.
+  // Each poll's report of the aircraft feeds its motion, at its height
+  // above the map, and sets where the view's pitch is heading.
   useEffect(() => {
     if (!fpvIcao24 || fpvFlight?.icao24.toLowerCase() !== fpvIcao24) return;
     const receivedAt = Date.now();
     noteReceipt(receiptDelaysRef.current, [fpvFlight], receivedAt);
+    const altitude = fpvFlight.baroAltitude;
+    const overMap =
+      altitude !== null && Number.isFinite(altitude)
+        ? { ...fpvFlight, baroAltitude: altitude + heightOffsetMeters }
+        : fpvFlight;
     motionFor(motionRef, fpvIcao24).observe(
-      fpvFlight,
+      overMap,
       receivedAt,
-      reportLeadMs(fpvFlight, receivedAt, receiptDelaysRef.current),
+      reportLeadMs(fpvFlight, receivedAt, receiptDelaysRef.current, Infinity),
     );
-  }, [fpvIcao24, fpvFlight]);
+    // deck's pitch is negative with the nose up.
+    const noseUp = -attitudeFor(fpvFlight, null).pitch;
+    targetPitchRef.current = fpvCameraPitch(noseUp, fpvFlight.onGround);
+  }, [fpvIcao24, fpvFlight, heightOffsetMeters]);
 
   useEffect(() => {
     if (!map || !isLoaded || !fpvIcao24) {
@@ -157,18 +189,35 @@ export function useFpvCamera(
     }
     savedSkyRef.current ??= { sky: map.getSky() };
     map.setSky(fpvSky());
-    // A style change replaces the sky, so save the new style's sky instead.
-    const onStyleLoad = () => {
-      savedSkyRef.current = { sky: map.getSky() };
-      map.setSky(fpvSky());
-    };
-    map.on("style.load", onStyleLoad);
 
     isFpvActiveRef.current = true;
+    aircraftPositionRef.current = null;
     map.stop();
     setMapInteractionsEnabled(map, false);
     const previousMaxZoom = map.getMaxZoom();
     map.setMaxZoom(FPV_MAX_ZOOM);
+    const previousMaxPitch = map.getMaxPitch();
+    map.setMaxPitch(Math.max(previousMaxPitch, MAX_FPV_PITCH));
+
+    // Runways stand out, and a band of haze hides the map's hard edge.
+    let restoreAeroways = highlightAeroways(
+      map,
+      isDarkTheme() ? "dark" : "light",
+    );
+    const haze = createHorizonHaze(
+      map,
+      isDarkTheme() ? FPV_DARK_HAZE : FPV_LIGHT_HAZE,
+    );
+    // A style change replaces the sky and the runway paint.
+    const onStyleLoad = () => {
+      savedSkyRef.current = { sky: map.getSky() };
+      map.setSky(fpvSky());
+      restoreAeroways = highlightAeroways(
+        map,
+        isDarkTheme() ? "dark" : "light",
+      );
+    };
+    map.on("style.load", onStyleLoad);
 
     const motion = motionFor(motionRef, fpvIcao24);
     const reduceMotion = window.matchMedia(
@@ -176,17 +225,27 @@ export function useFpvCamera(
     ).matches;
     let frameId: number | null = null;
     let lastBearing = normalizeBearing(map.getBearing());
+    let pitch = targetPitchRef.current;
+    let lastFrameTime: number | null = null;
     // Set on the first frame with a known position; null once entered.
     let entry: { from: CameraPose; startedAt: number } | null = null;
     let entered = reduceMotion;
 
     const onFrame = (frameTime: number) => {
       frameId = requestAnimationFrame(onFrame);
+      const elapsed =
+        lastFrameTime === null ? 0 : Math.min(frameTime - lastFrameTime, 1_000);
+      lastFrameTime = frameTime;
+      pitch +=
+        (targetPitchRef.current - pitch) *
+        (1 - Math.exp(-elapsed / PITCH_EASE_MS));
       const state = motion.stateAt(Date.now());
       if (!state) return;
-      const target = fpvCameraOptions(map, state, lastBearing);
+      aircraftPositionRef.current = [state.lng, state.lat];
+      const target = fpvCameraOptions(map, state, lastBearing, pitch);
       if (!target) return;
       lastBearing = target.bearing ?? lastBearing;
+      haze.update(target.pitch ?? pitch);
 
       if (!entered) {
         entry ??= { from: currentPose(map), startedAt: frameTime };
@@ -209,7 +268,12 @@ export function useFpvCamera(
       if (frameId !== null) cancelAnimationFrame(frameId);
       map.off("style.load", onStyleLoad);
       map.stop();
+      haze.remove();
+      restoreAeroways();
       map.setMaxZoom(previousMaxZoom);
+      // Back below the map's own limit before it is lowered again.
+      if (map.getPitch() > previousMaxPitch) map.setPitch(previousMaxPitch);
+      map.setMaxPitch(previousMaxPitch);
       setMapInteractionsEnabled(map, true);
       isFpvActiveRef.current = false;
       // Wait for the exit transition before putting the sky back, unless
@@ -227,5 +291,5 @@ export function useFpvCamera(
         }
       }, FPV_SKY_RESTORE_MS);
     };
-  }, [map, isLoaded, fpvIcao24, isFpvActiveRef]);
+  }, [map, isLoaded, fpvIcao24, isFpvActiveRef, aircraftPositionRef]);
 }

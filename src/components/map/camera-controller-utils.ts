@@ -1,9 +1,16 @@
 import maplibregl from "maplibre-gl";
 import { normalizeBearing } from "./flight-interpolation";
+import { FPV_LEVEL_PITCH } from "./fpv-scenery";
 
-export const FPV_CAMERA_PITCH = 80;
+export const DEFAULT_ZOOM = 9.2;
+export const DEFAULT_PITCH = 49;
+export const DEFAULT_BEARING = 27.4;
+/** Leaving the cockpit eases out to the overview over as long as entering. */
+export const FPV_EXIT_DURATION_MS = 1_100;
+
 export const FPV_DEFAULT_ALTITUDE_METERS = 5_000;
-export const FPV_MIN_CAMERA_ALTITUDE_METERS = 60;
+/** A pilot's eye sits about this far above the runway. */
+export const FPV_MIN_CAMERA_ALTITUDE_METERS = 8;
 
 const MAX_MERCATOR_LATITUDE = 85.051129;
 /** Drawn heights above this share of the camera's height cannot be framed. */
@@ -16,6 +23,33 @@ export type FpvCameraPosition = {
   alt: number | null;
   track: number | null;
 };
+
+/**
+ * Where the map goes when first person view ends, however it ends: the
+ * default overview, centred on the aircraft. The open card's position is
+ * the aircraft's latest; without a card, the cockpit's own position is.
+ */
+export function fpvExitCamera({
+  panelCoordinates,
+  cockpit,
+  padding,
+  reduceMotion,
+}: {
+  panelCoordinates: [number, number] | null;
+  cockpit: [number, number];
+  padding: maplibregl.PaddingOptions;
+  reduceMotion: boolean;
+}): maplibregl.EaseToOptions {
+  return {
+    center: panelCoordinates ?? cockpit,
+    zoom: DEFAULT_ZOOM,
+    pitch: DEFAULT_PITCH,
+    bearing: DEFAULT_BEARING,
+    padding,
+    duration: reduceMotion ? 0 : FPV_EXIT_DURATION_MS,
+    essential: true,
+  };
+}
 
 export function smoothstep(t: number): number {
   return t * t * (3 - 2 * t);
@@ -42,6 +76,7 @@ export function fpvCameraOptions(
   map: maplibregl.Map,
   position: FpvCameraPosition,
   fallbackBearing: number,
+  pitch: number = FPV_LEVEL_PITCH,
 ): maplibregl.CameraOptions | null {
   if (
     !Number.isFinite(position.lng) ||
@@ -70,7 +105,7 @@ export function fpvCameraOptions(
       new maplibregl.LngLat(normalizeLng(position.lng), latitude),
       altitude,
       bearing,
-      FPV_CAMERA_PITCH,
+      pitch,
       0,
     );
   } catch {

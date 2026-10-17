@@ -54,6 +54,10 @@ import {
 
 import { buildSelectionPulseLayers } from "./selection-pulse-layers";
 import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
+import {
+  buildFpvTrafficLabelLayer,
+  pickFpvTrafficLabels,
+} from "./fpv-traffic-labels";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import {
   aircraftFootprintPixels,
@@ -76,6 +80,10 @@ import {
 
 /** Flat icons are never pitched, so their trails meet a level tail. */
 const NO_PITCH = new Map<string, number>();
+/** Seen from the cockpit, other aircraft's trails are this much fainter... */
+const FPV_TRAIL_OPACITY = 0.35;
+/** ...and this much thinner. */
+const FPV_TRAIL_THICKNESS = 0.6;
 const METERS_PER_DEGREE = 111_320;
 
 type CockpitCamera = {
@@ -106,11 +114,43 @@ function cockpitCamera(
   };
 }
 
+/**
+ * Whether the cockpit camera can see an aircraft: within its field of view
+ * across and up and down, measured as angles from the camera.
+ */
+function inCockpitView(
+  camera: CockpitCamera,
+  view: { bearing: number; pitch: number; verticalFov: number; aspect: number },
+  flight: FlightState,
+  elevation: number,
+): boolean {
+  const cosLat = Math.cos((camera.lat * Math.PI) / 180);
+  const east =
+    (((flight.longitude! - camera.lng + 540) % 360) - 180) *
+    METERS_PER_DEGREE *
+    cosLat;
+  const north = (flight.latitude! - camera.lat) * METERS_PER_DEGREE;
+  const across = Math.hypot(east, north);
+  const bearing = (Math.atan2(east, north) * 180) / Math.PI;
+  const offAxis = Math.abs(((bearing - view.bearing + 540) % 360) - 180);
+  const elevationAngle =
+    (Math.atan2(elevation - camera.alt, across) * 180) / Math.PI;
+  const halfVertical = view.verticalFov / 2;
+  const halfHorizontal =
+    (Math.atan(Math.tan((halfVertical * Math.PI) / 180) * view.aspect) * 180) /
+    Math.PI;
+  return (
+    offAxis < halfHorizontal &&
+    Math.abs(elevationAngle - (view.pitch - 90)) < halfVertical
+  );
+}
+
 /** Straight-line metres from the cockpit camera to an aircraft. */
 function distanceFromCockpit(
   camera: CockpitCamera,
   flight: FlightState,
   altitudeMode: AltitudeDisplayMode,
+  altitudeOffset: number,
 ): number {
   const cosLat = Math.cos(
     (((camera.lat + flight.latitude!) / 2) * Math.PI) / 180,
@@ -121,7 +161,8 @@ function distanceFromCockpit(
     cosLat;
   const north = (flight.latitude! - camera.lat) * METERS_PER_DEGREE;
   const up =
-    aircraftElevationMeters(flight.baroAltitude, altitudeMode) - camera.alt;
+    aircraftElevationMeters(flight.baroAltitude, altitudeMode, altitudeOffset) -
+    camera.alt;
   return Math.hypot(east, north, up);
 }
 
@@ -139,6 +180,7 @@ export function FlightLayers({
   altitudeDisplayMode,
   globeMode = false,
   fpvIcao24 = null,
+  fpvHeightOffsetMeters = 0,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -196,6 +238,7 @@ export function FlightLayers({
   const globeModeRef = useRef(globeMode);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
+  const fpvHeightOffsetRef = useRef(fpvHeightOffsetMeters);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
 
@@ -226,6 +269,7 @@ export function FlightLayers({
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
+    fpvHeightOffsetRef.current = fpvHeightOffsetMeters;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -249,6 +293,7 @@ export function FlightLayers({
     globeMode,
     selectedIcao24,
     fpvIcao24,
+    fpvHeightOffsetMeters,
   ]);
 
   // ── Snapshot interpolation on new data ─────────────────────────────
@@ -783,6 +828,8 @@ export function FlightLayers({
         const altitudeMode: AltitudeDisplayMode = fpvId
           ? "realistic"
           : altitudeDisplayModeRef.current;
+        // ...and above the local ground, as the camera is (fpv-height).
+        const altitudeOffset = fpvId ? fpvHeightOffsetRef.current : 0;
 
         // Pitch and bank follow each aircraft's reported motion and change
         // slowly, so they are eased at ~10fps whatever the frame rate.
@@ -841,7 +888,12 @@ export function FlightLayers({
             footprintPx: cockpit
               ? fpvFootprintPixels(
                   wingspan,
-                  distanceFromCockpit(cockpit, flight, altitudeMode),
+                  distanceFromCockpit(
+                    cockpit,
+                    flight,
+                    altitudeMode,
+                    altitudeOffset,
+                  ),
                   cockpit.focalPx,
                   cockpit.metersPerPixel,
                 )
@@ -897,18 +949,21 @@ export function FlightLayers({
               flights: visibleFlights,
               aircraftSizes,
               pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
-              // A halo reads as a streak across the cockpit's sky.
+              // A halo reads as a streak across the cockpit's sky, and full
+              // trails crowd it, so they are thinner and fainter there.
               glow: !fpvId,
               zoom: currentZoom,
               trailMap: trailMapRef.current,
               selectedIcao24: selectedIcao24Ref.current,
               trailMinutes: trailMinutesRef.current,
               ceilingMeters: trailCeilingMetersRef.current,
-              thickness: trailThicknessRef.current,
+              thickness:
+                trailThicknessRef.current * (fpvId ? FPV_TRAIL_THICKNESS : 1),
               altColors,
               altitudeDisplayMode: altitudeMode,
+              altitudeOffsetMeters: altitudeOffset,
               defaultColor: DEFAULT_COLOR,
-              opacity: globeFade,
+              opacity: globeFade * (fpvId ? FPV_TRAIL_OPACITY : 1),
               cache: trailRenderCacheRef.current,
             }),
           );
@@ -957,6 +1012,7 @@ export function FlightLayers({
               globeFade,
               aircraftSizes,
               altitudeDisplayMode: altitudeMode,
+              altitudeOffsetMeters: altitudeOffset,
               altColors,
               defaultColor: DEFAULT_COLOR,
               pitchByIcao,
@@ -977,7 +1033,11 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                aircraftElevationMeters(d.baroAltitude, altitudeMode),
+                aircraftElevationMeters(
+                  d.baroAltitude,
+                  altitudeMode,
+                  altitudeOffset,
+                ),
               ],
               getIcon: () => "aircraft",
               getSize: footprintOf,
@@ -999,13 +1059,54 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [visualFrameRef.current, altitudeMode],
+                getPosition: [
+                  visualFrameRef.current,
+                  altitudeMode,
+                  altitudeOffset,
+                ],
                 getAngle: visualFrameRef.current,
                 getSize: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],
               },
             }),
           );
+        }
+
+        // Nearby traffic is labelled from the cockpit, as on a traffic display.
+        if (layersVisible && cockpit && map) {
+          const canvas = map.getCanvas();
+          const view = {
+            bearing: map.getBearing(),
+            pitch: map.getPitch(),
+            verticalFov: map.getVerticalFieldOfView(),
+            aspect: canvas.clientWidth / Math.max(1, canvas.clientHeight),
+          };
+          const elevationOf = (flight: FlightState) =>
+            aircraftElevationMeters(
+              flight.baroAltitude,
+              altitudeMode,
+              altitudeOffset,
+            );
+          const labels = pickFpvTrafficLabels(
+            visibleFlights,
+            cockpit.alt,
+            elevationOf,
+            (flight) =>
+              distanceFromCockpit(cockpit, flight, altitudeMode, altitudeOffset),
+            footprintOf,
+            (flight) =>
+              inCockpitView(cockpit, view, flight, elevationOf(flight)),
+          );
+          if (labels.length > 0) {
+            layers.push(
+              buildFpvTrafficLabelLayer(
+                labels,
+                document.documentElement.classList.contains("dark")
+                  ? "dark"
+                  : "light",
+              ),
+            );
+          }
         }
 
         overlay.setProps({ layers });

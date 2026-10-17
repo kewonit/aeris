@@ -10,6 +10,11 @@ import {
 } from "@/components/flight-tracker-utils";
 import type { City } from "@/lib/cities";
 
+/** Below about 30 kt a landed aircraft is taxiing, and FPV ends. */
+const FPV_TAXI_SPEED_MPS = 15;
+/** FPV ends this long after touchdown even if the aircraft is still rolling. */
+const FPV_MAX_ROLLOUT_MS = 45_000;
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface UseFlightMonitorsOptions {
@@ -28,6 +33,8 @@ export interface UseFlightMonitorsOptions {
   setFollowIcao24: (v: string | null) => void;
   setCityOverride: (v: City) => void;
   setFpvSeedCenter: (v: { lng: number; lat: number } | null) => void;
+  /** Ends FPV: after a landing, or when the feed has lost the aircraft. */
+  endFpv: (how: "landed" | "lost") => void;
 }
 
 export interface UseFlightMonitorsResult {
@@ -55,6 +62,7 @@ export function useFlightMonitors(
     setFollowIcao24,
     setCityOverride,
     setFpvSeedCenter,
+    endFpv,
   } = opts;
 
   const [repoStars, setRepoStars] = useState<number | null>(null);
@@ -135,14 +143,17 @@ export function useFlightMonitors(
     setFpvSeedCenter,
   ]);
 
-  // ── FPV miss counting ────────────────────────────────────────────
+  // ── FPV landing and miss counting ────────────────────────────────
 
   const fpvMissCountRef = useRef(0);
   const fpvActivatedAtRef = useRef(0);
+  // When the FPV aircraft was first reported on the ground.
+  const fpvGroundSinceRef = useRef<number | null>(null);
   useEffect(() => {
     if (!fpvIcao24) {
       fpvMissCountRef.current = 0;
       fpvActivatedAtRef.current = 0;
+      fpvGroundSinceRef.current = null;
       return;
     }
 
@@ -150,15 +161,20 @@ export function useFlightMonitors(
       fpvActivatedAtRef.current = Date.now();
     }
 
+    let ended: "landed" | "lost" | null = null;
     if (fpvFlight) {
       fpvMissCountRef.current = 0;
       if (fpvFlight.onGround) {
-        const exitIcao = fpvIcao24;
-        const timer = setTimeout(() => {
-          setSelectedIcao24(exitIcao);
-          setFpvIcao24(null);
-        }, 0);
-        return () => clearTimeout(timer);
+        // The landing roll plays out; FPV ends once the aircraft is down to
+        // taxiing speed, or has been on the ground a while.
+        const now = Date.now();
+        fpvGroundSinceRef.current ??= now;
+        const slowed = (fpvFlight.velocity ?? 0) < FPV_TAXI_SPEED_MPS;
+        if (slowed || now - fpvGroundSinceRef.current > FPV_MAX_ROLLOUT_MS) {
+          ended = "landed";
+        }
+      } else {
+        fpvGroundSinceRef.current = null;
       }
     } else {
       // Grace period: don't count misses for the first 30s after FPV
@@ -168,23 +184,13 @@ export function useFlightMonitors(
       if (!rateLimited && elapsed > 30_000) {
         fpvMissCountRef.current += 1;
       }
-      if (fpvMissCountRef.current >= 3) {
-        const exitIcao = fpvIcao24;
-        const timer = setTimeout(() => {
-          setSelectedIcao24(exitIcao);
-          setFpvIcao24(null);
-        }, 0);
-        return () => clearTimeout(timer);
-      }
+      if (fpvMissCountRef.current >= 3) ended = "lost";
     }
-  }, [
-    fpvIcao24,
-    fpvFlight,
-    rateLimited,
-    displayFlights,
-    setSelectedIcao24,
-    setFpvIcao24,
-  ]);
+    if (!ended) return;
+    const how = ended;
+    const timer = setTimeout(() => endFpv(how), 0);
+    return () => clearTimeout(timer);
+  }, [fpvIcao24, fpvFlight, rateLimited, displayFlights, endFpv]);
 
   // ── Follow miss counting ─────────────────────────────────────────
 

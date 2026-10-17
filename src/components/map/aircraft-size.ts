@@ -184,8 +184,11 @@ export function aircraftFootprintPixels(
   return Math.max(floor, wingspanMeters / metersPerPixel(zoom, latitude));
 }
 
-/** Seen from the cockpit, no aircraft looks smaller than this, so far traffic stays a dot... */
-const FPV_MIN_APPARENT_PX = 4;
+/**
+ * Seen from the cockpit, no aircraft looks smaller than this, so far
+ * traffic still reads as an aircraft rather than a star...
+ */
+const FPV_MIN_APPARENT_PX = 10;
 /** ...or larger than this, so a near pass does not fill the screen. */
 const FPV_MAX_APPARENT_PX = 160;
 

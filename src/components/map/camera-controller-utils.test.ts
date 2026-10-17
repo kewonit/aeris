@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  FPV_CAMERA_PITCH,
+  DEFAULT_PITCH,
+  DEFAULT_ZOOM,
+  fpvExitCamera,
   FPV_DEFAULT_ALTITUDE_METERS,
   FPV_MIN_CAMERA_ALTITUDE_METERS,
   fpvCameraOptions,
@@ -45,6 +47,7 @@ test("FPV camera is placed at the aircraft with a forward horizon pitch", () => 
     map as never,
     { lng: 190, lat: 89, alt: -20, track: -10 },
     45,
+    84,
   );
 
   assert.deepEqual(received, {
@@ -52,10 +55,10 @@ test("FPV camera is placed at the aircraft with a forward horizon pitch", () => 
     lat: 85.051129,
     altitude: FPV_MIN_CAMERA_ALTITUDE_METERS,
     bearing: 350,
-    pitch: FPV_CAMERA_PITCH,
+    pitch: 84,
     roll: 0,
   });
-  assert.equal(options?.pitch, FPV_CAMERA_PITCH);
+  assert.equal(options?.pitch, 84);
   assert.equal(options?.bearing, 350);
 });
 
@@ -157,4 +160,28 @@ test("an aircraft drawn up at the camera's height is not framed", () => {
   assert.equal(isWellBelowCamera(5_000, 10_000), true);
   assert.equal(isWellBelowCamera(9_600, 10_000), false);
   assert.equal(isWellBelowCamera(14_000, 10_000), false);
+});
+
+test("leaving the cockpit eases out to an overview centred on the aircraft", () => {
+  const padding = { top: 0, right: 0, bottom: 0, left: 440 };
+  const withCard = fpvExitCamera({
+    panelCoordinates: [-87.9, 41.98],
+    cockpit: [-87.6, 41.9],
+    padding,
+    reduceMotion: false,
+  });
+  assert.deepEqual(withCard.center, [-87.9, 41.98]);
+  assert.equal(withCard.zoom, DEFAULT_ZOOM);
+  assert.equal(withCard.pitch, DEFAULT_PITCH);
+  assert.equal(withCard.padding, padding);
+  assert.ok((withCard.duration ?? 0) > 0);
+
+  const withoutCard = fpvExitCamera({
+    panelCoordinates: null,
+    cockpit: [-87.6, 41.9],
+    padding,
+    reduceMotion: true,
+  });
+  assert.deepEqual(withoutCard.center, [-87.6, 41.9]);
+  assert.equal(withoutCard.duration, 0);
 });

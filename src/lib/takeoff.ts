@@ -1,4 +1,4 @@
-import { findNearestAirport, type Airport } from "./airports";
+import { findNearestAirport, isRunwayAirport, type Airport } from "./airports";
 import type { FlightTrack, TrackWaypoint } from "./opensky";
 
 const FEET = 0.3048;
@@ -37,16 +37,6 @@ export type Takeoff = {
 };
 
 type Point = TrackWaypoint & { latitude: number; longitude: number };
-
-/**
- * Whether an airport takes airliners rather than seaplanes or helicopters,
- * which have local codes with digits or say so in their names.
- */
-function isRunwayAirport(airport: Airport): boolean {
-  return (
-    /^[A-Z]{4}$/.test(airport.icao) && !/seaplane|heli/i.test(airport.name)
-  );
-}
 
 /**
  * The airport a point is at. Near a large airport a seaplane base or

@@ -173,6 +173,8 @@ export function useFlights(
           lon,
           radiusDeg,
           controller.signal,
+          // The FPV aircraft stays after it lands, so its roll-out is seen.
+          inFpv ? { keepOnGround: fpvIcao24Ref.current } : undefined,
         );
 
         setSource(result.source ?? null);

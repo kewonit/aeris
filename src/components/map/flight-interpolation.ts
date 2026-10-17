@@ -173,11 +173,16 @@ export function noteReceipt(
  * How long before `receivedAt` a flight's reported position was true: its
  * age when the provider answered, plus however long that answer sat in a
  * cache before it reached us.
+ *
+ * @param maxLeadMs The most a report is carried forward. First person view
+ *   passes no limit, so a stale report is placed when it was true, behind
+ *   newer ones, rather than pulling the view back.
  */
 export function reportLeadMs(
   flight: FlightState,
   receivedAt: number,
   delays: ReceiptDelays,
+  maxLeadMs: number = MAX_REPORT_LEAD_MS,
 ): number {
   const provenance = flight.provenance;
   if (!provenance) return 0;
@@ -191,9 +196,7 @@ export function reportLeadMs(
     ? receivedAt - provenance.responseTime - Math.min(...recent)
     : 0;
   const lead = age + Math.max(0, waited);
-  return Number.isFinite(lead)
-    ? Math.min(MAX_REPORT_LEAD_MS, Math.max(0, lead))
-    : 0;
+  return Number.isFinite(lead) ? Math.min(maxLeadMs, Math.max(0, lead)) : 0;
 }
 
 /**

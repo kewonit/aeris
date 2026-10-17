@@ -68,6 +68,8 @@ export type TrailGeometryOptions = {
   /** How much of the trail to show; null shows all of it. */
   windowMs: number | null;
   altitudeDisplayMode: AltitudeDisplayMode;
+  /** Added to every altitude before projecting; 0 outside first person. */
+  altitudeOffsetMeters?: number;
   altColors: boolean;
   defaultColor: Rgba;
   appearance: TrailAppearance;
@@ -353,7 +355,11 @@ function project(
   const toVertex = (point: CurvePoint): TrailVertex => [
     point.lng,
     point.lat,
-    aircraftElevationMeters(point.alt, options.altitudeDisplayMode),
+    aircraftElevationMeters(
+      point.alt,
+      options.altitudeDisplayMode,
+      options.altitudeOffsetMeters,
+    ),
   ];
   const toColor = (point: CurvePoint): Rgba => {
     const base = options.altColors
@@ -412,6 +418,7 @@ export function getTrailGeometry(
   const { category, dbFlags, emergencyStatus } = options.appearance;
   const projectionKey = [
     options.altitudeDisplayMode,
+    options.altitudeOffsetMeters ?? 0,
     options.altColors,
     options.defaultColor.join(","),
     category,

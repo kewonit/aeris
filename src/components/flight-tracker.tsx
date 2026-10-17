@@ -72,6 +72,7 @@ import type { FlightState } from "@/lib/opensky";
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
 import { findNearestAirport, airportToCity } from "@/lib/airports";
+import { fpvHeightOffsetMeters } from "@/components/map/fpv-height";
 import {
   computeAirspaceBounds,
   FPV_BOUNDS_SNAP_DEG,
@@ -299,9 +300,37 @@ function FlightTrackerInner({
     return displayFlightMap.get(fpvIcao24) ?? null;
   }, [fpvIcao24, displayFlightMap]);
 
+  // The last report of the FPV aircraft, held through polls that miss it,
+  // so the heights it sets do not jump back.
+  const [heldFpvFlight, setHeldFpvFlight] = useState<FlightState | null>(null);
+  if (fpvFlight && fpvFlight !== heldFpvFlight) setHeldFpvFlight(fpvFlight);
+  if (!fpvIcao24 && heldFpvFlight) setHeldFpvFlight(null);
+  const fpvHeightOffset = useMemo(
+    () =>
+      fpvHeightOffsetMeters(
+        heldFpvFlight?.icao24 === fpvIcao24 ? heldFpvFlight : null,
+      ),
+    [heldFpvFlight, fpvIcao24],
+  );
+
   useEffect(() => {
     syncFpvToUrl(fpvIcao24, activeCity);
   }, [fpvIcao24, activeCity]);
+
+  // Ends FPV however it ends; the camera always pulls back out to the
+  // aircraft. Leaving deliberately keeps it selected with its card open on
+  // desktop. After a landing or when the feed has lost it, the aircraft is
+  // off the map, which shows none on the ground, so nothing stays selected.
+  const endFpv = useCallback(
+    (how: "exited" | "landed" | "lost") => {
+      if (!fpvIcao24) return;
+      setSelectedIcao24(how === "exited" ? fpvIcao24 : null);
+      setFpvIcao24(null);
+      setFpvSeedCenter(null);
+      if (how === "exited" && !isMobile) setLeftPanel({ kind: "flight" });
+    },
+    [fpvIcao24, isMobile],
+  );
 
   const { repoStars } = useFlightMonitors({
     pendingFpvRef,
@@ -319,6 +348,7 @@ function FlightTrackerInner({
     setFollowIcao24,
     setCityOverride,
     setFpvSeedCenter,
+    endFpv,
   });
 
   const atc = useAtcStream();
@@ -392,14 +422,13 @@ function FlightTrackerInner({
   );
 
   const handleDeselectFlight = useCallback(() => {
-    setLeftPanel((panel) => (panel?.kind === "flight" ? null : panel));
     if (fpvIcao24) {
-      setSelectedIcao24(fpvIcao24);
-      setFpvIcao24(null);
-    } else {
-      setSelectedIcao24(null);
+      endFpv("exited");
+      return;
     }
-  }, [fpvIcao24]);
+    setLeftPanel((panel) => (panel?.kind === "flight" ? null : panel));
+    setSelectedIcao24(null);
+  }, [endFpv, fpvIcao24]);
 
   const enterFpv = useCallback(
     (icao24: string) => {
@@ -421,13 +450,7 @@ function FlightTrackerInner({
     [displayFlightMap],
   );
 
-  const handleExitFpv = useCallback(() => {
-    if (!fpvIcao24) return;
-    setSelectedIcao24(fpvIcao24);
-    setFpvIcao24(null);
-    setFpvSeedCenter(null);
-    if (!isMobile) setLeftPanel({ kind: "flight" });
-  }, [fpvIcao24, isMobile]);
+  const handleExitFpv = useCallback(() => endFpv("exited"), [endFpv]);
 
   const handleToggleFpv = useCallback(
     (icao24: string) => {
@@ -718,6 +741,7 @@ function FlightTrackerInner({
             followFlight={followFlight}
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
+            fpvHeightOffsetMeters={fpvHeightOffset}
             panelCamera={panelCamera}
           />
           {!fpvIcao24 && (
@@ -754,6 +778,7 @@ function FlightTrackerInner({
             altitudeDisplayMode={settings.altitudeDisplayMode}
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
+            fpvHeightOffsetMeters={fpvHeightOffset}
           />
         </MapView>
       </div>
