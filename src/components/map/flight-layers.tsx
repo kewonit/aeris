@@ -82,6 +82,29 @@ const NO_PITCH = new Map<string, number>();
  */
 const FPV_FOLLOWED_PX = 100;
 const FPV_FOLLOWED_WIDTH_SHARE = 1 / 6;
+
+/**
+ * deck's own render loop ticks on every display frame, 120 times a second
+ * on a fast display, looking for work that only the rebuilds here create.
+ * So it is stopped, and deck draws a frame with each rebuild instead. The
+ * overlay still redraws it with each map render.
+ */
+type DeckFrameLoop = { stop(): void; redraw(): void };
+function deckOf(overlay: MapboxOverlay) {
+  return (
+    overlay as unknown as {
+      _deck?: { isInitialized: boolean; animationLoop: DeckFrameLoop | null };
+    }
+  )._deck;
+}
+function stopDeckLoop(overlay: MapboxOverlay) {
+  deckOf(overlay)?.animationLoop?.stop();
+}
+/** Draws deck's frame now: layer updates, hover picking and the render. */
+function drawDeckFrame(overlay: MapboxOverlay) {
+  const deck = deckOf(overlay);
+  if (deck?.isInitialized) deck.animationLoop?.redraw();
+}
 export function FlightLayers({
   flights,
   trails,
@@ -466,6 +489,7 @@ export function FlightLayers({
       });
       overlayRef.current = overlay;
       map!.addControl(overlay as unknown as maplibregl.IControl);
+      stopDeckLoop(overlay);
       return overlay;
     }
 
@@ -640,6 +664,8 @@ export function FlightLayers({
     }
     map?.on("move", onCameraMove);
     map?.on("style.load", requestRender);
+    // Hover picking happens in deck's frame, which only a rebuild runs.
+    map?.on("mousemove", requestRender);
 
     function buildAndPushLayers(now: number) {
       animFrameRef.current = 0;
@@ -752,6 +778,7 @@ export function FlightLayers({
 
         if (!layersVisible) {
           overlay.setProps({ layers: [] });
+          drawDeckFrame(overlay);
           continueAnimating = false;
           return;
         }
@@ -1029,6 +1056,7 @@ export function FlightLayers({
         }
 
         overlay.setProps({ layers });
+        drawDeckFrame(overlay);
 
         const selectionAnimating =
           (selectedIcao24Ref.current != null || prevSelectedRef.current != null) &&
@@ -1062,6 +1090,7 @@ export function FlightLayers({
       document.removeEventListener("freeze", markPageInactive);
       document.removeEventListener("resume", handlePageResume);
       map?.off("move", onCameraMove);
+      map?.off("mousemove", requestRender);
       map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);
