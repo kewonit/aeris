@@ -282,7 +282,7 @@ export function CameraControls() {
 
       <ControlButton
         type="bearing"
-        direction={1}
+        direction={-1}
         label="Rotate clockwise"
         title="Rotate clockwise"
       >
@@ -291,7 +291,7 @@ export function CameraControls() {
       <Divider />
       <ControlButton
         type="bearing"
-        direction={-1}
+        direction={1}
         label="Rotate counter-clockwise"
         title="Rotate counter-clockwise"
       >
