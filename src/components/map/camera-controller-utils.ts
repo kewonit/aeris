@@ -6,6 +6,8 @@ export const FPV_DEFAULT_ALTITUDE_METERS = 5_000;
 export const FPV_MIN_CAMERA_ALTITUDE_METERS = 60;
 
 const MAX_MERCATOR_LATITUDE = 85.051129;
+/** Drawn heights above this share of the camera's height cannot be framed. */
+const FRAMABLE_CAMERA_SHARE = 0.95;
 
 /** The FPV aircraft's position. Missing altitude or heading stays null. */
 export type FpvCameraPosition = {
@@ -21,6 +23,18 @@ export function smoothstep(t: number): number {
 
 export function normalizeLng(lng: number): number {
   return ((lng + 540) % 360) - 180;
+}
+
+/**
+ * Whether an aircraft drawn at this height can be framed by moving the map.
+ * At or near the camera's own height the projection flips, so recentring on
+ * it would send the map somewhere wrong.
+ */
+export function isWellBelowCamera(
+  elevationMeters: number,
+  cameraHeightMeters: number,
+): boolean {
+  return elevationMeters < FRAMABLE_CAMERA_SHARE * cameraHeightMeters;
 }
 
 

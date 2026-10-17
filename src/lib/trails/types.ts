@@ -5,13 +5,6 @@ export type TrailProviderId =
   | "airplanes-live"
   | "opensky";
 
-export type TrailSampleQuality =
-  | "authoritative-live"
-  | "authoritative-trace"
-  | "interpolated-bridge"
-  | "derived-anchor"
-  | "suspect";
-
 export type TrailOutcome =
   | "full-history"
   | "partial-history"
@@ -19,43 +12,29 @@ export type TrailOutcome =
   | "rate-limited"
   | "provider-unavailable";
 
-export type TrailSnapshot = {
-  source: TrailProviderId;
-  timestamp: number;
+/** One observed position. */
+export type TrailSample = {
+  /** Unix milliseconds of the observation. */
+  t: number;
   lng: number;
   lat: number;
-  altitude: number | null;
-  track: number | null;
-  groundSpeed: number | null;
-  quality: TrailSampleQuality;
+  /** Barometric altitude in meters, or null when unknown. */
+  alt: number | null;
   onGround: boolean;
 };
 
-export type TrailSegmentKind = "live" | "historical" | "bridge";
-
-export type TrailSegment = {
-  kind: TrailSegmentKind;
-  provider: TrailProviderId;
-  samples: TrailSnapshot[];
-};
-
-export type TrailMetadata = {
-  provider?: TrailProviderId | null;
-  outcome?: TrailOutcome;
-  revision?: number;
-  liveRevision?: number;
-  historyRevision?: number;
-  selectionGeneration?: number;
-};
-
-export type TrailEntry = {
+/**
+ * The trail of one aircraft as continuous parts, oldest first. A renderer
+ * must never draw a line between two parts.
+ */
+export type TrailTrack = {
   icao24: string;
-  path: [number, number][];
-  altitudes: Array<number | null>;
-  timestamps: number[];
-  baroAltitude: number | null;
-  fullHistory?: boolean;
-} & TrailMetadata;
+  parts: TrailSample[][];
+  /** Changes whenever `parts` changes, so geometry can be cached on it. */
+  revision: number;
+  /** True when the parts include fetched history. */
+  hasHistory: boolean;
+};
 
 export type TrailHistoryState = {
   selectedIcao24: string | null;
@@ -65,22 +44,4 @@ export type TrailHistoryState = {
   outcome: TrailOutcome | null;
   cooldownUntil: number;
   creditsRemaining: number | null;
-  missingSinceMs: number | null;
-};
-
-export type TrailGeometry = TrailEntry & {
-  anchorIndex?: number;
-};
-
-export type TrailEnvelope = {
-  icao24: string;
-  provider: TrailProviderId | null;
-  outcome: TrailOutcome;
-  selectionGeneration: number;
-  liveRevision: number;
-  historyRevision: number;
-  lastSeenAt: number;
-  liveTail: TrailSnapshot[];
-  historySegments: TrailSegment[];
-  entry: TrailGeometry | null;
 };

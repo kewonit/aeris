@@ -260,7 +260,6 @@ function FlightTrackerInner({
     selectedIcao24,
     historyEnabled: !!selectedIcao24 && !fpvIcao24,
   });
-  const mergedTrails = trailState.trails;
 
   // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
   const displayFlightMap = useMemo(() => {
@@ -739,13 +738,12 @@ function FlightTrackerInner({
           />
           <FlightLayers
             flights={displayFlights}
-            trails={mergedTrails}
-            selectedEnvelope={trailState.selectedEnvelope}
+            trails={trailState.trails}
             onClick={handleClick}
             selectedIcao24={fpvIcao24 ?? selectedIcao24}
             showTrails={settings.showTrails}
             trailThickness={settings.trailThickness}
-            trailDistance={settings.trailDistance}
+            trailMinutes={settings.trailMinutes}
             showShadows={settings.showShadows}
             showAltitudeColors={settings.showAltitudeColors}
             altitudeDisplayMode={settings.altitudeDisplayMode}

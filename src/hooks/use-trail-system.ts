@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 
 import type { FlightTrack, FlightState } from "@/lib/opensky";
-import { TRAIL_HISTORY_REFRESH_MS } from "@/lib/trails/constants";
 import {
   getDirectTraceProviders,
   fetchReadsbDirectTrack,
@@ -15,18 +14,11 @@ import {
 } from "@/lib/trails/store/trail-store";
 import type { TrailOutcome, TrailProviderId } from "@/lib/trails/types";
 
-function toTrailProviderId(source: string | null): TrailProviderId | null {
-  switch (source) {
-    case "live":
-    case "adsb-fi":
-    case "adsb-lol":
-    case "airplanes-live":
-    case "opensky":
-      return source;
-    default:
-      return null;
-  }
-}
+/**
+ * How often the selected aircraft's history is fetched again. Live samples
+ * keep the trail current in between; a refresh only fills earlier gaps.
+ */
+const HISTORY_REFRESH_MS = 60_000;
 
 export function getHistoryLoadDisposition(params: {
   online: boolean;
@@ -43,11 +35,11 @@ export function getHistoryRefreshMs(params: {
   provider: TrailProviderId | null;
   creditsRemaining: number | null;
 }): number {
-  if (params.provider !== "opensky") return TRAIL_HISTORY_REFRESH_MS;
-  if (params.creditsRemaining === null) return TRAIL_HISTORY_REFRESH_MS;
-  if (params.creditsRemaining > 200) return TRAIL_HISTORY_REFRESH_MS;
-  if (params.creditsRemaining > 50) return 30_000;
-  if (params.creditsRemaining > 0) return 60_000;
+  if (params.provider !== "opensky") return HISTORY_REFRESH_MS;
+  if (params.creditsRemaining === null) return HISTORY_REFRESH_MS;
+  if (params.creditsRemaining > 200) return HISTORY_REFRESH_MS;
+  if (params.creditsRemaining > 50) return 2 * HISTORY_REFRESH_MS;
+  if (params.creditsRemaining > 0) return 5 * HISTORY_REFRESH_MS;
   return 0;
 }
 
@@ -102,9 +94,8 @@ export function useTrailSystem(params: {
   }, [params.historyEnabled, params.selectedIcao24]);
 
   useEffect(() => {
-    const history = trailStore.getSnapshot().history;
-    const selectedIcao24 = history.selectedIcao24;
-    const selectionGeneration = history.selectionGeneration;
+    const { selectedIcao24, selectionGeneration } =
+      trailStore.getSnapshot().history;
 
     if (!params.historyEnabled || !selectedIcao24) {
       return;
@@ -113,6 +104,14 @@ export function useTrailSystem(params: {
     let active = true;
     let currentController: AbortController | null = null;
     let timerId: number | null = null;
+
+    const isCurrent = () => {
+      const history = trailStore.getSnapshot().history;
+      return (
+        history.selectedIcao24 === selectedIcao24 &&
+        history.selectionGeneration === selectionGeneration
+      );
+    };
 
     const clearTimer = () => {
       if (timerId !== null) {
@@ -147,25 +146,22 @@ export function useTrailSystem(params: {
       }
 
       if (disposition === "hidden") {
-        scheduleNext(TRAIL_HISTORY_REFRESH_MS);
+        scheduleNext(HISTORY_REFRESH_MS);
         return;
       }
 
-      const latestHistory = trailStore.getSnapshot().history;
-      if (
-        latestHistory.selectedIcao24 !== selectedIcao24 ||
-        latestHistory.selectionGeneration !== selectionGeneration
-      ) {
+      if (!isCurrent()) {
         return;
       }
 
       const now = Date.now();
-      if (!force && latestHistory.cooldownUntil > now) {
-        scheduleNext(latestHistory.cooldownUntil - now);
+      const { cooldownUntil } = trailStore.getSnapshot().history;
+      if (!force && cooldownUntil > now) {
+        scheduleNext(cooldownUntil - now);
         return;
       }
 
-      trailStore.startHistoryLoad({ selectionGeneration });
+      trailStore.startHistoryLoad(selectionGeneration);
 
       const controller = new AbortController();
       currentController = controller;
@@ -176,40 +172,13 @@ export function useTrailSystem(params: {
           controller.signal,
         );
 
-        // After an async gap, the effect may have been cleaned up or
-        // the selection may have changed.  The generation check in
-        // resolveHistory / failHistory guards against stale results,
-        // so we only need to bail on scheduling here.
-        if (!active) {
-          // Still resolve if the generation matches - avoids silently
-          // discarding a valid response that would fix the trail.
-          const staleCheck = trailStore.getSnapshot().history;
-          if (
-            staleCheck.selectedIcao24 !== selectedIcao24 ||
-            staleCheck.selectionGeneration !== selectionGeneration
-          ) {
-            return;
-          }
-        }
-
-        const refreshedHistory = trailStore.getSnapshot().history;
-        if (
-          refreshedHistory.selectedIcao24 !== selectedIcao24 ||
-          refreshedHistory.selectionGeneration !== selectionGeneration
-        ) {
+        // The fetch is left to finish after cleanup (see below), so the
+        // selection may have moved on while it ran.
+        if (!isCurrent()) {
           return;
         }
 
-        if (result.track) {
-          trailStore.resolveHistory({
-            icao24: selectedIcao24,
-            selectionGeneration,
-            provider: result.provider,
-            outcome: result.outcome,
-            creditsRemaining: result.creditsRemaining,
-            track: result.track,
-          });
-        } else if (result.outcome === "rate-limited") {
+        if (result.outcome === "rate-limited" && !result.track) {
           trailStore.failHistory({
             icao24: selectedIcao24,
             selectionGeneration,
@@ -222,24 +191,24 @@ export function useTrailSystem(params: {
           trailStore.resolveHistory({
             icao24: selectedIcao24,
             selectionGeneration,
-            provider: toTrailProviderId(result.provider),
+            provider: result.provider,
             outcome: result.outcome,
             creditsRemaining: result.creditsRemaining,
-            track: null,
+            track: result.track,
           });
         }
 
-        // Don't schedule refreshes after the effect has been torn down
         if (!active) {
           return;
         }
 
-        const nextHistory = trailStore.getSnapshot().history;
-        const refreshMs = getHistoryRefreshMs({
-          provider: nextHistory.provider,
-          creditsRemaining: nextHistory.creditsRemaining,
-        });
-        scheduleNext(refreshMs);
+        const history = trailStore.getSnapshot().history;
+        scheduleNext(
+          getHistoryRefreshMs({
+            provider: history.provider,
+            creditsRemaining: history.creditsRemaining,
+          }),
+        );
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
@@ -250,9 +219,9 @@ export function useTrailSystem(params: {
           selectionGeneration,
           provider: null,
           outcome: "provider-unavailable",
-          cooldownUntil: Date.now() + TRAIL_HISTORY_REFRESH_MS,
+          cooldownUntil: Date.now() + HISTORY_REFRESH_MS,
         });
-        scheduleNext(TRAIL_HISTORY_REFRESH_MS);
+        scheduleNext(HISTORY_REFRESH_MS);
       } finally {
         if (currentController === controller) {
           currentController = null;
@@ -277,11 +246,8 @@ export function useTrailSystem(params: {
     return () => {
       active = false;
       clearTimer();
-      // Don't abort in-flight fetches - let them complete naturally.
-      // resolveHistory/failHistory guard against stale results via
-      // selectionGeneration, and completing the fetch avoids the
-      // "cancelled request → lost response" race that prevented
-      // historical trails from rendering after React re-mounts.
+      // In-flight fetches are not aborted: a remount with the same
+      // selection would otherwise lose the response and show no history.
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

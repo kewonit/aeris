@@ -1,5 +1,5 @@
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/lib/trails/types";
+import type { TrailTrack } from "@/lib/trails/types";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {
@@ -107,7 +107,7 @@ export function resolveDisplayTrack(input: {
 
 export function computePitchByIcao(
   interpolated: FlightState[],
-  trailByIcao: Map<string, TrailEntry>,
+  trailByIcao: Map<string, TrailTrack>,
   currSnapshots: Map<string, Snapshot>,
   prevSnapshots: Map<string, Snapshot>,
   out?: Map<string, number>,
@@ -120,25 +120,20 @@ export function computePitchByIcao(
     const prev = prevSnapshots.get(f.icao24);
 
     const trendTrail = trailByIcao.get(f.icao24);
+    const trend = trendTrail?.parts[trendTrail.parts.length - 1];
     const trendPitch =
-      trendTrail && trendTrail.path.length >= 2
+      trend && trend.length >= 2
         ? (() => {
-            const end = trendTrail.path.length - 1;
-            const start = Math.max(0, end - 7);
+            const endSample = trend[trend.length - 1];
+            const startSample = trend[Math.max(0, trend.length - 8)];
             const startAlt =
-              trendTrail.altitudes[start] ??
-              trendTrail.altitudes[end] ??
-              f.baroAltitude ??
-              0;
-            const endAlt =
-              trendTrail.altitudes[end] ?? f.baroAltitude ?? startAlt;
-            const [sLng, sLat] = trendTrail.path[start];
-            const [eLng, eLat] = trendTrail.path[end];
+              startSample.alt ?? endSample.alt ?? f.baroAltitude ?? 0;
+            const endAlt = endSample.alt ?? f.baroAltitude ?? startAlt;
             const hMeters = horizontalDistanceFromLngLat(
-              sLng,
-              sLat,
-              eLng,
-              eLat,
+              startSample.lng,
+              startSample.lat,
+              endSample.lng,
+              endSample.lat,
             );
             if (hMeters < 1) return 0;
             return (-Math.atan2(endAlt - startAlt, hMeters) * 180) / Math.PI;

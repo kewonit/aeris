@@ -10,8 +10,6 @@
 
 import type { FlightState } from "@/lib/opensky";
 
-import { MODEL_MESH_METRICS } from "./model-mesh-metrics";
-
 // ── Model Keys ─────────────────────────────────────────────────────────
 
 export type AircraftModelKey =
@@ -68,7 +66,18 @@ const MODEL_CDN_VERSIONS: Readonly<Record<string, number>> = {
   "widebody-4eng": 1774203418,
 };
 
-type AircraftModelFileKey = keyof typeof MODEL_MESH_METRICS;
+type AircraftModelFileKey =
+  | "b737"
+  | "bizjet"
+  | "fighter"
+  | "glider"
+  | "helicopter"
+  | "light-prop"
+  | "narrowbody"
+  | "regional-jet"
+  | "turboprop"
+  | "widebody-2eng"
+  | "widebody-4eng";
 
 // A380 reuses the widebody-4eng mesh (it IS the A380 from FlightAirMap).
 // generic.glb and narrowbody.glb are identical files; drone.glb and light-prop.glb likewise.
@@ -92,9 +101,7 @@ export function modelUrl(key: AircraftModelKey): string {
   return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/v${version}/${CLOUDINARY_FOLDER}/${file}.glb`;
 }
 
-// ── Mesh Normalization + Compact Physical Scale ───────────────────────
-
-const TARGET_MODEL_EXTENT_UNITS = 42;
+// ── Real wingspans ─────────────────────────────────────────────────────
 
 export const MODEL_KEY_WINGSPAN: Readonly<Record<AircraftModelKey, number>> = {
   a380: 80,
@@ -112,48 +119,6 @@ export const MODEL_KEY_WINGSPAN: Readonly<Record<AircraftModelKey, number>> = {
   drone: 5,
   generic: 30,
 };
-
-const REFERENCE_MODEL_KEY: AircraftModelKey = "narrowbody";
-const REFERENCE_WINGSPAN_METERS = MODEL_KEY_WINGSPAN[REFERENCE_MODEL_KEY];
-const REFERENCE_MESH_EXTENT_UNITS =
-  MODEL_MESH_METRICS[resolveModelFileKey(REFERENCE_MODEL_KEY)].maxExtent;
-
-export function wingspanToDisplayScale(
-  wingspan: number,
-): number {
-  return 0.65 + Math.max(0, Math.min((wingspan - 5) / 75, 1)) * 0.65;
-}
-
-function wingspanToModelDisplayScale(
-  wingspan: number,
-  meshMaxExtent: number = REFERENCE_MESH_EXTENT_UNITS,
-): number {
-  return (
-    wingspan / REFERENCE_WINGSPAN_METERS
-  ) * Math.sqrt(meshMaxExtent / REFERENCE_MESH_EXTENT_UNITS);
-}
-
-export function modelMeshNormalize(key: AircraftModelKey): number {
-  const fileKey = resolveModelFileKey(key);
-  return TARGET_MODEL_EXTENT_UNITS / MODEL_MESH_METRICS[fileKey].maxExtent;
-}
-
-export function modelPhysicalScale(key: AircraftModelKey): number {
-  const fileKey = resolveModelFileKey(key);
-  return wingspanToModelDisplayScale(
-    MODEL_KEY_WINGSPAN[key],
-    MODEL_MESH_METRICS[fileKey].maxExtent,
-  );
-}
-
-export function modelDisplayScale(key: AircraftModelKey): number {
-  return modelPhysicalScale(key);
-}
-
-/** Returns the mesh normalization factor for a model type */
-export function modelNormScale(key: AircraftModelKey): number {
-  return modelMeshNormalize(key);
-}
 
 // ── Per-Model Yaw Offset ───────────────────────────────────────────────
 //
@@ -275,9 +240,9 @@ export function typeCodeToModelKey(
 
   // ── Turboprops ───────────────────────────────────────────────────
   // ATR, Dash-8, Saab 340/2000, Jetstream, Fokker F27/F50,
-  // Beechcraft 1900, Embraer EMB 110/120
+  // Beechcraft 1900, Embraer EMB 110/120, Beechcraft King Air
   if (
-    /^AT[47]\d$|^DH8[A-D]?$|^SF34$|^SB20$|^JS[34]\d$|^F(?:27|50)$|^B190$|^E1[12]0$/.test(
+    /^AT[47]\d$|^DH8[A-D]?$|^SF34$|^SB20$|^JS[34]\d$|^F(?:27|50)$|^B190$|^E1[12]0$|^B350$|^BE20$|^BE9[LT]$/.test(
       tc,
     )
   )
@@ -286,20 +251,23 @@ export function typeCodeToModelKey(
   // ── Business jets ────────────────────────────────────────────────
   // Gulfstream (GLF/G-series), Bombardier Global (GLEX/GL5T/GL7T),
   // Challenger, Dassault Falcon (FA-series, F2TH, F900),
-  // Learjet, Cessna Citation (C5xx-C9xx + C25A-C), Hawker (H25x),
+  // Learjet, Cessna Citation (C5xx-C9xx and the C25A, C55B, C56X, and
+  // C68A letter variants), Hawker (H25x),
   // Embraer Phenom/Legacy (E55P/E550/E545), Pilatus PC-24,
   // HondaJet, Beechjet (BE40)
   if (
-    /^GLF\d$|^GL[5-7][T0-9]$|^GLEX$|^G[2-7]\d{2}$|^CL[3-6]\d$|^FA\d[0-9X]$|^F2TH$|^F900$|^LJ\d{2}$|^C[5-9]\d{2}$|^C25[A-C]$|^GA\d[0-9C]$|^H25[0-9A-Z]?$|^E[35]5[0-9P]$|^E545$|^PC24$|^HDJT$|^BE40$/.test(
+    /^GLF\d$|^GL[5-7][T0-9]$|^GLEX$|^G[2-7]\d{2}$|^CL[3-6]\d$|^FA\d[0-9X]$|^F2TH$|^F900$|^LJ\d{2}$|^C[5-9]\d{2}$|^C(?:25|55|56|68)[A-Z]$|^GA\d[0-9C]$|^H25[0-9A-Z]?$|^E[35]5[0-9P]$|^E545$|^PC24$|^HDJT$|^BE40$/.test(
       tc,
     )
   )
     return "bizjet";
 
   // ── Light GA ─────────────────────────────────────────────────────
-  // Cessna single/twin, Piper, Cirrus, Diamond, SOCATA, Mooney, Beechcraft
+  // Cessna singles and twins with their RG and turbo variants (C72R,
+  // T206, P210), Piper (PA28, P28A, P32R), Cirrus (incl. S22T), Diamond,
+  // SOCATA, Mooney, Beechcraft, Van's RV, Glasair, Champion
   if (
-    /^C[12]\d{2}$|^PA\d{2}$|^SR2\d$|^DA[24]\d$|^TB\d{2}$|^M20\d?$|^BE[3-9]\d$/.test(
+    /^C[1-4]\d{2}$|^C(?:72|77|82)[A-Z]$|^[TP]2\d{2}$|^PA\d{2}[A-Z]?$|^P\d{2}[A-Z]$|^SR2\d$|^S22T$|^DA[24]\d$|^TB\d{2}$|^M20[0-9A-Z]?$|^BE[3-9]\d$|^RV\d{1,2}[A-Z]?$|^GLA[SX]$|^GLST$|^CH7[A-Z]$/.test(
       tc,
     )
   ) {
@@ -312,9 +280,12 @@ export function typeCodeToModelKey(
   // Airbus/Eurocopter, Sikorsky, Robinson, Aérospatiale, MBB
   if (/^H[16]\d{2}$|^EC\d{2}$|^S[67]\d$|^R[24]\d$|^AS\d{2}$|^BK\d{2}$/.test(tc))
     return "helicopter";
-  // Bell: B0xx-B4xx (B190 and B46x already handled in turboprop/regional)
-  if (/^B[0-4]\d{2}$/.test(tc) && !/^B19\d$|^B46\d$/.test(tc))
+  // Bell: B06 and B0xx-B4xx (B190, B350, and B46x are already handled as
+  // turboprops and regional jets above)
+  if (/^B0\d[A-Z]?$|^B[0-4]\d{2}$/.test(tc) && !/^B19\d$|^B46\d$/.test(tc))
     return "helicopter";
+  // Boeing Chinook, Sikorsky Black Hawk, Bell Huey
+  if (/^H(?:47|60)$|^UH1[A-Z]?$/.test(tc)) return "helicopter";
   // AgustaWestland: A10x-A19x (A148/A158 already handled in regional)
   if (/^A1[0-9]\d$/.test(tc) && tc !== "A148" && tc !== "A158")
     return "helicopter";

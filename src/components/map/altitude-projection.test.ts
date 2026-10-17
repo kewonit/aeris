@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { WebMercatorViewport } from "@deck.gl/core";
+
+import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
-  GLOBE_FADE_ZOOM_CEIL,
-  TRAIL_BELOW_AIRCRAFT_METERS,
-} from "./flight-layer-constants";
-import {
-  getZoomAdjustedElevationScale,
+  aircraftElevationMeters,
+  cameraHeightMeters,
   projectDisplayedAltitudeMeters,
   projectTrailElevationMeters,
+  trailElevationMeters,
 } from "./altitude-projection";
 
 test("presentation altitude mode is monotonic and much lighter than the old x5 projection", () => {
@@ -52,22 +53,42 @@ test("trail elevation stays below the aircraft projection by the visual offset",
   assert.equal(projected - trail, TRAIL_BELOW_AIRCRAFT_METERS);
 });
 
-test("visible flight zooms preserve most of the requested height", () => {
-  const scale = getZoomAdjustedElevationScale(
-    GLOBE_FADE_ZOOM_CEIL,
-    "realistic",
-  );
-  const realistic = projectDisplayedAltitudeMeters(2_000, "realistic") * scale;
-  const presentation =
-    projectDisplayedAltitudeMeters(2_000, "presentation") *
-    getZoomAdjustedElevationScale(GLOBE_FADE_ZOOM_CEIL, "presentation");
-
-  assert.ok(scale >= 0.88);
-  assert.ok(realistic >= 1_760);
-  assert.ok(presentation >= 2_800);
+test("drawn heights come from altitude alone, as at the default view", () => {
+  assert.equal(aircraftElevationMeters(11_000, "presentation"), 50_400);
+  assert.equal(aircraftElevationMeters(2_000, "realistic"), 2_000);
+  assert.equal(aircraftElevationMeters(null, "presentation"), 0);
 });
 
-test("presentation mode stays slightly taller than realistic by city zoom", () => {
-  assert.equal(getZoomAdjustedElevationScale(6.9, "realistic"), 1);
-  assert.ok(getZoomAdjustedElevationScale(6.9, "presentation") > 1.04);
+test("a trail is drawn just below its aircraft in either mode", () => {
+  assert.equal(
+    aircraftElevationMeters(2_000, "presentation") -
+      trailElevationMeters(2_000, "presentation"),
+    TRAIL_BELOW_AIRCRAFT_METERS * 1.8,
+  );
+  assert.equal(
+    aircraftElevationMeters(2_000, "realistic") -
+      trailElevationMeters(2_000, "realistic"),
+    TRAIL_BELOW_AIRCRAFT_METERS,
+  );
+});
+
+test("the camera height matches deck's camera", () => {
+  for (const [zoom, pitch, height] of [
+    [9.2, 49, 900],
+    [11, 50, 600],
+    [13, 0, 900],
+  ]) {
+    const viewport = new WebMercatorViewport({
+      width: 800,
+      height,
+      longitude: -122.4,
+      latitude: 37.6,
+      zoom,
+      pitch,
+    });
+    const expected =
+      viewport.cameraPosition[2] / viewport.distanceScales.unitsPerMeter[2];
+    const actual = cameraHeightMeters(zoom, 37.6, height, pitch);
+    assert.ok(Math.abs(actual / expected - 1) < 0.01);
+  }
 });

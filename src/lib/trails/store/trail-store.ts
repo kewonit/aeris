@@ -1,258 +1,45 @@
 import { useSyncExternalStore } from "react";
 
+import { MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 
-import { SELECTED_TRAIL_GRACE_MS } from "../constants";
-import { buildTrailGeometry } from "../geometry/build-trail-geometry";
-import { getNextNegativeBackoffMs } from "../source/provider-health";
+import {
+  isContinuous,
+  mergeHistoryAndLive,
+  sampleFromFlight,
+  splitIntoParts,
+  trackToSamples,
+} from "../geometry/trail-parts";
 import type {
-  TrailEntry,
-  TrailEnvelope,
   TrailHistoryState,
   TrailOutcome,
   TrailProviderId,
-  TrailSampleQuality,
-  TrailSegment,
-  TrailSnapshot,
+  TrailSample,
+  TrailTrack,
 } from "../types";
 
+/** Live samples kept per aircraft; the longest trail setting. */
+const LIVE_WINDOW_MS = 30 * 60_000;
+/** An aircraft missing from the feed this long loses its trail. */
+const STALE_AIRCRAFT_MS = 60_000;
+
 type Listener = () => void;
-type Position = [lng: number, lat: number];
 
-type TrailPoint = {
-  position: Position;
-  baroAltitude: number | null;
-  timestamp: number;
-  track: number | null;
-  groundSpeed: number | null;
-  quality: TrailSampleQuality;
-  onGround: boolean;
-};
-
-type AltitudeState = {
-  filtered: number | null;
-  recent: number[];
-  outlierStreak: number;
-};
-
-type InternalHistoryState = TrailHistoryState & {
-  negativeBackoffMs: number;
+type Entry = {
+  live: TrailSample[];
+  history: TrailSample[];
+  /** Local time the feed last included this aircraft. */
+  lastSeenAt: number;
+  track: TrailTrack | null;
+  dirty: boolean;
 };
 
 export type TrailStoreSnapshot = {
-  trails: TrailEntry[];
+  trails: TrailTrack[];
   history: TrailHistoryState;
-  selectedTrack: FlightTrack | null;
-  selectedEnvelope: TrailEnvelope | null;
 };
 
-const MAX_LIVE_POINTS = 360;
-const MAX_SELECTED_LIVE_POINTS = 720;
-const MAX_LIVE_AGE_MS = 6 * 60_000;
-const MAX_SELECTED_LIVE_AGE_MS = 12 * 60_000;
-const SPARSE_INTERVAL_MS = 25_000;
-const JUMP_THRESHOLD_DEG = 0.15;
-const HISTORICAL_BOOTSTRAP_POLLS = 3;
-const HISTORICAL_BOOTSTRAP_STEP_SEC = 12;
-const BOOTSTRAP_UPDATES = 3;
-const LOW_PHASE_ALTITUDE_M = 2_000;
-const ALTITUDE_RECENT_WINDOW = 6;
-const ALTITUDE_SOFT_STEP_METERS = 500;
-const ALTITUDE_HARD_STEP_METERS = 12_000;
-const ALTITUDE_OUTLIER_BASE_METERS = 1_200;
-const ALTITUDE_OUTLIER_SCALE = 3;
-const ALTITUDE_SMOOTHING_ALPHA_TRUSTED = 0.9;
-const ALTITUDE_SMOOTHING_ALPHA_GUARDED = 0.5;
-const MAX_REASONABLE_SPEED_MPS = 350;
-const MAX_POST_RESUME_JOIN_METERS = 12_000;
-
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function getFlightSpeedMps(flight: FlightState): number {
-  return flight.velocity != null &&
-    Number.isFinite(flight.velocity) &&
-    flight.velocity > 0
-    ? flight.velocity
-    : MAX_REASONABLE_SPEED_MPS;
-}
-
-function getPositionDistanceMeters(left: Position, right: Position): number {
-  const latitude = (left[1] + right[1]) / 2;
-  return Math.hypot(
-    (right[0] - left[0]) * 111_320 * Math.cos((latitude * Math.PI) / 180),
-    (right[1] - left[1]) * 111_320,
-  );
-}
-
-function getPointIntervalMs(now: number, liveTrail: TrailPoint[]): number {
-  const lastTimestamp = liveTrail[liveTrail.length - 1]?.timestamp ?? now;
-  return Math.max(1_000, now - lastTimestamp);
-}
-
-function getDynamicMoveThresholdDeg(params: {
-  speedMps: number;
-  intervalMs: number;
-  baseThresholdDeg: number;
-  safetyMultiplier: number;
-}): number {
-  const intervalSec = Math.max(1, params.intervalMs / 1000);
-  const expectedMoveDeg =
-    (params.speedMps * intervalSec * params.safetyMultiplier) / 111_320;
-
-  return Math.max(params.baseThresholdDeg, expectedMoveDeg);
-}
-
-function normalizeHeadingDeltaDeg(left: number, right: number): number {
-  let delta = Math.abs(left - right);
-  if (delta > 180) {
-    delta = 360 - delta;
-  }
-  return delta;
-}
-
-function getImpliedHeadingDeg(from: Position, to: Position): number {
-  return (
-    ((Math.atan2(to[0] - from[0], to[1] - from[1]) * 180) / Math.PI + 360) % 360
-  );
-}
-
-function getRecentTurnDeltaDeg(
-  liveTrail: TrailPoint[],
-  nextPoint: TrailPoint,
-): number {
-  if (liveTrail.length < 2) {
-    return 0;
-  }
-
-  const previous = liveTrail[liveTrail.length - 2].position;
-  const current = liveTrail[liveTrail.length - 1].position;
-  const before = getImpliedHeadingDeg(previous, current);
-  const after = getImpliedHeadingDeg(current, nextPoint.position);
-  return normalizeHeadingDeltaDeg(before, after);
-}
-
-function isLowPhaseTrailPoint(point: TrailPoint): boolean {
-  return (
-    point.onGround ||
-    (point.baroAltitude != null && point.baroAltitude <= LOW_PHASE_ALTITUDE_M)
-  );
-}
-
-function trimLiveTrailWindow(
-  liveTrail: TrailPoint[],
-  now: number,
-  selected: boolean,
-): void {
-  const maxPoints = selected ? MAX_SELECTED_LIVE_POINTS : MAX_LIVE_POINTS;
-  const maxAgeMs = selected ? MAX_SELECTED_LIVE_AGE_MS : MAX_LIVE_AGE_MS;
-
-  while (liveTrail.length > maxPoints) {
-    liveTrail.shift();
-  }
-
-  while (liveTrail.length > 2 && now - liveTrail[0].timestamp > maxAgeMs) {
-    liveTrail.shift();
-  }
-}
-
-function synthesizeHistoricalPolls(flight: FlightState): Position[] {
-  if (flight.longitude == null || flight.latitude == null) return [];
-  if (flight.trueTrack == null || !Number.isFinite(flight.trueTrack)) return [];
-  if (
-    flight.velocity == null ||
-    !Number.isFinite(flight.velocity) ||
-    flight.velocity <= 0
-  ) {
-    return [];
-  }
-
-  const heading = (flight.trueTrack * Math.PI) / 180;
-  const speed = flight.velocity;
-  const degPerSecond = speed / 111_320;
-  const perpHeading = heading + Math.PI / 2;
-  const gpsJitterDeg = 0.00018;
-
-  const polls: Position[] = [];
-  for (let index = HISTORICAL_BOOTSTRAP_POLLS; index >= 1; index -= 1) {
-    const tSec = HISTORICAL_BOOTSTRAP_STEP_SEC * index;
-    const decay = 1 - (HISTORICAL_BOOTSTRAP_POLLS - index) * 0.08;
-    const distanceDeg = Math.min(degPerSecond * tSec * decay, 0.06);
-    const jitterSign = index % 2 === 0 ? 1 : -1;
-    const jitter =
-      gpsJitterDeg *
-      jitterSign *
-      (0.4 + (index / HISTORICAL_BOOTSTRAP_POLLS) * 0.6);
-    polls.push([
-      flight.longitude -
-        Math.sin(heading) * distanceDeg +
-        Math.sin(perpHeading) * jitter,
-      flight.latitude -
-        Math.cos(heading) * distanceDeg +
-        Math.cos(perpHeading) * jitter,
-    ]);
-  }
-
-  return polls;
-}
-
-function trailPointToSnapshot(point: TrailPoint): TrailSnapshot {
-  return {
-    source: "live",
-    timestamp: point.timestamp,
-    lng: point.position[0],
-    lat: point.position[1],
-    altitude: point.baroAltitude,
-    track: point.track,
-    groundSpeed: point.groundSpeed,
-    quality: point.quality,
-    onGround: point.onGround,
-  };
-}
-
-function trackToTrailSegment(
-  provider: TrailProviderId,
-  track: FlightTrack,
-): TrailSegment {
-  return {
-    kind: "historical",
-    provider,
-    samples: track.path
-      .filter(
-        (waypoint) =>
-          waypoint.longitude != null &&
-          waypoint.latitude != null &&
-          Number.isFinite(waypoint.longitude) &&
-          Number.isFinite(waypoint.latitude),
-      )
-      .map((waypoint) => ({
-        source: provider,
-        timestamp: waypoint.time,
-        lng: waypoint.longitude!,
-        lat: waypoint.latitude!,
-        altitude:
-          waypoint.baroAltitude != null &&
-          Number.isFinite(waypoint.baroAltitude)
-            ? waypoint.baroAltitude
-            : null,
-        track:
-          waypoint.trueTrack != null && Number.isFinite(waypoint.trueTrack)
-            ? waypoint.trueTrack
-            : null,
-        groundSpeed: null,
-        quality: "authoritative-trace",
-        onGround: waypoint.onGround,
-      })),
-  };
-}
-
-function createHistoryState(): InternalHistoryState {
+function createHistoryState(): TrailHistoryState {
   return {
     selectedIcao24: null,
     selectionGeneration: 0,
@@ -261,61 +48,53 @@ function createHistoryState(): InternalHistoryState {
     outcome: null,
     cooldownUntil: 0,
     creditsRemaining: null,
-    missingSinceMs: null,
-    negativeBackoffMs: 0,
-  };
-}
-
-function toPublicHistoryState(
-  history: InternalHistoryState,
-): TrailHistoryState {
-  return {
-    selectedIcao24: history.selectedIcao24,
-    selectionGeneration: history.selectionGeneration,
-    loading: history.loading,
-    provider: history.provider,
-    outcome: history.outcome,
-    cooldownUntil: history.cooldownUntil,
-    creditsRemaining: history.creditsRemaining,
-    missingSinceMs: history.missingSinceMs,
-  };
-}
-
-function createEnvelope(icao24: string): TrailEnvelope {
-  return {
-    icao24,
-    provider: null,
-    outcome: "live-tail-only",
-    selectionGeneration: 0,
-    liveRevision: 0,
-    historyRevision: 0,
-    lastSeenAt: 0,
-    liveTail: [],
-    historySegments: [],
-    entry: null,
   };
 }
 
 export function createTrailStore() {
   const listeners = new Set<Listener>();
-  const trails = new Map<string, TrailPoint[]>();
-  const altitudeStates = new Map<string, AltitudeState>();
-  const envelopes = new Map<string, TrailEnvelope>();
-  let seen = new Set<string>();
-  let bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
-  let resumeBarrierAtMs: number | null = null;
-  let liveOrder: string[] = [];
-  const history = createHistoryState();
-  let selectedTrack: FlightTrack | null = null;
-  let snapshot: TrailStoreSnapshot = {
-    trails: [],
-    history: toPublicHistoryState(history),
-    selectedTrack,
-    selectedEnvelope: null,
-  };
+  const entries = new Map<string, Entry>();
+  let revision = 0;
+  let history = createHistoryState();
+  let snapshot: TrailStoreSnapshot = { trails: [], history };
+
+  function getEntry(icao24: string, now: number): Entry {
+    let entry = entries.get(icao24);
+    if (!entry) {
+      entry = {
+        live: [],
+        history: [],
+        lastSeenAt: now,
+        track: null,
+        dirty: true,
+      };
+      entries.set(icao24, entry);
+    }
+    return entry;
+  }
+
+  function trackFor(icao24: string, entry: Entry): TrailTrack {
+    if (!entry.track || entry.dirty) {
+      revision += 1;
+      entry.track = {
+        icao24,
+        parts: splitIntoParts(mergeHistoryAndLive(entry.history, entry.live)),
+        revision,
+        hasHistory: entry.history.length > 0,
+      };
+      entry.dirty = false;
+    }
+    return entry.track;
+  }
 
   function emit(): void {
-    snapshot = buildSnapshot();
+    const trails: TrailTrack[] = [];
+    for (const [icao24, entry] of entries) {
+      if (entry.live.length > 0 || entry.history.length > 0) {
+        trails.push(trackFor(icao24, entry));
+      }
+    }
+    snapshot = { trails, history };
     for (const listener of listeners) {
       listener();
     }
@@ -332,398 +111,113 @@ export function createTrailStore() {
     return snapshot;
   }
 
-  function filterAltitude(
-    id: string,
-    rawAltitude: number | null,
-  ): number | null {
-    if (rawAltitude == null) return null;
-
-    const state =
-      altitudeStates.get(id) ??
-      ({ filtered: null, recent: [], outlierStreak: 0 } as AltitudeState);
-
-    if (state.filtered == null) {
-      state.filtered = rawAltitude;
-      state.recent.push(rawAltitude);
-      altitudeStates.set(id, state);
-      return rawAltitude;
-    }
-
-    const med = median(state.recent);
-    const absoluteDeviations = state.recent.map((value) =>
-      Math.abs(value - med),
-    );
-    const mad = median(absoluteDeviations);
-    const outlierThreshold =
-      ALTITUDE_OUTLIER_BASE_METERS +
-      ALTITUDE_OUTLIER_SCALE * Math.max(120, mad);
-
-    const isOutlier = Math.abs(rawAltitude - med) > outlierThreshold;
-    state.outlierStreak = isOutlier ? state.outlierStreak + 1 : 0;
-    const trustedTarget = !isOutlier || state.outlierStreak >= 2;
-    const maxStep = trustedTarget
-      ? ALTITUDE_HARD_STEP_METERS
-      : ALTITUDE_SOFT_STEP_METERS;
-    const alpha = trustedTarget
-      ? ALTITUDE_SMOOTHING_ALPHA_TRUSTED
-      : ALTITUDE_SMOOTHING_ALPHA_GUARDED;
-
-    const delta = rawAltitude - state.filtered;
-    const clampedDelta = Math.max(-maxStep, Math.min(maxStep, delta));
-    const filtered = state.filtered + clampedDelta * alpha;
-
-    state.filtered = filtered;
-    state.recent.push(filtered);
-    if (state.recent.length > ALTITUDE_RECENT_WINDOW) {
-      state.recent.splice(0, state.recent.length - ALTITUDE_RECENT_WINDOW);
-    }
-
-    altitudeStates.set(id, state);
-    return filtered;
-  }
-
-  function getOrCreateEnvelope(icao24: string): TrailEnvelope {
-    const existing = envelopes.get(icao24);
-    if (existing) {
-      return existing;
-    }
-
-    const created = createEnvelope(icao24);
-    envelopes.set(icao24, created);
-    return created;
-  }
-
-  function updateEnvelopeEntry(icao24: string): void {
-    const envelope = envelopes.get(icao24);
-    if (!envelope) {
-      return;
-    }
-
-    envelope.entry = buildTrailGeometry(envelope);
-  }
-
-  function buildSnapshot(): TrailStoreSnapshot {
-    const nextTrails: TrailEntry[] = [];
-
-    for (const icao24 of liveOrder) {
-      const entry = envelopes.get(icao24)?.entry;
-      if (entry && entry.path.length >= 2) {
-        nextTrails.push(entry);
-      }
-    }
-
-    if (history.selectedIcao24 && !liveOrder.includes(history.selectedIcao24)) {
-      const selectedEntry = envelopes.get(history.selectedIcao24)?.entry;
-      if (selectedEntry && selectedEntry.path.length >= 2) {
-        nextTrails.push(selectedEntry);
-      }
-    }
-
-    return {
-      trails: nextTrails,
-      history: toPublicHistoryState(history),
-      selectedTrack,
-      selectedEnvelope: history.selectedIcao24
-        ? (envelopes.get(history.selectedIcao24) ?? null)
-        : null,
-    };
-  }
-
   function ingestLiveFlights(
     flights: FlightState[],
-    options: { authoritativeEmpty?: boolean } = {},
+    { now = Date.now() }: { now?: number } = {},
   ): void {
-    const now = Date.now();
-
-    if (
-      flights.length === 0 &&
-      trails.size > 0 &&
-      !options.authoritativeEmpty
-    ) {
+    // An empty poll is a failed fetch far more often than an empty sky.
+    if (flights.length === 0 && entries.size > 0) {
       return;
     }
 
-    const current = new Set<string>();
-    let processedFlightCount = 0;
-    liveOrder = [];
-
+    let changed = false;
     for (const flight of flights) {
+      const sample = sampleFromFlight(flight);
+      if (!sample) continue;
+
+      const entry = getEntry(flight.icao24.trim().toLowerCase(), now);
+      entry.lastSeenAt = now;
+
+      const last = entry.live[entry.live.length - 1];
       if (
-        flight.longitude == null ||
-        flight.latitude == null ||
-        !Number.isFinite(flight.longitude) ||
-        !Number.isFinite(flight.latitude)
+        last &&
+        (sample.t <= last.t ||
+          (sample.lng === last.lng && sample.lat === last.lat))
       ) {
         continue;
       }
 
-      processedFlightCount += 1;
-      const id = flight.icao24.trim().toLowerCase();
-      current.add(id);
-      liveOrder.push(id);
-      const speedMps = getFlightSpeedMps(flight);
-
-      let trail = trails.get(id);
-      const isNewEntry = !trail;
-
-      if (isNewEntry) {
-        altitudeStates.delete(id);
+      // The map eases MLAT positions to hide their noise, so the trail
+      // eases them the same way to stay attached to the aircraft.
+      if (
+        last &&
+        flight.positionSource === "mlat" &&
+        isContinuous(last, sample)
+      ) {
+        sample.lng = last.lng + (sample.lng - last.lng) * MLAT_POSITION_ALPHA;
+        sample.lat = last.lat + (sample.lat - last.lat) * MLAT_POSITION_ALPHA;
       }
 
-      let filteredAltitude = filterAltitude(id, flight.baroAltitude);
-      const point: TrailPoint = {
-        position: [flight.longitude, flight.latitude],
-        baroAltitude: filteredAltitude,
-        timestamp: now,
-        track:
-          flight.trueTrack != null && Number.isFinite(flight.trueTrack)
-            ? flight.trueTrack
-            : null,
-        groundSpeed:
-          flight.velocity != null && Number.isFinite(flight.velocity)
-            ? flight.velocity
-            : null,
-        quality: "authoritative-live",
-        onGround: flight.onGround,
-      };
-
-      if (isNewEntry) {
-        trail =
-          bootstrapUpdatesRemaining > 0
-            ? synthesizeHistoricalPolls(flight).map((position, index) => ({
-                position,
-                baroAltitude: filteredAltitude,
-                timestamp:
-                  now -
-                  (HISTORICAL_BOOTSTRAP_POLLS - index) *
-                    HISTORICAL_BOOTSTRAP_STEP_SEC *
-                    1000,
-                track: point.track,
-                groundSpeed: point.groundSpeed,
-                quality: "suspect",
-                onGround: point.onGround,
-              }))
-            : [];
-        trails.set(id, trail);
+      entry.live.push(sample);
+      const cutoff = sample.t - LIVE_WINDOW_MS;
+      let expired = 0;
+      while (
+        expired < entry.live.length - 1 &&
+        entry.live[expired].t < cutoff
+      ) {
+        expired += 1;
       }
-
-      const liveTrail = trail!;
-      if (liveTrail.length === 0) {
-        liveTrail.push(point);
-      } else {
-        const last = liveTrail[liveTrail.length - 1].position;
-        const dx = point.position[0] - last[0];
-        const dy = point.position[1] - last[1];
-        const distSq = dx * dx + dy * dy;
-
-        const pointIntervalMs = getPointIntervalMs(now, liveTrail);
-        const sparseInterval = pointIntervalMs >= SPARSE_INTERVAL_MS;
-        const recentTurnDeltaDeg = getRecentTurnDeltaDeg(liveTrail, point);
-        const jumpThresholdDeg = getDynamicMoveThresholdDeg({
-          speedMps,
-          intervalMs: pointIntervalMs,
-          baseThresholdDeg: JUMP_THRESHOLD_DEG,
-          safetyMultiplier: 2.0,
-        });
-        const lastPoint = liveTrail[liveTrail.length - 1];
-        const crossesResumeBarrier =
-          resumeBarrierAtMs != null && lastPoint.timestamp <= resumeBarrierAtMs;
-        const resumeGapMeters = crossesResumeBarrier
-          ? getPositionDistanceMeters(lastPoint.position, point.position)
-          : 0;
-
-        if (
-          resumeGapMeters > MAX_POST_RESUME_JOIN_METERS ||
-          distSq > jumpThresholdDeg * jumpThresholdDeg
-        ) {
-          liveTrail.length = 0;
-          altitudeStates.delete(id);
-          // Rebuild altitude smoothing from the accepted reset point.
-          filteredAltitude = filterAltitude(id, flight.baroAltitude);
-          point.baroAltitude = filteredAltitude;
-        } else {
-          const outlierThresholdDeg = getDynamicMoveThresholdDeg({
-            speedMps,
-            intervalMs: pointIntervalMs,
-            baseThresholdDeg: 0.035,
-            safetyMultiplier: 1.6,
-          });
-
-          if (
-            liveTrail.length >= 2 &&
-            distSq > outlierThresholdDeg * outlierThresholdDeg
-          ) {
-            const secondLast = liveTrail[liveTrail.length - 2].position;
-            const dx2 = last[0] - secondLast[0];
-            const dy2 = last[1] - secondLast[1];
-            const prevDistSq = dx2 * dx2 + dy2 * dy2;
-
-            if (prevDistSq < outlierThresholdDeg * outlierThresholdDeg) {
-              continue;
-            }
-          }
-
-          if (
-            liveTrail.length >= 1 &&
-            flight.trueTrack != null &&
-            Number.isFinite(flight.trueTrack) &&
-            distSq > 1e-10
-          ) {
-            const impliedHeading = getImpliedHeadingDeg(last, point.position);
-            const headingDelta = normalizeHeadingDeltaDeg(
-              impliedHeading,
-              flight.trueTrack,
-            );
-
-            const speed =
-              flight.velocity != null &&
-              Number.isFinite(flight.velocity) &&
-              flight.velocity > 0
-                ? flight.velocity
-                : 100;
-            const lastPoint = liveTrail[liveTrail.length - 1];
-            const baseHeadingThreshold =
-              speed < 50 ? 110 : speed < 100 ? 90 : 70;
-            let headingThreshold =
-              sparseInterval || recentTurnDeltaDeg > 55
-                ? Math.max(baseHeadingThreshold, 140)
-                : baseHeadingThreshold;
-
-            if (
-              speed <= 120 &&
-              (isLowPhaseTrailPoint(lastPoint) || isLowPhaseTrailPoint(point))
-            ) {
-              headingThreshold = Math.max(headingThreshold, 150);
-            }
-
-            if (headingDelta > headingThreshold) {
-              continue;
-            }
-          }
-
-          if (liveTrail.length >= 2) {
-            const prev = liveTrail[liveTrail.length - 2].position;
-            const sdx1 = last[0] - prev[0];
-            const sdy1 = last[1] - prev[1];
-            const slen1 = Math.sqrt(sdx1 * sdx1 + sdy1 * sdy1);
-            const slen2 = Math.sqrt(dx * dx + dy * dy);
-
-            if (slen1 > 1e-8 && slen2 > 1e-8) {
-              const cosine = (sdx1 * dx + sdy1 * dy) / (slen1 * slen2);
-              const allowSharpTurn = sparseInterval || recentTurnDeltaDeg > 70;
-
-              if (cosine < (allowSharpTurn ? -0.9 : -0.3)) {
-                continue;
-              }
-              if (cosine < 0.1) {
-                const ratio = Math.max(slen1, slen2) / Math.min(slen1, slen2);
-                if (ratio > (allowSharpTurn ? 8 : 3.5)) {
-                  continue;
-                }
-              }
-            }
-          }
-        }
-
-        liveTrail.push(point);
-        trimLiveTrailWindow(liveTrail, now, id === history.selectedIcao24);
+      if (expired > 0) {
+        entry.live.splice(0, expired);
       }
-
-      const envelope = getOrCreateEnvelope(id);
-      envelope.liveTail = liveTrail.map(trailPointToSnapshot);
-      envelope.liveRevision += 1;
-      envelope.lastSeenAt = now;
-      if (id === history.selectedIcao24) {
-        envelope.selectionGeneration = history.selectionGeneration;
-        history.missingSinceMs = null;
-      }
-      if (envelope.historySegments.length === 0) {
-        envelope.provider = null;
-        envelope.outcome = "live-tail-only";
-      }
-      updateEnvelopeEntry(id);
+      entry.dirty = true;
+      changed = true;
     }
 
-    for (const id of seen) {
-      if (!current.has(id) && id !== history.selectedIcao24) {
-        trails.delete(id);
-        altitudeStates.delete(id);
-        envelopes.delete(id);
+    for (const [icao24, entry] of entries) {
+      if (
+        icao24 !== history.selectedIcao24 &&
+        now - entry.lastSeenAt > STALE_AIRCRAFT_MS
+      ) {
+        entries.delete(icao24);
+        changed = true;
       }
     }
 
-    if (history.selectedIcao24 && !current.has(history.selectedIcao24)) {
-      markSelectedMissing(now);
-    } else if (history.selectedIcao24) {
-      history.missingSinceMs = null;
+    if (changed) {
+      emit();
     }
-
-    seen = current;
-
-    if (bootstrapUpdatesRemaining > 0 && processedFlightCount > 0) {
-      bootstrapUpdatesRemaining -= 1;
-    }
-
-    if (processedFlightCount > 0) {
-      resumeBarrierAtMs = null;
-    }
-
-    emit();
   }
 
   function selectAircraft(icao24: string | null): number {
-    const normalized = icao24?.trim().toLowerCase() ?? null;
+    const normalized = icao24?.trim().toLowerCase() || null;
     if (history.selectedIcao24 === normalized) {
       return history.selectionGeneration;
     }
 
-    const previousSelected = history.selectedIcao24;
-    history.selectionGeneration += 1;
-    history.selectedIcao24 = normalized;
-    history.loading = !!normalized;
-    history.provider = null;
-    history.outcome = null;
-    history.cooldownUntil = 0;
-    history.creditsRemaining = null;
-    history.missingSinceMs = null;
-    history.negativeBackoffMs = 0;
-    selectedTrack = null;
-
-    if (previousSelected && previousSelected !== normalized) {
-      const previousEnvelope = envelopes.get(previousSelected);
-      if (previousEnvelope) {
-        previousEnvelope.historySegments = [];
-        previousEnvelope.historyRevision += 1;
-        previousEnvelope.provider = null;
-        previousEnvelope.outcome = "live-tail-only";
-        previousEnvelope.selectionGeneration = 0;
-        updateEnvelopeEntry(previousSelected);
-      }
+    const previous = history.selectedIcao24
+      ? entries.get(history.selectedIcao24)
+      : undefined;
+    if (previous && previous.history.length > 0) {
+      previous.history = [];
+      previous.dirty = true;
     }
 
-    if (normalized) {
-      const envelope = getOrCreateEnvelope(normalized);
-      envelope.selectionGeneration = history.selectionGeneration;
-      updateEnvelopeEntry(normalized);
-    }
-
+    history = {
+      ...createHistoryState(),
+      selectedIcao24: normalized,
+      selectionGeneration: history.selectionGeneration + 1,
+      loading: normalized !== null,
+    };
     emit();
     return history.selectionGeneration;
   }
 
-  function startHistoryLoad(params?: { selectionGeneration?: number }): void {
+  function isCurrentSelection(icao24: string, selectionGeneration: number) {
+    return (
+      selectionGeneration === history.selectionGeneration &&
+      icao24.trim().toLowerCase() === history.selectedIcao24
+    );
+  }
+
+  function startHistoryLoad(selectionGeneration: number): void {
     if (
-      params?.selectionGeneration != null &&
-      params.selectionGeneration !== history.selectionGeneration
+      selectionGeneration !== history.selectionGeneration ||
+      !history.selectedIcao24
     ) {
       return;
     }
-
-    if (!history.selectedIcao24) {
-      return;
-    }
-
-    history.loading = true;
+    history = { ...history, loading: true };
     emit();
   }
 
@@ -733,41 +227,32 @@ export function createTrailStore() {
     provider: TrailProviderId | null;
     outcome: TrailOutcome;
     creditsRemaining?: number | null;
-    path?: [number, number][];
-    track?: FlightTrack | null;
+    track: FlightTrack | null;
   }): void {
-    const normalized = params.icao24.trim().toLowerCase();
-    if (
-      params.selectionGeneration !== history.selectionGeneration ||
-      history.selectedIcao24 !== normalized
-    ) {
+    if (!isCurrentSelection(params.icao24, params.selectionGeneration)) {
       return;
     }
 
-    const envelope = getOrCreateEnvelope(normalized);
-    envelope.selectionGeneration = params.selectionGeneration;
-    envelope.provider = params.provider;
-    envelope.outcome = params.outcome;
+    const entry = getEntry(history.selectedIcao24!, Date.now());
     if (params.track) {
-      envelope.historySegments = [
-        trackToTrailSegment(params.provider ?? "opensky", params.track),
-      ];
-      selectedTrack = params.track;
-    } else if (params.outcome === "live-tail-only") {
-      envelope.historySegments = [];
-      selectedTrack = null;
+      entry.history = trackToSamples(params.track);
+      entry.dirty = true;
+    } else if (
+      params.outcome === "live-tail-only" &&
+      entry.history.length > 0
+    ) {
+      entry.history = [];
+      entry.dirty = true;
     }
-    envelope.historyRevision += 1;
 
-    history.loading = false;
-    history.provider = params.provider;
-    history.outcome = params.outcome;
-    history.creditsRemaining = params.creditsRemaining ?? null;
-    history.cooldownUntil = 0;
-    history.missingSinceMs = null;
-    history.negativeBackoffMs = 0;
-
-    updateEnvelopeEntry(normalized);
+    history = {
+      ...history,
+      loading: false,
+      provider: params.provider,
+      outcome: params.outcome,
+      creditsRemaining: params.creditsRemaining ?? null,
+      cooldownUntil: 0,
+    };
     emit();
   }
 
@@ -779,67 +264,18 @@ export function createTrailStore() {
     cooldownUntil: number;
     creditsRemaining?: number | null;
   }): void {
-    const normalized = params.icao24.trim().toLowerCase();
-    if (
-      params.selectionGeneration !== history.selectionGeneration ||
-      history.selectedIcao24 !== normalized
-    ) {
+    if (!isCurrentSelection(params.icao24, params.selectionGeneration)) {
       return;
     }
 
-    const envelope = getOrCreateEnvelope(normalized);
-    envelope.selectionGeneration = params.selectionGeneration;
-    envelope.provider = params.provider;
-    envelope.outcome = params.outcome;
-    updateEnvelopeEntry(normalized);
-
-    history.loading = false;
-    history.provider = params.provider;
-    history.outcome = params.outcome;
-    history.creditsRemaining = params.creditsRemaining ?? null;
-    history.cooldownUntil = params.cooldownUntil;
-    history.negativeBackoffMs = getNextNegativeBackoffMs(
-      history.negativeBackoffMs,
-    );
-
-    emit();
-  }
-
-  function markSelectedMissing(now: number): void {
-    if (!history.selectedIcao24) {
-      return;
-    }
-
-    if (history.missingSinceMs == null) {
-      history.missingSinceMs = now;
-      emit();
-      return;
-    }
-
-    if (now - history.missingSinceMs < SELECTED_TRAIL_GRACE_MS) {
-      return;
-    }
-
-    const envelope = envelopes.get(history.selectedIcao24);
-    if (envelope) {
-      envelope.historySegments = [];
-      envelope.historyRevision += 1;
-      envelope.provider = null;
-      envelope.outcome = "live-tail-only";
-      updateEnvelopeEntry(history.selectedIcao24);
-    }
-
-    history.outcome = "live-tail-only";
-    emit();
-  }
-
-  /** Signal that the tab just became visible again.
-   *  Keep existing trail arrays loaded; the next live ingest uses elapsed time,
-   *  dynamic movement thresholds, and bounded trim windows to append plausible
-   *  motion or reset true teleports without wiping every active trail. */
-  function handleVisibilityResume(): void {
-    resumeBarrierAtMs = Date.now();
-    bootstrapUpdatesRemaining = BOOTSTRAP_UPDATES;
+    history = {
+      ...history,
+      loading: false,
+      provider: params.provider,
+      outcome: params.outcome,
+      creditsRemaining: params.creditsRemaining ?? null,
+      cooldownUntil: params.cooldownUntil,
+    };
     emit();
   }
 
@@ -851,8 +287,6 @@ export function createTrailStore() {
     startHistoryLoad,
     resolveHistory,
     failHistory,
-    markSelectedMissing,
-    handleVisibilityResume,
   };
 }
 

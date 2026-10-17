@@ -5,7 +5,7 @@ import {
 } from "../providers";
 import type { FlightTrack } from "@/lib/opensky";
 
-import { parseReadsbTrace } from "./parse-readsb-trace";
+import { parseReadsbTraces } from "./parse-readsb-trace";
 
 function isAbortError(error: unknown): boolean {
   if (error == null || typeof error !== "object") return false;
@@ -36,6 +36,35 @@ export function buildReadsbTraceUrls(
   ];
 }
 
+/** The JSON body of a trace file, or null when it is missing or unreadable. */
+async function fetchTracePayload(
+  url: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  try {
+    const response = await fetch(url, { cache: "no-store", signal });
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("text/html") || contentType.includes("text/xml")) {
+      return null;
+    }
+
+    return (await response.json()) as unknown;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+/**
+ * Fetches trace_full and trace_recent together and merges them, because
+ * trace_full lags by minutes and trace_recent alone covers only the end.
+ */
 export async function fetchReadsbDirectTrack(
   provider: TraceProviderId,
   icao24: string,
@@ -44,51 +73,19 @@ export async function fetchReadsbDirectTrack(
   track: FlightTrack | null;
   outcome: "full-history" | "partial-history" | "provider-unavailable";
 }> {
-  const urls = buildReadsbTraceUrls(provider, icao24);
+  const [fullUrl, recentUrl] = buildReadsbTraceUrls(provider, icao24);
+  const [full, recent] = await Promise.all([
+    fetchTracePayload(fullUrl, signal),
+    fetchTracePayload(recentUrl, signal),
+  ]);
 
-  for (let index = 0; index < urls.length; index += 1) {
-    let response: Response | null = null;
-
-    try {
-      response = await fetch(urls[index], {
-        cache: "no-store",
-        signal,
-      });
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      continue;
-    }
-
-    if (!response?.ok) {
-      continue;
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("text/html") || contentType.includes("text/xml")) {
-      continue;
-    }
-
-    try {
-      const payload = (await response.json()) as unknown;
-      const track = parseReadsbTrace(icao24, payload);
-      if (track?.path.length && track.path.length >= 2) {
-        return {
-          track,
-          outcome: index === 0 ? "full-history" : "partial-history",
-        };
-      }
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      continue;
-    }
+  const track = parseReadsbTraces(icao24, [full, recent]);
+  if (!track) {
+    return { track: null, outcome: "provider-unavailable" };
   }
 
   return {
-    track: null,
-    outcome: "provider-unavailable",
+    track,
+    outcome: full != null ? "full-history" : "partial-history",
   };
 }

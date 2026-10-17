@@ -302,12 +302,12 @@ export function normalizeTrackWaypoints(
   return downsamplePreservingCurves(deduped, TARGET_WAYPOINTS);
 }
 
-export function parseReadsbTrace(
-  hex: string,
-  data: unknown,
-): FlightTrack | null {
+type TraceEntry = { time: number; entry: unknown[] };
+
+/** The trace rows of one readsb payload, with absolute times in seconds. */
+function readTraceEntries(data: unknown): TraceEntry[] {
   if (typeof data !== "object" || data === null) {
-    return null;
+    return [];
   }
 
   const object = data as Record<string, unknown>;
@@ -315,64 +315,71 @@ export function parseReadsbTrace(
     typeof object.timestamp === "number" && Number.isFinite(object.timestamp)
       ? object.timestamp
       : 0;
-  const rawTrace = Array.isArray(object.trace) ? object.trace : null;
-
-  if (timestamp <= 0 || !rawTrace || rawTrace.length < 2) {
-    return null;
+  if (timestamp <= 0 || !Array.isArray(object.trace)) {
+    return [];
   }
 
-  let latestOffset = 0;
-  for (const entry of rawTrace) {
+  const entries: TraceEntry[] = [];
+  for (const entry of object.trace) {
     if (
       Array.isArray(entry) &&
       typeof entry[0] === "number" &&
-      entry[0] > latestOffset
+      Number.isFinite(entry[0])
     ) {
-      latestOffset = entry[0];
+      entries.push({ time: timestamp + entry[0], entry });
     }
   }
+  return entries;
+}
 
-  const cutoffOffset = latestOffset - MAX_AGE_SECONDS;
-  let lastNewLegOffset = Number.NEGATIVE_INFINITY;
+/**
+ * Parses one aircraft's trace from several readsb payloads, typically
+ * trace_full and trace_recent. trace_full is rewritten only every few
+ * minutes, so trace_recent supplies the newest points.
+ */
+export function parseReadsbTraces(
+  hex: string,
+  payloads: unknown[],
+): FlightTrack | null {
+  const rawTrace = payloads
+    .flatMap(readTraceEntries)
+    .sort((left, right) => left.time - right.time)
+    .filter(
+      (item, index, sorted) =>
+        index === 0 || item.time !== sorted[index - 1].time,
+    );
+
+  if (rawTrace.length < 2) {
+    return null;
+  }
+
+  const latestTime = rawTrace[rawTrace.length - 1].time;
+  const cutoffTime = latestTime - MAX_AGE_SECONDS;
+  let lastNewLegTime = Number.NEGATIVE_INFINITY;
   let hasNewLegFlag = false;
 
-  for (const entry of rawTrace) {
-    if (!Array.isArray(entry) || entry.length < 7) {
+  for (const { time, entry } of rawTrace) {
+    if (entry.length < 7 || time < cutoffTime) {
       continue;
     }
 
-    const offset = typeof entry[0] === "number" ? entry[0] : null;
     const flags = typeof entry[6] === "number" ? entry[6] : 0;
-
-    if (offset === null || !Number.isFinite(offset) || offset < cutoffOffset) {
-      continue;
-    }
     if (flags & 1) {
       continue;
     }
     if (flags & 2) {
-      lastNewLegOffset = offset;
+      lastNewLegTime = time;
       hasNewLegFlag = true;
     }
   }
 
   const legCutoff = hasNewLegFlag
-    ? lastNewLegOffset - 90
+    ? lastNewLegTime - 90
     : Number.NEGATIVE_INFINITY;
   const waypoints: TrackWaypoint[] = [];
 
-  for (const entry of rawTrace) {
-    if (!Array.isArray(entry) || entry.length < 4) {
-      continue;
-    }
-
-    const offset = typeof entry[0] === "number" ? entry[0] : null;
-    if (
-      offset === null ||
-      !Number.isFinite(offset) ||
-      offset < cutoffOffset ||
-      offset < legCutoff
-    ) {
+  for (const { time, entry } of rawTrace) {
+    if (entry.length < 4 || time < cutoffTime || time < legCutoff) {
       continue;
     }
 
@@ -416,7 +423,7 @@ export function parseReadsbTrace(
         : null;
 
     waypoints.push({
-      time: timestamp + offset,
+      time,
       latitude,
       longitude,
       baroAltitude,

@@ -4,15 +4,18 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
+  isWellBelowCamera,
   projectLngLatElevationPixelDelta,
   type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
-import { getZoomAdjustedElevationScale } from "./altitude-projection";
+import {
+  aircraftElevationMeters,
+  cameraHeightMeters,
+} from "./altitude-projection";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToElevation } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
@@ -41,7 +44,7 @@ const PANEL_VISUAL_REFINEMENT_MS = 220;
 /**
  * Returns the map center that puts the aircraft as drawn (lifted by its
  * altitude) where its ground position would be, or null when no correction
- * is needed.
+ * is needed or the aircraft is drawn too near the camera's height to frame.
  */
 function drawnAircraftCenter(
   map: maplibregl.Map,
@@ -52,14 +55,19 @@ function drawnAircraftCenter(
   if (!coordinates || altitudeMeters == null) return null;
   const [lng, lat] = coordinates;
 
-  const elevationMeters =
-    altitudeToElevation(altitudeMeters, altitudeMode) *
-    getZoomAdjustedElevationScale(map.getZoom(), altitudeMode);
+  const canvas = map.getCanvas();
+  const elevationMeters = aircraftElevationMeters(altitudeMeters, altitudeMode);
+  const cameraHeight = cameraHeightMeters(
+    map.getZoom(),
+    map.getCenter().lat,
+    canvas.clientHeight,
+    map.getPitch(),
+  );
+  if (!isWellBelowCamera(elevationMeters, cameraHeight)) return null;
   const elevated = projectLngLatElevationPixelDelta(map, lng, lat, elevationMeters);
   const ground = projectLngLatElevationPixelDelta(map, lng, lat, 0);
   if (!elevated || !ground) return null;
 
-  const canvas = map.getCanvas();
   const offset = panelVisualOffset(
     { dx: elevated.dx - ground.dx, dy: elevated.dy - ground.dy },
     canvas.clientWidth,
