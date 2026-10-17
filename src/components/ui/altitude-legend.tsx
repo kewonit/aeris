@@ -17,11 +17,7 @@ export function AltitudeLegend() {
       role="img"
       aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}
     >
-      <p
-        className="text-micro text-subtle"
-      >
-        Altitude
-      </p>
+      <p className="aeris-eyebrow text-subtle">Altitude</p>
       <div className="flex items-center gap-2">
         <div
           className="h-32 w-1.5 rounded-full"
@@ -34,7 +30,7 @@ export function AltitudeLegend() {
           {ticks.map((tick) => (
             <span
               key={tick}
-              className="text-micro text-muted-foreground"
+              className="text-micro font-medium text-muted-foreground"
             >
               {formatAltitude(tick, settings.unitSystem)}
             </span>
