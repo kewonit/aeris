@@ -29,6 +29,7 @@ import {
 } from "@/lib/aircraft-sidebar";
 import { AirlineLogo } from "@/components/ui/airline-logo";
 import { HeroBanner } from "@/components/ui/hero-banner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type FlightCardProps = {
   flight: FlightState;
@@ -70,7 +71,7 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
     !flight.onGround;
 
   return (
-    <div className="h-full overflow-y-auto overscroll-contain pb-6 [scrollbar-width:thin]">
+    <ScrollArea className="h-full" viewportClassName="pb-6">
       <HeroBanner
         photo={photos[0] ?? null}
         loading={photosLoading}
@@ -119,6 +120,14 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           />
         </dl>
 
+        <AircraftDetails
+          key={flight.icao24}
+          flight={flight}
+          details={details}
+          units={units}
+          showDebugData={settings.showDebugData}
+        />
+
         {onToggleFpv && (
           <button
             type="button"
@@ -131,19 +140,11 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           </button>
         )}
 
-        <AircraftDetails
-          key={flight.icao24}
-          flight={flight}
-          details={details}
-          units={units}
-          showDebugData={settings.showDebugData}
-        />
-
         <p className="mt-4 text-micro text-subtle">
           {[freshness, sources.join(", ")].filter(Boolean).join(" · ")}
         </p>
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
