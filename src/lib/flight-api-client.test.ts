@@ -409,3 +409,59 @@ test("invalid callsigns are rejected before any provider request", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("a point request that times out on adsb.lol is answered by adsb.fi", async () => {
+  resetAllCircuits();
+  const providers: (string | null)[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  // Fire every timeout at once, so the 8 s provider timeout trips now.
+  globalThis.setTimeout = ((handler: () => void) =>
+    originalSetTimeout(handler, 0)) as typeof setTimeout;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    if (provider !== "adsb") return readsbResponse([rawAircraft()]);
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("Aborted", "AbortError")),
+      );
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchFlightsByPoint(12.5, 77.6, 2);
+    assert.equal(result.source, "adsbfi");
+    assert.equal(result.flights.length, 1);
+    assert.deepEqual(providers, ["adsb", "adsbfi"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("the caller's own abort still cancels a point request", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let calls = 0;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1;
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("Aborted", "AbortError")),
+      );
+      controller.abort();
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      fetchFlightsByPoint(12.5, 77.6, 2, controller.signal),
+      (err: Error) => err.name === "AbortError",
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

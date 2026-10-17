@@ -223,7 +223,19 @@ function degreesToNm(degrees: number): number {
 }
 
 /**
- * Runs `fn` with a timeout. External abort signals are propagated.
+ * A provider that took too long. It is a failure of that provider, so the
+ * fallback chain moves on; only the caller's own abort cancels the lookup.
+ */
+export class ProviderTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Provider did not answer within ${timeoutMs} ms`);
+    this.name = "TimeoutError";
+  }
+}
+
+/**
+ * Runs `fn` with a timeout. External abort signals are propagated as an
+ * AbortError; the timeout itself raises a ProviderTimeoutError.
  */
 async function withTimeout<T>(
   fn: (signal: AbortSignal) => Promise<T>,
@@ -233,7 +245,11 @@ async function withTimeout<T>(
   if (externalSignal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   const onAbort = () => controller.abort();
   externalSignal?.addEventListener("abort", onAbort);
 
@@ -243,6 +259,7 @@ async function withTimeout<T>(
     // If the external signal fired, surface as AbortError
     if (externalSignal?.aborted)
       throw new DOMException("Aborted", "AbortError");
+    if (timedOut) throw new ProviderTimeoutError(timeoutMs);
     throw err;
   } finally {
     clearTimeout(timer);
@@ -383,8 +400,10 @@ async function runFallbackChain(
       if (options?.usePointSticky) recordStickySuccess(id);
       return { flights, rateLimited: false, source: id };
     } catch (err) {
+      // Only the caller's abort cancels the lookup. A provider that timed
+      // out or failed in any other way is skipped for the next one; giving
+      // up here would leave the caller thinking it had been cancelled.
       if (signal?.aborted) throw err;
-      if (err instanceof Error && err.name === "AbortError") throw err;
 
       if (!isNonCircuitError(err)) recordFailure(id, err);
 

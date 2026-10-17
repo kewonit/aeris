@@ -229,8 +229,10 @@ export function useFlights(
 
         scheduleNext(target, POLL_INTERVAL_MS);
       } catch (err) {
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        if (isAbort) return;
+        // Only this fetch's own abort is a cancel: a newer fetch or the hook
+        // winding down replaced it and owns the schedule. Anything else,
+        // such as every provider timing out, must not stop polling.
+        if (controller.signal.aborted) return;
         setSource("none");
         setError(err instanceof Error ? err.message : "Unknown error");
         scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
