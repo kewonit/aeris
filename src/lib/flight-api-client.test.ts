@@ -465,3 +465,75 @@ test("the caller's own abort still cancels a point request", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+/** A request that never answers, failing only once its signal aborts. */
+function hangUntilAborted(init?: RequestInit): Promise<Response> {
+  return new Promise<Response>((_, reject) => {
+    init?.signal?.addEventListener("abort", () =>
+      reject(new DOMException("Aborted", "AbortError")),
+    );
+  });
+}
+
+/** Runs `run` with every timer firing at once, so provider timeouts trip now. */
+async function withImmediateTimers<T>(run: () => Promise<T>): Promise<T> {
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: () => void) =>
+    originalSetTimeout(handler, 0)) as typeof setTimeout;
+  try {
+    return await run();
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+}
+
+test("three timeouts in a row open a provider's circuit, so it is skipped", async () => {
+  resetAllCircuits();
+  const providers: (string | null)[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    return provider === "adsb"
+      ? hangUntilAborted(init)
+      : readsbResponse([rawAircraft()]);
+  }) as typeof fetch;
+
+  try {
+    await withImmediateTimers(async () => {
+      for (let i = 0; i < 3; i++) await fetchFlightsByHex("abc123");
+    });
+    const circuit = getCircuitState("adsb");
+    assert.equal(circuit.state, "open");
+    assert.ok(circuit.cooldownRemaining > 59_000);
+
+    providers.length = 0;
+    await withImmediateTimers(() => fetchFlightsByHex("abc123"));
+    assert.deepEqual(providers, ["adsbfi"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a timeout before rate limits still reports the poll as rate limited", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    providerFromRequest(input.toString()) === "adsb"
+      ? hangUntilAborted(init)
+      : new Response(null, { status: 429 })) as typeof fetch;
+
+  try {
+    const result = await withImmediateTimers(() =>
+      fetchFlightsByPoint(12.5, 77.6, 2),
+    );
+    assert.equal(result.rateLimited, true);
+    assert.deepEqual(result.flights, []);
+    // Rate limits never trip a circuit.
+    for (const tier of ["adsbfi", "airplanes", "opensky"]) {
+      assert.equal(getCircuitState(tier).state, "closed", tier);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
