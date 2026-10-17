@@ -9,7 +9,7 @@ import {
   type RouteAirport,
   type RouteSource,
 } from "@/lib/route-lookup";
-import { selectReportedRoute } from "@/lib/route-validation";
+import { isSameLeg, selectReportedRoute } from "@/lib/route-validation";
 
 export type FlightRouteInfo = {
   origin: RouteAirport | null;
@@ -26,15 +26,19 @@ export type FlightRouteInfo = {
 
 /**
  * Looks up the routes providers report for the flight's callsign, then
- * keeps the first one that fits the live position. The check reruns on
- * every position update, so a route that stops fitting disappears without
- * another request.
+ * keeps the leg that best fits the live position. The check reruns on
+ * every position update, so the next leg takes over at a stop and a route
+ * that stops fitting disappears, without another request.
  */
 export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
   const callsign = normalizeRouteCallsign(flight?.callsign);
   const [lookup, setLookup] = useState<{
     callsign: string;
     routes: ReportedRoute[];
+  } | null>(null);
+  const [shown, setShown] = useState<{
+    aircraft: string;
+    route: ReportedRoute;
   } | null>(null);
 
   useEffect(() => {
@@ -57,9 +61,18 @@ export function useRouteInfo(flight: FlightState | null): FlightRouteInfo {
           altitudeMeters: flight.baroAltitude,
           onGround: flight.onGround,
           verticalRate: flight.verticalRate ?? flight.geomRate ?? null,
+          track: flight.trueTrack,
+          speed: flight.velocity,
         }
       : null;
-  const route = routes ? selectReportedRoute(routes, position) : null;
+  const aircraft = flight ? `${flight.icao24}:${callsign}` : null;
+  const current = shown?.aircraft === aircraft ? shown.route : null;
+  const route = routes ? selectReportedRoute(routes, position, current) : null;
+
+  // Remember the leg shown, so it holds while it still fits.
+  if (aircraft && route && !(current && isSameLeg(route, current))) {
+    setShown({ aircraft, route });
+  }
 
   return {
     origin: route?.origin ?? null,

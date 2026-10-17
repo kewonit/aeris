@@ -710,6 +710,11 @@ export const CHANGELOG: {
         description:
           "The map style picker shows a still of each style instead of CARTO's API key notice, and no longer loads preview tiles from other sites.",
       },
+      {
+        title: "More accurate routes",
+        description:
+          "Routes now come first from Virtual Radar Server's community route data, updated daily. A flight with stops shows the leg it is flying. When sources disagree, the card shows the route the aircraft is actually flying, not just the first one reported, and no longer shows a route the aircraft is flying backwards, has overflown, or is too high to land at. Airports are named by the city travellers know.",
+      },
     ],
   },
   {
