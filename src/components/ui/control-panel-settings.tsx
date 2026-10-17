@@ -652,6 +652,11 @@ export const CHANGELOG: {
         description:
           "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed in to an airport, they appear at their real size, and their heights stay the same as you zoom.",
       },
+      {
+        title: "Map style previews",
+        description:
+          "The map style picker shows a still of each style instead of CARTO's API key notice, and no longer loads preview tiles from other sites.",
+      },
     ],
   },
   {
