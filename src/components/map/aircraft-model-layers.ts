@@ -184,8 +184,6 @@ export interface AircraftLayerParams {
   /** Each aircraft's drawn size this frame, keyed by icao24. */
   aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
-  /** Added to every altitude before projecting; 0 outside first person. */
-  altitudeOffsetMeters?: number;
   altColors: boolean;
   defaultColor: [number, number, number, number];
   pitchByIcao: Map<string, number>;
@@ -220,7 +218,6 @@ export function buildAircraftModelLayers(
     globeFade,
     aircraftSizes,
     altitudeDisplayMode,
-    altitudeOffsetMeters = 0,
     altColors,
     defaultColor,
     pitchByIcao,
@@ -264,11 +261,7 @@ export function buildAircraftModelLayers(
         return [
           src.longitude ?? 0,
           src.latitude ?? 0,
-          aircraftElevationMeters(
-            src.baroAltitude,
-            altitudeDisplayMode,
-            altitudeOffsetMeters,
-          ),
+          aircraftElevationMeters(src.baroAltitude, altitudeDisplayMode),
         ];
       },
       getOrientation: (d) => {
@@ -298,7 +291,7 @@ export function buildAircraftModelLayers(
       sizeMinPixels: 1,
       sizeMaxPixels: 1,
       updateTriggers: {
-        getPosition: [frameCounter, altitudeDisplayMode, altitudeOffsetMeters],
+        getPosition: [frameCounter, altitudeDisplayMode],
         getOrientation: frameCounter,
         getScale: frameCounter,
         getColor: [dataVersion, altColors],

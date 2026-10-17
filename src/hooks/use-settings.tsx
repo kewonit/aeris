@@ -32,7 +32,6 @@ export type Settings = {
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
   unitSystem: UnitSystem;
-  fpvChaseDistance: number;
   globeMode: boolean;
   showAirspace: boolean;
   airspaceOpacity: number;
@@ -50,8 +49,6 @@ export const TRAIL_CEILING_FT_MIN = 1_000;
 export const TRAIL_CEILING_FT_MAX = 45_000;
 export const TRAIL_CEILING_FT_STEP = 1_000;
 const METERS_PER_FOOT = 0.3048;
-const FPV_CHASE_DISTANCE_MIN = 0.003;
-const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
 export const AIRSPACE_OPACITY_MAX = 1.0;
 export const WEATHER_RADAR_OPACITY_MIN = 0.15;
@@ -84,13 +81,6 @@ export function normalizeSettings(input: Settings): Settings {
           ) / TRAIL_CEILING_FT_STEP,
         ) * TRAIL_CEILING_FT_STEP
       : DEFAULT_SETTINGS.trailCeilingFt,
-    fpvChaseDistance: Number.isFinite(input.fpvChaseDistance)
-      ? clamp(
-          input.fpvChaseDistance,
-          FPV_CHASE_DISTANCE_MIN,
-          FPV_CHASE_DISTANCE_MAX,
-        )
-      : DEFAULT_SETTINGS.fpvChaseDistance,
     airspaceOpacity: Number.isFinite(input.airspaceOpacity)
       ? clamp(
           input.airspaceOpacity,
@@ -128,7 +118,6 @@ export const DEFAULT_SETTINGS: Settings = {
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
   unitSystem: "aviation",
-  fpvChaseDistance: 0.0048,
   globeMode: false,
   showAirspace: false,
   airspaceOpacity: 0.78,
@@ -231,10 +220,6 @@ function isValidSettings(obj: unknown): obj is Settings {
     (s.unitSystem === "aviation" ||
       s.unitSystem === "metric" ||
       s.unitSystem === "imperial") &&
-    typeof s.fpvChaseDistance === "number" &&
-    Number.isFinite(s.fpvChaseDistance) &&
-    s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
-    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
     typeof s.globeMode === "boolean" &&
     typeof s.showAirspace === "boolean" &&
     typeof s.airspaceOpacity === "number" &&

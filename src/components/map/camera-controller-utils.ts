@@ -1,33 +1,20 @@
 import maplibregl from "maplibre-gl";
 import { normalizeBearing } from "./flight-interpolation";
-import { FPV_LEVEL_PITCH } from "./fpv-scenery";
 
 export const DEFAULT_ZOOM = 9.2;
 export const DEFAULT_PITCH = 49;
 export const DEFAULT_BEARING = 27.4;
-/** Leaving the cockpit eases out to the overview over as long as entering. */
+/** Leaving first person eases out to the overview over as long as entering. */
 export const FPV_EXIT_DURATION_MS = 1_100;
-
-export const FPV_DEFAULT_ALTITUDE_METERS = 5_000;
-/** A pilot's eye sits about this far above the runway. */
-export const FPV_MIN_CAMERA_ALTITUDE_METERS = 8;
 
 const MAX_MERCATOR_LATITUDE = 85.051129;
 /** Drawn heights above this share of the camera's height cannot be framed. */
 const FRAMABLE_CAMERA_SHARE = 0.95;
 
-/** The FPV aircraft's position. Missing altitude or heading stays null. */
-export type FpvCameraPosition = {
-  lng: number;
-  lat: number;
-  alt: number | null;
-  track: number | null;
-};
-
 /**
  * Where the map goes when first person view ends, however it ends: the
  * default overview, centred on the aircraft. The open card's position is
- * the aircraft's latest; without a card, the cockpit's own position is.
+ * the aircraft's latest; without a card, where the camera last saw it is.
  */
 export function fpvExitCamera({
   panelCoordinates,
@@ -72,40 +59,96 @@ export function isWellBelowCamera(
 }
 
 
-export function fpvCameraOptions(
+/**
+ * The camera looks down at the aircraft by this much, and its pitch leaves
+ * the aircraft a few degrees below the centre of the view, so the way ahead
+ * fills most of it.
+ */
+const FOLLOW_LOOK_DOWN_DEG = 25;
+export const FPV_FOLLOW_PITCH = 68;
+/** The camera never comes closer than this, so the aircraft stays a model... */
+const MIN_FOLLOW_METERS = 300;
+/** ...nor further than this, so the ground stays readable from cruise. */
+const MAX_FOLLOW_METERS = 4_000;
+/** The follow distance grows by this much per metre of height. */
+const FOLLOW_PER_HEIGHT = 0.25;
+const METERS_PER_DEGREE = 111_320;
+
+/**
+ * How far behind the aircraft the camera follows, from the height it is
+ * drawn at: close on an approach, where the runway and buildings matter,
+ * further back at cruise, where the landscape does.
+ */
+export function fpvFollowDistanceMeters(drawnHeightMeters: number): number {
+  const height = Number.isFinite(drawnHeightMeters)
+    ? Math.max(0, drawnHeightMeters)
+    : 0;
+  return Math.min(
+    MAX_FOLLOW_METERS,
+    MIN_FOLLOW_METERS + FOLLOW_PER_HEIGHT * height,
+  );
+}
+
+/** The aircraft the camera follows: where it is drawn, and its track. */
+export type FpvFollowTarget = {
+  lng: number;
+  lat: number;
+  /** Metres above the map. */
+  elevation: number;
+  /** Degrees, or null until a track is reported. */
+  track: number | null;
+};
+
+/**
+ * The camera behind and above the aircraft, looking along its track. It sits
+ * back along the track and up from the aircraft by the follow distance, at
+ * the look-down angle, so the aircraft is always framed the same way for
+ * its height. MapLibre turns the camera's own position into the map's
+ * centre and zoom; at this pitch the ground is always in front of it.
+ *
+ * @param fallbackBearing Used until the aircraft reports a track.
+ */
+export function fpvFollowCamera(
   map: maplibregl.Map,
-  position: FpvCameraPosition,
+  target: FpvFollowTarget,
   fallbackBearing: number,
-  pitch: number = FPV_LEVEL_PITCH,
 ): maplibregl.CameraOptions | null {
   if (
-    !Number.isFinite(position.lng) ||
-    !Number.isFinite(position.lat) ||
-    Math.abs(position.lat) > 90
+    !Number.isFinite(target.lng) ||
+    !Number.isFinite(target.lat) ||
+    Math.abs(target.lat) > 90
   ) {
     return null;
   }
 
+  const bearing = normalizeBearing(
+    target.track !== null && Number.isFinite(target.track)
+      ? target.track
+      : fallbackBearing,
+  );
+  const elevation = Number.isFinite(target.elevation)
+    ? Math.max(0, target.elevation)
+    : 0;
+  const distance = fpvFollowDistanceMeters(elevation);
+  const lookDown = (FOLLOW_LOOK_DOWN_DEG * Math.PI) / 180;
+  const back = distance * Math.cos(lookDown);
+  const up = distance * Math.sin(lookDown);
+  const radians = (bearing * Math.PI) / 180;
+  const cosLat = Math.max(Math.cos((target.lat * Math.PI) / 180), 1e-6);
+  const lng =
+    target.lng - (back * Math.sin(radians)) / (METERS_PER_DEGREE * cosLat);
+  const lat = target.lat - (back * Math.cos(radians)) / METERS_PER_DEGREE;
   const latitude = Math.max(
     -MAX_MERCATOR_LATITUDE,
-    Math.min(MAX_MERCATOR_LATITUDE, position.lat),
-  );
-  const altitude =
-    position.alt !== null && Number.isFinite(position.alt)
-      ? Math.max(position.alt, FPV_MIN_CAMERA_ALTITUDE_METERS)
-      : FPV_DEFAULT_ALTITUDE_METERS;
-  const bearing = normalizeBearing(
-    position.track !== null && Number.isFinite(position.track)
-      ? position.track
-      : fallbackBearing,
+    Math.min(MAX_MERCATOR_LATITUDE, lat),
   );
 
   try {
     return map.calculateCameraOptionsFromCameraLngLatAltRotation(
-      new maplibregl.LngLat(normalizeLng(position.lng), latitude),
-      altitude,
+      new maplibregl.LngLat(normalizeLng(lng), latitude),
+      elevation + up,
       bearing,
-      pitch,
+      FPV_FOLLOW_PITCH,
       0,
     );
   } catch {

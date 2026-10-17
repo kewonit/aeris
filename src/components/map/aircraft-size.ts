@@ -185,38 +185,6 @@ export function aircraftFootprintPixels(
 }
 
 /**
- * Seen from the cockpit, no aircraft looks smaller than this, so far
- * traffic still reads as an aircraft rather than a star...
- */
-const FPV_MIN_APPARENT_PX = 10;
-/** ...or larger than this, so a near pass does not fill the screen. */
-const FPV_MAX_APPARENT_PX = 160;
-
-/**
- * An aircraft's size from the cockpit, in pixels at the depth of the map's
- * centre, which is the unit models and icons are drawn in; perspective then
- * shrinks it with distance. It is the aircraft's real wingspan, kept between
- * a visible dot and a screen-filling size at its distance.
- *
- * @param focalPx The camera's focal length in pixels: half the canvas height
- *   over the tangent of half the vertical field of view.
- */
-export function fpvFootprintPixels(
-  wingspanMeters: number,
-  distanceMeters: number,
-  focalPx: number,
-  metersPerPixelAtCenter: number,
-): number {
-  // The width, in metres, that looks a given number of pixels wide here.
-  const metersFor = (pixels: number) => (pixels * distanceMeters) / focalPx;
-  const meters = Math.min(
-    Math.max(wingspanMeters, metersFor(FPV_MIN_APPARENT_PX)),
-    metersFor(FPV_MAX_APPARENT_PX),
-  );
-  return meters / metersPerPixelAtCenter;
-}
-
-/**
  * The most perspective compensation applied to one aircraft. Zoomed in,
  * exaggerated cruise heights reach the camera itself, where enlargement
  * grows without bound.
@@ -231,6 +199,12 @@ const MAX_MAGNIFICATION = 40;
  *
  * Measured with a step across the view, which perspective scales by depth
  * alone; a step along the view is also foreshortened by the pitch.
+ *
+ * @param groundReference Where on the ground to measure against instead of
+ *   below the aircraft. The follow camera flies close behind its aircraft,
+ *   whose ground point is then behind the camera, where projection breaks
+ *   down; measured against the map's centre, every aircraft is drawn the
+ *   size it would be there.
  */
 export function altitudeMagnification(
   project: (position: [number, number, number]) => number[],
@@ -238,21 +212,25 @@ export function altitudeMagnification(
   latitude: number,
   elevation: number,
   bearing: number,
+  groundReference?: [number, number],
 ): number {
-  if (!(elevation > 0)) return 1;
+  if (!(elevation > 0) && !groundReference) return 1;
 
   const step = 0.001;
   const radians = (bearing * Math.PI) / 180;
   const stepLng =
     (step * Math.cos(radians)) / Math.cos((latitude * Math.PI) / 180);
   const stepLat = -step * Math.sin(radians);
-  const span = (z: number) => {
-    const origin = project([longitude, latitude, z]);
-    const across = project([longitude + stepLng, latitude + stepLat, z]);
+  const span = (lng: number, lat: number, z: number) => {
+    const origin = project([lng, lat, z]);
+    const across = project([lng + stepLng, lat + stepLat, z]);
     return Math.hypot(across[0] - origin[0], across[1] - origin[1]);
   };
 
-  const ratio = span(elevation) / span(0);
+  const [groundLng, groundLat] = groundReference ?? [longitude, latitude];
+  const ratio =
+    span(longitude, latitude, Math.max(0, elevation)) /
+    span(groundLng, groundLat, 0);
   return Number.isFinite(ratio)
     ? Math.min(MAX_MAGNIFICATION, Math.max(1, ratio))
     : 1;

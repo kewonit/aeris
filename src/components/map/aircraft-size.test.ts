@@ -7,7 +7,6 @@ import type { FlightState } from "@/lib/opensky";
 
 import {
   aircraftFootprintPixels,
-  fpvFootprintPixels,
   aircraftTailShare,
   aircraftWingspanMeters,
   altitudeMagnification,
@@ -120,14 +119,15 @@ test("a loaded model's tail share replaces the default", () => {
   assert.equal(aircraftTailShare(flight, false), 0.4);
 });
 
-test("from the cockpit an aircraft is its real size, between a dot and a close pass", () => {
-  // A 1,200 px focal length and 10 m per pixel at the map's centre.
-  const size = (distance: number) => fpvFootprintPixels(36, distance, 1_200, 10);
-
-  // Close enough to see at real size: 36 m, 3.6 px at the centre's scale.
-  assert.ok(Math.abs(size(3_000) - 3.6) < 1e-9);
-  // Far off it would be 1.4 px, so it is kept 10 px wide at that distance.
-  assert.ok(Math.abs(size(30_000) - (10 * 30_000) / 1_200 / 10) < 1e-9);
-  // A pass at 100 m would be 432 px, so it is held to 160 px.
-  assert.ok(Math.abs(size(100) - (160 * 100) / 1_200 / 10) < 1e-9);
+test("magnification can be measured against the map's centre instead of the ground below", () => {
+  // Perspective that enlarges by depth alone: twice as large at the centre
+  // as under the aircraft, and four times as large at the aircraft's height.
+  const project = ([lng, lat, z]: [number, number, number]) => {
+    const scale = z > 0 ? 4 : lng > 5 ? 2 : 1;
+    return [lng * 1_000 * scale, lat * 1_000 * scale];
+  };
+  assert.equal(altitudeMagnification(project, 0, 0, 500, 0), 4);
+  assert.equal(altitudeMagnification(project, 0, 0, 500, 0, [10, 0]), 2);
+  // Against the centre, an aircraft on the ground is scaled too.
+  assert.equal(altitudeMagnification(project, 0, 0, 0, 0, [10, 0]), 1);
 });

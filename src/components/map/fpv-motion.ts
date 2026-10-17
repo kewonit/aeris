@@ -18,10 +18,12 @@ const MAX_TURN_RATE_DEG_S = 3;
 /** A turn eases out over about this long after the last report. */
 const TURN_FADE_S = 8;
 /**
- * Where the camera was shown and where a new report puts the aircraft
- * close up over about this long, so a poll never jumps the view.
+ * Where the aircraft was shown and where a new report puts it close up
+ * over this long, so a poll never jumps the view. The closing starts and
+ * ends gently, so a report changes the apparent speed by no more than a
+ * few percent rather than kicking it. Polls are five seconds apart.
  */
-const CORRECTION_TIME_MS = 1_500;
+const CORRECTION_TIME_MS = 4_000;
 /** Further apart than this, a report is a new position, not a correction. */
 const TELEPORT_METERS = 5_000;
 const TELEPORT_ALTITUDE_METERS = 1_500;
@@ -128,6 +130,12 @@ function flyOn(observation: Observation, seconds: number): FpvState {
   };
 }
 
+/** How much of a correction is still shown, `progress` of the way through. */
+function correctionShare(progress: number): number {
+  const t = Math.min(Math.max(progress, 0), 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
 /** Metres east and north from one state to another. */
 function offsetMeters(from: FpvState, to: FpvState): [number, number] {
   const cosLat = Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180);
@@ -159,7 +167,7 @@ export function createFpvMotion() {
   function stateAt(now: number): FpvState | null {
     const base = predicted(now);
     if (!base || !offset) return base;
-    const share = Math.exp(-(now - offset.at) / CORRECTION_TIME_MS);
+    const share = correctionShare((now - offset.at) / CORRECTION_TIME_MS);
     const cosLat = Math.cos((base.lat * Math.PI) / 180);
     return {
       lng:

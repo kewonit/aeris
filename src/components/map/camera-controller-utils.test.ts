@@ -5,14 +5,22 @@ import {
   DEFAULT_PITCH,
   DEFAULT_ZOOM,
   fpvExitCamera,
-  FPV_DEFAULT_ALTITUDE_METERS,
-  FPV_MIN_CAMERA_ALTITUDE_METERS,
-  fpvCameraOptions,
+  fpvFollowCamera,
+  fpvFollowDistanceMeters,
+  FPV_FOLLOW_PITCH,
   isWellBelowCamera,
   projectLngLatElevationPixelDelta,
 } from "./camera-controller-utils";
 
-test("FPV camera is placed at the aircraft with a forward horizon pitch", () => {
+test("the camera follows closer near the ground and further back at cruise", () => {
+  assert.equal(fpvFollowDistanceMeters(0), 300);
+  assert.equal(fpvFollowDistanceMeters(100), 325);
+  assert.equal(fpvFollowDistanceMeters(11_000), 3_050);
+  assert.equal(fpvFollowDistanceMeters(50_000), 4_000);
+  assert.equal(fpvFollowDistanceMeters(Number.NaN), 300);
+});
+
+test("the follow camera sits behind the aircraft along its track, above it, looking along it", () => {
   let received:
     | {
         lng: number;
@@ -20,7 +28,6 @@ test("FPV camera is placed at the aircraft with a forward horizon pitch", () => 
         altitude: number;
         bearing: number;
         pitch: number;
-        roll: number | undefined;
       }
     | undefined;
   const map = {
@@ -29,7 +36,6 @@ test("FPV camera is placed at the aircraft with a forward horizon pitch", () => 
       altitude: number,
       bearing: number,
       pitch: number,
-      roll?: number,
     ) => {
       received = {
         lng: position.lng,
@@ -37,84 +43,56 @@ test("FPV camera is placed at the aircraft with a forward horizon pitch", () => 
         altitude,
         bearing,
         pitch,
-        roll,
       };
-      return { center: [4.9, 52.3], zoom: 9, bearing, pitch, roll };
+      return { center: [position.lng, position.lat], zoom: 12, bearing, pitch };
     },
   };
 
-  const options = fpvCameraOptions(
+  // Flying due east at 1,000 m: the camera is 550 m back at 25° down.
+  const options = fpvFollowCamera(
     map as never,
-    { lng: 190, lat: 89, alt: -20, track: -10 },
-    45,
-    84,
+    { lng: 10, lat: 0, elevation: 1_000, track: 90 },
+    0,
   );
-
-  assert.deepEqual(received, {
-    lng: -170,
-    lat: 85.051129,
-    altitude: FPV_MIN_CAMERA_ALTITUDE_METERS,
-    bearing: 350,
-    pitch: 84,
-    roll: 0,
-  });
-  assert.equal(options?.pitch, 84);
-  assert.equal(options?.bearing, 350);
+  assert.ok(options && received);
+  const back = 550 * Math.cos((25 * Math.PI) / 180);
+  const up = 550 * Math.sin((25 * Math.PI) / 180);
+  assert.ok(Math.abs(received.lng - (10 - back / 111_320)) < 1e-9);
+  assert.ok(Math.abs(received.lat) < 1e-9);
+  assert.ok(Math.abs(received.altitude - (1_000 + up)) < 1e-9);
+  assert.equal(received.bearing, 90);
+  assert.equal(received.pitch, FPV_FOLLOW_PITCH);
 });
 
-test("FPV camera uses safe altitude and bearing fallbacks", () => {
-  let altitudeReceived = 0;
-  let bearingReceived = 0;
+test("the follow camera falls back to the last bearing and rejects unusable positions", () => {
+  let bearingReceived = -1;
+  let calculationCount = 0;
   const map = {
     calculateCameraOptionsFromCameraLngLatAltRotation: (
       _position: unknown,
-      altitude: number,
+      _altitude: number,
       bearing: number,
       pitch: number,
     ) => {
-      altitudeReceived = altitude;
+      calculationCount += 1;
       bearingReceived = bearing;
       return { center: [0, 0], zoom: 10, bearing, pitch };
     },
   };
 
-  const options = fpvCameraOptions(
-    map as never,
-    { lng: 12, lat: 48, alt: Number.NaN, track: null },
-    -170,
-  );
-
-  assert.ok(options);
-  assert.equal(altitudeReceived, FPV_DEFAULT_ALTITUDE_METERS);
+  const target = { lng: 12, lat: 48, elevation: 500, track: null };
+  assert.ok(fpvFollowCamera(map as never, target, -170));
   assert.equal(bearingReceived, 190);
-});
-
-test("FPV camera rejects unusable positions", () => {
-  let calculationCount = 0;
-  const map = {
-    calculateCameraOptionsFromCameraLngLatAltRotation: () => {
-      calculationCount += 1;
-      return {};
-    },
-  };
-
+  const east = { elevation: 500, track: 90 };
   assert.equal(
-    fpvCameraOptions(
-      map as never,
-      { lng: Number.NaN, lat: 48, alt: 1_000, track: 90 },
-      0,
-    ),
+    fpvFollowCamera(map as never, { ...east, lng: Number.NaN, lat: 48 }, 0),
     null,
   );
   assert.equal(
-    fpvCameraOptions(
-      map as never,
-      { lng: 12, lat: 91, alt: 1_000, track: 90 },
-      0,
-    ),
+    fpvFollowCamera(map as never, { ...east, lng: 12, lat: 91 }, 0),
     null,
   );
-  assert.equal(calculationCount, 0);
+  assert.equal(calculationCount, 1);
 });
 
 test("elevation projection measures from MapLibre's padded visual center", () => {

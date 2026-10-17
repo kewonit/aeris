@@ -90,8 +90,6 @@ export function createTrailRenderCache(): TrailRenderCache {
 type HeadOptions = {
   altColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
-  /** Added to every altitude before projecting; 0 outside first person. */
-  altitudeOffsetMeters?: number;
   defaultColor: Rgba;
   zoom: number;
 };
@@ -196,11 +194,7 @@ export function buildTrailHead(
   // than level with its centre, has the trail run straight into it.
   const startZ = start[2];
   const tailZ =
-    aircraftElevationMeters(
-      altitude,
-      options.altitudeDisplayMode,
-      options.altitudeOffsetMeters,
-    ) -
+    aircraftElevationMeters(altitude, options.altitudeDisplayMode) -
     halfLength * Math.sin(climb);
   const base = options.altColors
     ? altitudeToColor(altitude)
@@ -322,7 +316,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
           ? null
           : windowMs,
       altitudeDisplayMode: params.altitudeDisplayMode,
-      altitudeOffsetMeters: params.altitudeOffsetMeters,
       altColors: params.altColors,
       defaultColor: params.defaultColor,
       appearance: flight,

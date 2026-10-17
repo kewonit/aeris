@@ -1,3 +1,4 @@
+import type { MutableRefObject } from "react";
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
@@ -69,6 +70,19 @@ export type FlightLayerProps = {
   altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
-  /** Added to pressure altitudes in FPV to sit them above the map. */
-  fpvHeightOffsetMeters?: number;
+  /**
+   * Written every frame with where the first person aircraft is drawn, so
+   * the camera can follow it exactly; null while it is not drawn.
+   */
+  fpvDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
+};
+
+/** Where the first person aircraft is drawn this frame. */
+export type FpvDrawnPosition = {
+  lng: number;
+  lat: number;
+  /** Metres above the map. */
+  elevation: number;
+  /** Degrees, or null until a track is known. */
+  track: number | null;
 };

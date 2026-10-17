@@ -68,15 +68,10 @@ export function cameraHeightMeters(
 /**
  * How high an aircraft, or its trail, is drawn, in metres. A trail rides at
  * its aircraft's own height so it runs level into the tail.
- *
- * @param offsetMeters Added to the altitude first. First person view uses
- *   it to sit heights above the local ground (fpv-height); elsewhere it is 0.
  */
 export function aircraftElevationMeters(
   altitude: number | null,
   mode: AltitudeDisplayMode,
-  offsetMeters = 0,
 ): number {
-  const shifted = altitude === null ? null : altitude + offsetMeters;
-  return projectDisplayedAltitudeMeters(shifted, mode) * ELEVATION_SCALE[mode];
+  return projectDisplayedAltitudeMeters(altitude, mode) * ELEVATION_SCALE[mode];
 }

@@ -54,18 +54,13 @@ import {
 
 import { buildSelectionPulseLayers } from "./selection-pulse-layers";
 import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
-import {
-  buildFpvTrafficLabelLayer,
-  pickFpvTrafficLabels,
-} from "./fpv-traffic-labels";
+import { createFpvMotion, type FpvMotion } from "./fpv-motion";
 import { buildAircraftModelLayers } from "./aircraft-model-layers";
 import {
   aircraftFootprintPixels,
   aircraftTailShare,
   aircraftWingspanMeters,
   altitudeMagnification,
-  fpvFootprintPixels,
-  metersPerPixel,
   type AircraftScreenSize,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
@@ -80,92 +75,13 @@ import {
 
 /** Flat icons are never pitched, so their trails meet a level tail. */
 const NO_PITCH = new Map<string, number>();
-/** Seen from the cockpit, other aircraft's trails are this much fainter... */
-const FPV_TRAIL_OPACITY = 0.35;
-/** ...and this much thinner. */
-const FPV_TRAIL_THICKNESS = 0.6;
-const METERS_PER_DEGREE = 111_320;
-
-type CockpitCamera = {
-  lng: number;
-  lat: number;
-  alt: number;
-  /** Half the canvas height over the tangent of half the field of view. */
-  focalPx: number;
-  /** Metres per pixel at the map's centre, the unit models are drawn in. */
-  metersPerPixel: number;
-};
-
-/** Where the first person camera is, and how it maps metres to pixels. */
-function cockpitCamera(
-  map: maplibregl.Map,
-  zoom: number,
-): CockpitCamera | null {
-  const { lng, lat } = map.transform.getCameraLngLat();
-  const alt = map.transform.getCameraAltitude();
-  if (![lng, lat, alt].every(Number.isFinite)) return null;
-  const halfFov = (map.getVerticalFieldOfView() * Math.PI) / 360;
-  return {
-    lng,
-    lat,
-    alt,
-    focalPx: map.getCanvas().clientHeight / 2 / Math.tan(halfFov),
-    metersPerPixel: metersPerPixel(zoom, map.getCenter().lat),
-  };
-}
-
 /**
- * Whether the cockpit camera can see an aircraft: within its field of view
- * across and up and down, measured as angles from the camera.
+ * The followed aircraft is drawn this wide on screen, whatever the zoom, so
+ * it reads as the one the camera rides with without filling the view. On a
+ * narrow screen it is drawn narrower, this share of the width.
  */
-function inCockpitView(
-  camera: CockpitCamera,
-  view: { bearing: number; pitch: number; verticalFov: number; aspect: number },
-  flight: FlightState,
-  elevation: number,
-): boolean {
-  const cosLat = Math.cos((camera.lat * Math.PI) / 180);
-  const east =
-    (((flight.longitude! - camera.lng + 540) % 360) - 180) *
-    METERS_PER_DEGREE *
-    cosLat;
-  const north = (flight.latitude! - camera.lat) * METERS_PER_DEGREE;
-  const across = Math.hypot(east, north);
-  const bearing = (Math.atan2(east, north) * 180) / Math.PI;
-  const offAxis = Math.abs(((bearing - view.bearing + 540) % 360) - 180);
-  const elevationAngle =
-    (Math.atan2(elevation - camera.alt, across) * 180) / Math.PI;
-  const halfVertical = view.verticalFov / 2;
-  const halfHorizontal =
-    (Math.atan(Math.tan((halfVertical * Math.PI) / 180) * view.aspect) * 180) /
-    Math.PI;
-  return (
-    offAxis < halfHorizontal &&
-    Math.abs(elevationAngle - (view.pitch - 90)) < halfVertical
-  );
-}
-
-/** Straight-line metres from the cockpit camera to an aircraft. */
-function distanceFromCockpit(
-  camera: CockpitCamera,
-  flight: FlightState,
-  altitudeMode: AltitudeDisplayMode,
-  altitudeOffset: number,
-): number {
-  const cosLat = Math.cos(
-    (((camera.lat + flight.latitude!) / 2) * Math.PI) / 180,
-  );
-  const east =
-    (((flight.longitude! - camera.lng + 540) % 360) - 180) *
-    METERS_PER_DEGREE *
-    cosLat;
-  const north = (flight.latitude! - camera.lat) * METERS_PER_DEGREE;
-  const up =
-    aircraftElevationMeters(flight.baroAltitude, altitudeMode, altitudeOffset) -
-    camera.alt;
-  return Math.hypot(east, north, up);
-}
-
+const FPV_FOLLOWED_PX = 100;
+const FPV_FOLLOWED_WIDTH_SHARE = 1 / 6;
 export function FlightLayers({
   flights,
   trails,
@@ -180,7 +96,7 @@ export function FlightLayers({
   altitudeDisplayMode,
   globeMode = false,
   fpvIcao24 = null,
-  fpvHeightOffsetMeters = 0,
+  fpvDrawnRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -198,6 +114,12 @@ export function FlightLayers({
   const recentIntervalsRef = useRef<number[]>([]);
   // How quickly each provider's answers reach us, to time its reports.
   const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
+  // The first person aircraft's own smoothed path, which it is drawn on so
+  // that it flies on steadily through late and missing reports, started
+  // afresh for each aircraft followed.
+  const fpvMotionRef = useRef<{ icao24: string; motion: FpvMotion } | null>(
+    null,
+  );
 
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailRenderCacheRef = useRef(createTrailRenderCache());
@@ -238,7 +160,7 @@ export function FlightLayers({
   const globeModeRef = useRef(globeMode);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
-  const fpvHeightOffsetRef = useRef(fpvHeightOffsetMeters);
+  const fpvDrawnRefRef = useRef(fpvDrawnRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
 
@@ -269,7 +191,7 @@ export function FlightLayers({
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
-    fpvHeightOffsetRef.current = fpvHeightOffsetMeters;
+    fpvDrawnRefRef.current = fpvDrawnRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -293,7 +215,7 @@ export function FlightLayers({
     globeMode,
     selectedIcao24,
     fpvIcao24,
-    fpvHeightOffsetMeters,
+    fpvDrawnRef,
   ]);
 
   // ── Snapshot interpolation on new data ─────────────────────────────
@@ -306,6 +228,25 @@ export function FlightLayers({
     noteReceipt(receiptDelaysRef.current, flights, receivedAt);
     const reported = (f: FlightState) =>
       carryForward(f, reportLeadMs(f, receivedAt, receiptDelaysRef.current));
+
+    // Each report of the first person aircraft feeds its own path. A stale
+    // report is placed when it was true, so it never pulls the view back.
+    const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
+    const fpvReport = fpvId
+      ? flights.find((f) => f.icao24.toLowerCase() === fpvId)
+      : undefined;
+    if (fpvId && fpvReport) {
+      if (fpvMotionRef.current?.icao24 !== fpvId) {
+        fpvMotionRef.current = { icao24: fpvId, motion: createFpvMotion() };
+      }
+      fpvMotionRef.current.motion.observe(
+        fpvReport,
+        receivedAt,
+        reportLeadMs(fpvReport, receivedAt, receiptDelaysRef.current, Infinity),
+      );
+    } else if (!fpvId) {
+      fpvMotionRef.current = null;
+    }
 
     // If data is stale (tab was hidden 15s+), snap directly to new
     // positions instead of slowly interpolating from outdated ones.
@@ -420,8 +361,11 @@ export function FlightLayers({
       animDurationRef.current = Math.max(
         MIN_ANIM_DURATION_MS,
         // A move lasts the whole interval, so aircraft glide on until the
-        // next report instead of arriving early and standing still.
-        Math.min(MAX_ANIM_DURATION_MS, medianInterval),
+        // next report instead of arriving early and standing still. A poll
+        // that comes early, as the first one does after the view moves to a
+        // new area, covers only its own short stretch of flight, so its move
+        // is as short, or aircraft would crawl through it.
+        Math.min(MAX_ANIM_DURATION_MS, medianInterval, observedInterval),
       );
     }
     dataTimestampRef.current = now;
@@ -813,23 +757,48 @@ export function FlightLayers({
         }
 
         const altColors = showAltColorsRef.current;
-        // In FPV the camera sits inside this aircraft, so its own icon,
-        // model, shadow, and trail would block the view. Other traffic stays.
-        const visibleFlights = fpvId
-          ? interpolated.filter((flight) => flight.icao24 !== fpvId)
-          : interpolated;
-        const modelFlights = fpvId
-          ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
-          : currentFlights;
+        const visibleFlights = interpolated;
+        const modelFlights = currentFlights;
 
-        // The FPV camera sits at the aircraft's true altitude, so traffic is
-        // drawn at true altitudes too. Otherwise the exaggerated presentation
-        // heights would float every other aircraft far above the horizon.
+        // The first person camera follows its aircraft at true height, so
+        // all traffic is drawn at true heights too: the exaggerated
+        // presentation heights would stack it far above the ground around
+        // the aircraft.
         const altitudeMode: AltitudeDisplayMode = fpvId
           ? "realistic"
           : altitudeDisplayModeRef.current;
-        // ...and above the local ground, as the camera is (fpv-height).
-        const altitudeOffset = fpvId ? fpvHeightOffsetRef.current : 0;
+
+        // The first person aircraft is drawn on its own smoothed path, and
+        // the camera follows it exactly where it is drawn.
+        const fpvMotion =
+          fpvId && fpvMotionRef.current?.icao24 === fpvId
+            ? fpvMotionRef.current.motion
+            : null;
+        const drawn = fpvId ? interpolatedMapRef.current.get(fpvId) : null;
+        const flown = fpvMotion?.stateAt(Date.now()) ?? null;
+        if (drawn && flown) {
+          drawn.longitude = flown.lng;
+          drawn.latitude = flown.lat;
+          if (flown.alt !== null) drawn.baroAltitude = flown.alt;
+          if (flown.track !== null) drawn.trueTrack = flown.track;
+        }
+        const drawnOut = fpvDrawnRefRef.current;
+        if (drawnOut) {
+          drawnOut.current =
+            drawn && drawn.longitude != null && drawn.latitude != null
+              ? {
+                  lng: drawn.longitude,
+                  lat: drawn.latitude,
+                  elevation: aircraftElevationMeters(
+                    drawn.baroAltitude,
+                    altitudeMode,
+                  ),
+                  track: Number.isFinite(drawn.trueTrack)
+                    ? drawn.trueTrack
+                    : null,
+                }
+              : null;
+        }
 
         // Pitch and bank follow each aircraft's reported motion and change
         // slowly, so they are eased at ~10fps whatever the frame rate.
@@ -855,17 +824,22 @@ export function FlightLayers({
         }
 
         // Every aircraft's drawn size, shared by models, icons, shadows, and
-        // trail heads so they agree. 3D models are drawn at their exaggerated
-        // height, where perspective would enlarge them, so outside FPV that
-        // enlargement is measured and divided back out.
+        // trail heads so they agree. 3D models are drawn at their height,
+        // where perspective would enlarge them, so that enlargement is
+        // measured and divided back out.
         const aircraftSizes = aircraftSizesRef.current;
         aircraftSizes.clear();
         let project: ((position: [number, number, number]) => number[]) | null =
           null;
         const bearing = map?.getBearing() ?? 0;
-        if (use3DRef.current && !fpvId && map) {
+        // The follow camera sits close behind its aircraft, whose own ground
+        // point is then behind the camera, so sizes are measured against the
+        // map's centre instead (altitudeMagnification).
+        let groundReference: [number, number] | undefined;
+        if (use3DRef.current && map) {
           const canvas = map.getCanvas();
           const center = map.getCenter();
+          if (fpvId) groundReference = [center.lng, center.lat];
           const viewport = new WebMercatorViewport({
             width: canvas.clientWidth,
             height: canvas.clientHeight,
@@ -878,26 +852,22 @@ export function FlightLayers({
           });
           project = (position) => viewport.project(position);
         }
-        // From the cockpit, traffic is drawn at its real size for its
-        // distance from the camera, kept a visible dot when far away.
-        const cockpit = fpvId && map ? cockpitCamera(map, currentZoom) : null;
         for (const flight of visibleFlights) {
           if (flight.longitude == null || flight.latitude == null) continue;
           const wingspan = aircraftWingspanMeters(flight);
           aircraftSizes.set(flight.icao24, {
-            footprintPx: cockpit
-              ? fpvFootprintPixels(
-                  wingspan,
-                  distanceFromCockpit(
-                    cockpit,
-                    flight,
-                    altitudeMode,
-                    altitudeOffset,
+            footprintPx:
+              flight.icao24 === fpvId
+                ? Math.min(
+                    FPV_FOLLOWED_PX,
+                    (map?.getCanvas().clientWidth ?? Infinity) *
+                      FPV_FOLLOWED_WIDTH_SHARE,
+                  )
+                : aircraftFootprintPixels(
+                    wingspan,
+                    currentZoom,
+                    flight.latitude,
                   ),
-                  cockpit.focalPx,
-                  cockpit.metersPerPixel,
-                )
-              : aircraftFootprintPixels(wingspan, currentZoom, flight.latitude),
             magnification: project
               ? altitudeMagnification(
                   project,
@@ -905,6 +875,7 @@ export function FlightLayers({
                   flight.latitude,
                   aircraftElevationMeters(flight.baroAltitude, altitudeMode),
                   bearing,
+                  groundReference,
                 )
               : 1,
             tailShare: aircraftTailShare(flight, use3DRef.current),
@@ -913,9 +884,7 @@ export function FlightLayers({
         const footprintOf = (flight: FlightState) =>
           aircraftSizes.get(flight.icao24)?.footprintPx ?? 20;
 
-        // From the cockpit, ground shadows sit far below their aircraft
-        // and would be sized for the aircraft, not the ground.
-        if (layersVisible && showShadowsRef.current && !fpvId) {
+        if (layersVisible && showShadowsRef.current) {
           layers.push(
             new IconLayer<FlightState>({
             id: "flight-shadows",
@@ -949,21 +918,17 @@ export function FlightLayers({
               flights: visibleFlights,
               aircraftSizes,
               pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
-              // A halo reads as a streak across the cockpit's sky, and full
-              // trails crowd it, so they are thinner and fainter there.
-              glow: !fpvId,
+              glow: true,
               zoom: currentZoom,
               trailMap: trailMapRef.current,
               selectedIcao24: selectedIcao24Ref.current,
               trailMinutes: trailMinutesRef.current,
               ceilingMeters: trailCeilingMetersRef.current,
-              thickness:
-                trailThicknessRef.current * (fpvId ? FPV_TRAIL_THICKNESS : 1),
+              thickness: trailThicknessRef.current,
               altColors,
               altitudeDisplayMode: altitudeMode,
-              altitudeOffsetMeters: altitudeOffset,
               defaultColor: DEFAULT_COLOR,
-              opacity: globeFade * (fpvId ? FPV_TRAIL_OPACITY : 1),
+              opacity: globeFade,
               cache: trailRenderCacheRef.current,
             }),
           );
@@ -1012,7 +977,6 @@ export function FlightLayers({
               globeFade,
               aircraftSizes,
               altitudeDisplayMode: altitudeMode,
-              altitudeOffsetMeters: altitudeOffset,
               altColors,
               defaultColor: DEFAULT_COLOR,
               pitchByIcao,
@@ -1033,11 +997,7 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                aircraftElevationMeters(
-                  d.baroAltitude,
-                  altitudeMode,
-                  altitudeOffset,
-                ),
+                aircraftElevationMeters(d.baroAltitude, altitudeMode),
               ],
               getIcon: () => "aircraft",
               getSize: footprintOf,
@@ -1059,54 +1019,13 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [
-                  visualFrameRef.current,
-                  altitudeMode,
-                  altitudeOffset,
-                ],
+                getPosition: [visualFrameRef.current, altitudeMode],
                 getAngle: visualFrameRef.current,
                 getSize: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],
               },
             }),
           );
-        }
-
-        // Nearby traffic is labelled from the cockpit, as on a traffic display.
-        if (layersVisible && cockpit && map) {
-          const canvas = map.getCanvas();
-          const view = {
-            bearing: map.getBearing(),
-            pitch: map.getPitch(),
-            verticalFov: map.getVerticalFieldOfView(),
-            aspect: canvas.clientWidth / Math.max(1, canvas.clientHeight),
-          };
-          const elevationOf = (flight: FlightState) =>
-            aircraftElevationMeters(
-              flight.baroAltitude,
-              altitudeMode,
-              altitudeOffset,
-            );
-          const labels = pickFpvTrafficLabels(
-            visibleFlights,
-            cockpit.alt,
-            elevationOf,
-            (flight) =>
-              distanceFromCockpit(cockpit, flight, altitudeMode, altitudeOffset),
-            footprintOf,
-            (flight) =>
-              inCockpitView(cockpit, view, flight, elevationOf(flight)),
-          );
-          if (labels.length > 0) {
-            layers.push(
-              buildFpvTrafficLabelLayer(
-                labels,
-                document.documentElement.classList.contains("dark")
-                  ? "dark"
-                  : "light",
-              ),
-            );
-          }
         }
 
         overlay.setProps({ layers });

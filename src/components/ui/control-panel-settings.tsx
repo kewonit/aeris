@@ -693,7 +693,7 @@ export const CHANGELOG: {
       {
         title: "First person view rebuilt",
         description:
-          "The cockpit view flies smoothly on the aircraft's own path, looks closer to the horizon and nods as the aircraft climbs and descends. Heights sit above the local ground, so landings touch down on the runway and roll out, and runways stand out on the approach. Nearby traffic is labelled with its height above or below, a haze softens the horizon, and when reports drop out the view flies on and says the signal is lost. However it ends, the view pulls back out to the aircraft.",
+          "The camera follows close behind the aircraft, looking along its track with the aircraft always in view: nearer on an approach, further back at cruise. It moves smoothly on the aircraft's own path between reports, and when reports drop out it flies on and says the signal is lost. You can drag, zoom and turn the map, and it eases back to following when you stop. Runways stand out on the approach, and however it ends, the view pulls back out to the aircraft.",
       },
       {
         title: "Steadier flight trails",

@@ -68,11 +68,11 @@ import { MobileFlightToast } from "@/components/ui/mobile-flight-toast";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
+import type { FpvDrawnPosition } from "@/components/map/flight-layer-constants";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
 import { findNearestAirport, airportToCity } from "@/lib/airports";
-import { fpvHeightOffsetMeters } from "@/components/map/fpv-height";
 import {
   computeAirspaceBounds,
   FPV_BOUNDS_SNAP_DEG,
@@ -129,6 +129,9 @@ function FlightTrackerInner({
   );
 
   const [cityOverride, setCityOverride] = useState<City | undefined>();
+  // Where the first person aircraft is drawn, shared from the flight
+  // layers to the camera that follows it.
+  const fpvDrawnRef = useRef<FpvDrawnPosition | null>(null);
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
@@ -299,19 +302,6 @@ function FlightTrackerInner({
     if (!fpvIcao24) return null;
     return displayFlightMap.get(fpvIcao24) ?? null;
   }, [fpvIcao24, displayFlightMap]);
-
-  // The last report of the FPV aircraft, held through polls that miss it,
-  // so the heights it sets do not jump back.
-  const [heldFpvFlight, setHeldFpvFlight] = useState<FlightState | null>(null);
-  if (fpvFlight && fpvFlight !== heldFpvFlight) setHeldFpvFlight(fpvFlight);
-  if (!fpvIcao24 && heldFpvFlight) setHeldFpvFlight(null);
-  const fpvHeightOffset = useMemo(
-    () =>
-      fpvHeightOffsetMeters(
-        heldFpvFlight?.icao24 === fpvIcao24 ? heldFpvFlight : null,
-      ),
-    [heldFpvFlight, fpvIcao24],
-  );
 
   useEffect(() => {
     syncFpvToUrl(fpvIcao24, activeCity);
@@ -741,7 +731,7 @@ function FlightTrackerInner({
             followFlight={followFlight}
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
-            fpvHeightOffsetMeters={fpvHeightOffset}
+            fpvDrawnRef={fpvDrawnRef}
             panelCamera={panelCamera}
           />
           {!fpvIcao24 && (
@@ -778,7 +768,7 @@ function FlightTrackerInner({
             altitudeDisplayMode={settings.altitudeDisplayMode}
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
-            fpvHeightOffsetMeters={fpvHeightOffset}
+            fpvDrawnRef={fpvDrawnRef}
           />
         </MapView>
       </div>

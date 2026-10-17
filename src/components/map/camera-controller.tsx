@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
@@ -21,6 +21,7 @@ import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
+import type { FpvDrawnPosition } from "./flight-layer-constants";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
@@ -83,7 +84,7 @@ export function CameraController({
   followFlight = null,
   fpvIcao24 = null,
   fpvFlight = null,
-  fpvHeightOffsetMeters = 0,
+  fpvDrawnRef,
   panelCamera,
 }: {
   city: City;
@@ -91,8 +92,8 @@ export function CameraController({
   /** The FPV selection. Stays set while a poll misses the aircraft. */
   fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
-  /** Added to pressure altitudes in FPV to sit them above the map. */
-  fpvHeightOffsetMeters?: number;
+  /** Where the FPV aircraft is drawn each frame, from the flight layers. */
+  fpvDrawnRef: MutableRefObject<FpvDrawnPosition | null>;
   panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
@@ -108,8 +109,6 @@ export function CameraController({
     null,
   );
   const isFpvActiveRef = useRef(false);
-  // Where the FPV aircraft was on the last frame, to centre the exit on.
-  const fpvAircraftPositionRef = useRef<[number, number] | null>(null);
   const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
@@ -174,7 +173,8 @@ export function CameraController({
     const isExitingFpv =
       previousFpvKeyRef.current !== null && fpvKey === null;
     const lastCockpitPosition = (): [number, number] => {
-      if (fpvAircraftPositionRef.current) return fpvAircraftPositionRef.current;
+      const drawn = fpvDrawnRef.current;
+      if (drawn) return [drawn.lng, drawn.lat];
       const { lng, lat } = map.transform.getCameraLngLat();
       return [lng, lat];
     };
@@ -293,6 +293,7 @@ export function CameraController({
   }, [
     map,
     isLoaded,
+    fpvDrawnRef,
     panelCamera.open,
     panelCamera.focusKey,
     panelCamera.kind,
@@ -381,10 +382,8 @@ export function CameraController({
     map,
     isLoaded,
     fpvIcao24,
-    fpvFlight,
-    fpvHeightOffsetMeters,
+    fpvDrawnRef,
     isFpvActiveRef,
-    fpvAircraftPositionRef,
   );
 
   // North-up & reset-view
