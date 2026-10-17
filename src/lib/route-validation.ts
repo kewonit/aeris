@@ -1,5 +1,6 @@
 import { haversineDistanceRad } from "./geo";
 import type { ReportedRoute, RouteAirport } from "./route-lookup";
+import type { Takeoff } from "./takeoff";
 
 const EARTH_RADIUS_NM = 3_440.065;
 const FEET = 0.3048;
@@ -36,6 +37,12 @@ const HIGH_ALTITUDE_METERS = 25_000 * FEET;
 const STEEPEST_DESCENT_NM_PER_1000_FT = 1.5;
 /** A departure or arrival this close to an airport starts or ends there. */
 const NEAR_ENDPOINT_NM = 50;
+/**
+ * A route starts where the aircraft was seen taking off when its origin is
+ * this close: the first point off the ground can be a few miles from the
+ * airport's reference point, but other airports are further off.
+ */
+const TAKEOFF_MATCH_NM = 5;
 
 export type RoutePosition = {
   latitude: number;
@@ -307,18 +314,32 @@ export function isSameLeg(
  * providers often disagree, so the order alone is not enough. Without a
  * position there is nothing to check against, so the first leg stands.
  *
- * @param current The leg shown for this aircraft until now, which keeps
- *   its place while it still fits.
+ * @param options.current The leg shown for this aircraft until now, which
+ *   keeps its place while it still fits.
+ * @param options.departedFrom Where the aircraft was seen taking off on
+ *   this flight. Only a leg from there can be the one it is flying.
  */
 export function selectReportedRoute(
   routes: readonly ReportedRoute[],
   position: RoutePosition | null,
-  current: ReportedRoute | null = null,
+  options: {
+    current?: ReportedRoute | null;
+    departedFrom?: Point | null;
+  } = {},
 ): ReportedRoute | null {
   if (!position) return routes[0] ?? null;
+  const current = options.current ?? null;
+  // Once landed, the callsign may already name the next flight.
+  const departedFrom = position.onGround ? null : options.departedFrom;
 
   let best: { route: ReportedRoute; key: number[] } | null = null;
   for (const [index, route] of routes.entries()) {
+    if (
+      departedFrom &&
+      distanceNm(route.origin, departedFrom) > TAKEOFF_MATCH_NM
+    ) {
+      continue;
+    }
     const isCurrent = current !== null && isSameLeg(route, current);
     if (
       !isRouteConsistentWithPosition(route, position, {
@@ -331,4 +352,31 @@ export function selectReportedRoute(
     if (!best || compareKeys(key, best.key) < 0) best = { route, key };
   }
   return best?.route ?? null;
+}
+
+/**
+ * The airport an aircraft was seen taking off from, named as the reported
+ * routes name it when one of them lists it, so it reads like any other
+ * route, else from the app's own airport list.
+ */
+export function takeoffAirport(
+  takeoff: Takeoff,
+  routes: readonly ReportedRoute[],
+): RouteAirport | null {
+  for (const route of routes) {
+    for (const airport of [route.origin, route.destination]) {
+      if (distanceNm(airport, takeoff) <= TAKEOFF_MATCH_NM) return airport;
+    }
+  }
+  const listed = takeoff.airport;
+  if (!listed) return null;
+  return {
+    iata: listed.iata,
+    icao: listed.icao,
+    name: listed.name,
+    municipality: listed.city,
+    countryIso: listed.country,
+    latitude: listed.lat,
+    longitude: listed.lng,
+  };
 }

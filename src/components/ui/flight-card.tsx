@@ -25,6 +25,7 @@ import {
   formatAircraftDataSources,
   formatAircraftIdentity,
   formatAircraftName,
+  formatTimeSinceTakeoff,
   hasEmergencyStatus,
   isMilitaryAircraft,
 } from "@/lib/aircraft-sidebar";
@@ -97,7 +98,10 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           </p>
         )}
 
-        <RouteSummary routeInfo={routeInfo} />
+        <RouteSummary
+          routeInfo={routeInfo}
+          now={flight.provenance.responseTime}
+        />
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5">
           <Fact label="Altitude" value={formatAltitude(flight.baroAltitude, units)} />
@@ -173,27 +177,50 @@ function AirlineMark({
 }
 
 /**
- * The reported route, or a note while it loads or when none is reported.
- * Every state keeps the same height so the facts below never move.
+ * The route, or a note while it loads or when none is reported. A route
+ * the aircraft was seen to take off on says when; one only as reported
+ * says so. Every state keeps the same height so the facts below never move.
+ *
+ * @param now The time the aircraft was last reported, in milliseconds.
  */
-export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
+export function RouteSummary({
+  routeInfo,
+  now,
+}: {
+  routeInfo: FlightRouteInfo;
+  now: number;
+}) {
   const origin = routeInfo.available ? formatAirportCode(routeInfo.origin) : "";
-  const destination = routeInfo.available
-    ? formatAirportCode(routeInfo.destination)
-    : "";
+  const destination = formatAirportCode(routeInfo.destination);
+  const departedAt = routeInfo.departedAt;
 
   return (
-    <section aria-label="Reported route" className="border-t border-border py-4">
-      <p className="text-label text-subtle">Reported route</p>
-      {origin && destination ? (
+    <section aria-label="Route" className="border-t border-border py-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-label text-subtle">
+          {departedAt !== null ? "Route" : "Reported route"}
+        </p>
+        {departedAt !== null && (
+          <p className="truncate text-label text-subtle">
+            {formatTimeSinceTakeoff(departedAt, now)}
+          </p>
+        )}
+      </div>
+      {origin ? (
         <div className="mt-1 grid h-11 grid-cols-[1fr_auto_1fr] items-center gap-3">
           <RouteEndpoint code={origin} place={routeInfo.origin?.municipality ?? ""} />
           <ArrowRight className="size-4 text-subtle" aria-label="to" />
-          <RouteEndpoint
-            code={destination}
-            place={routeInfo.destination?.municipality ?? ""}
-            alignEnd
-          />
+          {destination ? (
+            <RouteEndpoint
+              code={destination}
+              place={routeInfo.destination?.municipality ?? ""}
+              alignEnd
+            />
+          ) : (
+            <p className="min-w-0 truncate text-right text-small text-subtle">
+              Not reported
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-1 flex h-11 items-center text-small text-subtle">

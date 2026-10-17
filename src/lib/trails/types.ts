@@ -1,3 +1,5 @@
+import type { Takeoff } from "@/lib/takeoff";
+
 export type TrailProviderId =
   | "live"
   | "adsb-fi"
@@ -49,4 +51,6 @@ export type TrailHistoryState = {
   outcome: TrailOutcome | null;
   cooldownUntil: number;
   creditsRemaining: number | null;
+  /** Where the selected aircraft took off, if its history shows it. */
+  takeoff: Takeoff | null;
 };

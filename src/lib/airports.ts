@@ -90715,12 +90715,14 @@ export function airportToCity(airport: Airport): City {
  * @param lat  Latitude in degrees
  * @param lng  Longitude in degrees
  * @param maxDistanceKm  Maximum search radius in km (default 50)
+ * @param options.accept  Only consider airports this returns true for
  * @returns The nearest airport within the radius, or null
  */
 export function findNearestAirport(
   lat: number,
   lng: number,
   maxDistanceKm: number = 50,
+  options: { accept?: (airport: Airport) => boolean } = {},
 ): Airport | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
@@ -90733,6 +90735,7 @@ export function findNearestAirport(
   let bestDistSq = maxDistDegLat * maxDistDegLat;
 
   for (const airport of AIRPORTS) {
+    if (options.accept && !options.accept(airport)) continue;
     // Quick bounding box pre-check
     const dlat = airport.lat - lat;
     if (Math.abs(dlat) > maxDistDegLat) continue;

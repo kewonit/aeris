@@ -39,6 +39,7 @@ import {
   formatAircraftIdentity,
   formatAircraftName,
   formatAircraftPosition,
+  formatTimeSinceTakeoff,
   hasEmergencyStatus,
   isMilitaryAircraft,
 } from "@/lib/aircraft-sidebar";
@@ -444,7 +445,10 @@ export function MobileFlightToast({
           )}
         </div>
 
-        <MobileRoute routeInfo={routeInfo} />
+        <MobileRoute
+          routeInfo={routeInfo}
+          now={flight.provenance.responseTime}
+        />
 
         {/* Metrics 4-column grid */}
         <div className="mx-4 mb-4 grid grid-cols-4 gap-1.5 rounded-lg border border-border bg-card p-1.5">
@@ -579,33 +583,56 @@ export function MobileFlightToast({
 }
 
 /**
- * The reported route, or a note while it loads or when none is reported.
- * Every state keeps the same height so the card never jumps.
+ * The route, or a note while it loads or when none is reported. A route
+ * the aircraft was seen to take off on says when; one only as reported
+ * says so. Every state keeps the same height so the card never jumps.
+ *
+ * @param now The time the aircraft was last reported, in milliseconds.
  */
-function MobileRoute({ routeInfo }: { routeInfo: FlightRouteInfo }) {
+function MobileRoute({
+  routeInfo,
+  now,
+}: {
+  routeInfo: FlightRouteInfo;
+  now: number;
+}) {
   const origin = routeInfo.available ? formatAirportCode(routeInfo.origin) : "";
-  const destination = routeInfo.available
-    ? formatAirportCode(routeInfo.destination)
-    : "";
+  const destination = formatAirportCode(routeInfo.destination);
+  const departedAt = routeInfo.departedAt;
 
   return (
     <section
-      aria-label="Reported route"
+      aria-label="Route"
       className="mx-4 mb-4 rounded-lg border border-border bg-card px-3.5 py-2.5"
     >
-      <p className="text-micro text-subtle">Reported route</p>
-      {origin && destination ? (
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-micro text-subtle">
+          {departedAt !== null ? "Route" : "Reported route"}
+        </p>
+        {departedAt !== null && (
+          <p className="truncate text-micro text-subtle">
+            {formatTimeSinceTakeoff(departedAt, now)}
+          </p>
+        )}
+      </div>
+      {origin ? (
         <div className="mt-1 grid h-10 grid-cols-[1fr_auto_1fr] items-center gap-3">
           <MobileRouteEnd
             code={origin}
             place={routeInfo.origin?.municipality ?? ""}
           />
           <ArrowRight className="h-3.5 w-3.5 text-subtle" aria-label="to" />
-          <MobileRouteEnd
-            code={destination}
-            place={routeInfo.destination?.municipality ?? ""}
-            alignEnd
-          />
+          {destination ? (
+            <MobileRouteEnd
+              code={destination}
+              place={routeInfo.destination?.municipality ?? ""}
+              alignEnd
+            />
+          ) : (
+            <p className="min-w-0 truncate text-right text-small text-subtle">
+              Not reported
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-1 flex h-10 items-center text-small text-muted-foreground">

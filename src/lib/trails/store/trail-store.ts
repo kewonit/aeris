@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import { MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
+import { findTakeoff } from "@/lib/takeoff";
 
 import {
   angleBetween,
@@ -114,6 +115,7 @@ function createHistoryState(): TrailHistoryState {
     outcome: null,
     cooldownUntil: 0,
     creditsRemaining: null,
+    takeoff: null,
   };
 }
 
@@ -308,9 +310,11 @@ export function createTrailStore() {
     }
 
     const entry = getEntry(history.selectedIcao24!, Date.now());
+    let takeoff = history.takeoff;
     if (params.track) {
       entry.history = trackToSamples(params.track);
       entry.dirty = true;
+      takeoff = findTakeoff(params.track);
     } else if (
       params.outcome === "live-tail-only" &&
       entry.history.length > 0
@@ -326,6 +330,7 @@ export function createTrailStore() {
       outcome: params.outcome,
       creditsRemaining: params.creditsRemaining ?? null,
       cooldownUntil: 0,
+      takeoff,
     };
     emit();
   }

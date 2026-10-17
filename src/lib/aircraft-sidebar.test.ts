@@ -11,6 +11,7 @@ import {
   formatAircraftFreshness,
   formatAircraftIdentity,
   formatAircraftName,
+  formatTimeSinceTakeoff,
   hasEmergencyStatus,
   isMilitaryAircraft,
 } from "./aircraft-sidebar";
@@ -114,6 +115,16 @@ test("sidebar source and freshness text stays factual", () => {
     formatAircraftFreshness(1_000, 2_000),
     "Updated 1 second ago",
   );
+});
+
+test("says how long ago a take-off was seen", () => {
+  const now = 10_000_000;
+  const ago = (seconds: number) =>
+    formatTimeSinceTakeoff(now / 1_000 - seconds, now);
+  assert.equal(ago(20), "Took off just now");
+  assert.equal(ago(12 * 60 + 30), "Took off 12 min ago");
+  assert.equal(ago(2 * 60 * 60), "Took off 2 h ago");
+  assert.equal(ago(65 * 60), "Took off 1 h 5 min ago");
 });
 
 test("names the aircraft by maker and model", () => {

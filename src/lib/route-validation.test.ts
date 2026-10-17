@@ -6,6 +6,7 @@ import {
   distanceToRouteCorridorNm,
   isRouteConsistentWithPosition,
   selectReportedRoute,
+  takeoffAirport,
   type RoutePosition,
 } from "./route-validation";
 
@@ -186,7 +187,10 @@ test("a route already shown survives the outbound leg of a hold far out", () => 
   const outbound = flying(40.5, -100, 270);
   const shown = route(SFO, JFK);
   assert.equal(selectReportedRoute([shown], outbound), null);
-  assert.equal(selectReportedRoute([shown], outbound, shown), shown);
+  assert.equal(
+    selectReportedRoute([shown], outbound, { current: shown }),
+    shown,
+  );
 });
 
 test("rejects a destination the aircraft is too high to land at", () => {
@@ -268,4 +272,61 @@ test("routes that fit about as well keep provider order", () => {
   const over = flying(40.8, -95, 80);
   assert.equal(selectReportedRoute([first, second], over), first);
   assert.equal(selectReportedRoute([second, first], over), second);
+});
+
+const OTP = airport("OTP", 44.5711, 26.085);
+const BUD = airport("BUD", 47.4369, 19.2556);
+
+test("only a route from where the aircraft took off can be the one it flies", () => {
+  // Over Germany, westbound for Heathrow: either could fit.
+  const fromBucharest = route(OTP, LHR, "vrs");
+  const fromBudapest = route(BUD, LHR, "adsbdb");
+  const over = flying(50, 13.04, 293);
+  assert.equal(selectReportedRoute([fromBucharest, fromBudapest], over), fromBucharest);
+  // Seen lifting off a couple of miles from Budapest's reference point.
+  const departedFrom = { latitude: 47.45, longitude: 19.22 };
+  assert.equal(
+    selectReportedRoute([fromBucharest, fromBudapest], over, { departedFrom }),
+    fromBudapest,
+  );
+  assert.equal(selectReportedRoute([fromBucharest], over, { departedFrom }), null);
+});
+
+test("a take-off is not held against a route once the aircraft is down", () => {
+  const atHeathrow = { latitude: 51.47, longitude: -0.45, altitudeMeters: 25, onGround: true };
+  const next = route(LHR, JFK);
+  assert.equal(
+    selectReportedRoute([next], atHeathrow, { departedFrom: { latitude: 47.45, longitude: 19.22 } }),
+    next,
+  );
+});
+
+test("names a take-off airport as the reported routes do, else from the list", () => {
+  const takeoff = {
+    latitude: 47.45,
+    longitude: 19.22,
+    time: 0,
+    airport: {
+      iata: "BUD",
+      icao: "LHBP",
+      name: "Budapest Liszt Ferenc International Airport",
+      city: "Budapest",
+      country: "HU",
+      lat: 47.4369,
+      lng: 19.2556,
+      elevation_ft: 495,
+    },
+  };
+  const reported = route(LHR, BUD);
+  assert.equal(takeoffAirport(takeoff, [route(OTP, LHR), reported]), BUD);
+  assert.deepEqual(takeoffAirport(takeoff, [route(OTP, LHR)]), {
+    iata: "BUD",
+    icao: "LHBP",
+    name: "Budapest Liszt Ferenc International Airport",
+    municipality: "Budapest",
+    countryIso: "HU",
+    latitude: 47.4369,
+    longitude: 19.2556,
+  });
+  assert.equal(takeoffAirport({ ...takeoff, airport: null }, []), null);
 });
