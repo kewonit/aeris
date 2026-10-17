@@ -650,7 +650,7 @@ export const CHANGELOG: {
       {
         title: "Better-proportioned aircraft",
         description:
-          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed in to an airport, they appear at their real size, and high traffic is drawn lower so it stays in view instead of rising past the camera.",
+          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed in to an airport, they appear at their real size, and their heights stay the same as you zoom.",
       },
     ],
   },

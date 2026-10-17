@@ -68,8 +68,6 @@ const LEAD: TrailLead = {
 const HEAD_OPTIONS = {
   altColors: true,
   altitudeDisplayMode: "realistic" as const,
-  elevScale: 1,
-  heightCeiling: Infinity,
   defaultColor: [180, 220, 255, 200] as [number, number, number, number],
   zoom: 14,
 };

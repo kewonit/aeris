@@ -36,8 +36,6 @@ function narrowbodyParams(
     dataVersion: 0,
     layersVisible: true,
     globeFade: 1,
-    elevScale: 1,
-    heightCeiling: Infinity,
     aircraftSizes,
     altitudeDisplayMode: "realistic",
     altColors: false,
@@ -81,13 +79,13 @@ test("a model is drawn at its footprint, less perspective enlargement", () => {
   assert.deepEqual(scale(flight), [16, 16, 16]);
 });
 
-test("a model is kept under the height ceiling", () => {
+test("a model is drawn at its altitude's presentation height", () => {
   const flight = { ...makeNarrowbodyFlight(), baroAltitude: 11_000 };
   const layers = buildAircraftModelLayers({
     ...narrowbodyParams(new Map()),
     rawFlights: [flight],
     interpolatedMap: new Map([[flight.icao24, flight]]),
-    heightCeiling: 6_000,
+    altitudeDisplayMode: "presentation",
   });
   const layer = layers.find(
     (candidate) => candidate.props.id === "flight-aircraft-narrowbody",
@@ -96,7 +94,7 @@ test("a model is kept under the height ceiling", () => {
     d: FlightState,
   ) => number[];
 
-  assert.ok(position(flight)[2] < 6_000);
+  assert.equal(position(flight)[2], 50_400);
 });
 
 test("normalizing a scene centres it and scales its footprint to one unit", () => {

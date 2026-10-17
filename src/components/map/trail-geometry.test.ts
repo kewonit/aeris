@@ -5,6 +5,8 @@ import { altitudeToColor } from "@/lib/flight-utils";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
 import { aircraftColor } from "./aircraft-appearance";
+import { aircraftElevationMeters } from "./altitude-projection";
+import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
   getTrailGeometry,
   TRAIL_ALPHA,
@@ -14,10 +16,8 @@ import {
 const OPTIONS: TrailGeometryOptions = {
   windowMs: null,
   altitudeDisplayMode: "realistic",
-  elevScale: 1,
   altColors: true,
   defaultColor: [180, 220, 255, 200],
-  heightCeiling: Infinity,
   appearance: { category: null },
 };
 
@@ -149,15 +149,16 @@ test("a trail takes on its aircraft's tint", () => {
   assert.deepEqual(geometry.lead?.colors.at(-1)!.slice(0, 3), expected.slice(0, 3));
 });
 
-test("a trail is kept under the height ceiling like its aircraft", () => {
+test("a trail rides just below its aircraft's drawn height", () => {
   const samples = Array.from({ length: 10 }, (_, index) => eastbound(index));
   const geometry = getTrailGeometry(new Map(), track([samples]), {
     ...OPTIONS,
-    heightCeiling: 4_000,
+    altitudeDisplayMode: "presentation",
   });
 
+  const aircraft = aircraftElevationMeters(3_000, "presentation");
   for (const [, , z] of [...geometry.bodies[0].path, ...geometry.lead!.path]) {
-    assert.ok(z > 2_000 && z < 3_000);
+    assert.ok(Math.abs(aircraft - z - TRAIL_BELOW_AIRCRAFT_METERS * 1.8) < 1e-6);
   }
 });
 
@@ -182,7 +183,7 @@ test("a lone altitude glitch does not spike the trail", () => {
   }
 });
 
-test("geometry is reused until the track or the view changes", () => {
+test("geometry is reused until the track, altitude mode, or colours change", () => {
   const cache = new Map();
   const steady = track([
     Array.from({ length: 6 }, (_, index) => turning(index)),
@@ -190,25 +191,10 @@ test("geometry is reused until the track or the view changes", () => {
 
   const first = getTrailGeometry(cache, steady, OPTIONS);
   assert.equal(getTrailGeometry(cache, steady, OPTIONS), first);
-  // A ceiling far above the trail does not change it.
-  assert.equal(
-    getTrailGeometry(cache, steady, { ...OPTIONS, heightCeiling: 50_000 }),
-    first,
-  );
+  const presentation = { ...OPTIONS, altitudeDisplayMode: "presentation" as const };
+  assert.notEqual(getTrailGeometry(cache, steady, presentation), first);
   assert.notEqual(
-    getTrailGeometry(cache, steady, { ...OPTIONS, heightCeiling: 4_000 }),
-    first,
-  );
-  assert.notEqual(
-    getTrailGeometry(cache, steady, { ...OPTIONS, elevScale: 1.5 }),
-    first,
-  );
-  assert.notEqual(
-    getTrailGeometry(cache, steady, {
-      ...OPTIONS,
-      elevScale: 1.5,
-      appearance: { category: 2 },
-    }),
-    getTrailGeometry(cache, steady, { ...OPTIONS, elevScale: 1.5 }),
+    getTrailGeometry(cache, steady, { ...presentation, appearance: { category: 2 } }),
+    getTrailGeometry(cache, steady, presentation),
   );
 });

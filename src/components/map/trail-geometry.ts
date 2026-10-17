@@ -5,10 +5,7 @@ import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
 import { aircraftColor } from "./aircraft-appearance";
-import {
-  elevationUnderCeiling,
-  trailElevationMeters,
-} from "./altitude-projection";
+import { trailElevationMeters } from "./altitude-projection";
 import { horizontalDistanceFromLngLat } from "./flight-math";
 
 export type Rgba = [number, number, number, number];
@@ -68,11 +65,8 @@ export type TrailGeometryOptions = {
   /** How much of the trail to show; null shows all of it. */
   windowMs: number | null;
   altitudeDisplayMode: AltitudeDisplayMode;
-  elevScale: number;
   altColors: boolean;
   defaultColor: Rgba;
-  /** Height in metres that no trail is drawn above, as for aircraft. */
-  heightCeiling: number;
   appearance: TrailAppearance;
 };
 
@@ -81,8 +75,6 @@ type Curves = {
   lead: CurvePoint[];
   /** The point before the lead, for the direction the lead starts in. */
   beforeLead: CurvePoint | null;
-  /** The highest altitude anywhere on the trail. */
-  peakAltitude: number | null;
   fadeStart: number;
   fadeSpan: number;
   tEnd: number;
@@ -323,20 +315,12 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
     if (curve.length >= 2) curves.push(curve);
   }
 
-  let peakAltitude: number | null = null;
-  for (const point of [...curves.flat(), ...lead]) {
-    if (point.alt != null) {
-      peakAltitude = Math.max(peakAltitude ?? point.alt, point.alt);
-    }
-  }
-
   const fadeStart = curves[0]?.[0]?.t ?? lead[0]?.t ?? tEnd;
   const fadeShare = windowMs == null ? HISTORY_FADE_SHARE : 0.5;
   return {
     curves,
     lead,
     beforeLead,
-    peakAltitude,
     fadeStart,
     fadeSpan: Math.max(MIN_FADE_MS, (tEnd - fadeStart) * fadeShare),
     tEnd,
@@ -366,12 +350,7 @@ function project(
   const toVertex = (point: CurvePoint): TrailVertex => [
     point.lng,
     point.lat,
-    trailElevationMeters(
-      point.alt,
-      options.altitudeDisplayMode,
-      options.elevScale,
-      options.heightCeiling,
-    ),
+    trailElevationMeters(point.alt, options.altitudeDisplayMode),
   ];
   const toColor = (point: CurvePoint): Rgba => {
     const base = options.altColors
@@ -404,7 +383,7 @@ function project(
 
 /**
  * The drawable trail of one aircraft. Smoothing reruns only when the track
- * changes, and projection only when the view or colours change.
+ * changes, and projection only when the altitude mode or colours change.
  */
 export function getTrailGeometry(
   cache: TrailGeometryCache,
@@ -427,23 +406,9 @@ export function getTrailGeometry(
     cache.set(track.icao24, entry);
   }
 
-  // Two decimals keeps zoom-driven elevation changes from reprojecting
-  // every trail on every frame.
-  const elevScale = Number(options.elevScale.toFixed(2));
-  // The ceiling only matters to a trail that reaches up towards it.
-  const peak = trailElevationMeters(
-    entry.curves.peakAltitude,
-    options.altitudeDisplayMode,
-    elevScale,
-    Infinity,
-  );
-  const underCeiling =
-    elevationUnderCeiling(peak, options.heightCeiling) !== peak;
   const { category, dbFlags, emergencyStatus } = options.appearance;
   const projectionKey = [
     options.altitudeDisplayMode,
-    elevScale,
-    underCeiling ? options.heightCeiling : "",
     options.altColors,
     options.defaultColor.join(","),
     category,
@@ -451,10 +416,7 @@ export function getTrailGeometry(
     emergencyStatus,
   ].join("|");
   if (entry.projectionKey !== projectionKey) {
-    entry.geometry = project(track.icao24, entry.curves, {
-      ...options,
-      elevScale,
-    });
+    entry.geometry = project(track.icao24, entry.curves, options);
     entry.projectionKey = projectionKey;
   }
   return entry.geometry;

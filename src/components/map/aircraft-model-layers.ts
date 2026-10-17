@@ -146,9 +146,6 @@ export interface AircraftLayerParams {
   dataVersion: number;
   layersVisible: boolean;
   globeFade: number;
-  elevScale: number;
-  /** Height in metres that no aircraft is drawn above. */
-  heightCeiling: number;
   /** Each aircraft's drawn size this frame, keyed by icao24. */
   aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -184,8 +181,6 @@ export function buildAircraftModelLayers(
     dataVersion,
     layersVisible,
     globeFade,
-    elevScale,
-    heightCeiling,
     aircraftSizes,
     altitudeDisplayMode,
     altColors,
@@ -233,12 +228,7 @@ export function buildAircraftModelLayers(
         return [
           src.longitude ?? 0,
           src.latitude ?? 0,
-          aircraftElevationMeters(
-            src.baroAltitude,
-            altitudeDisplayMode,
-            elevScale,
-            heightCeiling,
-          ),
+          aircraftElevationMeters(src.baroAltitude, altitudeDisplayMode),
         ];
       },
       getOrientation: (d) => {
@@ -269,7 +259,7 @@ export function buildAircraftModelLayers(
       sizeMinPixels: 1,
       sizeMaxPixels: 1,
       updateTriggers: {
-        getPosition: [frameCounter, elevScale, altitudeDisplayMode, heightCeiling],
+        getPosition: [frameCounter, altitudeDisplayMode],
         getOrientation: frameCounter,
         getScale: frameCounter,
         getColor: [dataVersion, altColors],

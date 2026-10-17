@@ -6,6 +6,7 @@ import {
   FPV_DEFAULT_ALTITUDE_METERS,
   FPV_MIN_CAMERA_ALTITUDE_METERS,
   fpvCameraOptions,
+  isWellBelowCamera,
   projectLngLatElevationPixelDelta,
 } from "./camera-controller-utils";
 
@@ -150,4 +151,10 @@ test("elevation projection falls back to the canvas center without padding", () 
   );
 
   assert.deepEqual(delta, { dx: 44, dy: 50 });
+});
+
+test("an aircraft drawn up at the camera's height is not framed", () => {
+  assert.equal(isWellBelowCamera(5_000, 10_000), true);
+  assert.equal(isWellBelowCamera(9_600, 10_000), false);
+  assert.equal(isWellBelowCamera(14_000, 10_000), false);
 });

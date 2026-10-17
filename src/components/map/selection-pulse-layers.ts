@@ -21,10 +21,6 @@ export interface SelectionPulseParams {
   elapsed: number;
   globeFade: number;
   currentZoom: number;
-  /** Pre-computed zoom-dependent elevation scale */
-  elevScale: number;
-  /** Height in metres that no aircraft is drawn above. */
-  heightCeiling: number;
   altitudeDisplayMode: AltitudeDisplayMode;
   haloUrl: string;
   ringUrl: string;
@@ -49,8 +45,6 @@ export function buildSelectionPulseLayers(
     interpolatedMap,
     elapsed,
     globeFade,
-    elevScale,
-    heightCeiling,
     altitudeDisplayMode,
     haloUrl,
     ringUrl,
@@ -83,12 +77,7 @@ export function buildSelectionPulseLayers(
     const active = layersVisible && !!targetId && hasPosition && op > 0.01;
     const elevation =
       flight && flight.baroAltitude != null
-        ? aircraftElevationMeters(
-            flight.baroAltitude,
-            altitudeDisplayMode,
-            elevScale,
-            heightCeiling,
-          )
+        ? aircraftElevationMeters(flight.baroAltitude, altitudeDisplayMode)
         : 0;
     const pos: [number, number, number] =
       flight && flight.longitude != null && flight.latitude != null

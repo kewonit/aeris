@@ -4,14 +4,14 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
+  isWellBelowCamera,
   projectLngLatElevationPixelDelta,
   type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
 import {
   aircraftElevationMeters,
-  getZoomAdjustedElevationScale,
-  heightCeilingMeters,
+  cameraHeightMeters,
 } from "./altitude-projection";
 import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
@@ -44,7 +44,7 @@ const PANEL_VISUAL_REFINEMENT_MS = 220;
 /**
  * Returns the map center that puts the aircraft as drawn (lifted by its
  * altitude) where its ground position would be, or null when no correction
- * is needed.
+ * is needed or the aircraft is drawn too near the camera's height to frame.
  */
 function drawnAircraftCenter(
   map: maplibregl.Map,
@@ -55,19 +55,15 @@ function drawnAircraftCenter(
   if (!coordinates || altitudeMeters == null) return null;
   const [lng, lat] = coordinates;
 
-  const zoom = map.getZoom();
   const canvas = map.getCanvas();
-  const elevationMeters = aircraftElevationMeters(
-    altitudeMeters,
-    altitudeMode,
-    getZoomAdjustedElevationScale(zoom, altitudeMode),
-    heightCeilingMeters(
-      zoom,
-      map.getCenter().lat,
-      canvas.clientHeight,
-      map.getPitch(),
-    ),
+  const elevationMeters = aircraftElevationMeters(altitudeMeters, altitudeMode);
+  const cameraHeight = cameraHeightMeters(
+    map.getZoom(),
+    map.getCenter().lat,
+    canvas.clientHeight,
+    map.getPitch(),
   );
+  if (!isWellBelowCamera(elevationMeters, cameraHeight)) return null;
   const elevated = projectLngLatElevationPixelDelta(map, lng, lat, elevationMeters);
   const ground = projectLngLatElevationPixelDelta(map, lng, lat, 0);
   if (!elevated || !ground) return null;

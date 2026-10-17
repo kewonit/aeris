@@ -44,9 +44,6 @@ export function createTrailRenderCache(): TrailRenderCache {
 type HeadOptions = {
   altColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
-  elevScale: number;
-  /** Height in metres that no aircraft or trail is drawn above. */
-  heightCeiling: number;
   defaultColor: Rgba;
   zoom: number;
 };
@@ -136,15 +133,7 @@ export function buildTrailHead(
   const altitude = flight.onGround ? 0 : flight.baroAltitude;
   // The trail rides just below the aircraft and rises to meet the tail.
   const startZ = start[2];
-  const endZ = Math.max(
-    0,
-    aircraftElevationMeters(
-      altitude,
-      options.altitudeDisplayMode,
-      options.elevScale,
-      options.heightCeiling,
-    ),
-  );
+  const endZ = aircraftElevationMeters(altitude, options.altitudeDisplayMode);
   const base = options.altColors
     ? altitudeToColor(altitude)
     : options.defaultColor;
@@ -218,10 +207,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
           ? null
           : windowMs,
       altitudeDisplayMode: params.altitudeDisplayMode,
-      elevScale: params.elevScale,
       altColors: params.altColors,
       defaultColor: params.defaultColor,
-      heightCeiling: params.heightCeiling,
       appearance: flight,
     });
     bodies.push(...geometry.bodies);

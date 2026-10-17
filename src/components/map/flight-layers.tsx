@@ -59,17 +59,12 @@ import {
   type AircraftScreenSize,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
-import {
-  aircraftElevationMeters,
-  getZoomAdjustedElevationScale,
-  heightCeilingMeters,
-} from "./altitude-projection";
+import { aircraftElevationMeters } from "./altitude-projection";
 import { altitudeToColor, MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
-  ACTIVE_FRAME_INTERVAL_MS,
-  OVERVIEW_FRAME_INTERVAL_MS,
+  frameIntervalMs,
   isFrameDue,
 } from "./frame-rate";
 
@@ -507,6 +502,7 @@ export function FlightLayers({
     let lastRenderedAt = 0;
     let needsRender = true;
     let continueAnimating = true;
+    let cameraMoving = false;
 
     function scheduleFrame() {
       if (
@@ -567,8 +563,13 @@ export function FlightLayers({
     window.addEventListener("pageshow", handlePageResume);
     document.addEventListener("freeze", markPageInactive);
     document.addEventListener("resume", handlePageResume);
-    // Sizes and trail heads depend on the camera, so any camera move redraws.
-    map?.on("move", requestRender);
+    // Sizes and trail heads depend on the camera, so a moving camera redraws
+    // at a faster cadence to keep them in step with it.
+    function onCameraMove() {
+      cameraMoving = true;
+      requestRender();
+    }
+    map?.on("move", onCameraMove);
     map?.on("style.load", requestRender);
 
     function buildAndPushLayers(now: number) {
@@ -582,9 +583,10 @@ export function FlightLayers({
         return;
       }
 
-      const frameInterval = fpvIcao24Ref.current
-        ? ACTIVE_FRAME_INTERVAL_MS
-        : OVERVIEW_FRAME_INTERVAL_MS;
+      const frameInterval = frameIntervalMs({
+        fpv: Boolean(fpvIcao24Ref.current),
+        cameraMoving,
+      });
       if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
         return;
@@ -592,6 +594,7 @@ export function FlightLayers({
 
       if (!needsRender && !continueAnimating) return;
       needsRender = false;
+      cameraMoving = false;
       lastRenderedAt = now;
 
       const overlay = overlayRef.current;
@@ -756,23 +759,6 @@ export function FlightLayers({
         const altitudeMode: AltitudeDisplayMode = fpvId
           ? "realistic"
           : altitudeDisplayModeRef.current;
-        // Tie the height ramp to the actual flight-layer visibility window so
-        // aircraft and trails do not appear overly flattened as they fade in.
-        const elevScale = fpvId
-          ? 1
-          : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
-        // Zoomed in, heights are eased under a ceiling so high traffic
-        // stays in view. In FPV the camera flies with the traffic and true
-        // heights are kept.
-        const heightCeiling =
-          fpvId || !map
-            ? Infinity
-            : heightCeilingMeters(
-                currentZoom,
-                map.getCenter().lat,
-                map.getCanvas().clientHeight,
-                map.getPitch(),
-              );
 
         // ── LOD: 3D models vs 2D icons ────────────────────────────────
         // At low zoom, aircraft are too small to distinguish 3D silhouettes.
@@ -822,12 +808,7 @@ export function FlightLayers({
                   project,
                   flight.longitude,
                   flight.latitude,
-                  aircraftElevationMeters(
-                    flight.baroAltitude,
-                    altitudeMode,
-                    elevScale,
-                    heightCeiling,
-                  ),
+                  aircraftElevationMeters(flight.baroAltitude, altitudeMode),
                   bearing,
                 )
               : 1,
@@ -877,8 +858,6 @@ export function FlightLayers({
               thickness: trailThicknessRef.current,
               altColors,
               altitudeDisplayMode: altitudeMode,
-              elevScale,
-              heightCeiling,
               defaultColor: DEFAULT_COLOR,
               opacity: globeFade,
               cache: trailRenderCacheRef.current,
@@ -903,8 +882,6 @@ export function FlightLayers({
             elapsed,
             globeFade,
             currentZoom,
-            elevScale,
-            heightCeiling,
             altitudeDisplayMode: altitudeMode,
             haloUrl,
             ringUrl,
@@ -929,8 +906,6 @@ export function FlightLayers({
               dataVersion: dataVersionRef.current,
               layersVisible,
               globeFade,
-              elevScale,
-              heightCeiling,
               aircraftSizes,
               altitudeDisplayMode: altitudeMode,
               altColors,
@@ -953,12 +928,7 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                aircraftElevationMeters(
-                  d.baroAltitude,
-                  altitudeMode,
-                  elevScale,
-                  heightCeiling,
-                ),
+                aircraftElevationMeters(d.baroAltitude, altitudeMode),
               ],
               getIcon: () => "aircraft",
               getSize: footprintOf,
@@ -980,12 +950,7 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [
-                  visualFrameRef.current,
-                  elevScale,
-                  altitudeMode,
-                  heightCeiling,
-                ],
+                getPosition: [visualFrameRef.current, altitudeMode],
                 getAngle: visualFrameRef.current,
                 getSize: visualFrameRef.current,
                 getColor: [dataVersionRef.current, altColors],
@@ -1027,7 +992,7 @@ export function FlightLayers({
       window.removeEventListener("pageshow", handlePageResume);
       document.removeEventListener("freeze", markPageInactive);
       document.removeEventListener("resume", handlePageResume);
-      map?.off("move", requestRender);
+      map?.off("move", onCameraMove);
       map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);

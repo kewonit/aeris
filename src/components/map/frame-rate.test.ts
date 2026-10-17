@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ACTIVE_FRAME_INTERVAL_MS,
   OVERVIEW_FRAME_INTERVAL_MS,
+  frameIntervalMs,
   isFrameDue,
 } from "./frame-rate";
 
@@ -20,6 +21,25 @@ test("frame gate caps work on 60Hz and 120Hz displays", () => {
 test("overview rendering uses the lower power 20fps cadence", () => {
   assert.equal(isFrameDue(100, 100 + 1000 / 30, OVERVIEW_FRAME_INTERVAL_MS), false);
   assert.equal(isFrameDue(100, 100 + 50, OVERVIEW_FRAME_INTERVAL_MS), true);
+});
+
+test("a moving camera rebuilds at 60fps on 60Hz and 120Hz displays", () => {
+  const interval = frameIntervalMs({ fpv: false, cameraMoving: true });
+
+  assert.equal(isFrameDue(100, 100 + 1000 / 60, interval), true);
+  assert.equal(isFrameDue(100, 100 + 1000 / 120, interval), false);
+  assert.equal(isFrameDue(100, 100 + 2000 / 120, interval), true);
+});
+
+test("a still camera falls back to the overview cadence, and FPV keeps its own", () => {
+  assert.equal(
+    frameIntervalMs({ fpv: false, cameraMoving: false }),
+    OVERVIEW_FRAME_INTERVAL_MS,
+  );
+  assert.equal(
+    frameIntervalMs({ fpv: true, cameraMoving: true }),
+    ACTIVE_FRAME_INTERVAL_MS,
+  );
 });
 
 test("frame gate recovers safely from invalid clocks", () => {
