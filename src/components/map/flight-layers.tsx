@@ -8,6 +8,7 @@ import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailTrack } from "@/lib/trails/types";
 import {
+  type Layer,
   type PickingInfo,
   MapView,
   WebMercatorViewport,
@@ -55,7 +56,14 @@ import {
 import { buildSelectionPulseLayers } from "./selection-pulse-layers";
 import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
 import { createFpvMotion, type FpvMotion } from "./fpv-motion";
-import { buildAircraftModelLayers } from "./aircraft-model-layers";
+import {
+  buildAircraftModelLayers,
+  buildFollowedAircraftLayer,
+} from "./aircraft-model-layers";
+import {
+  fpvFollowedFootprintPx,
+  fpvGroundPixelsPerSecond,
+} from "./camera-controller-utils";
 import {
   aircraftFootprintPixels,
   aircraftTailShare,
@@ -72,6 +80,7 @@ import { useGlobeDots } from "./use-globe-dots";
 import {
   frameIntervalMs,
   isFrameDue,
+  overviewFrameIntervalMs,
 } from "./frame-rate";
 
 /** Flat icons are never pitched, so their trails meet a level tail. */
@@ -82,6 +91,7 @@ const NO_PITCH = new Map<string, number>();
  * narrow screen it is drawn narrower, this share of the width.
  */
 const FPV_FOLLOWED_PX = 100;
+const NO_FLIGHTS: FlightState[] = [];
 const FPV_FOLLOWED_WIDTH_SHARE = 1 / 6;
 
 /**
@@ -149,6 +159,23 @@ export function FlightLayers({
 
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailRenderCacheRef = useRef(createTrailRenderCache());
+  // In first person view the followed aircraft is drawn on its own, every
+  // frame, and the rest of the traffic at the overview's rate: from lists
+  // without it that last as long as the poll does, into layers kept until
+  // the next traffic frame.
+  const followedTrailCacheRef = useRef(createTrailRenderCache());
+  const trafficListsRef = useRef<{
+    raw: FlightState[];
+    drawn: FlightState[];
+    fpvId: string;
+    rawWithout: FlightState[];
+    drawnWithout: FlightState[];
+  } | null>(null);
+  const trafficLayersRef = useRef<{ builtAt: number; layers: Layer[] }>({
+    builtAt: 0,
+    layers: [],
+  });
+  const trafficFrameRef = useRef(0);
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
   const aircraftSizesRef = useRef(new Map<string, AircraftScreenSize>());
   // Every aircraft's shown pitch and bank, eased from frame to frame.
@@ -696,17 +723,31 @@ export function FlightLayers({
         return;
       }
 
+      const maxPixelsPerSecond = map
+        ? maxVelocityRef.current /
+          metersPerPixel(map.getZoom(), map.getCenter().lat)
+        : Infinity;
+      const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
       const frameInterval = frameIntervalMs({
-        fpv: Boolean(fpvIcao24Ref.current),
+        fpv: fpvId != null,
         cameraMoving,
         fading:
           (selectedIcao24Ref.current != null ||
             prevSelectedRef.current != null) &&
           now - selectionChangeTimeRef.current < SELECTION_FADE_MS,
-        maxPixelsPerSecond: map
-          ? maxVelocityRef.current /
-            metersPerPixel(map.getZoom(), map.getCenter().lat)
-          : Infinity,
+        maxPixelsPerSecond,
+        groundPixelsPerSecond:
+          fpvId && map
+            ? fpvGroundPixelsPerSecond({
+                cameraAltitude: map.transform.getCameraAltitude(),
+                pitch: map.getPitch(),
+                fovDegrees: map.transform.fov,
+                heightPx: map.getCanvas().clientHeight,
+                speedMps:
+                  interpolatedMapRef.current.get(fpvId)?.velocity ??
+                  maxVelocityRef.current,
+              })
+            : Infinity,
       });
       if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
@@ -788,8 +829,6 @@ export function FlightLayers({
           );
         }
 
-        const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
-
         // Rebuild trail-by-icao24 Map only when trails reference changes
         if (currentTrails !== lastTrailsForMapRef.current) {
           trailMapRef.current.clear();
@@ -810,8 +849,6 @@ export function FlightLayers({
         }
 
         const altColors = showAltColorsRef.current;
-        const visibleFlights = interpolated;
-        const modelFlights = currentFlights;
 
         // The first person camera follows its aircraft at true height, so
         // all traffic is drawn at true heights too: the exaggerated
@@ -853,18 +890,6 @@ export function FlightLayers({
               : null;
         }
 
-        // Pitch and bank follow each aircraft's reported motion and change
-        // slowly, so they are eased at ~10fps whatever the frame rate.
-        const PITCH_BANK_INTERVAL_MS = 100;
-        if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
-          lastPitchBankTimeRef.current = now;
-          updateAttitudes(currentFlights, attitudeRef.current, now);
-        }
-        const pitchByIcao = attitudeRef.current.pitch;
-        const bankByIcao = attitudeRef.current.bank;
-
-        const layers = [];
-
         // ── LOD: 3D models vs 2D icons ────────────────────────────────
         // At low zoom, aircraft are too small to distinguish 3D silhouettes.
         // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
@@ -876,12 +901,57 @@ export function FlightLayers({
           use3DRef.current = true;
         }
 
+        // The followed aircraft, drawn apart from the traffic every frame.
+        const followed = use3DRef.current && drawn ? drawn : null;
+        let visibleFlights = interpolated;
+        let modelFlights = currentFlights;
+        if (followed && fpvId) {
+          let lists = trafficListsRef.current;
+          if (
+            !lists ||
+            lists.raw !== currentFlights ||
+            lists.drawn !== interpolated ||
+            lists.fpvId !== fpvId
+          ) {
+            lists = {
+              raw: currentFlights,
+              drawn: interpolated,
+              fpvId,
+              rawWithout: currentFlights.filter((f) => f.icao24 !== fpvId),
+              drawnWithout: interpolated.filter((f) => f !== followed),
+            };
+            trafficListsRef.current = lists;
+          }
+          visibleFlights = lists.drawnWithout;
+          modelFlights = lists.rawWithout;
+        }
+        const traffic = trafficLayersRef.current;
+        const trafficDue =
+          !followed ||
+          isFrameDue(
+            traffic.builtAt,
+            now,
+            overviewFrameIntervalMs(maxPixelsPerSecond),
+          );
+
+        // Pitch and bank follow each aircraft's reported motion and change
+        // slowly, so they are eased at ~10fps whatever the frame rate.
+        const PITCH_BANK_INTERVAL_MS = 100;
+        if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
+          lastPitchBankTimeRef.current = now;
+          updateAttitudes(currentFlights, attitudeRef.current, now);
+        }
+        const pitchByIcao = attitudeRef.current.pitch;
+        const bankByIcao = attitudeRef.current.bank;
+
+        const frameLayers: Layer[] = [];
+
         // Every aircraft's drawn size, shared by models, icons, shadows, and
         // trail heads so they agree. 3D models are drawn at their height,
         // where perspective would enlarge them, so that enlargement is
         // measured and divided back out.
         const aircraftSizes = aircraftSizesRef.current;
-        aircraftSizes.clear();
+        if (trafficDue) aircraftSizes.clear();
         let project: ((position: [number, number, number]) => number[]) | null =
           null;
         const bearing = map?.getBearing() ?? 0;
@@ -905,45 +975,69 @@ export function FlightLayers({
           });
           project = (position) => viewport.project(position);
         }
-        for (const flight of visibleFlights) {
+        const magnificationOf = (flight: FlightState) =>
+          project
+            ? altitudeMagnification(
+                project,
+                flight.longitude!,
+                flight.latitude!,
+                aircraftElevationMeters(flight.baroAltitude, altitudeMode),
+                bearing,
+                groundReference,
+              )
+            : 1;
+        for (const flight of trafficDue ? visibleFlights : NO_FLIGHTS) {
           if (flight.longitude == null || flight.latitude == null) continue;
-          const wingspan = aircraftWingspanMeters(flight);
           aircraftSizes.set(flight.icao24, {
-            footprintPx:
-              flight.icao24 === fpvId
-                ? Math.min(
-                    FPV_FOLLOWED_PX,
-                    (map?.getCanvas().clientWidth ?? Infinity) *
-                      FPV_FOLLOWED_WIDTH_SHARE,
-                  )
-                : aircraftFootprintPixels(
-                    wingspan,
-                    currentZoom,
-                    flight.latitude,
-                  ),
-            magnification: project
-              ? altitudeMagnification(
-                  project,
-                  flight.longitude,
-                  flight.latitude,
-                  aircraftElevationMeters(flight.baroAltitude, altitudeMode),
-                  bearing,
-                  groundReference,
-                )
-              : 1,
+            footprintPx: aircraftFootprintPixels(
+              aircraftWingspanMeters(flight),
+              currentZoom,
+              flight.latitude,
+            ),
+            magnification: magnificationOf(flight),
             tailShare: aircraftTailShare(flight, use3DRef.current),
+          });
+        }
+        if (
+          followed &&
+          map &&
+          followed.longitude != null &&
+          followed.latitude != null
+        ) {
+          const camera = map.transform.getCameraLngLat();
+          aircraftSizes.set(followed.icao24, {
+            footprintPx: fpvFollowedFootprintPx(
+              Math.min(
+                FPV_FOLLOWED_PX,
+                map.getCanvas().clientWidth * FPV_FOLLOWED_WIDTH_SHARE,
+              ),
+              {
+                lng: followed.longitude,
+                lat: followed.latitude,
+                elevation: aircraftElevationMeters(
+                  followed.baroAltitude,
+                  altitudeMode,
+                ),
+              },
+              {
+                lng: camera.lng,
+                lat: camera.lat,
+                altitude: map.transform.getCameraAltitude(),
+              },
+            ),
+            magnification: magnificationOf(followed),
+            tailShare: aircraftTailShare(followed, true),
           });
         }
         const footprintOf = (flight: FlightState) =>
           aircraftSizes.get(flight.icao24)?.footprintPx ?? 20;
 
-        if (layersVisible && showShadowsRef.current) {
-          layers.push(
-            new IconLayer<FlightState>({
-            id: "flight-shadows",
+        const shadowLayer = (id: string, data: FlightState[], frame: number) =>
+          new IconLayer<FlightState>({
+            id,
             pickable: false,
             visible: true,
-            data: visibleFlights,
+            data,
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
             getIcon: () => "aircraft",
@@ -957,31 +1051,58 @@ export function FlightLayers({
             sizeUnits: "pixels",
             sizeScale: 1,
             updateTriggers: {
-              getPosition: visualFrameRef.current,
-              getAngle: visualFrameRef.current,
-              getSize: visualFrameRef.current,
+              getPosition: frame,
+              getAngle: frame,
+              getSize: frame,
             },
-            }),
+          });
+        const trailParams = {
+          aircraftSizes,
+          pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
+          glow: true,
+          zoom: currentZoom,
+          trailMap: trailMapRef.current,
+          selectedIcao24: selectedIcao24Ref.current,
+          trailMinutes: trailMinutesRef.current,
+          ceilingMeters: trailCeilingMetersRef.current,
+          thickness: trailThicknessRef.current,
+          altColors,
+          altitudeDisplayMode: altitudeMode,
+          defaultColor: DEFAULT_COLOR,
+          opacity: globeFade,
+        };
+        const modelParams = {
+          interpolatedMap: interpolatedMapRef.current,
+          dataVersion: dataVersionRef.current,
+          layersVisible,
+          globeFade,
+          aircraftSizes,
+          altitudeDisplayMode: altitudeMode,
+          altColors,
+          defaultColor: DEFAULT_COLOR,
+          pitchByIcao,
+          bankByIcao,
+          handleHover: stableHover,
+          handleClick: stableClick,
+        };
+
+        if (trafficDue) {
+          traffic.builtAt = now;
+          trafficFrameRef.current += 1;
+          const trafficFrame = trafficFrameRef.current;
+          const layers: Layer[] = [];
+
+        if (layersVisible && showShadowsRef.current) {
+          layers.push(
+            shadowLayer("flight-shadows", visibleFlights, trafficFrame),
           );
         }
 
         if (layersVisible && showTrailsRef.current) {
           layers.push(
             ...buildTrailLayers({
+              ...trailParams,
               flights: visibleFlights,
-              aircraftSizes,
-              pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
-              glow: true,
-              zoom: currentZoom,
-              trailMap: trailMapRef.current,
-              selectedIcao24: selectedIcao24Ref.current,
-              trailMinutes: trailMinutesRef.current,
-              ceilingMeters: trailCeilingMetersRef.current,
-              thickness: trailThicknessRef.current,
-              altColors,
-              altitudeDisplayMode: altitudeMode,
-              defaultColor: DEFAULT_COLOR,
-              opacity: globeFade,
               cache: trailRenderCacheRef.current,
             }),
           );
@@ -1022,20 +1143,9 @@ export function FlightLayers({
           // 3D: one ScenegraphLayer per model type
           layers.push(
             ...buildAircraftModelLayers({
+              ...modelParams,
               rawFlights: modelFlights,
-              interpolatedMap: interpolatedMapRef.current,
-              frameCounter: visualFrameRef.current,
-              dataVersion: dataVersionRef.current,
-              layersVisible,
-              globeFade,
-              aircraftSizes,
-              altitudeDisplayMode: altitudeMode,
-              altColors,
-              defaultColor: DEFAULT_COLOR,
-              pitchByIcao,
-              bankByIcao,
-              handleHover: stableHover,
-              handleClick: stableClick,
+              frameCounter: trafficFrame,
             }),
           );
         } else {
@@ -1072,16 +1182,45 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [visualFrameRef.current, altitudeMode],
-                getAngle: visualFrameRef.current,
-                getSize: visualFrameRef.current,
+                getPosition: [trafficFrame, altitudeMode],
+                getAngle: trafficFrame,
+                getSize: trafficFrame,
                 getColor: [dataVersionRef.current, altColors],
               },
             }),
           );
         }
 
-        overlay.setProps({ layers });
+          traffic.layers = layers;
+        }
+        frameLayers.push(...traffic.layers);
+
+        if (followed && layersVisible) {
+          const frame = visualFrameRef.current;
+          if (showShadowsRef.current) {
+            frameLayers.push(
+              shadowLayer("flight-shadow-followed", [followed], frame),
+            );
+          }
+          if (showTrailsRef.current) {
+            frameLayers.push(
+              ...buildTrailLayers({
+                ...trailParams,
+                flights: [followed],
+                cache: followedTrailCacheRef.current,
+                idSuffix: "followed",
+              }),
+            );
+          }
+          frameLayers.push(
+            buildFollowedAircraftLayer(followed, {
+              ...modelParams,
+              frameCounter: frame,
+            }),
+          );
+        }
+
+        overlay.setProps({ layers: frameLayers });
         drawDeckFrame(overlay);
 
         const selectionAnimating =

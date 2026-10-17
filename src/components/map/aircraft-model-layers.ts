@@ -30,6 +30,7 @@ import {
   bucketFlightsByModel,
   modelNoseTurn,
   modelUrl,
+  resolveModelKeyCached,
 } from "./aircraft-model-mapping";
 import {
   type AircraftScreenSize,
@@ -209,22 +210,7 @@ export interface AircraftLayerParams {
 export function buildAircraftModelLayers(
   params: AircraftLayerParams,
 ): ScenegraphLayer<FlightState>[] {
-  const {
-    rawFlights,
-    interpolatedMap,
-    frameCounter,
-    dataVersion,
-    layersVisible,
-    globeFade,
-    aircraftSizes,
-    altitudeDisplayMode,
-    altColors,
-    defaultColor,
-    pitchByIcao,
-    bankByIcao,
-    handleHover,
-    handleClick,
-  } = params;
+  const { rawFlights } = params;
 
   // Cached bucketing - only recomputes when rawFlights reference changes
   const buckets = bucketFlightsByModel(rawFlights);
@@ -247,12 +233,58 @@ export function buildAircraftModelLayers(
       return true;
     }
     return now - (modelLastUsed.get(key) ?? 0) < MODEL_DEACTIVATE_MS;
-  }).map((modelKey) => {
-    const flights = buckets.get(modelKey) ?? EMPTY_DATA;
-    const hasData = flights.length > 0;
+  }).map((modelKey) =>
+    modelLayer(
+      `flight-aircraft-${modelKey}`,
+      modelKey,
+      buckets.get(modelKey) ?? EMPTY_DATA,
+      params,
+    ),
+  );
+}
 
-    return new ScenegraphLayer<FlightState>({
-      id: `flight-aircraft-${modelKey}`,
+/**
+ * The first person aircraft's own layer, rebuilt every frame so that it
+ * moves with the camera, while the rest of the traffic is rebuilt at the
+ * overview's rate.
+ */
+export function buildFollowedAircraftLayer(
+  flight: FlightState,
+  params: Omit<AircraftLayerParams, "rawFlights">,
+): ScenegraphLayer<FlightState> {
+  return modelLayer(
+    "flight-aircraft-followed",
+    resolveModelKeyCached(flight),
+    [flight],
+    params,
+  );
+}
+
+function modelLayer(
+  id: string,
+  modelKey: AircraftModelKey,
+  flights: FlightState[],
+  params: Omit<AircraftLayerParams, "rawFlights">,
+): ScenegraphLayer<FlightState> {
+  const {
+    interpolatedMap,
+    frameCounter,
+    dataVersion,
+    layersVisible,
+    globeFade,
+    aircraftSizes,
+    altitudeDisplayMode,
+    altColors,
+    defaultColor,
+    pitchByIcao,
+    bankByIcao,
+    handleHover,
+    handleClick,
+  } = params;
+  const hasData = flights.length > 0;
+
+  return new ScenegraphLayer<FlightState>({
+      id,
       visible: hasData && layersVisible,
       data: flights,
       opacity: globeFade,
@@ -302,6 +334,5 @@ export function buildAircraftModelLayers(
       onClick: handleClick,
       autoHighlight: true,
       highlightColor: [255, 255, 255, 80],
-    });
   });
 }

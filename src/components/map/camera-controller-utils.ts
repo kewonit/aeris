@@ -90,6 +90,48 @@ export function fpvFollowDistanceMeters(drawnHeightMeters: number): number {
 }
 
 /** The aircraft the camera follows: where it is drawn, and its track. */
+/**
+ * How wide the followed aircraft is drawn, in pixels. At the follow pose it
+ * is `basePx`. Zoomed in by hand, the camera comes nearer and it grows, like
+ * everything else on the map, instead of staying one size while the ground
+ * swells around it; zoomed out it shrinks, down to a quarter.
+ */
+export function fpvFollowedFootprintPx(
+  basePx: number,
+  drawn: { lng: number; lat: number; elevation: number },
+  camera: { lng: number; lat: number; altitude: number },
+): number {
+  const cosLat = Math.cos((drawn.lat * Math.PI) / 180);
+  const east =
+    normalizeLng(camera.lng - drawn.lng) * METERS_PER_DEGREE * cosLat;
+  const north = (camera.lat - drawn.lat) * METERS_PER_DEGREE;
+  const distance = Math.hypot(east, north, camera.altitude - drawn.elevation);
+  if (!(distance > 0)) return basePx;
+  const share = fpvFollowDistanceMeters(drawn.elevation) / distance;
+  return basePx * Math.min(4, Math.max(0.25, share));
+}
+
+/**
+ * How fast the nearest ground in view crosses the screen, in pixels a
+ * second, as the camera flies over it at `speedMps`. The nearest ground is
+ * at the bottom edge of the view, half the field of view below the
+ * camera's pitch; above the horizon there is none, and the speed is zero.
+ */
+export function fpvGroundPixelsPerSecond(view: {
+  cameraAltitude: number;
+  pitch: number;
+  fovDegrees: number;
+  heightPx: number;
+  speedMps: number;
+}): number {
+  const halfFov = (view.fovDegrees / 2) * (Math.PI / 180);
+  const belowNadir = Math.cos((view.pitch * Math.PI) / 180 - halfFov);
+  if (!(belowNadir > 0) || !(view.cameraAltitude > 0)) return 0;
+  const slantMeters = view.cameraAltitude / belowNadir;
+  const focalPx = (0.5 * view.heightPx) / Math.tan(halfFov);
+  return (view.speedMps * focalPx) / slantMeters;
+}
+
 export type FpvFollowTarget = {
   lng: number;
   lat: number;

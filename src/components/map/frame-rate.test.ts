@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   ACTIVE_FRAME_INTERVAL_MS,
-  FPV_FRAME_INTERVAL_MS,
+  CAMERA_FRAME_INTERVAL_MS,
+  MIN_FPV_FRAME_RATE,
   MIN_OVERVIEW_FRAME_RATE,
   OVERVIEW_FRAME_INTERVAL_MS,
+  fpvFrameIntervalMs,
   frameIntervalMs,
   isFrameDue,
   overviewFrameIntervalMs,
@@ -67,16 +69,25 @@ test("the overview slows down when aircraft barely move on screen", () => {
   );
 });
 
-test("first person view redraws every third frame at 120Hz and every other at 60Hz", () => {
-  const interval = frameIntervalMs({ fpv: true, cameraMoving: true });
-  assert.equal(interval, FPV_FRAME_INTERVAL_MS);
-
-  assert.equal(isFrameDue(100, 100 + 2000 / 120, interval), false);
-  assert.equal(isFrameDue(100, 100 + 3000 / 120, interval), true);
-  assert.equal(isFrameDue(100, 100 + 1000 / 60, interval), false);
-  assert.equal(isFrameDue(100, 100 + 2000 / 60, interval), true);
+test("first person view is paced by how fast the ground goes by", () => {
+  // Final approach, the ground streaming past: the camera's full rate.
+  assert.equal(fpvFrameIntervalMs(180), CAMERA_FRAME_INTERVAL_MS);
+  assert.equal(
+    frameIntervalMs({
+      fpv: true,
+      cameraMoving: false,
+      maxPixelsPerSecond: 1,
+      groundPixelsPerSecond: 180,
+    }),
+    CAMERA_FRAME_INTERVAL_MS,
+  );
+  // Descending through 2,000 ft: in between, 1.5 px a frame.
+  assert.equal(Math.round(1000 / fpvFrameIntervalMs(72)), 48);
+  // At cruise the ground crawls, so the floor...
+  assert.equal(fpvFrameIntervalMs(18), 1000 / MIN_FPV_FRAME_RATE);
+  // ...which also serves when the speed is unknown.
+  assert.equal(fpvFrameIntervalMs(NaN), 1000 / MIN_FPV_FRAME_RATE);
 });
-
 test("frame gate recovers safely from invalid clocks", () => {
   assert.equal(isFrameDue(Number.NaN, 100), true);
   assert.equal(isFrameDue(100, Number.POSITIVE_INFINITY), true);

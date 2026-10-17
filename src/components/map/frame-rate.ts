@@ -29,36 +29,54 @@ export function overviewFrameIntervalMs(maxPixelsPerSecond: number): number {
 export const CAMERA_FRAME_RATE = 60;
 /** A little under 60 fps, so a 120 Hz display rebuilds every other frame. */
 export const CAMERA_FRAME_INTERVAL_MS = (1000 / CAMERA_FRAME_RATE) * 0.8;
+
 /**
- * First person view redraws the map and every aircraft each frame for as
- * long as it is open, which at 60 fps keeps the GPU and the fans busy.
- * This rate is every third frame on a 120 Hz display and every other
- * frame on a 60 Hz one, so frames stay evenly spaced either way.
+ * In first person view the aircraft holds still on screen and the ground
+ * streams past beneath it, fast on final approach and barely at cruise.
+ * The view is paced so the nearest ground moves about this far between
+ * frames: the full camera rate low down, where steps would show, and as
+ * little as the floor high up, where they cannot.
  */
-export const FPV_FRAME_RATE = 40;
-export const FPV_FRAME_INTERVAL_MS = (1000 / FPV_FRAME_RATE) * 0.8;
+export const FPV_STEP_PX = 1.5;
+export const MIN_FPV_FRAME_RATE = 24;
+
+/** First person view's redraw interval when the ground goes by this fast. */
+export function fpvFrameIntervalMs(groundPixelsPerSecond: number): number {
+  if (!(groundPixelsPerSecond > 0)) return 1000 / MIN_FPV_FRAME_RATE;
+  const rate = Math.min(
+    CAMERA_FRAME_RATE,
+    Math.max(MIN_FPV_FRAME_RATE, groundPixelsPerSecond / FPV_STEP_PX),
+  );
+  return rate === CAMERA_FRAME_RATE ? CAMERA_FRAME_INTERVAL_MS : 1000 / rate;
+}
 
 /**
  * How long to wait between layer rebuilds. The follow camera moves with
- * the aircraft each time it is redrawn, so this is also the camera's rate.
+ * the aircraft each time it is redrawn, so this is also the camera's rate;
+ * in first person view only the followed aircraft is rebuilt at it, and
+ * the rest of the traffic at the overview's.
  *
  * @param fading Something besides aircraft motion is animating, such as a
  *   selection fading, which wants the full overview rate.
  * @param maxPixelsPerSecond How fast the fastest aircraft crosses the
  *   screen, which paces the overview (overviewFrameIntervalMs).
+ * @param groundPixelsPerSecond How fast the nearest ground crosses the
+ *   screen, which paces first person view (fpvFrameIntervalMs).
  */
 export function frameIntervalMs({
   fpv,
   cameraMoving,
   fading = false,
   maxPixelsPerSecond = Infinity,
+  groundPixelsPerSecond = Infinity,
 }: {
   fpv: boolean;
   cameraMoving: boolean;
   fading?: boolean;
   maxPixelsPerSecond?: number;
+  groundPixelsPerSecond?: number;
 }): number {
-  if (fpv) return FPV_FRAME_INTERVAL_MS;
+  if (fpv) return fpvFrameIntervalMs(groundPixelsPerSecond);
   if (cameraMoving) return CAMERA_FRAME_INTERVAL_MS;
   if (fading) return OVERVIEW_FRAME_INTERVAL_MS;
   return overviewFrameIntervalMs(maxPixelsPerSecond);

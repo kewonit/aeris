@@ -267,6 +267,8 @@ export type TrailLayerParams = HeadOptions & {
   thickness: number;
   opacity: number;
   cache: TrailRenderCache;
+  /** Tells these layers apart from another set built the same frame. */
+  idSuffix?: string;
 };
 
 /**
@@ -381,31 +383,33 @@ export function buildTrailLayers(params: TrailLayerParams) {
     extensions: SOFT_EDGE,
   };
 
+  const id = (name: string) =>
+    params.idSuffix ? `${name}-${params.idSuffix}` : name;
   return [
     new PathLayer<TrailBody>({
       ...glow,
-      id: "flight-trail-glow",
+      id: id("flight-trail-glow"),
       data: params.cache.bodies,
       getPath: (body) => body.path,
       getColor: (body) => body.colors,
     }),
     new PathLayer<TrailHead>({
       ...glow,
-      id: "flight-trail-head-glow",
+      id: id("flight-trail-head-glow"),
       data: heads,
       getPath: (head) => head.path,
       getColor: (head) => head.colors,
     }),
     new PathLayer<TrailBody>({
       ...shared,
-      id: "flight-trails",
+      id: id("flight-trails"),
       data: params.cache.bodies,
       getPath: (body) => body.path,
       getColor: (body) => body.colors,
     }),
     new PathLayer<TrailHead>({
       ...shared,
-      id: "flight-trail-heads",
+      id: id("flight-trail-heads"),
       data: heads,
       getPath: (head) => head.path,
       getColor: (head) => head.colors,

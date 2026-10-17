@@ -7,6 +7,8 @@ import {
   fpvExitCamera,
   fpvFollowCamera,
   fpvFollowDistanceMeters,
+  fpvFollowedFootprintPx,
+  fpvGroundPixelsPerSecond,
   FPV_FOLLOW_PITCH,
   isWellBelowCamera,
   projectLngLatElevationPixelDelta,
@@ -162,4 +164,48 @@ test("leaving the cockpit eases out to an overview centred on the aircraft", () 
   });
   assert.deepEqual(withoutCard.center, [-87.6, 41.9]);
   assert.equal(withoutCard.duration, 0);
+});
+
+test("the followed aircraft grows as the camera comes nearer, like the ground", () => {
+  const drawn = { lng: 0, lat: 0, elevation: 1_000 };
+  // At the follow pose, 550 m behind and above: the base size.
+  const d = fpvFollowDistanceMeters(1_000);
+  const back = (d * Math.cos((25 * Math.PI) / 180)) / 111_320;
+  const atPose = {
+    lng: 0,
+    lat: -back,
+    altitude: 1_000 + d * Math.sin((25 * Math.PI) / 180),
+  };
+  assert.ok(Math.abs(fpvFollowedFootprintPx(100, drawn, atPose) - 100) < 0.01);
+  // Zoomed in to half the distance it is drawn twice as wide...
+  const nearer = { lng: 0, lat: -back / 2, altitude: 1_000 + (d * Math.sin((25 * Math.PI) / 180)) / 2 };
+  assert.ok(Math.abs(fpvFollowedFootprintPx(100, drawn, nearer) - 200) < 0.01);
+  // ...and far away it stops shrinking at a quarter.
+  assert.equal(fpvFollowedFootprintPx(100, drawn, { lng: 1, lat: 0, altitude: 50_000 }), 25);
+});
+
+test("the ground streams past on final and crawls at cruise", () => {
+  const view = { pitch: 68, fovDegrees: 36.87, heightPx: 806 };
+  const onFinal = fpvGroundPixelsPerSecond({
+    ...view,
+    cameraAltitude: 300,
+    speedMps: 70,
+  });
+  const atCruise = fpvGroundPixelsPerSecond({
+    ...view,
+    cameraAltitude: 11_000,
+    speedMps: 250,
+  });
+  assert.ok(onFinal > 150 && onFinal < 250, `${onFinal}`);
+  assert.ok(atCruise > 10 && atCruise < 25, `${atCruise}`);
+  // With the whole view above the horizon there is no ground to go by.
+  assert.equal(
+    fpvGroundPixelsPerSecond({
+      ...view,
+      pitch: 110,
+      cameraAltitude: 300,
+      speedMps: 70,
+    }),
+    0,
+  );
 });
