@@ -9,15 +9,48 @@ const MAX_PLAUSIBLE_SPEED_MPS = 450;
 /** Allowance for position noise between samples close in time. */
 const POSITION_NOISE_METERS = 1_500;
 const METERS_PER_DEGREE = 111_320;
+/** A detour this many times the direct distance is a sideways spike... */
+const SPIKE_DETOUR_RATIO = 3;
+/** ...once it strays this far off the direct line... */
+const SPIKE_MIN_OFFSET_METERS = 60;
+/** ...and the trail runs on within this angle once it is gone. */
+const SPIKE_STRAIGHT_RAD = (30 * Math.PI) / 180;
 
-function sampleDistanceMeters(a: TrailSample, b: TrailSample): number {
-  let deltaLng = b.lng - a.lng;
+/** Metres east and north from one sample to another. */
+export function offsetMeters(
+  from: Pick<TrailSample, "lng" | "lat">,
+  to: Pick<TrailSample, "lng" | "lat">,
+): [number, number] {
+  let deltaLng = to.lng - from.lng;
   if (deltaLng > 180) deltaLng -= 360;
   if (deltaLng < -180) deltaLng += 360;
-  const latitude = ((a.lat + b.lat) / 2) * (Math.PI / 180);
-  return Math.hypot(
+  const latitude = ((from.lat + to.lat) / 2) * (Math.PI / 180);
+  return [
     deltaLng * METERS_PER_DEGREE * Math.cos(latitude),
-    (b.lat - a.lat) * METERS_PER_DEGREE,
+    (to.lat - from.lat) * METERS_PER_DEGREE,
+  ];
+}
+
+function sampleDistanceMeters(a: TrailSample, b: TrailSample): number {
+  return Math.hypot(...offsetMeters(a, b));
+}
+
+/** The unsigned angle between two directions, in radians. */
+export function angleBetween(
+  [ax, ay]: [number, number],
+  [bx, by]: [number, number],
+): number {
+  return Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+}
+
+function isOnEarth(lng: number, lat: number): boolean {
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
   );
 }
 
@@ -36,6 +69,42 @@ export function isContinuous(
   );
 }
 
+/**
+ * Whether a sample sticks out sideways from a line its neighbours agree
+ * on: a long detour, well off the direct line, with the trail running
+ * straight on without it. A genuine U-turn or hold leaves along a new
+ * direction, so it is kept.
+ */
+function isSidewaysSpike(
+  before: TrailSample | undefined,
+  previous: TrailSample,
+  sample: TrailSample,
+  next: TrailSample,
+): boolean {
+  if (
+    !before ||
+    previous.afterGap ||
+    !isContinuous(before, previous) ||
+    !isContinuous(previous, next)
+  ) {
+    return false;
+  }
+
+  const arrival = offsetMeters(before, previous);
+  const direct = offsetMeters(previous, next);
+  const directMeters = Math.hypot(...direct);
+  if (!(directMeters > 0) || !(Math.hypot(...arrival) > 0)) return false;
+  const out = offsetMeters(previous, sample);
+  const detour = Math.hypot(...out) + sampleDistanceMeters(sample, next);
+  const offLine =
+    Math.abs(out[0] * direct[1] - out[1] * direct[0]) / directMeters;
+  return (
+    detour > SPIKE_DETOUR_RATIO * directMeters &&
+    offLine > SPIKE_MIN_OFFSET_METERS &&
+    angleBetween(arrival, direct) < SPIKE_STRAIGHT_RAD
+  );
+}
+
 /** Drops single samples that jump away and straight back. */
 function dropPositionSpikes(samples: TrailSample[]): TrailSample[] {
   if (samples.length < 3) {
@@ -47,10 +116,15 @@ function dropPositionSpikes(samples: TrailSample[]): TrailSample[] {
     const previous = kept[kept.length - 1];
     const sample = samples[index];
     const next = samples[index + 1];
+    // Samples either side of an unwatched stretch are never compared, and
+    // one that starts a new stretch is never dropped, or the break is lost.
     if (
-      !isContinuous(previous, sample) &&
-      !isContinuous(sample, next) &&
-      isContinuous(previous, next)
+      !sample.afterGap &&
+      !next.afterGap &&
+      ((!isContinuous(previous, sample) &&
+        !isContinuous(sample, next) &&
+        isContinuous(previous, next)) ||
+        isSidewaysSpike(kept[kept.length - 2], previous, sample, next))
     ) {
       continue;
     }
@@ -67,7 +141,7 @@ export function splitIntoParts(samples: TrailSample[]): TrailSample[][] {
 
   for (const sample of dropPositionSpikes(samples)) {
     const last = part[part.length - 1];
-    if (last && !isContinuous(last, sample)) {
+    if (last && (sample.afterGap || !isContinuous(last, sample))) {
       parts.push(part);
       part = [];
     }
@@ -82,8 +156,9 @@ export function splitIntoParts(samples: TrailSample[]): TrailSample[][] {
 
 /**
  * Joins fetched history and live samples by time: history up to the first
- * live sample, then the live samples. Joining by position instead folds the
- * trail back on itself wherever the two overlap.
+ * live sample, then the live samples, with history filling any stretch the
+ * live samples missed. Joining by position instead folds the trail back on
+ * itself wherever the two overlap.
  */
 export function mergeHistoryAndLive(
   history: TrailSample[],
@@ -92,9 +167,30 @@ export function mergeHistoryAndLive(
   if (live.length === 0) return history;
   if (history.length === 0) return live;
 
-  const firstLive = live[0].t;
-  const older = history.filter((sample) => sample.t < firstLive);
-  return older.length > 0 ? [...older, ...live] : live;
+  const merged = history.filter((sample) => sample.t < live[0].t);
+  let next = merged.length;
+  for (const [index, sample] of live.entries()) {
+    if (!sample.afterGap) {
+      merged.push(sample);
+      continue;
+    }
+    // History before the first live sample already covers a gap there.
+    if (index === 0) {
+      merged.push(merged.length > 0 ? { ...sample, afterGap: false } : sample);
+      continue;
+    }
+    while (next < history.length && history[next].t <= live[index - 1].t) {
+      next += 1;
+    }
+    const from = next;
+    while (next < history.length && history[next].t < sample.t) next += 1;
+    if (next > from) {
+      merged.push(...history.slice(from, next), { ...sample, afterGap: false });
+    } else {
+      merged.push(sample);
+    }
+  }
+  return merged;
 }
 
 /** Converts a provider track, whose times are Unix seconds, to samples. */
@@ -106,8 +202,7 @@ export function trackToSamples(track: FlightTrack): TrailSample[] {
     if (
       waypoint.longitude == null ||
       waypoint.latitude == null ||
-      !Number.isFinite(waypoint.longitude) ||
-      !Number.isFinite(waypoint.latitude) ||
+      !isOnEarth(waypoint.longitude, waypoint.latitude) ||
       !Number.isFinite(t)
     ) {
       continue;
@@ -127,7 +222,11 @@ export function trackToSamples(track: FlightTrack): TrailSample[] {
     });
   }
 
-  samples.sort((left, right) => left.t - right.t);
+  // Of two samples at the same moment, keep the one that knows its height.
+  samples.sort(
+    (left, right) =>
+      left.t - right.t || Number(left.alt == null) - Number(right.alt == null),
+  );
   return samples.filter(
     (sample, index) => index === 0 || sample.t !== samples[index - 1].t,
   );
@@ -153,8 +252,7 @@ export function sampleFromFlight(flight: FlightState): TrailSample | null {
     t == null ||
     flight.longitude == null ||
     flight.latitude == null ||
-    !Number.isFinite(flight.longitude) ||
-    !Number.isFinite(flight.latitude)
+    !isOnEarth(flight.longitude, flight.latitude)
   ) {
     return null;
   }

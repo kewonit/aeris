@@ -21,6 +21,11 @@ export type TrailSample = {
   /** Barometric altitude in meters, or null when unknown. */
   alt: number | null;
   onGround: boolean;
+  /**
+   * True when the aircraft turned during a stretch nobody watched, such as
+   * a hidden tab, so no straight line may be drawn up to this sample.
+   */
+  afterGap?: boolean;
 };
 
 /**

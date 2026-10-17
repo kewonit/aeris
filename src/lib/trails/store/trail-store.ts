@@ -4,8 +4,10 @@ import { MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { FlightState, FlightTrack } from "@/lib/opensky";
 
 import {
+  angleBetween,
   isContinuous,
   mergeHistoryAndLive,
+  offsetMeters,
   sampleFromFlight,
   splitIntoParts,
   trackToSamples,
@@ -22,6 +24,16 @@ import type {
 const LIVE_WINDOW_MS = 30 * 60_000;
 /** An aircraft missing from the feed this long loses its trail. */
 const STALE_AIRCRAFT_MS = 60_000;
+/** Live samples further apart than this were not watched in between. */
+const LIVE_GAP_MS = 90_000;
+/** A line across a gap is drawn only if it runs within this of the track. */
+const STRAIGHT_ACROSS_GAP_RAD = (30 * Math.PI) / 180;
+/** A step this soon after the last can be judged against the track... */
+const BACKWARD_CHECK_MS = 20_000;
+/** ...for an aircraft this fast, which cannot hover or turn on the spot... */
+const BACKWARD_CHECK_MIN_SPEED_MPS = 30;
+/** ...and a step this far off its track is behind it. */
+const BACKWARD_RAD = (120 * Math.PI) / 180;
 
 type Listener = () => void;
 
@@ -38,6 +50,60 @@ export type TrailStoreSnapshot = {
   trails: TrailTrack[];
   history: TrailHistoryState;
 };
+
+function trackDirection(flight: FlightState): [number, number] | null {
+  const track = flight.trueTrack;
+  if (track == null || !Number.isFinite(track)) return null;
+  const radians = (track * Math.PI) / 180;
+  return [Math.sin(radians), Math.cos(radians)];
+}
+
+/**
+ * Whether a position lies behind a fast airborne aircraft seconds after
+ * the last one. No aircraft turns that far that quickly, so it is a stale
+ * position, often relayed by another receiver.
+ */
+function isBackwardStep(
+  last: TrailSample,
+  sample: TrailSample,
+  flight: FlightState,
+): boolean {
+  const direction = trackDirection(flight);
+  const speed = flight.velocity ?? 0;
+  if (
+    !direction ||
+    flight.onGround ||
+    !(speed >= BACKWARD_CHECK_MIN_SPEED_MPS) ||
+    sample.t - last.t > BACKWARD_CHECK_MS
+  ) {
+    return false;
+  }
+  return angleBetween(offsetMeters(last, sample), direction) > BACKWARD_RAD;
+}
+
+/**
+ * Whether the aircraft turned while no live samples arrived, so a straight
+ * line across the gap would leave its track or the trail before the gap.
+ */
+function turnedDuringGap(
+  live: TrailSample[],
+  sample: TrailSample,
+  flight: FlightState,
+): boolean {
+  const last = live[live.length - 1];
+  const before = live[live.length - 2];
+  const chord = offsetMeters(last, sample);
+  const directions = [
+    trackDirection(flight),
+    before ? offsetMeters(before, last) : null,
+  ].filter((direction) => direction != null);
+  return (
+    directions.length === 0 ||
+    directions.some(
+      (direction) => angleBetween(chord, direction) > STRAIGHT_ACROSS_GAP_RAD,
+    )
+  );
+}
 
 function createHistoryState(): TrailHistoryState {
   return {
@@ -132,9 +198,17 @@ export function createTrailStore() {
       if (
         last &&
         (sample.t <= last.t ||
-          (sample.lng === last.lng && sample.lat === last.lat))
+          (sample.lng === last.lng && sample.lat === last.lat) ||
+          isBackwardStep(last, sample, flight))
       ) {
         continue;
+      }
+      if (
+        last &&
+        sample.t - last.t > LIVE_GAP_MS &&
+        turnedDuringGap(entry.live, sample, flight)
+      ) {
+        sample.afterGap = true;
       }
 
       // The map eases MLAT positions to hide their noise, so the trail

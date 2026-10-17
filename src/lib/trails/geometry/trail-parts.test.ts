@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { FlightTrack } from "@/lib/opensky";
+import type { FlightState, FlightTrack } from "@/lib/opensky";
 
 import type { TrailSample } from "../types";
 import {
   MAX_PART_GAP_MS,
   mergeHistoryAndLive,
+  sampleFromFlight,
   splitIntoParts,
   trackToSamples,
 } from "./trail-parts";
@@ -113,4 +114,129 @@ test("ordinary flight stays in one part", () => {
   const samples = Array.from({ length: 20 }, (_, index) => eastbound(index));
 
   assert.deepEqual(splitIntoParts(samples), [samples]);
+});
+
+test("a position flung sideways off a straight line is dropped", () => {
+  // Reachable in the time, but 3.3 km off a line its neighbours agree on.
+  const samples = [
+    eastbound(0),
+    eastbound(1),
+    eastbound(2, { lat: 37.53 }),
+    eastbound(3),
+    eastbound(4),
+  ];
+
+  assert.deepEqual(splitIntoParts(samples), [
+    [samples[0], samples[1], samples[3], samples[4]],
+  ]);
+});
+
+test("a tight U-turn keeps its apex", () => {
+  const samples = [
+    eastbound(0),
+    eastbound(1),
+    eastbound(2, { lat: 37.501 }),
+    eastbound(1, { t: eastbound(3).t, lat: 37.502 }),
+    eastbound(0, { t: eastbound(4).t, lat: 37.502 }),
+  ];
+
+  assert.deepEqual(splitIntoParts(samples), [samples]);
+});
+
+test("a sample after an unwatched turn starts a new part", () => {
+  const samples = [
+    eastbound(0),
+    eastbound(1),
+    eastbound(2, { afterGap: true }),
+    eastbound(3),
+  ];
+
+  assert.deepEqual(splitIntoParts(samples), [
+    samples.slice(0, 2),
+    samples.slice(2),
+  ]);
+});
+
+test("history fills a stretch the live samples missed", () => {
+  const history = Array.from({ length: 40 }, (_, index) => eastbound(index));
+  const live = [eastbound(10), eastbound(11), eastbound(30, { afterGap: true })];
+
+  const merged = mergeHistoryAndLive(history, live);
+
+  assert.equal(merged.length, 31);
+  assert.deepEqual(
+    merged.map((sample) => sample.t),
+    history.slice(0, 31).map((sample) => sample.t),
+  );
+  assert.ok(!merged.at(-1)!.afterGap);
+  assert.equal(splitIntoParts(merged).length, 1);
+});
+
+test("a live gap history does not cover stays a gap", () => {
+  const history = Array.from({ length: 5 }, (_, index) => eastbound(index));
+  const live = [eastbound(10), eastbound(11), eastbound(30, { afterGap: true })];
+
+  assert.equal(mergeHistoryAndLive(history, live).at(-1)!.afterGap, true);
+});
+
+test("positions off the globe are not samples", () => {
+  const track: FlightTrack = {
+    icao24: "abc123",
+    startTime: 1_700_000_000,
+    endTime: 1_700_000_010,
+    callsign: null,
+    path: [
+      waypoint(1_700_000_000, 91, -122, 3_000, false),
+      waypoint(1_700_000_005, 37.5, 200, 3_000, false),
+      waypoint(1_700_000_010, 37.5, -122, 3_000, false),
+    ],
+  };
+
+  assert.deepEqual(
+    trackToSamples(track).map((sample) => sample.t),
+    [1_700_000_010_000],
+  );
+  assert.equal(
+    sampleFromFlight({
+      longitude: -122,
+      latitude: -95,
+      baroAltitude: 3_000,
+      onGround: false,
+      provenance: { observationTime: 1 },
+    } as FlightState),
+    null,
+  );
+});
+
+test("of two track points at one moment, the one with a height is kept", () => {
+  const track: FlightTrack = {
+    icao24: "abc123",
+    startTime: 1_700_000_000,
+    endTime: 1_700_000_000,
+    callsign: null,
+    path: [
+      waypoint(1_700_000_000, 37.5, -122, null, false),
+      waypoint(1_700_000_000, 37.5, -122, 3_000, false),
+    ],
+  };
+
+  assert.deepEqual(
+    trackToSamples(track).map((sample) => sample.alt),
+    [3_000],
+  );
+});
+
+test("a sample after an unwatched stretch is never dropped as a spike", () => {
+  // Off to the side, but it starts a new stretch, so its break must stay.
+  const samples = [
+    eastbound(0),
+    eastbound(1),
+    eastbound(2, { lat: 37.53, afterGap: true }),
+    eastbound(3),
+  ];
+
+  assert.deepEqual(splitIntoParts(samples), [
+    samples.slice(0, 2),
+    samples.slice(2),
+  ]);
 });

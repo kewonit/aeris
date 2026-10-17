@@ -182,3 +182,53 @@ test("a track keeps its revision until its samples change", () => {
 
   assert.equal(after, before);
 });
+
+test("a position behind a fast airborne aircraft is skipped", () => {
+  const store = createTrailStore();
+  const lngAt = (t: number) => -122 + (t - T0) / 400_000;
+  store.ingestLiveFlights([flight(T0)], { now: T0 });
+  store.ingestLiveFlights([flight(T0 + 5_000)], { now: T0 + 5_000 });
+  store.ingestLiveFlights(
+    [flight(T0 + 10_000, { longitude: lngAt(T0 + 5_000) - 0.005 })],
+    { now: T0 + 10_000 },
+  );
+  store.ingestLiveFlights([flight(T0 + 15_000)], { now: T0 + 15_000 });
+
+  assert.deepEqual(
+    samples(store).map((sample) => sample.t),
+    [T0, T0 + 5_000, T0 + 15_000],
+  );
+});
+
+test("an aircraft on the ground may back up", () => {
+  const store = createTrailStore();
+  const taxiing = { onGround: true, velocity: 40 };
+  store.ingestLiveFlights([flight(T0, taxiing)], { now: T0 });
+  store.ingestLiveFlights([flight(T0 + 5_000, taxiing)], { now: T0 + 5_000 });
+  store.ingestLiveFlights(
+    [flight(T0 + 10_000, { ...taxiing, longitude: -122 })],
+    { now: T0 + 10_000 },
+  );
+
+  assert.equal(samples(store).length, 3);
+});
+
+test("a gap in live samples is bridged only where the aircraft flew straight", () => {
+  const straight = createTrailStore();
+  const turned = createTrailStore();
+  for (const store of [straight, turned]) {
+    store.ingestLiveFlights([flight(T0)], { now: T0 });
+    store.ingestLiveFlights([flight(T0 + 5_000)], { now: T0 + 5_000 });
+  }
+  straight.ingestLiveFlights([flight(T0 + 120_000)], { now: T0 + 120_000 });
+  turned.ingestLiveFlights(
+    [flight(T0 + 120_000, { latitude: 37.6, trueTrack: 0 })],
+    { now: T0 + 120_000 },
+  );
+
+  assert.equal(trailOf(straight, "abc123")!.parts.length, 1);
+  assert.deepEqual(
+    trailOf(turned, "abc123")!.parts.map((part) => part.length),
+    [2, 1],
+  );
+});
