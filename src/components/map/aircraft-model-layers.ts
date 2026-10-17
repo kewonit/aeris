@@ -120,8 +120,13 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
   let loader = sceneLoaders.get(key);
   if (!loader) {
     loader = (scenegraph) => {
+      // While the model is still loading deck passes null, and expects it
+      // back untouched; anything else is logged as an invalid scenegraph.
+      if (!scenegraph?.scenes) return scenegraph;
       const scene =
-        scenegraph?.scenes?.[scenegraph.scene ?? 0] ?? scenegraph?.scenes?.[0];
+        typeof scenegraph.scene === "object"
+          ? scenegraph.scene
+          : scenegraph.scenes[scenegraph.scene || 0];
       const footprint = scene ? normalizeScene(scene) : null;
       if (footprint) {
         recordModelTailShare(key, modelTailShareFor(key, footprint));

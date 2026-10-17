@@ -97,6 +97,31 @@ test("a model is drawn at its altitude's presentation height", () => {
   assert.equal(position(flight)[2], 50_400);
 });
 
+test("a model still loading is handed back to deck untouched", () => {
+  const { props } = narrowbodyLayer(new Map());
+  const getScene = props.getScene as unknown as (scenegraph: unknown) => unknown;
+
+  assert.equal(getScene(null), null);
+});
+
+test("a loaded model's chosen scene is normalised", () => {
+  const { props } = narrowbodyLayer(new Map());
+  const getScene = props.getScene as unknown as (scenegraph: unknown) => unknown;
+  let matrix: number[] = [];
+  const scene = {
+    getBounds: () => [
+      [-2, 0, -1],
+      [2, 1, 1],
+    ],
+    setMatrix: (next: number[]) => {
+      matrix = next;
+    },
+  };
+
+  assert.equal(getScene({ scenes: [scene] }), scene);
+  assert.equal(matrix[0], 0.25);
+});
+
 test("normalizing a scene centres it and scales its footprint to one unit", () => {
   let matrix: number[] = [];
   const scene = {
