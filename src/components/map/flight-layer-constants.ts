@@ -22,7 +22,6 @@ export const DEFAULT_ANIM_DURATION_MS = 4_500;
 export const MIN_ANIM_DURATION_MS = 1_000;
 export const MAX_ANIM_DURATION_MS = 30_000;
 export const TELEPORT_THRESHOLD = 0.3;
-export const TRAIL_BELOW_AIRCRAFT_METERS = 40;
 export const TRACK_DAMPING = 0.18;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
@@ -60,6 +59,8 @@ export type FlightLayerProps = {
   showTrails: boolean;
   trailThickness: number;
   trailMinutes: number;
+  /** Aircraft flying above this many metres get no trail; null for none. */
+  trailCeilingMeters: number | null;
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;

@@ -3,13 +3,10 @@ import test from "node:test";
 
 import { WebMercatorViewport } from "@deck.gl/core";
 
-import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
   aircraftElevationMeters,
   cameraHeightMeters,
   projectDisplayedAltitudeMeters,
-  projectTrailElevationMeters,
-  trailElevationMeters,
 } from "./altitude-projection";
 
 test("presentation altitude mode is monotonic and much lighter than the old x5 projection", () => {
@@ -24,11 +21,7 @@ test("presentation altitude mode is monotonic and much lighter than the old x5 p
 });
 
 test("realistic altitude mode stays close to raw altitude", () => {
-  const projected = projectDisplayedAltitudeMeters(2_000, "realistic");
-  const trail = projectTrailElevationMeters(2_000, "realistic");
-
-  assert.equal(projected, 2_000);
-  assert.equal(projected - trail, TRAIL_BELOW_AIRCRAFT_METERS);
+  assert.equal(projectDisplayedAltitudeMeters(2_000, "realistic"), 2_000);
 });
 
 test("presentation mode stays visually separated above realistic mode", () => {
@@ -46,30 +39,10 @@ test("presentation mode gives low and mid altitudes extra lift for a taller map 
   assert.ok(mid >= 10_500);
 });
 
-test("trail elevation stays below the aircraft projection by the visual offset", () => {
-  const projected = projectDisplayedAltitudeMeters(2_000, "presentation");
-  const trail = projectTrailElevationMeters(2_000, "presentation");
-
-  assert.equal(projected - trail, TRAIL_BELOW_AIRCRAFT_METERS);
-});
-
 test("drawn heights come from altitude alone, as at the default view", () => {
   assert.equal(aircraftElevationMeters(11_000, "presentation"), 50_400);
   assert.equal(aircraftElevationMeters(2_000, "realistic"), 2_000);
   assert.equal(aircraftElevationMeters(null, "presentation"), 0);
-});
-
-test("a trail is drawn just below its aircraft in either mode", () => {
-  assert.equal(
-    aircraftElevationMeters(2_000, "presentation") -
-      trailElevationMeters(2_000, "presentation"),
-    TRAIL_BELOW_AIRCRAFT_METERS * 1.8,
-  );
-  assert.equal(
-    aircraftElevationMeters(2_000, "realistic") -
-      trailElevationMeters(2_000, "realistic"),
-    TRAIL_BELOW_AIRCRAFT_METERS,
-  );
 });
 
 test("the camera height matches deck's camera", () => {

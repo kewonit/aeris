@@ -51,7 +51,11 @@ const AirportInfoCard = dynamic(() =>
   ),
 );
 import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
-import { SettingsProvider, useSettings } from "@/hooks/use-settings";
+import {
+  SettingsProvider,
+  trailCeilingMeters,
+  useSettings,
+} from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailSystem } from "@/hooks/use-trail-system";
@@ -744,6 +748,7 @@ function FlightTrackerInner({
             showTrails={settings.showTrails}
             trailThickness={settings.trailThickness}
             trailMinutes={settings.trailMinutes}
+            trailCeilingMeters={trailCeilingMeters(settings)}
             showShadows={settings.showShadows}
             showAltitudeColors={settings.showAltitudeColors}
             altitudeDisplayMode={settings.altitudeDisplayMode}

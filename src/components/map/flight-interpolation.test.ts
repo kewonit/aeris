@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
+import type { TrailTrack } from "@/lib/trails/types";
 
 import {
   computeInterpolatedFlights,
+  computePitchByIcao,
   getSafeInterpolationProgress,
   resolveDisplayTrack,
 } from "./flight-interpolation";
@@ -97,4 +99,49 @@ test("resolveDisplayTrack takes the short way across the antimeridian", () => {
   });
 
   assert.ok(Math.abs(resolved - 90) < 0.5, `got ${resolved}`);
+});
+
+test("an aircraft pitches along its path as drawn, in either altitude mode", () => {
+  // A steady 3° descent at 70 m/s, sampled every 350 m.
+  const glide = Math.tan((3 * Math.PI) / 180);
+  const stepLng = 350 / (111_320 * Math.cos((50 * Math.PI) / 180));
+  const at = (index: number) => ({
+    lng: 8 + index * stepLng,
+    lat: 50,
+    alt: 1_000 - index * 350 * glide,
+  });
+  const trail: TrailTrack = {
+    icao24: "abc123",
+    parts: [
+      Array.from({ length: 8 }, (_, index) => ({
+        t: index * 5_000,
+        ...at(index),
+        onGround: false,
+      })),
+    ],
+    revision: 1,
+    hasHistory: false,
+  };
+  const flight = {
+    icao24: "abc123",
+    longitude: at(7).lng,
+    latitude: 50,
+    baroAltitude: at(7).alt,
+    velocity: 70,
+    verticalRate: -70 * glide,
+  } as FlightState;
+  const pitch = (mode: "realistic" | "presentation") =>
+    computePitchByIcao(
+      [flight],
+      new Map([[flight.icao24, trail]]),
+      new Map([[flight.icao24, { ...at(7), track: 90 }]]),
+      new Map([[flight.icao24, { ...at(6), track: 90 }]]),
+      mode,
+    ).get(flight.icao24)!;
+
+  // Positive pitch lowers the nose. Below 3,000 m presentation heights are
+  // drawn 3 × 1.8 times as tall, so the drawn descent is that much steeper.
+  assert.ok(Math.abs(pitch("realistic") - 3) < 0.05);
+  const drawn = (Math.atan(5.4 * glide) * 180) / Math.PI;
+  assert.ok(Math.abs(pitch("presentation") - drawn) < 0.05);
 });

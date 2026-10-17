@@ -1,7 +1,6 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 
 import { metersPerPixel } from "./aircraft-size";
-import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 
 const LOW_ALT_BREAK_M = 3_000;
 const MID_ALT_BREAK_M = 9_000;
@@ -51,15 +50,6 @@ export function projectDisplayedAltitudeMeters(
   );
 }
 
-export function projectTrailElevationMeters(
-  altitude: number | null,
-  mode: AltitudeDisplayMode = "presentation",
-): number {
-  const displayed = projectDisplayedAltitudeMeters(altitude, mode);
-  if (displayed <= 0) return 0;
-  return Math.max(0, displayed - TRAIL_BELOW_AIRCRAFT_METERS);
-}
-
 /** How high the camera is above the ground, in metres. */
 export function cameraHeightMeters(
   zoom: number,
@@ -75,18 +65,13 @@ export function cameraHeightMeters(
   );
 }
 
-/** How high an aircraft is drawn, in metres. */
+/**
+ * How high an aircraft, or its trail, is drawn, in metres. A trail rides at
+ * its aircraft's own height so it runs level into the tail.
+ */
 export function aircraftElevationMeters(
   altitude: number | null,
   mode: AltitudeDisplayMode,
 ): number {
   return projectDisplayedAltitudeMeters(altitude, mode) * ELEVATION_SCALE[mode];
-}
-
-/** How high a trail is drawn, in metres: just below its aircraft. */
-export function trailElevationMeters(
-  altitude: number | null,
-  mode: AltitudeDisplayMode,
-): number {
-  return projectTrailElevationMeters(altitude, mode) * ELEVATION_SCALE[mode];
 }

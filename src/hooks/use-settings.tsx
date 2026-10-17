@@ -25,6 +25,9 @@ export type Settings = {
   trailThickness: number;
   /** How many minutes of each aircraft's path to draw. */
   trailMinutes: number;
+  /** Whether aircraft flying above `trailCeilingFt` are drawn without trails. */
+  hideHighTrails: boolean;
+  trailCeilingFt: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -43,6 +46,10 @@ export const TRAIL_THICKNESS_MIN = 0.5;
 export const TRAIL_THICKNESS_MAX = 8;
 export const TRAIL_MINUTES_MIN = 1;
 export const TRAIL_MINUTES_MAX = 10;
+export const TRAIL_CEILING_FT_MIN = 1_000;
+export const TRAIL_CEILING_FT_MAX = 45_000;
+export const TRAIL_CEILING_FT_STEP = 1_000;
+const METERS_PER_FOOT = 0.3048;
 const FPV_CHASE_DISTANCE_MIN = 0.003;
 const FPV_CHASE_DISTANCE_MAX = 0.01;
 export const AIRSPACE_OPACITY_MIN = 0.25;
@@ -68,6 +75,15 @@ export function normalizeSettings(input: Settings): Settings {
           clamp(input.trailMinutes, TRAIL_MINUTES_MIN, TRAIL_MINUTES_MAX),
         )
       : DEFAULT_SETTINGS.trailMinutes,
+    trailCeilingFt: Number.isFinite(input.trailCeilingFt)
+      ? Math.round(
+          clamp(
+            input.trailCeilingFt,
+            TRAIL_CEILING_FT_MIN,
+            TRAIL_CEILING_FT_MAX,
+          ) / TRAIL_CEILING_FT_STEP,
+        ) * TRAIL_CEILING_FT_STEP
+      : DEFAULT_SETTINGS.trailCeilingFt,
     fpvChaseDistance: Number.isFinite(input.fpvChaseDistance)
       ? clamp(
           input.fpvChaseDistance,
@@ -92,6 +108,13 @@ export function normalizeSettings(input: Settings): Settings {
   };
 }
 
+/** The height above which aircraft get no trail, in metres, or null. */
+export function trailCeilingMeters(settings: Settings): number | null {
+  return settings.hideHighTrails
+    ? settings.trailCeilingFt * METERS_PER_FOOT
+    : null;
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   autoOrbit: false,
   orbitSpeed: 0.06,
@@ -99,6 +122,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showTrails: true,
   trailThickness: 1.0,
   trailMinutes: 3,
+  hideHighTrails: true,
+  trailCeilingFt: 20_000,
   showShadows: true,
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
@@ -114,7 +139,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 7;
+const STORAGE_VERSION = 8;
 const WRITE_DEBOUNCE_MS = 300;
 
 const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
@@ -149,6 +174,12 @@ export function migrateSettingsDefaults(
   // A user who opts back in will persist that preference in the v6 envelope.
   if (fromVersion < 6) {
     next.autoOrbit = false;
+  }
+
+  // High trails are hidden by default from version 8. Earlier saves stored
+  // the old default with everything else, so it is switched on once.
+  if (fromVersion < 8) {
+    next.hideHighTrails = true;
   }
 
   if (
@@ -188,6 +219,11 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.trailMinutes) &&
     s.trailMinutes >= TRAIL_MINUTES_MIN &&
     s.trailMinutes <= TRAIL_MINUTES_MAX &&
+    typeof s.hideHighTrails === "boolean" &&
+    typeof s.trailCeilingFt === "number" &&
+    Number.isFinite(s.trailCeilingFt) &&
+    s.trailCeilingFt >= TRAIL_CEILING_FT_MIN &&
+    s.trailCeilingFt <= TRAIL_CEILING_FT_MAX &&
     typeof s.showShadows === "boolean" &&
     typeof s.showAltitudeColors === "boolean" &&
     (s.altitudeDisplayMode === "presentation" ||

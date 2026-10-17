@@ -5,14 +5,17 @@ import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
 import { aircraftColor } from "./aircraft-appearance";
-import { trailElevationMeters } from "./altitude-projection";
+import { aircraftElevationMeters } from "./altitude-projection";
 import { horizontalDistanceFromLngLat } from "./flight-math";
 
 export type Rgba = [number, number, number, number];
 export type TrailVertex = [lng: number, lat: number, z: number];
 
-/** Opacity of the newer half of a trail; the older half fades out. */
-export const TRAIL_ALPHA = 210;
+/**
+ * Opacity of the newer half of a trail, see-through so the map shows
+ * beneath it; the older half fades out.
+ */
+export const TRAIL_ALPHA = 140;
 /** Shortest fade, so a trail that has only just started does not start hard. */
 const MIN_FADE_MS = 60_000;
 /** Share of a full history that fades, so most of a long route stays solid. */
@@ -350,7 +353,7 @@ function project(
   const toVertex = (point: CurvePoint): TrailVertex => [
     point.lng,
     point.lat,
-    trailElevationMeters(point.alt, options.altitudeDisplayMode),
+    aircraftElevationMeters(point.alt, options.altitudeDisplayMode),
   ];
   const toColor = (point: CurvePoint): Rgba => {
     const base = options.altColors

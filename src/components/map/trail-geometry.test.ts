@@ -6,7 +6,6 @@ import type { TrailSample, TrailTrack } from "@/lib/trails/types";
 
 import { aircraftColor } from "./aircraft-appearance";
 import { aircraftElevationMeters } from "./altitude-projection";
-import { TRAIL_BELOW_AIRCRAFT_METERS } from "./flight-layer-constants";
 import {
   getTrailGeometry,
   TRAIL_ALPHA,
@@ -149,7 +148,7 @@ test("a trail takes on its aircraft's tint", () => {
   assert.deepEqual(geometry.lead?.colors.at(-1)!.slice(0, 3), expected.slice(0, 3));
 });
 
-test("a trail rides just below its aircraft's drawn height", () => {
+test("a trail rides at its aircraft's drawn height", () => {
   const samples = Array.from({ length: 10 }, (_, index) => eastbound(index));
   const geometry = getTrailGeometry(new Map(), track([samples]), {
     ...OPTIONS,
@@ -158,7 +157,7 @@ test("a trail rides just below its aircraft's drawn height", () => {
 
   const aircraft = aircraftElevationMeters(3_000, "presentation");
   for (const [, , z] of [...geometry.bodies[0].path, ...geometry.lead!.path]) {
-    assert.ok(Math.abs(aircraft - z - TRAIL_BELOW_AIRCRAFT_METERS * 1.8) < 1e-6);
+    assert.ok(Math.abs(aircraft - z) < 1e-6);
   }
 });
 

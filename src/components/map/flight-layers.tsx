@@ -68,6 +68,9 @@ import {
   isFrameDue,
 } from "./frame-rate";
 
+/** Flat icons are never pitched, so their trails meet a level tail. */
+const NO_PITCH = new Map<string, number>();
+
 export function FlightLayers({
   flights,
   trails,
@@ -76,6 +79,7 @@ export function FlightLayers({
   showTrails,
   trailThickness,
   trailMinutes,
+  trailCeilingMeters,
   showShadows,
   showAltitudeColors,
   altitudeDisplayMode,
@@ -130,6 +134,7 @@ export function FlightLayers({
   const showTrailsRef = useRef(showTrails);
   const trailThicknessRef = useRef(trailThickness);
   const trailMinutesRef = useRef(trailMinutes);
+  const trailCeilingMetersRef = useRef(trailCeilingMeters);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const altitudeDisplayModeRef = useRef(altitudeDisplayMode);
@@ -162,6 +167,7 @@ export function FlightLayers({
     showTrailsRef.current = showTrails;
     trailThicknessRef.current = trailThickness;
     trailMinutesRef.current = trailMinutes;
+    trailCeilingMetersRef.current = trailCeilingMeters;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
@@ -183,6 +189,7 @@ export function FlightLayers({
     showTrails,
     trailThickness,
     trailMinutes,
+    trailCeilingMeters,
     showShadows,
     showAltitudeColors,
     altitudeDisplayMode,
@@ -726,6 +733,13 @@ export function FlightLayers({
           ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
           : currentFlights;
 
+        // The FPV camera sits at the aircraft's true altitude, so traffic is
+        // drawn at true altitudes too. Otherwise the exaggerated presentation
+        // heights would float every other aircraft far above the horizon.
+        const altitudeMode: AltitudeDisplayMode = fpvId
+          ? "realistic"
+          : altitudeDisplayModeRef.current;
+
         // Pitch/bank change slowly - recompute at ~10fps regardless of
         // animation frame rate. Values are retained in pitchMapRef/bankMapRef
         // between compute frames.
@@ -737,6 +751,7 @@ export function FlightLayers({
             trailMapRef.current,
             currSnapshotsRef.current,
             prevSnapshotsRef.current,
+            altitudeMode,
             pitchMapRef.current,
           );
 
@@ -752,13 +767,6 @@ export function FlightLayers({
         const bankByIcao = bankMapRef.current;
 
         const layers = [];
-
-        // The FPV camera sits at the aircraft's true altitude, so traffic is
-        // drawn at true altitudes too. Otherwise the exaggerated presentation
-        // heights would float every other aircraft far above the horizon.
-        const altitudeMode: AltitudeDisplayMode = fpvId
-          ? "realistic"
-          : altitudeDisplayModeRef.current;
 
         // ── LOD: 3D models vs 2D icons ────────────────────────────────
         // At low zoom, aircraft are too small to distinguish 3D silhouettes.
@@ -851,10 +859,12 @@ export function FlightLayers({
             ...buildTrailLayers({
               flights: visibleFlights,
               aircraftSizes,
+              pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
               zoom: currentZoom,
               trailMap: trailMapRef.current,
               selectedIcao24: selectedIcao24Ref.current,
               trailMinutes: trailMinutesRef.current,
+              ceilingMeters: trailCeilingMetersRef.current,
               thickness: trailThicknessRef.current,
               altColors,
               altitudeDisplayMode: altitudeMode,

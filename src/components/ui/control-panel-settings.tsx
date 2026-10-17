@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import {
+  ArrowUpToLine,
   RotateCw,
   Route,
   Layers,
@@ -25,12 +26,16 @@ import {
   TRAIL_THICKNESS_MAX,
   TRAIL_MINUTES_MIN,
   TRAIL_MINUTES_MAX,
+  TRAIL_CEILING_FT_MIN,
+  TRAIL_CEILING_FT_MAX,
+  TRAIL_CEILING_FT_STEP,
   type OrbitDirection,
   type UnitSystem,
   type Settings,
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { formatAltitude } from "@/lib/unit-formatters";
 
 const SHORTCUTS = [
   { key: "N", description: "North up" },
@@ -130,6 +135,20 @@ export function SettingsContent({
               value={settings.trailMinutes}
               onChange={(v) => update("trailMinutes", v)}
             />
+            <SettingRow
+              icon={<ArrowUpToLine className="h-4 w-4" />}
+              title="Hide high trails"
+              description="No trails for aircraft above a set height"
+              checked={settings.hideHighTrails}
+              onChange={(v) => update("hideHighTrails", v)}
+            />
+            {settings.hideHighTrails && (
+              <TrailCeilingSlider
+                value={settings.trailCeilingFt}
+                unitSystem={settings.unitSystem}
+                onChange={(v) => update("trailCeilingFt", v)}
+              />
+            )}
           </>
         )}
         <SettingRow
@@ -405,6 +424,40 @@ function TrailLengthSlider({
           value={[value]}
           onValueChange={(vals) => onChange(vals[0])}
           aria-label="Trail length"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrailCeilingSlider({
+  value,
+  unitSystem,
+  onChange,
+}: {
+  value: number;
+  unitSystem: UnitSystem;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
+        <ArrowUpToLine className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-small font-medium text-foreground">Hide above</p>
+          <span className="text-caption text-muted-foreground">
+            {formatAltitude(value * 0.3048, unitSystem)}
+          </span>
+        </div>
+        <Slider
+          min={TRAIL_CEILING_FT_MIN}
+          max={TRAIL_CEILING_FT_MAX}
+          step={TRAIL_CEILING_FT_STEP}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Hide trails above"
         />
       </div>
     </div>

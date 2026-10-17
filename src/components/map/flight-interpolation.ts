@@ -1,5 +1,7 @@
+import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailTrack } from "@/lib/trails/types";
+import { aircraftElevationMeters } from "./altitude-projection";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import {
@@ -105,15 +107,28 @@ export function resolveDisplayTrack(input: {
 
 // ── Pitch Calculation ──────────────────────────────────────────────────
 
+/** Height step for measuring how much the drawn heights stretch a climb. */
+const STRETCH_PROBE_METERS = 50;
+
+/**
+ * Each aircraft's pitch, in deck's sense: negative raises the nose. It is
+ * the slope of the path as drawn, so the nose follows the trail even where
+ * presentation heights stretch every climb several times over.
+ */
 export function computePitchByIcao(
   interpolated: FlightState[],
   trailByIcao: Map<string, TrailTrack>,
   currSnapshots: Map<string, Snapshot>,
   prevSnapshots: Map<string, Snapshot>,
+  altitudeMode: AltitudeDisplayMode,
   out?: Map<string, number>,
 ): Map<string, number> {
   const pitchByIcao = out ?? new Map<string, number>();
   pitchByIcao.clear();
+  const drawn = (altitude: number) =>
+    aircraftElevationMeters(altitude, altitudeMode);
+  const slopeDegrees = (rise: number, run: number) =>
+    (-Math.atan2(rise, run) * 180) / Math.PI;
 
   for (const f of interpolated) {
     const curr = currSnapshots.get(f.icao24);
@@ -136,7 +151,7 @@ export function computePitchByIcao(
               endSample.lat,
             );
             if (hMeters < 1) return 0;
-            return (-Math.atan2(endAlt - startAlt, hMeters) * 180) / Math.PI;
+            return slopeDegrees(drawn(endAlt) - drawn(startAlt), hMeters);
           })()
         : 0;
 
@@ -145,21 +160,23 @@ export function computePitchByIcao(
         ? (() => {
             const hMeters = horizontalDistanceMeters(prev, curr);
             if (hMeters < 1) return 0;
-            const deltaAltitudeMeters = curr.alt - prev.alt;
-            return (-Math.atan2(deltaAltitudeMeters, hMeters) * 180) / Math.PI;
+            return slopeDegrees(drawn(curr.alt) - drawn(prev.alt), hMeters);
           })()
         : 0;
 
     const speed =
       Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 0;
     const verticalRate = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
+    const altitude = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
+    const low = Math.max(0, altitude - STRETCH_PROBE_METERS);
+    const high = altitude + STRETCH_PROBE_METERS;
+    const stretch = (drawn(high) - drawn(low)) / (high - low);
     const kinematicPitch =
-      speed > 0 ? (-Math.atan2(verticalRate, speed) * 180) / Math.PI : 0;
+      speed > 0 ? slopeDegrees(verticalRate * stretch, speed) : 0;
 
     const blendedPitch =
       trendPitch * 0.5 + risePitch * 0.38 + kinematicPitch * 0.12;
-    const amplifiedPitch = blendedPitch * 1.55;
-    const clampedPitch = Math.max(-40, Math.min(40, amplifiedPitch));
+    const clampedPitch = Math.max(-40, Math.min(40, blendedPitch));
     pitchByIcao.set(f.icao24, clampedPitch);
   }
 

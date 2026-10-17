@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   migrateSettingsDefaults,
   normalizeSettings,
+  trailCeilingMeters,
 } from "./use-settings";
 
 test("settings migration disables inherited auto-orbit once", () => {
@@ -80,4 +81,31 @@ test("settings migration preserves partial custom trail settings", () => {
 
   assert.equal(customThickness.trailThickness, 2);
   assert.equal(customDistance.trailThickness, 1.3);
+});
+
+test("trails above 20,000 ft are hidden by default", () => {
+  assert.equal(DEFAULT_SETTINGS.hideHighTrails, true);
+  assert.equal(DEFAULT_SETTINGS.trailCeilingFt, 20_000);
+  assert.equal(trailCeilingMeters(DEFAULT_SETTINGS), 6_096);
+  assert.equal(
+    trailCeilingMeters({ ...DEFAULT_SETTINGS, hideHighTrails: false }),
+    null,
+  );
+});
+
+test("settings saved before version 8 hide high trails once", () => {
+  const saved = { ...DEFAULT_SETTINGS, hideHighTrails: false };
+
+  assert.equal(migrateSettingsDefaults(saved, 7).hideHighTrails, true);
+  assert.equal(migrateSettingsDefaults(saved, 8).hideHighTrails, false);
+});
+
+test("the trail height limit is kept in range and to whole thousands of feet", () => {
+  const limit = (trailCeilingFt: number) =>
+    normalizeSettings({ ...DEFAULT_SETTINGS, trailCeilingFt }).trailCeilingFt;
+
+  assert.equal(limit(12_345), 12_000);
+  assert.equal(limit(100), 1_000);
+  assert.equal(limit(60_000), 45_000);
+  assert.equal(limit(Number.NaN), 20_000);
 });
