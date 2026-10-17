@@ -19,6 +19,7 @@ import {
   Maximize,
   Minimize,
 } from "lucide-react";
+import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 
 type CameraActionType = "zoom" | "pitch" | "bearing";
 
@@ -63,32 +64,33 @@ function ControlButton({
   type,
   direction,
   label,
-  title,
+  hint,
   children,
 }: {
   type: CameraActionType;
   direction: number;
   label: string;
-  title: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   const handlers = useCameraAction(type, direction);
 
   return (
-    <motion.button
-      type="button"
-      className="flex h-8 w-8 items-center justify-center select-none text-subtle"
-      whileHover={{ scale: 1.12 }}
-      whileTap={{ scale: 0.88 }}
-      aria-label={label}
-      title={title}
-      onPointerDown={handlers.onPointerDown}
-      onPointerUp={handlers.onPointerUp}
-      onPointerLeave={handlers.onPointerLeave}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {children}
-    </motion.button>
+    <Tooltip label={label} hint={hint} side="left">
+      <motion.button
+        type="button"
+        className="flex h-8 w-8 items-center justify-center select-none text-subtle"
+        whileHover={{ scale: 1.12 }}
+        whileTap={{ scale: 0.88 }}
+        aria-label={label}
+        onPointerDown={handlers.onPointerDown}
+        onPointerUp={handlers.onPointerUp}
+        onPointerLeave={handlers.onPointerLeave}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {children}
+      </motion.button>
+    </Tooltip>
   );
 }
 
@@ -136,28 +138,29 @@ function getFullscreenSupportedSnapshot() {
 /** One-off action button (no continuous press). */
 function ActionButton({
   label,
-  title,
+  hint,
   onClick,
   children,
 }: {
   label: string;
-  title: string;
+  hint?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <motion.button
-      type="button"
-      className="flex h-8 w-8 items-center justify-center select-none text-subtle"
-      whileHover={{ scale: 1.12 }}
-      whileTap={{ scale: 0.88 }}
-      aria-label={label}
-      title={title}
-      onClick={onClick}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {children}
-    </motion.button>
+    <Tooltip label={label} hint={hint} side="left">
+      <motion.button
+        type="button"
+        className="flex h-8 w-8 items-center justify-center select-none text-subtle"
+        whileHover={{ scale: 1.12 }}
+        whileTap={{ scale: 0.88 }}
+        aria-label={label}
+        onClick={onClick}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {children}
+      </motion.button>
+    </Tooltip>
   );
 }
 
@@ -241,91 +244,89 @@ export function CameraControls() {
       role="toolbar"
       aria-label="Camera controls"
     >
-      <ControlButton type="zoom" direction={1} label="Zoom in" title="Zoom in">
-        <Plus className="h-3.5 w-3.5" />
-      </ControlButton>
-      <Divider />
-      <ControlButton
-        type="zoom"
-        direction={-1}
-        label="Zoom out"
-        title="Zoom out"
-      >
-        <Minus className="h-3.5 w-3.5" />
-      </ControlButton>
+      <TooltipProvider>
+        <ControlButton type="zoom" direction={1} label="Zoom in">
+          <Plus className="h-3.5 w-3.5" />
+        </ControlButton>
+        <Divider />
+        <ControlButton
+          type="zoom"
+          direction={-1}
+          label="Zoom out"
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </ControlButton>
 
-      <div
-        className="mx-auto my-0.5 h-px w-6 bg-border"
-      />
+        <div
+          className="mx-auto my-0.5 h-px w-6 bg-border"
+        />
 
-      <ControlButton
-        type="pitch"
-        direction={-1}
-        label="Tilt up"
-        title="Tilt up (flatter view)"
-      >
-        <ChevronsUp className="h-3.5 w-3.5" />
-      </ControlButton>
-      <Divider />
-      <ControlButton
-        type="pitch"
-        direction={1}
-        label="Tilt down"
-        title="Tilt down (more 3D)"
-      >
-        <ChevronsDown className="h-3.5 w-3.5" />
-      </ControlButton>
+        <ControlButton
+          type="pitch"
+          direction={-1}
+          label="Tilt up"
+          hint="Flatter view"
+        >
+          <ChevronsUp className="h-3.5 w-3.5" />
+        </ControlButton>
+        <Divider />
+        <ControlButton
+          type="pitch"
+          direction={1}
+          label="Tilt down"
+          hint="More 3D"
+        >
+          <ChevronsDown className="h-3.5 w-3.5" />
+        </ControlButton>
 
-      <div
-        className="mx-auto my-0.5 h-px w-6 bg-border"
-      />
+        <div
+          className="mx-auto my-0.5 h-px w-6 bg-border"
+        />
 
-      <ControlButton
-        type="bearing"
-        direction={-1}
-        label="Rotate clockwise"
-        title="Rotate clockwise"
-      >
-        <RotateCw className="h-3.5 w-3.5" />
-      </ControlButton>
-      <Divider />
-      <ControlButton
-        type="bearing"
-        direction={1}
-        label="Rotate counter-clockwise"
-        title="Rotate counter-clockwise"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </ControlButton>
+        <ControlButton
+          type="bearing"
+          direction={-1}
+          label="Rotate clockwise"
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+        </ControlButton>
+        <Divider />
+        <ControlButton
+          type="bearing"
+          direction={1}
+          label="Rotate counter-clockwise"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </ControlButton>
 
-      <div
-        className="mx-auto my-0.5 h-px w-6 bg-border"
-      />
+        <div
+          className="mx-auto my-0.5 h-px w-6 bg-border"
+        />
 
-      <ActionButton
-        label="Fly to my location"
-        title="Fly to my location"
-        onClick={flyToMe}
-      >
-        <Locate className={`h-3.5 w-3.5 ${locating ? "animate-pulse" : ""}`} />
-      </ActionButton>
+        <ActionButton
+          label="Fly to my location"
+          hint={locating ? "Finding you…" : undefined}
+          onClick={flyToMe}
+        >
+          <Locate className={`h-3.5 w-3.5 ${locating ? "animate-pulse" : ""}`} />
+        </ActionButton>
 
-      {shouldRenderFullscreenToggle(mounted, fsSupported) && (
-        <>
-          <Divider />
-          <ActionButton
-            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            onClick={toggleFullscreen}
-          >
-            {isFullscreen ? (
-              <Minimize className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize className="h-3.5 w-3.5" />
-            )}
-          </ActionButton>
-        </>
-      )}
+        {shouldRenderFullscreenToggle(mounted, fsSupported) && (
+          <>
+            <Divider />
+            <ActionButton
+              label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? (
+                <Minimize className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize className="h-3.5 w-3.5" />
+              )}
+            </ActionButton>
+          </>
+        )}
+      </TooltipProvider>
     </motion.div>
   );
 }

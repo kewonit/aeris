@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/aeris-left-sidebar";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
+import { MapToggles } from "@/components/ui/map-toggles";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
 import { AtcPlayerBar } from "@/components/ui/atc-panel";
@@ -808,24 +809,29 @@ function FlightTrackerInner({
 
         {!fpvIcao24 && (
           <div
-            className="aeris-left-chrome pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0"
+            className="aeris-left-chrome pointer-events-none absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 flex flex-col items-start gap-2 sm:bottom-4 sm:left-4 sm:mb-0"
             data-panel-open={desktopLeftPanelOpen}
           >
-            <StatusBar
-              flightCount={flights.length}
-              cityName={activeCity.name}
-              cityIata={activeCity.iata}
-              cityCoordinates={activeCity.coordinates}
-              loading={loading}
-              rateLimited={rateLimited}
-              retryIn={retryIn}
-              onNorthUp={handleNorthUp}
-              onResetView={handleResetView}
-              onRandomAirport={handleRandomAirport}
-              atc={atc}
-              atcToggle={atcToggle}
-              source={source}
-            />
+            <div className="pointer-events-auto">
+              <MapToggles />
+            </div>
+            <div className="pointer-events-auto">
+              <StatusBar
+                flightCount={flights.length}
+                cityName={activeCity.name}
+                cityIata={activeCity.iata}
+                cityCoordinates={activeCity.coordinates}
+                loading={loading}
+                rateLimited={rateLimited}
+                retryIn={retryIn}
+                onNorthUp={handleNorthUp}
+                onResetView={handleResetView}
+                onRandomAirport={handleRandomAirport}
+                atc={atc}
+                atcToggle={atcToggle}
+                source={source}
+              />
+            </div>
           </div>
         )}
 

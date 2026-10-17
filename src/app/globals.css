@@ -297,6 +297,31 @@
   border-top-color: var(--background);
 }
 
+/* Tooltips ease in from the control they describe. */
+.aeris-tooltip {
+  --tooltip-from: 0, 2px;
+  animation: aeris-tooltip-in 120ms ease-out;
+}
+
+.aeris-tooltip[data-side="bottom"] {
+  --tooltip-from: 0, -2px;
+}
+
+.aeris-tooltip[data-side="left"] {
+  --tooltip-from: 2px, 0;
+}
+
+.aeris-tooltip[data-side="right"] {
+  --tooltip-from: -2px, 0;
+}
+
+@keyframes aeris-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--tooltip-from));
+  }
+}
+
 /* The custom attribution component replaces MapLibre's controls. */
 .maplibregl-ctrl-attrib,
 .maplibregl-ctrl-logo {
