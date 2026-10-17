@@ -1,26 +1,29 @@
-import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
-import type { TrailTrack } from "@/lib/trails/types";
-import { aircraftElevationMeters } from "./altitude-projection";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
-import {
-  lerpAngle,
-  horizontalDistanceFromLngLat,
-  horizontalDistanceMeters,
-} from "./flight-math";
+import { lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
 export const FLIGHT_RENDER_STALE_MS = 15_000;
 export const MAX_FLIGHT_EXTRAPOLATION_MS = 2_000;
 
+/**
+ * How far along its move from the previous snapshot to the current one
+ * traffic is drawn, and whether it is still moving.
+ *
+ * A poll that arrives late leaves aircraft gliding on along their last move
+ * for up to `maxExtrapolationMs`, rather than parked at its end until the
+ * report lands. Reports are timed to when they arrive (see carryForward),
+ * so the drawn traffic trails them by a poll and the next move carries on
+ * from there at the same speed. While the page is inactive, traffic holds
+ * at the current snapshot.
+ */
 export function getSafeInterpolationProgress(input: {
   elapsedMs: number;
   animDurationMs: number;
   pageActive: boolean;
-  staleThresholdMs?: number;
   maxExtrapolationMs?: number;
-}): { rawT: number; tPos: number } {
+}): { tPos: number; moving: boolean } {
   const elapsedMs = Number.isFinite(input.elapsedMs)
     ? Math.max(0, input.elapsedMs)
     : 0;
@@ -28,26 +31,18 @@ export function getSafeInterpolationProgress(input: {
     Number.isFinite(input.animDurationMs) && input.animDurationMs > 0
       ? input.animDurationMs
       : 1;
-  const staleThresholdMs = Math.max(
-    0,
-    input.staleThresholdMs ?? FLIGHT_RENDER_STALE_MS,
-  );
   const maxExtrapolationMs = Math.max(
     0,
     input.maxExtrapolationMs ?? MAX_FLIGHT_EXTRAPOLATION_MS,
   );
-  const stale = elapsedMs >= staleThresholdMs;
 
-  if (!input.pageActive || stale) {
-    return { rawT: 1, tPos: 1 };
+  if (!input.pageActive) {
+    return { tPos: 1, moving: false };
   }
 
-  const rawT = Math.min(
-    elapsedMs / animDurationMs,
-    1 + maxExtrapolationMs / animDurationMs,
-  );
-
-  return { rawT, tPos: Math.min(rawT, 1) };
+  const end = 1 + maxExtrapolationMs / animDurationMs;
+  const tPos = Math.min(elapsedMs / animDurationMs, end);
+  return { tPos, moving: tPos < end };
 }
 
 export function normalizeBearing(bearing: number): number {
@@ -105,122 +100,145 @@ export function resolveDisplayTrack(input: {
   return motionTrack;
 }
 
-// ── Pitch Calculation ──────────────────────────────────────────────────
-
-/** Height step for measuring how much the drawn heights stretch a climb. */
-const STRETCH_PROBE_METERS = 50;
+// ── Heading ────────────────────────────────────────────────────────────
 
 /**
- * Each aircraft's pitch, in deck's sense: negative raises the nose. It is
- * the slope of the path as drawn, so the nose follows the trail even where
- * presentation heights stretch every climb several times over.
+ * When a report sets an aircraft on a new course, its nose turns onto the
+ * new direction over about this long instead of snapping to it.
  */
-export function computePitchByIcao(
-  interpolated: FlightState[],
-  trailByIcao: Map<string, TrailTrack>,
-  currSnapshots: Map<string, Snapshot>,
-  prevSnapshots: Map<string, Snapshot>,
-  altitudeMode: AltitudeDisplayMode,
-  out?: Map<string, number>,
-): Map<string, number> {
-  const pitchByIcao = out ?? new Map<string, number>();
-  pitchByIcao.clear();
-  const drawn = (altitude: number) =>
-    aircraftElevationMeters(altitude, altitudeMode);
-  const slopeDegrees = (rise: number, run: number) =>
-    (-Math.atan2(rise, run) * 180) / Math.PI;
+export const HEADING_TURN_MS = 1_500;
 
-  for (const f of interpolated) {
-    const curr = currSnapshots.get(f.icao24);
-    const prev = prevSnapshots.get(f.icao24);
-
-    const trendTrail = trailByIcao.get(f.icao24);
-    const trend = trendTrail?.parts[trendTrail.parts.length - 1];
-    const trendPitch =
-      trend && trend.length >= 2
-        ? (() => {
-            const endSample = trend[trend.length - 1];
-            const startSample = trend[Math.max(0, trend.length - 8)];
-            const startAlt =
-              startSample.alt ?? endSample.alt ?? f.baroAltitude ?? 0;
-            const endAlt = endSample.alt ?? f.baroAltitude ?? startAlt;
-            const hMeters = horizontalDistanceFromLngLat(
-              startSample.lng,
-              startSample.lat,
-              endSample.lng,
-              endSample.lat,
-            );
-            if (hMeters < 1) return 0;
-            return slopeDegrees(drawn(endAlt) - drawn(startAlt), hMeters);
-          })()
-        : 0;
-
-    const risePitch =
-      curr && prev
-        ? (() => {
-            const hMeters = horizontalDistanceMeters(prev, curr);
-            if (hMeters < 1) return 0;
-            return slopeDegrees(drawn(curr.alt) - drawn(prev.alt), hMeters);
-          })()
-        : 0;
-
-    const speed =
-      Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 0;
-    const verticalRate = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
-    const altitude = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
-    const low = Math.max(0, altitude - STRETCH_PROBE_METERS);
-    const high = altitude + STRETCH_PROBE_METERS;
-    const stretch = (drawn(high) - drawn(low)) / (high - low);
-    const kinematicPitch =
-      speed > 0 ? slopeDegrees(verticalRate * stretch, speed) : 0;
-
-    const blendedPitch =
-      trendPitch * 0.5 + risePitch * 0.38 + kinematicPitch * 0.12;
-    const clampedPitch = Math.max(-40, Math.min(40, blendedPitch));
-    pitchByIcao.set(f.icao24, clampedPitch);
-  }
-
-  return pitchByIcao;
+function smoothStepUnit(t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  return clamped * clamped * (3 - 2 * clamped);
 }
 
-// ── Bank (Roll) Calculation ────────────────────────────────────────────
+/**
+ * Which way an aircraft points `elapsedMs` into its move from one snapshot
+ * to the next. It points along the way it moves, so the nose never crabs
+ * across the drawn path; at each new report it turns there from wherever
+ * it was pointing, smoothly, rather than jumping.
+ */
+export function displayHeading(
+  prev: Snapshot,
+  curr: Snapshot,
+  elapsedMs: number,
+): number {
+  const course = resolveDisplayTrack({
+    reportedTrack: curr.track,
+    previousPosition: prev,
+    currentPosition: curr,
+  });
+  if (prev.heading === undefined) return course;
+  return normalizeBearing(
+    lerpAngle(prev.heading, course, smoothStepUnit(elapsedMs / HEADING_TURN_MS)),
+  );
+}
 
-const MAX_BANK_DEG = 25;
+// ── Report timing ──────────────────────────────────────────────────────
+
+/** A report is carried forward at most this far. */
+export const MAX_REPORT_LEAD_MS = 10_000;
+/** Recent polls kept per provider to find its quickest answer. */
+const RECEIPT_HISTORY = 12;
+const METERS_PER_DEGREE = 111_320;
 
 /**
- * Compute a turn-coupled bank angle for each aircraft.
- * The bank follows a sine-bell curve over the animation cycle so it
- * peaks mid-turn and eases to zero at the start/end - mimicking how
- * real aircraft roll into and out of turns.
+ * How long each provider's recent answers took to reach us, in ms, as our
+ * clock less theirs. That holds both the network delay and any offset
+ * between the clocks; only how far one answer lags the quickest counts, so
+ * the offset cancels out.
  */
-export function computeBankByIcao(
-  interpolated: FlightState[],
-  prevSnapshots: Map<string, Snapshot>,
-  currSnapshots: Map<string, Snapshot>,
-  tAngle: number,
-  out?: Map<string, number>,
-): Map<string, number> {
-  const bankByIcao = out ?? new Map<string, number>();
-  bankByIcao.clear();
-  for (const f of interpolated) {
-    const prev = prevSnapshots.get(f.icao24);
-    const curr = currSnapshots.get(f.icao24);
-    if (!prev || !curr) continue;
+export type ReceiptDelays = Map<string, number[]>;
 
-    // Shortest-path heading delta: positive = turning right
-    const headingDelta = ((curr.track - prev.track + 540) % 360) - 180;
-
-    // Bank proportional to turn magnitude, clamped
-    const bankTarget = Math.max(
-      -MAX_BANK_DEG,
-      Math.min(MAX_BANK_DEG, headingDelta * 0.8),
-    );
-
-    // Sine bell curve: 0 → 1 → 0 over the animation cycle
-    const bankEase = Math.sin(tAngle * Math.PI);
-    bankByIcao.set(f.icao24, bankTarget * bankEase);
+/** Notes when a poll's answer arrived, once for each provider in it. */
+export function noteReceipt(
+  delays: ReceiptDelays,
+  flights: FlightState[],
+  receivedAt: number,
+): void {
+  const seen = new Set<string>();
+  for (const flight of flights) {
+    const provenance = flight.provenance;
+    if (!provenance || seen.has(provenance.positionProvider)) continue;
+    seen.add(provenance.positionProvider);
+    const recent = delays.get(provenance.positionProvider) ?? [];
+    recent.push(receivedAt - provenance.responseTime);
+    if (recent.length > RECEIPT_HISTORY) recent.shift();
+    delays.set(provenance.positionProvider, recent);
   }
-  return bankByIcao;
+}
+
+/**
+ * How long before `receivedAt` a flight's reported position was true: its
+ * age when the provider answered, plus however long that answer sat in a
+ * cache before it reached us.
+ */
+export function reportLeadMs(
+  flight: FlightState,
+  receivedAt: number,
+  delays: ReceiptDelays,
+): number {
+  const provenance = flight.provenance;
+  if (!provenance) return 0;
+  const age =
+    provenance.positionAgeSeconds !== null &&
+    Number.isFinite(provenance.positionAgeSeconds)
+      ? provenance.positionAgeSeconds * 1_000
+      : 0;
+  const recent = delays.get(provenance.positionProvider);
+  const waited = recent?.length
+    ? receivedAt - provenance.responseTime - Math.min(...recent)
+    : 0;
+  const lead = age + Math.max(0, waited);
+  return Number.isFinite(lead)
+    ? Math.min(MAX_REPORT_LEAD_MS, Math.max(0, lead))
+    : 0;
+}
+
+/**
+ * Where an aircraft is `leadMs` after its reported position, flying on
+ * straight at its reported speed and climb.
+ *
+ * Providers answer from caches and report positions of differing ages, so
+ * two reports a poll apart can be 4 or 6 seconds of flight apart. Carried
+ * forward to the moment each arrived, they are a poll's worth apart, and the
+ * aircraft glides between them at its true speed instead of surging and
+ * slowing with each report.
+ */
+export function carryForward(
+  flight: FlightState,
+  leadMs: number,
+): { lng: number; lat: number; alt: number | null } | null {
+  if (flight.longitude == null || flight.latitude == null) return null;
+  const alt = Number.isFinite(flight.baroAltitude) ? flight.baroAltitude! : null;
+  const seconds = leadMs / 1_000;
+  const speed = flight.velocity;
+  const track = flight.trueTrack;
+  if (
+    flight.onGround ||
+    !(seconds > 0) ||
+    speed == null ||
+    !Number.isFinite(speed) ||
+    speed <= 0 ||
+    track == null ||
+    !Number.isFinite(track)
+  ) {
+    return { lng: flight.longitude, lat: flight.latitude, alt };
+  }
+
+  const radians = (track * Math.PI) / 180;
+  const distance = speed * seconds;
+  const cosLat = Math.max(Math.cos((flight.latitude * Math.PI) / 180), 1e-6);
+  const climb = flight.verticalRate ?? flight.geomRate;
+  return {
+    lng: flight.longitude + (distance * Math.sin(radians)) / (METERS_PER_DEGREE * cosLat),
+    lat: flight.latitude + (distance * Math.cos(radians)) / METERS_PER_DEGREE,
+    alt:
+      alt !== null && climb != null && Number.isFinite(climb)
+        ? Math.max(0, alt + climb * seconds)
+        : alt,
+  };
 }
 
 // ── Flight Interpolation ───────────────────────────────────────────────
@@ -230,8 +248,6 @@ export function computeInterpolatedFlights(
   prevSnapshots: Map<string, Snapshot>,
   currSnapshots: Map<string, Snapshot>,
   tPos: number,
-  tAngle: number,
-  rawT: number,
   animDuration: number,
 ): FlightState[] {
   return currentFlights.map((f) => {
@@ -261,42 +277,12 @@ export function computeInterpolatedFlights(
       return f;
     }
 
-    if (rawT <= 1) {
-      const blendedTrack = lerpAngle(prev.track, curr.track, tAngle);
-      return {
-        ...f,
-        longitude: prev.lng + dx * tPos,
-        latitude: prev.lat + dy * tPos,
-        baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
-        trueTrack: resolveDisplayTrack({
-          reportedTrack: blendedTrack,
-          previousPosition: { lng: prev.lng, lat: prev.lat },
-          currentPosition: { lng: curr.lng, lat: curr.lat },
-        }),
-      };
-    }
-
-    const heading = (curr.track * Math.PI) / 180;
-    const speed =
-      Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
-    const extraSec = ((rawT - 1) * animDuration) / 1000;
-    const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
-    const moveDx = Math.sin(heading) * extraDeg;
-    const moveDy = Math.cos(heading) * extraDeg;
-    // Continue climb/descent using vertical rate, capped at ±500m
-    const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
-    const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
-    const safeAlt = Number.isFinite(curr.alt) ? curr.alt : 0;
     return {
       ...f,
-      longitude: curr.lng + moveDx,
-      latitude: curr.lat + moveDy,
-      baroAltitude: safeAlt + extraAlt,
-      trueTrack: resolveDisplayTrack({
-        reportedTrack: curr.track,
-        previousPosition: { lng: prev.lng, lat: prev.lat },
-        currentPosition: { lng: curr.lng, lat: curr.lat },
-      }),
+      longitude: prev.lng + dx * tPos,
+      latitude: prev.lat + dy * tPos,
+      baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
+      trueTrack: displayHeading(prev, curr, tPos * animDuration),
     };
   });
 }
@@ -320,8 +306,6 @@ export function updateInterpolatedInPlace(
   prevSnapshots: Map<string, Snapshot>,
   currSnapshots: Map<string, Snapshot>,
   tPos: number,
-  tAngle: number,
-  rawT: number,
   animDuration: number,
 ): void {
   for (let i = 0; i < out.length; i++) {
@@ -352,34 +336,9 @@ export function updateInterpolatedInPlace(
     const dy = curr.lat - prev.lat;
     if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) continue;
 
-    if (rawT <= 1) {
-      o.longitude = prev.lng + dx * tPos;
-      o.latitude = prev.lat + dy * tPos;
-      o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
-      o.trueTrack = resolveDisplayTrack({
-        reportedTrack: lerpAngle(prev.track, curr.track, tAngle),
-        previousPosition: { lng: prev.lng, lat: prev.lat },
-        currentPosition: { lng: curr.lng, lat: curr.lat },
-      });
-    } else {
-      const heading = (curr.track * Math.PI) / 180;
-      const speed =
-        Number.isFinite(f.velocity) && f.velocity! > 0 ? f.velocity! : 200;
-      const extraSec = ((rawT - 1) * animDuration) / 1000;
-      const extraDeg = Math.min((speed * extraSec) / 111_320, 0.03);
-      const moveDx = Math.sin(heading) * extraDeg;
-      const moveDy = Math.cos(heading) * extraDeg;
-      const vr = Number.isFinite(f.verticalRate) ? f.verticalRate! : 0;
-      const extraAlt = Math.max(-500, Math.min(500, vr * extraSec));
-      const safeAlt = Number.isFinite(curr.alt) ? curr.alt : 0;
-      o.longitude = curr.lng + moveDx;
-      o.latitude = curr.lat + moveDy;
-      o.baroAltitude = safeAlt + extraAlt;
-      o.trueTrack = resolveDisplayTrack({
-        reportedTrack: curr.track,
-        previousPosition: { lng: prev.lng, lat: prev.lat },
-        currentPosition: { lng: curr.lng, lat: curr.lat },
-      });
-    }
+    o.longitude = prev.lng + dx * tPos;
+    o.latitude = prev.lat + dy * tPos;
+    o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
+    o.trueTrack = displayHeading(prev, curr, tPos * animDuration);
   }
 }

@@ -147,10 +147,16 @@ export function createFpvMotion() {
   }
 
   /**
-   * Takes in a report of the aircraft, received at `receivedAt`. Repeats
-   * of the same report are ignored, so re-renders do not restart a fade.
+   * Takes in a report of the aircraft, received at `receivedAt`, whose
+   * position was true `leadMs` before that (its reported age when unset).
+   * Repeats of the same report are ignored, so re-renders do not restart a
+   * fade.
    */
-  function observe(flight: FlightState, receivedAt: number): void {
+  function observe(
+    flight: FlightState,
+    receivedAt: number,
+    leadMs?: number,
+  ): void {
     if (!finite(flight.longitude) || !finite(flight.latitude)) return;
     const key = [
       flight.longitude,
@@ -163,7 +169,13 @@ export function createFpvMotion() {
     lastKey = key;
 
     const age = flight.provenance?.positionAgeSeconds;
-    const at = receivedAt - (finite(age) && age > 0 ? age * 1_000 : 0);
+    const at =
+      receivedAt -
+      (finite(leadMs) && leadMs > 0
+        ? leadMs
+        : finite(age) && age > 0
+          ? age * 1_000
+          : 0);
     // A report older than the one in hand would only pull the view back.
     if (last && at < last.at) return;
     const track = finite(flight.trueTrack)

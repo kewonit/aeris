@@ -8,7 +8,12 @@ import {
   setMapInteractionsEnabled,
 } from "./camera-controller-utils";
 import { createFpvMotion, type FpvMotion } from "./fpv-motion";
-import { normalizeBearing } from "./flight-interpolation";
+import {
+  normalizeBearing,
+  noteReceipt,
+  reportLeadMs,
+  type ReceiptDelays,
+} from "./flight-interpolation";
 import type { FlightState } from "@/lib/opensky";
 
 const FPV_ENTER_DURATION_MS = 1_100;
@@ -118,6 +123,8 @@ export function useFpvCamera(
   isFpvActiveRef: MutableRefObject<boolean>,
 ) {
   const motionRef = useRef<{ icao24: string; motion: FpvMotion } | null>(null);
+  // How quickly answers reach us, so a cached report is timed correctly.
+  const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
   // The sky to restore after FPV. It is captured once per FPV session, so
   // switching aircraft inside the restore delay keeps the original sky.
   const savedSkyRef = useRef<{
@@ -128,7 +135,13 @@ export function useFpvCamera(
   // Each poll's report of the aircraft feeds its motion.
   useEffect(() => {
     if (!fpvIcao24 || fpvFlight?.icao24.toLowerCase() !== fpvIcao24) return;
-    motionFor(motionRef, fpvIcao24).observe(fpvFlight, Date.now());
+    const receivedAt = Date.now();
+    noteReceipt(receiptDelaysRef.current, [fpvFlight], receivedAt);
+    motionFor(motionRef, fpvIcao24).observe(
+      fpvFlight,
+      receivedAt,
+      reportLeadMs(fpvFlight, receivedAt, receiptDelaysRef.current),
+    );
   }, [fpvIcao24, fpvFlight]);
 
   useEffect(() => {

@@ -47,6 +47,11 @@ export type Snapshot = {
   lat: number;
   alt: number;
   track: number;
+  /**
+   * Which way the aircraft pointed when this snapshot began a move, so its
+   * nose turns on from there; unset for a fresh or teleported aircraft.
+   */
+  heading?: number;
 };
 
 export type FlightLayerProps = {

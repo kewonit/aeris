@@ -154,6 +154,18 @@ test("a report's position age places it that far back in time", () => {
   assert.ok(Math.abs(east - 400) < 1);
 });
 
+test("a given lead, which counts time in a cache too, overrides the position age", () => {
+  const motion = createFpvMotion();
+  motion.observe(
+    flight({ provenance: { ...flight().provenance, positionAgeSeconds: 2 } }),
+    10_000,
+    3_000,
+  );
+
+  const [east] = fromStart(motion.stateAt(10_000));
+  assert.ok(Math.abs(east - 600) < 1);
+});
+
 test("a repeated or older report changes nothing", () => {
   const motion = createFpvMotion();
   motion.observe(flight(), 0);

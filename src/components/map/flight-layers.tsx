@@ -39,13 +39,17 @@ import {
 
 import { lerpAngle, smoothStep } from "./flight-math";
 
+import { createAttitudeState, updateAttitudes } from "./aircraft-attitude";
 import {
-  computePitchByIcao,
-  computeBankByIcao,
+  carryForward,
   computeInterpolatedFlights,
+  displayHeading,
   FLIGHT_RENDER_STALE_MS,
   getSafeInterpolationProgress,
+  noteReceipt,
+  reportLeadMs,
   updateInterpolatedInPlace,
+  type ReceiptDelays,
 } from "./flight-interpolation";
 
 import { buildSelectionPulseLayers } from "./selection-pulse-layers";
@@ -150,13 +154,15 @@ export function FlightLayers({
   // Recent poll intervals for median smoothing - prevents event loop
   // stalls from inflating animDuration beyond the true poll cadence.
   const recentIntervalsRef = useRef<number[]>([]);
+  // How quickly each provider's answers reach us, to time its reports.
+  const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
 
   // Persistent caches reused across animation frames to reduce GC pressure
   const trailRenderCacheRef = useRef(createTrailRenderCache());
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
   const aircraftSizesRef = useRef(new Map<string, AircraftScreenSize>());
-  const pitchMapRef = useRef(new Map<string, number>());
-  const bankMapRef = useRef(new Map<string, number>());
+  // Every aircraft's shown pitch and bank, eased from frame to frame.
+  const attitudeRef = useRef(createAttitudeState());
   // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
   const trailMapRef = useRef(new Map<string, TrailTrack>());
   const lastTrailsForMapRef = useRef<TrailTrack[] | null>(null);
@@ -167,9 +173,9 @@ export function FlightLayers({
   const lastFlightsForInterpRef = useRef<FlightState[] | null>(null);
 
   // Set on tab resume, cleared when fresh flight data arrives.
-  // While true, the RAF loop clamps rawT to 1 (no dead reckoning)
-  // so aircraft freeze at last-known positions on stale data instead
-  // of extrapolating forward on minutes-old headings.
+  // While true, the RAF loop holds traffic at its current snapshot, so
+  // aircraft freeze at last-known positions on stale data instead of
+  // gliding on along minutes-old moves.
   const resumeSnapRef = useRef(false);
   const pageActiveRef = useRef(true);
   const requestRenderRef = useRef<() => void>(() => {});
@@ -250,6 +256,11 @@ export function FlightLayers({
   useEffect(() => {
     const now = performance.now();
     const elapsed = now - dataTimestampRef.current;
+    // Every report is placed where its aircraft is as the poll arrives.
+    const receivedAt = Date.now();
+    noteReceipt(receiptDelaysRef.current, flights, receivedAt);
+    const reported = (f: FlightState) =>
+      carryForward(f, reportLeadMs(f, receivedAt, receiptDelaysRef.current));
 
     // If data is stale (tab was hidden 15s+), snap directly to new
     // positions instead of slowly interpolating from outdated ones.
@@ -259,11 +270,12 @@ export function FlightLayers({
     if (isStale) {
       const snap = new Map<string, Snapshot>();
       for (const f of flights) {
-        if (f.longitude != null && f.latitude != null) {
+        const at = reported(f);
+        if (at) {
           snap.set(f.icao24, {
-            lng: f.longitude,
-            lat: f.latitude,
-            alt: Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0,
+            lng: at.lng,
+            lat: at.lat,
+            alt: at.alt ?? 0,
             track: Number.isFinite(f.trueTrack) ? f.trueTrack! : 0,
           });
         }
@@ -277,8 +289,14 @@ export function FlightLayers({
       requestRenderRef.current();
       return;
     }
-    const oldLinearT = Math.min(elapsed / animDurationRef.current, 1);
-    const oldAngleT = smoothStep(oldLinearT);
+    // Where each aircraft is drawn now, which may be a little past its last
+    // report if this one came late; its next move starts from there.
+    const oldLinearT = getSafeInterpolationProgress({
+      elapsedMs: elapsed,
+      animDurationMs: animDurationRef.current,
+      pageActive: pageActiveRef.current && !resumeSnapRef.current,
+    }).tPos;
+    const oldAngleT = smoothStep(Math.min(oldLinearT, 1));
 
     const newPrev = new Map<string, Snapshot>();
     for (const f of flights) {
@@ -296,6 +314,12 @@ export function FlightLayers({
             lat: oldPrev.lat + dy * oldLinearT,
             alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldLinearT,
             track: lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
+            // Where the nose pointed as this report arrived, to turn on from.
+            heading: displayHeading(
+              oldPrev,
+              oldCurr,
+              oldLinearT * animDurationRef.current,
+            ),
           });
         } else {
           newPrev.set(id, oldCurr);
@@ -308,17 +332,18 @@ export function FlightLayers({
 
     const next = new Map<string, Snapshot>();
     for (const f of flights) {
-      if (f.longitude != null && f.latitude != null) {
+      const at = reported(f);
+      if (at) {
         const prev = newPrev.get(f.icao24);
         const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
-        const rawAlt = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
+        const rawAlt = at.alt ?? 0;
 
         // MLAT positions (~100m accuracy) jitter visibly compared to
         // ADS-B (~10m). Apply EMA blending against the previous position
         // to suppress the noise while tracking real movement.
         const isMLAT = f.positionSource === "mlat";
-        let lng = f.longitude;
-        let lat = f.latitude;
+        let lng = at.lng;
+        let lat = at.lat;
         if (isMLAT && prev) {
           lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
           lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
@@ -349,7 +374,9 @@ export function FlightLayers({
       const medianInterval = sorted[Math.floor(sorted.length / 2)];
       animDurationRef.current = Math.max(
         MIN_ANIM_DURATION_MS,
-        Math.min(MAX_ANIM_DURATION_MS, medianInterval * 0.9),
+        // A move lasts the whole interval, so aircraft glide on until the
+        // next report instead of arriving early and standing still.
+        Math.min(MAX_ANIM_DURATION_MS, medianInterval),
       );
     }
     dataTimestampRef.current = now;
@@ -681,11 +708,7 @@ export function FlightLayers({
           // that resume window we render the latest authoritative snapshot only.
           pageActive: pageActiveRef.current && !resumeSnapRef.current,
         });
-        const rawT = fpvIcao24Ref.current
-          ? progress.rawT
-          : Math.min(progress.rawT, 1);
         const tPos = progress.tPos;
-        const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
@@ -699,8 +722,6 @@ export function FlightLayers({
             prevSnapshotsRef.current,
             currSnapshotsRef.current,
             tPos,
-            tAngle,
-            rawT,
             animDurationRef.current,
           );
           interpArrayRef.current = interpolated;
@@ -722,8 +743,6 @@ export function FlightLayers({
             prevSnapshotsRef.current,
             currSnapshotsRef.current,
             tPos,
-            tAngle,
-            rawT,
             animDurationRef.current,
           );
         }
@@ -765,31 +784,15 @@ export function FlightLayers({
           ? "realistic"
           : altitudeDisplayModeRef.current;
 
-        // Pitch/bank change slowly - recompute at ~10fps regardless of
-        // animation frame rate. Values are retained in pitchMapRef/bankMapRef
-        // between compute frames.
+        // Pitch and bank follow each aircraft's reported motion and change
+        // slowly, so they are eased at ~10fps whatever the frame rate.
         const PITCH_BANK_INTERVAL_MS = 100;
         if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
           lastPitchBankTimeRef.current = now;
-          computePitchByIcao(
-            interpolated,
-            trailMapRef.current,
-            currSnapshotsRef.current,
-            prevSnapshotsRef.current,
-            altitudeMode,
-            pitchMapRef.current,
-          );
-
-          computeBankByIcao(
-            interpolated,
-            prevSnapshotsRef.current,
-            currSnapshotsRef.current,
-            tAngle,
-            bankMapRef.current,
-          );
+          updateAttitudes(currentFlights, attitudeRef.current, now);
         }
-        const pitchByIcao = pitchMapRef.current;
-        const bankByIcao = bankMapRef.current;
+        const pitchByIcao = attitudeRef.current.pitch;
+        const bankByIcao = attitudeRef.current.bank;
 
         const layers = [];
 
@@ -1014,7 +1017,7 @@ export function FlightLayers({
           layersVisible &&
           ((!resumeSnapRef.current &&
             currentFlights.length > 0 &&
-            tPos < 1) ||
+            progress.moving) ||
             fpvId != null ||
             selectionAnimating);
         if (continueAnimating) scheduleFrame();
