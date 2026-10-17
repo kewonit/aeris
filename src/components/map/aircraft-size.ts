@@ -155,11 +155,18 @@ export function aircraftWingspanMeters(flight: FlightState): number {
   return override ?? MODEL_KEY_WINGSPAN[resolveModelKeyCached(flight)];
 }
 
+/** At this zoom and above, aircraft are drawn at their full symbol size. */
+const FULL_SIZE_ZOOM = 10;
+/** The share of that size an aircraft loses for each zoom level out... */
+const SHRINK_PER_ZOOM = 0.1;
+/** ...down to this share, so a zoomed-out busy sky does not turn solid. */
+const MIN_SIZE_SHARE = 0.35;
+
 /**
  * How wide an aircraft is drawn, in pixels at ground level. Sizes grow
  * gently with wingspan, so a big jet stays in proportion with a light
- * aircraft instead of dwarfing it, and shrink a little when zoomed out.
- * Zoomed in far enough, the aircraft is drawn at its real size.
+ * aircraft instead of dwarfing it, and shrink steadily as the map zooms
+ * out. Zoomed in far enough, the aircraft is drawn at its real size.
  */
 export function aircraftFootprintPixels(
   wingspanMeters: number,
@@ -169,7 +176,10 @@ export function aircraftFootprintPixels(
   if (!Number.isFinite(zoom)) {
     return 14 + 0.2 * wingspanMeters;
   }
-  const zoomFactor = Math.min(1, Math.max(0.75, 0.75 + (zoom - 6) * 0.0625));
+  const zoomFactor = Math.min(
+    1,
+    Math.max(MIN_SIZE_SHARE, 1 - (FULL_SIZE_ZOOM - zoom) * SHRINK_PER_ZOOM),
+  );
   const floor = (14 + 0.2 * wingspanMeters) * zoomFactor;
   return Math.max(floor, wingspanMeters / metersPerPixel(zoom, latitude));
 }

@@ -24,9 +24,18 @@ test("big jets stay in proportion with light aircraft at city zoom", () => {
   assert.ok(a380 / lightAircraft < 2);
 });
 
-test("aircraft shrink a little when zoomed out", () => {
-  const zoomedOut = aircraftFootprintPixels(36, 5, 37.6);
-  assert.ok(zoomedOut < aircraftFootprintPixels(36, 10, 37.6));
+test("aircraft keep shrinking as the map zooms out, down to a floor", () => {
+  const size = (zoom: number) => aircraftFootprintPixels(36, zoom, 37.6);
+
+  // A narrowbody's full symbol is 21.2 px, from zoom 10 up to real size.
+  assert.ok(Math.abs(size(10) - 21.2) < 1e-9);
+  assert.equal(size(11), size(10));
+  for (let zoom = 4; zoom < 10; zoom += 1) {
+    assert.ok(size(zoom) < size(zoom + 1), `smaller at zoom ${zoom}`);
+  }
+  assert.ok(Math.abs(size(5) - 21.2 * 0.5) < 1e-9);
+  assert.ok(Math.abs(size(2) - 21.2 * 0.35) < 1e-9);
+  assert.equal(size(0), size(2));
 });
 
 test("zoomed in to an airport, aircraft are drawn at their real size", () => {
