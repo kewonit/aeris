@@ -8,6 +8,7 @@ import {
   MAX_PART_GAP_MS,
   mergeHistoryAndLive,
   sampleFromFlight,
+  smoothQuantizedAltitudes,
   splitIntoParts,
   trackToSamples,
 } from "./trail-parts";
@@ -239,4 +240,99 @@ test("a sample after an unwatched stretch is never dropped as a spike", () => {
     samples.slice(0, 2),
     samples.slice(2),
   ]);
+});
+
+const FT = 0.3048;
+
+/** Samples a minute apart at the given altitudes in feet. */
+function atFeet(feet: number[], start = 0): TrailSample[] {
+  return feet.map((altitude, index) =>
+    eastbound(start + index, {
+      t: 1_000_000 + (start + index) * 60_000,
+      alt: altitude * FT,
+    }),
+  );
+}
+
+test("a descent rounded down to whole thousands of feet becomes smooth", () => {
+  // OpenSky's track readings while descending through 6,000-1,000 ft.
+  const rounded = atFeet([6000, 6000, 5000, 4000, 4000, 3000, 2000, 1000, 1000]);
+  const smooth = smoothQuantizedAltitudes(rounded).map((sample) => sample.alt! / FT);
+
+  // It falls the whole way, with no flat treads left between the steps...
+  for (let index = 1; index < smooth.length; index += 1) {
+    assert.ok(smooth[index] < smooth[index - 1], `falling at ${index}`);
+  }
+  // ...and each height stays inside the band its rounded reading allows.
+  rounded.forEach((sample, index) => {
+    const reading = sample.alt! / FT;
+    assert.ok(smooth[index] >= reading - 1e-6 && smooth[index] <= reading + 1000);
+  });
+});
+
+test("a level run of rounded readings sits mid-band, and the ground stays at 0", () => {
+  const level = atFeet([1000, 1000, 1000, 1000, 1000]);
+  level.push(eastbound(9, { t: 1_000_000 + 9 * 60_000, alt: 0, onGround: true }));
+
+  const smooth = smoothQuantizedAltitudes(level);
+  for (const sample of smooth.slice(0, 5)) {
+    assert.ok(Math.abs(sample.alt! / FT - 1500) < 1);
+  }
+  assert.equal(smooth[5].alt, 0);
+});
+
+test("finer altitudes are not taken for rounded ones", () => {
+  const fine = atFeet([6025, 5950, 5875, 5800, 5725, 5650]);
+
+  assert.equal(smoothQuantizedAltitudes(fine), fine);
+});
+
+test("history meets the live trail at the live height, easing in over two minutes", () => {
+  // History rounded to 1,000 ft; live says 1,800 ft at the hand-over.
+  const history = atFeet([1000, 1000, 1000, 1000]).map((sample, index) => ({
+    ...sample,
+    t: 1_000_000 + index * 30_000,
+  }));
+  const live = [
+    eastbound(5, { t: 1_000_000 + 4 * 30_000, alt: 1800 * FT }),
+    eastbound(6, { t: 1_000_000 + 5 * 30_000, alt: 1800 * FT }),
+  ];
+
+  const merged = mergeHistoryAndLive(history, live);
+  const feet = merged.map((sample) => Math.round(sample.alt! / FT));
+
+  // The last history sample is at the live height; earlier ones ease up to it.
+  assert.equal(feet[3], 1800);
+  assert.ok(feet[2] > 1000 && feet[2] < 1800);
+  assert.ok(feet[0] >= 1000 && feet[0] < feet[1]);
+  assert.deepEqual(feet.slice(4), [1800, 1800]);
+});
+
+test("history older than two minutes before the hand-over keeps its height", () => {
+  const history = atFeet([1000, 1000, 1000, 1000]);
+  const live = [eastbound(5, { t: 1_000_000 + 4 * 60_000, alt: 1800 * FT })];
+
+  const merged = mergeHistoryAndLive(history, live);
+  assert.ok(Math.abs(merged[0].alt! / FT - 1000) < 1);
+  assert.ok(Math.abs(merged[3].alt! / FT - 1800) < 1);
+});
+
+test("history filling a live gap meets the live trail at both ends", () => {
+  const history = Array.from({ length: 6 }, (_, index) =>
+    eastbound(index + 1, {
+      t: 1_000_000 + (index + 1) * 20_000,
+      alt: 3000 * FT,
+    }),
+  );
+  const live = [
+    eastbound(0, { t: 1_000_000, alt: 3200 * FT }),
+    eastbound(8, { t: 1_000_000 + 8 * 20_000, alt: 2800 * FT, afterGap: true }),
+  ];
+
+  const merged = mergeHistoryAndLive(history, live);
+  const feet = merged.map((sample) => Math.round(sample.alt! / FT));
+
+  assert.equal(merged.length, 8);
+  assert.equal(feet[1], 3200);
+  assert.equal(feet[6], 2800);
 });

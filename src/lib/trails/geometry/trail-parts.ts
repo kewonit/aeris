@@ -167,8 +167,9 @@ export function mergeHistoryAndLive(
   if (live.length === 0) return history;
   if (history.length === 0) return live;
 
-  const merged = history.filter((sample) => sample.t < live[0].t);
-  let next = merged.length;
+  const older = history.filter((sample) => sample.t < live[0].t);
+  const merged = blendHistoryHeights(older, null, live[0]);
+  let next = older.length;
   for (const [index, sample] of live.entries()) {
     if (!sample.afterGap) {
       merged.push(sample);
@@ -185,12 +186,122 @@ export function mergeHistoryAndLive(
     const from = next;
     while (next < history.length && history[next].t < sample.t) next += 1;
     if (next > from) {
-      merged.push(...history.slice(from, next), { ...sample, afterGap: false });
+      merged.push(
+        ...blendHistoryHeights(
+          history.slice(from, next),
+          live[index - 1],
+          sample,
+        ),
+        { ...sample, afterGap: false },
+      );
     } else {
       merged.push(sample);
     }
   }
   return merged;
+}
+
+/** History heights ease onto the live height they meet over this long. */
+const HANDOVER_BLEND_MS = 2 * 60_000;
+
+/**
+ * Eases a stretch of history onto the live samples either side of it, so
+ * the trail meets them at their height instead of stepping there. History
+ * and live reports can disagree by hundreds of feet, which drawn heights
+ * stretch into a cliff; positions already agree to within a sample.
+ */
+function blendHistoryHeights(
+  stretch: TrailSample[],
+  before: TrailSample | null,
+  after: TrailSample | null,
+): TrailSample[] {
+  if (stretch.length === 0) return [];
+  const first = stretch[0];
+  const last = stretch[stretch.length - 1];
+  const gapTo = (history: TrailSample, live: TrailSample | null) =>
+    live &&
+    live.alt !== null &&
+    history.alt !== null &&
+    !live.onGround &&
+    !history.onGround
+      ? live.alt - history.alt
+      : 0;
+  const startGap = gapTo(first, before);
+  const endGap = gapTo(last, after);
+  if (startGap === 0 && endGap === 0) return [...stretch];
+
+  // Between two live samples a short stretch shares itself between the two
+  // ramps, so each end still lands exactly on its live height.
+  const span = last.t - first.t;
+  const window =
+    startGap !== 0 && endGap !== 0
+      ? Math.min(HANDOVER_BLEND_MS, span)
+      : HANDOVER_BLEND_MS;
+  return stretch.map((sample) => {
+    if (sample.alt === null || sample.onGround) return sample;
+    const offset =
+      window > 0
+        ? startGap * Math.max(0, 1 - (sample.t - first.t) / window) +
+          endGap * Math.max(0, 1 - (last.t - sample.t) / window)
+        : (startGap + endGap) / 2;
+    return { ...sample, alt: Math.max(0, sample.alt + offset) };
+  });
+}
+
+/** OpenSky's track endpoint rounds altitude down to the thousand feet. */
+const ROUNDED_ALTITUDE_STEP_METERS = 304.8;
+/** Fewer readings than this could be whole thousands by chance. */
+const MIN_ROUNDED_READINGS = 5;
+
+/**
+ * Restores a smooth height profile to a track whose altitudes were rounded
+ * down to whole thousands of feet, which would otherwise draw as stairs.
+ * Between two runs of equal readings the aircraft crossed the higher run's
+ * level, so that level is pinned midway between them and heights are
+ * interpolated between such crossings; the ends sit mid-band. Tracks with
+ * finer heights, and samples on the ground, are left as they are.
+ */
+export function smoothQuantizedAltitudes(samples: TrailSample[]): TrailSample[] {
+  const airborne = samples.filter(
+    (sample) => !sample.onGround && sample.alt !== null && sample.alt > 0,
+  );
+  const step = ROUNDED_ALTITUDE_STEP_METERS;
+  const rounded =
+    airborne.length >= MIN_ROUNDED_READINGS &&
+    airborne.every((sample) => {
+      const steps = sample.alt! / step;
+      return Math.abs(steps - Math.round(steps)) * step < 1;
+    });
+  if (!rounded) return samples;
+
+  const runs: { level: number; first: number; last: number }[] = [];
+  for (const sample of airborne) {
+    const run = runs[runs.length - 1];
+    if (run && Math.abs(run.level - sample.alt!) < 1) run.last = sample.t;
+    else runs.push({ level: sample.alt!, first: sample.t, last: sample.t });
+  }
+  const pins = [{ t: runs[0].first, alt: runs[0].level + step / 2 }];
+  for (let index = 1; index < runs.length; index += 1) {
+    pins.push({
+      t: (runs[index - 1].last + runs[index].first) / 2,
+      alt: Math.max(runs[index - 1].level, runs[index].level),
+    });
+  }
+  const lastRun = runs[runs.length - 1];
+  pins.push({ t: lastRun.last, alt: lastRun.level + step / 2 });
+
+  let pin = 0;
+  return samples.map((sample) => {
+    if (sample.onGround || sample.alt === null || sample.alt <= 0) return sample;
+    while (pin < pins.length - 2 && pins[pin + 1].t <= sample.t) pin += 1;
+    const from = pins[pin];
+    const to = pins[pin + 1];
+    const share = to.t > from.t ? (sample.t - from.t) / (to.t - from.t) : 1;
+    return {
+      ...sample,
+      alt: from.alt + (to.alt - from.alt) * Math.min(1, Math.max(0, share)),
+    };
+  });
 }
 
 /** Converts a provider track, whose times are Unix seconds, to samples. */
@@ -227,8 +338,10 @@ export function trackToSamples(track: FlightTrack): TrailSample[] {
     (left, right) =>
       left.t - right.t || Number(left.alt == null) - Number(right.alt == null),
   );
-  return samples.filter(
-    (sample, index) => index === 0 || sample.t !== samples[index - 1].t,
+  return smoothQuantizedAltitudes(
+    samples.filter(
+      (sample, index) => index === 0 || sample.t !== samples[index - 1].t,
+    ),
   );
 }
 
