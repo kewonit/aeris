@@ -1,10 +1,8 @@
-import type { FpvCameraPosition } from "./camera-controller-utils";
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { TrailTrack } from "@/lib/trails/types";
-import type { MutableRefObject } from "react";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
 
@@ -66,5 +64,4 @@ export type FlightLayerProps = {
   altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
-  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
 };

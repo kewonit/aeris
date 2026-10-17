@@ -205,6 +205,7 @@ function layerParams(overrides: Partial<TrailLayerParams> = {}): TrailLayerParam
     selectedIcao24: null,
     trailMinutes: 5,
     ceilingMeters: null,
+    glow: true,
     thickness: 1,
     opacity: 1,
     cache: createTrailRenderCache(),
@@ -245,6 +246,14 @@ test("a faint, wide glow is drawn under each trail from the same data", () => {
   assert.equal(glow.props.extensions.length, 1);
   assert.equal(core.props.extensions.length, 0);
   assert.equal(layerData(layers, "flight-trail-head-glow").length, 1);
+});
+
+test("trails have no glow from the cockpit", () => {
+  const glow = buildTrailLayers(layerParams({ glow: false })).find(
+    (layer) => layer.props.id === "flight-trail-glow",
+  )!;
+
+  assert.equal(glow.props.visible, false);
 });
 
 test("the glow fades out as the map zooms out, and is gone below zoom 8", () => {

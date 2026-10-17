@@ -56,6 +56,8 @@ import {
   aircraftTailShare,
   aircraftWingspanMeters,
   altitudeMagnification,
+  fpvFootprintPixels,
+  metersPerPixel,
   type AircraftScreenSize,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
@@ -70,6 +72,54 @@ import {
 
 /** Flat icons are never pitched, so their trails meet a level tail. */
 const NO_PITCH = new Map<string, number>();
+const METERS_PER_DEGREE = 111_320;
+
+type CockpitCamera = {
+  lng: number;
+  lat: number;
+  alt: number;
+  /** Half the canvas height over the tangent of half the field of view. */
+  focalPx: number;
+  /** Metres per pixel at the map's centre, the unit models are drawn in. */
+  metersPerPixel: number;
+};
+
+/** Where the first person camera is, and how it maps metres to pixels. */
+function cockpitCamera(
+  map: maplibregl.Map,
+  zoom: number,
+): CockpitCamera | null {
+  const { lng, lat } = map.transform.getCameraLngLat();
+  const alt = map.transform.getCameraAltitude();
+  if (![lng, lat, alt].every(Number.isFinite)) return null;
+  const halfFov = (map.getVerticalFieldOfView() * Math.PI) / 360;
+  return {
+    lng,
+    lat,
+    alt,
+    focalPx: map.getCanvas().clientHeight / 2 / Math.tan(halfFov),
+    metersPerPixel: metersPerPixel(zoom, map.getCenter().lat),
+  };
+}
+
+/** Straight-line metres from the cockpit camera to an aircraft. */
+function distanceFromCockpit(
+  camera: CockpitCamera,
+  flight: FlightState,
+  altitudeMode: AltitudeDisplayMode,
+): number {
+  const cosLat = Math.cos(
+    (((camera.lat + flight.latitude!) / 2) * Math.PI) / 180,
+  );
+  const east =
+    (((flight.longitude! - camera.lng + 540) % 360) - 180) *
+    METERS_PER_DEGREE *
+    cosLat;
+  const north = (flight.latitude! - camera.lat) * METERS_PER_DEGREE;
+  const up =
+    aircraftElevationMeters(flight.baroAltitude, altitudeMode) - camera.alt;
+  return Math.hypot(east, north, up);
+}
 
 export function FlightLayers({
   flights,
@@ -85,7 +135,6 @@ export function FlightLayers({
   altitudeDisplayMode,
   globeMode = false,
   fpvIcao24 = null,
-  fpvPositionRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -141,7 +190,6 @@ export function FlightLayers({
   const globeModeRef = useRef(globeMode);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
-  const fpvPosRef = useRef(fpvPositionRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
 
@@ -172,7 +220,6 @@ export function FlightLayers({
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
-    fpvPosRef.current = fpvPositionRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -196,7 +243,6 @@ export function FlightLayers({
     globeMode,
     selectedIcao24,
     fpvIcao24,
-    fpvPositionRef,
   ]);
 
   // ── Snapshot interpolation on new data ─────────────────────────────
@@ -682,28 +728,7 @@ export function FlightLayers({
           );
         }
 
-        // FPV position output - O(1) Map lookup instead of O(n) find
         const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
-        const fpvPosOut = fpvPosRef.current;
-        if (fpvPosOut && fpvId) {
-          const fpvF = interpolatedMapRef.current.get(fpvId) ?? null;
-          if (
-            fpvF &&
-            Number.isFinite(fpvF.longitude) &&
-            Number.isFinite(fpvF.latitude)
-          ) {
-            fpvPosOut.current = {
-              lng: fpvF.longitude!,
-              lat: fpvF.latitude!,
-              alt: Number.isFinite(fpvF.baroAltitude) ? fpvF.baroAltitude : null,
-              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack : null,
-            };
-          } else {
-            fpvPosOut.current = null;
-          }
-        } else if (fpvPosOut && !fpvId) {
-          fpvPosOut.current = null;
-        }
 
         // Rebuild trail-by-icao24 Map only when trails reference changes
         if (currentTrails !== lastTrailsForMapRef.current) {
@@ -803,14 +828,21 @@ export function FlightLayers({
           });
           project = (position) => viewport.project(position);
         }
+        // From the cockpit, traffic is drawn at its real size for its
+        // distance from the camera, kept a visible dot when far away.
+        const cockpit = fpvId && map ? cockpitCamera(map, currentZoom) : null;
         for (const flight of visibleFlights) {
           if (flight.longitude == null || flight.latitude == null) continue;
+          const wingspan = aircraftWingspanMeters(flight);
           aircraftSizes.set(flight.icao24, {
-            footprintPx: aircraftFootprintPixels(
-              aircraftWingspanMeters(flight),
-              currentZoom,
-              flight.latitude,
-            ),
+            footprintPx: cockpit
+              ? fpvFootprintPixels(
+                  wingspan,
+                  distanceFromCockpit(cockpit, flight, altitudeMode),
+                  cockpit.focalPx,
+                  cockpit.metersPerPixel,
+                )
+              : aircraftFootprintPixels(wingspan, currentZoom, flight.latitude),
             magnification: project
               ? altitudeMagnification(
                   project,
@@ -826,7 +858,9 @@ export function FlightLayers({
         const footprintOf = (flight: FlightState) =>
           aircraftSizes.get(flight.icao24)?.footprintPx ?? 20;
 
-        if (layersVisible && showShadowsRef.current) {
+        // From the cockpit, ground shadows sit far below their aircraft
+        // and would be sized for the aircraft, not the ground.
+        if (layersVisible && showShadowsRef.current && !fpvId) {
           layers.push(
             new IconLayer<FlightState>({
             id: "flight-shadows",
@@ -860,6 +894,8 @@ export function FlightLayers({
               flights: visibleFlights,
               aircraftSizes,
               pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
+              // A halo reads as a streak across the cockpit's sky.
+              glow: !fpvId,
               zoom: currentZoom,
               trailMap: trailMapRef.current,
               selectedIcao24: selectedIcao24Ref.current,

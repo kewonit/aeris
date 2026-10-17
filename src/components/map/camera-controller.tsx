@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
   isWellBelowCamera,
   projectLngLatElevationPixelDelta,
-  type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
 import {
@@ -82,7 +81,6 @@ export function CameraController({
   followFlight = null,
   fpvIcao24 = null,
   fpvFlight = null,
-  fpvPositionRef,
   panelCamera,
 }: {
   city: City;
@@ -90,7 +88,6 @@ export function CameraController({
   /** The FPV selection. Stays set while a poll misses the aircraft. */
   fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
-  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
   panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
@@ -106,8 +103,6 @@ export function CameraController({
     null,
   );
   const isFpvActiveRef = useRef(false);
-  const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
-  const fpvPosRef = useRef(fpvPositionRef);
   const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
@@ -115,14 +110,6 @@ export function CameraController({
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
   const fpvKey = fpvIcao24;
-
-  useEffect(() => {
-    fpvPosRef.current = fpvPositionRef;
-  }, [fpvPositionRef]);
-
-  useEffect(() => {
-    fpvFlightRef.current = fpvFlight;
-  }, [fpvFlight]);
 
   useEffect(() => {
     panelCameraRef.current = panelCamera;
@@ -370,14 +357,7 @@ export function CameraController({
     followFlight?.trueTrack,
   ]);
 
-  useFpvCamera(
-    map,
-    isLoaded,
-    fpvIcao24,
-    fpvFlightRef,
-    fpvPosRef,
-    isFpvActiveRef,
-  );
+  useFpvCamera(map, isLoaded, fpvIcao24, fpvFlight, isFpvActiveRef);
 
   // North-up & reset-view
   useEffect(() => {

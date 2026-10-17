@@ -10,7 +10,10 @@ export const CAMERA_FRAME_RATE = 60;
 /** A little under 60 fps, so a 120 Hz display rebuilds every other frame. */
 export const CAMERA_FRAME_INTERVAL_MS = (1000 / CAMERA_FRAME_RATE) * 0.8;
 
-/** How long to wait between layer rebuilds. */
+/**
+ * How long to wait between layer rebuilds. The cockpit camera moves every
+ * frame, so first person keeps traffic up with it at the camera's rate.
+ */
 export function frameIntervalMs({
   fpv,
   cameraMoving,
@@ -18,8 +21,9 @@ export function frameIntervalMs({
   fpv: boolean;
   cameraMoving: boolean;
 }): number {
-  if (fpv) return ACTIVE_FRAME_INTERVAL_MS;
-  return cameraMoving ? CAMERA_FRAME_INTERVAL_MS : OVERVIEW_FRAME_INTERVAL_MS;
+  return fpv || cameraMoving
+    ? CAMERA_FRAME_INTERVAL_MS
+    : OVERVIEW_FRAME_INTERVAL_MS;
 }
 
 export function isFrameDue(

@@ -184,6 +184,35 @@ export function aircraftFootprintPixels(
   return Math.max(floor, wingspanMeters / metersPerPixel(zoom, latitude));
 }
 
+/** Seen from the cockpit, no aircraft looks smaller than this, so far traffic stays a dot... */
+const FPV_MIN_APPARENT_PX = 4;
+/** ...or larger than this, so a near pass does not fill the screen. */
+const FPV_MAX_APPARENT_PX = 160;
+
+/**
+ * An aircraft's size from the cockpit, in pixels at the depth of the map's
+ * centre, which is the unit models and icons are drawn in; perspective then
+ * shrinks it with distance. It is the aircraft's real wingspan, kept between
+ * a visible dot and a screen-filling size at its distance.
+ *
+ * @param focalPx The camera's focal length in pixels: half the canvas height
+ *   over the tangent of half the vertical field of view.
+ */
+export function fpvFootprintPixels(
+  wingspanMeters: number,
+  distanceMeters: number,
+  focalPx: number,
+  metersPerPixelAtCenter: number,
+): number {
+  // The width, in metres, that looks a given number of pixels wide here.
+  const metersFor = (pixels: number) => (pixels * distanceMeters) / focalPx;
+  const meters = Math.min(
+    Math.max(wingspanMeters, metersFor(FPV_MIN_APPARENT_PX)),
+    metersFor(FPV_MAX_APPARENT_PX),
+  );
+  return meters / metersPerPixelAtCenter;
+}
+
 /**
  * The most perspective compensation applied to one aircraft. Zoomed in,
  * exaggerated cruise heights reach the camera itself, where enlargement

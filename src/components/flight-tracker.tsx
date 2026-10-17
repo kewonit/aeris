@@ -14,7 +14,6 @@ import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView, type MapRef } from "@/components/map/map";
-import type { FpvCameraPosition } from "@/components/map/camera-controller-utils";
 import { CameraController } from "@/components/map/camera-controller";
 import {
   CLOSED_MAP_PANEL_CAMERA_STATE,
@@ -144,8 +143,6 @@ function FlightTrackerInner({
   }, []);
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
-
-  const fpvPositionRef = useRef<FpvCameraPosition | null>(null);
 
   const [fpvSeedCenter, setFpvSeedCenter] = useState<{
     lng: number;
@@ -721,7 +718,6 @@ function FlightTrackerInner({
             followFlight={followFlight}
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
-            fpvPositionRef={fpvPositionRef}
             panelCamera={panelCamera}
           />
           {!fpvIcao24 && (
@@ -758,7 +754,6 @@ function FlightTrackerInner({
             altitudeDisplayMode={settings.altitudeDisplayMode}
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
-            fpvPositionRef={fpvPositionRef}
           />
         </MapView>
       </div>

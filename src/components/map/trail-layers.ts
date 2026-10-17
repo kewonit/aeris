@@ -262,6 +262,8 @@ export type TrailLayerParams = HeadOptions & {
   trailMinutes: number;
   /** Aircraft flying above this many metres get no trail; null for none. */
   ceilingMeters: number | null;
+  /** Whether trails get their halo; off from the cockpit. */
+  glow: boolean;
   thickness: number;
   opacity: number;
   cache: TrailRenderCache;
@@ -369,7 +371,7 @@ export function buildTrailLayers(params: TrailLayerParams) {
       (params.zoom - GLOW_HIDDEN_ZOOM) / (GLOW_FULL_ZOOM - GLOW_HIDDEN_ZOOM),
     ),
   );
-  const glowShare = zoomIn * zoomIn * (3 - 2 * zoomIn);
+  const glowShare = params.glow ? zoomIn * zoomIn * (3 - 2 * zoomIn) : 0;
   const glow = {
     ...shared,
     visible: glowShare > 0,
