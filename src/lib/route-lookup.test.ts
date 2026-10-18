@@ -1,141 +1,132 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { clearRouteCache, lookupRoute } from "./route-lookup";
+import {
+  clearRouteCache,
+  lookupReportedRoutes,
+  type ReportedRoute,
+} from "./route-lookup";
 
-function jsonResponse(body: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
-}
+const route: ReportedRoute = {
+  callsign: "UAL123",
+  origin: {
+    iata: "SFO",
+    icao: "KSFO",
+    name: "San Francisco International Airport",
+    municipality: "San Francisco",
+    countryIso: "US",
+    latitude: 37.619,
+    longitude: -122.375,
+  },
+  destination: {
+    iata: "LHR",
+    icao: "EGLL",
+    name: "London Heathrow Airport",
+    municipality: "London",
+    countryIso: "GB",
+    latitude: 51.4706,
+    longitude: -0.4619,
+  },
+  source: "adsbdb",
+  fetchedAt: 1_779_840_000_000,
+};
 
-test("lookupRoute fetches route data through the internal route API", async () => {
-  clearRouteCache();
+async function withFetch(
+  respond: (url: string) => Response | Promise<Response>,
+  run: (urls: string[]) => Promise<void>,
+): Promise<void> {
   const originalFetch = globalThis.fetch;
   const urls: string[] = [];
-
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    urls.push(url);
-
-    if (url === "/api/routes?callsign=UAL123") {
-      return jsonResponse({
-        callsign: "UAL123",
-        origin: {
-          iata: "SFO",
-          icao: "KSFO",
-          name: "San Francisco International Airport",
-          municipality: "San Francisco",
-          countryIso: "US",
-          latitude: 37.618999,
-          longitude: -122.375,
-        },
-        destination: {
-          iata: "LHR",
-          icao: "EGLL",
-          name: "London Heathrow Airport",
-          municipality: "London",
-          countryIso: "GB",
-          latitude: 51.4706,
-          longitude: -0.461941,
-        },
-        source: "adsbdb",
-        fetchedAt: 1_779_840_000_000,
-      });
-    }
-
-    return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
+    urls.push(String(input));
+    return respond(String(input));
   }) as typeof fetch;
-
+  clearRouteCache();
   try {
-    const route = await lookupRoute("ual123");
-
-    assert.equal(route?.source, "adsbdb");
-    assert.equal(route?.origin?.iata, "SFO");
-    assert.equal(route?.destination?.iata, "LHR");
-    assert.deepEqual(urls, ["/api/routes?callsign=UAL123"]);
+    await run(urls);
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteCache();
   }
+}
+
+test("requests routes by callsign alone and caches them", async () => {
+  await withFetch(
+    () => Response.json({ ...route, routes: [route] }),
+    async (urls) => {
+      assert.deepEqual(await lookupReportedRoutes(" ual123 "), [route]);
+      assert.deepEqual(await lookupReportedRoutes("UAL123"), [route]);
+      assert.deepEqual(urls, ["/api/routes?callsign=UAL123"]);
+    },
+  );
 });
 
-test("lookupRoute caches internal route API misses", async () => {
-  clearRouteCache();
-  const originalFetch = globalThis.fetch;
-  let requestCount = 0;
-
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    requestCount += 1;
-
-    if (url === "/api/routes?callsign=NOPE123") {
-      return jsonResponse({ error: "Route unavailable" }, { status: 404 });
-    }
-
-    return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
-  }) as typeof fetch;
-
-  try {
-    const first = await lookupRoute("NOPE123");
-    const second = await lookupRoute("NOPE123");
-
-    assert.equal(first, null);
-    assert.equal(second, null);
-    assert.equal(requestCount, 1);
-  } finally {
-    globalThis.fetch = originalFetch;
-    clearRouteCache();
-  }
+test("drops malformed routes and routes for another callsign", async () => {
+  await withFetch(
+    () =>
+      Response.json({
+        routes: [
+          route,
+          { ...route, callsign: "DAL1" },
+          { ...route, origin: { iata: "SFO" } },
+          { ...route, source: "unknown" },
+        ],
+      }),
+    async () => {
+      assert.deepEqual(await lookupReportedRoutes("UAL123"), [route]);
+    },
+  );
 });
 
-test("lookupRoute does not cache temporary route API failures", async () => {
-  clearRouteCache();
-  const originalFetch = globalThis.fetch;
-  let requestCount = 0;
-
-  globalThis.fetch = (async () => {
-    requestCount += 1;
-    return jsonResponse(
-      { error: "Route lookup temporarily unavailable" },
-      { status: 503 },
-    );
-  }) as typeof fetch;
-
-  try {
-    const first = await lookupRoute("UAL790");
-    const second = await lookupRoute("UAL790");
-
-    assert.equal(first, null);
-    assert.equal(second, null);
-    assert.equal(requestCount, 2);
-  } finally {
-    globalThis.fetch = originalFetch;
-    clearRouteCache();
-  }
+test("caches a 404 as a miss", async () => {
+  await withFetch(
+    () => Response.json({ error: "Route unavailable" }, { status: 404 }),
+    async (urls) => {
+      assert.deepEqual(await lookupReportedRoutes("UAL404"), []);
+      assert.deepEqual(await lookupReportedRoutes("UAL404"), []);
+      assert.equal(urls.length, 1);
+    },
+  );
 });
 
-test("lookupRoute does not cache malformed route API success bodies", async () => {
-  clearRouteCache();
-  const originalFetch = globalThis.fetch;
-  let requestCount = 0;
+test("retries after a temporary failure", async () => {
+  let attempts = 0;
+  await withFetch(
+    () =>
+      attempts++ === 0
+        ? Response.json({ error: "temporarily unavailable" }, { status: 503 })
+        : Response.json({ ...route, routes: [route] }),
+    async (urls) => {
+      assert.deepEqual(await lookupReportedRoutes("UAL123"), []);
+      assert.deepEqual(await lookupReportedRoutes("UAL123"), [route]);
+      assert.equal(urls.length, 2);
+    },
+  );
+});
 
-  globalThis.fetch = (async () => {
-    requestCount += 1;
-    return jsonResponse({ callsign: "UAL791", source: "adsbdb" });
-  }) as typeof fetch;
+test("skips invalid callsigns without a request", async () => {
+  await withFetch(
+    () => {
+      throw new Error("Unexpected request");
+    },
+    async (urls) => {
+      assert.deepEqual(await lookupReportedRoutes("../../EGLL"), []);
+      assert.deepEqual(urls, []);
+    },
+  );
+});
 
-  try {
-    const first = await lookupRoute("UAL791");
-    const second = await lookupRoute("UAL791");
-
-    assert.equal(first, null);
-    assert.equal(second, null);
-    assert.equal(requestCount, 2);
-  } finally {
-    globalThis.fetch = originalFetch;
-    clearRouteCache();
-  }
+test("concurrent lookups share one request that no caller can cancel", async () => {
+  let resolveResponse: (response: Response) => void = () => {};
+  await withFetch(
+    () => new Promise<Response>((resolve) => (resolveResponse = resolve)),
+    async (urls) => {
+      const first = lookupReportedRoutes("UAL123");
+      const second = lookupReportedRoutes("UAL123");
+      resolveResponse(Response.json({ ...route, routes: [route] }));
+      assert.deepEqual(await first, [route]);
+      assert.deepEqual(await second, [route]);
+      assert.equal(urls.length, 1);
+    },
+  );
 });

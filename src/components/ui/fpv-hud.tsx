@@ -369,7 +369,7 @@ export function FpvHud({ flight, onExit }: FpvHudProps) {
                 ) : null}
               </div>
               <p className="truncate text-[9px] font-medium uppercase tracking-widest text-foreground/30">
-                {airline ?? flight.originCountry}
+                {airline ?? flight.registrationCountry}
               </p>
             </div>
           </div>

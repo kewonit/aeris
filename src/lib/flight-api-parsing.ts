@@ -8,6 +8,7 @@
 import type { FlightState, PositionSource } from "./opensky-types";
 import type { RawAircraft } from "./flight-api-types";
 import { MAX_POSITION_AGE_S } from "./flight-api-types";
+import { createFlightProvenance } from "./flight-provenance";
 import { registrationCountry } from "./registration-country";
 
 // ── Unit Conversion Constants ──────────────────────────────────────────
@@ -108,7 +109,10 @@ function optionalTrimmedString(value: unknown): string | null {
 
 // ── Single Aircraft Parser ─────────────────────────────────────────────
 
-function parseRawAircraft(raw: RawAircraft): FlightState | null {
+function parseRawAircraft(
+  raw: RawAircraft,
+  options?: ParseOptions,
+): FlightState | null {
   // Reject non-ICAO addresses (TIS-B, etc.)
   if (!isValidIcaoHex(raw.hex)) return null;
 
@@ -130,11 +134,10 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
   }
 
   const { altitude, onGround } = parseAltBaro(raw.alt_baro);
-
   return {
     icao24: raw.hex.toLowerCase(),
     callsign: optionalTrimmedString(raw.flight),
-    originCountry: registrationCountry(raw.r)?.name ?? "Unknown",
+    registrationCountry: registrationCountry(raw.r)?.name ?? null,
     longitude: raw.lon,
     latitude: raw.lat,
     baroAltitude: altitude,
@@ -165,6 +168,11 @@ function parseRawAircraft(raw: RawAircraft): FlightState | null {
     category: readsbCategoryToNumber(raw.category),
     typeCode: optionalTrimmedString(raw.t),
     registration: optionalTrimmedString(raw.r),
+    provenance: createFlightProvenance({
+      positionProvider: options?.positionProvider ?? "unknown",
+      responseTime: options?.responseTime,
+      positionAgeSeconds: raw.seen_pos,
+    }),
 
     // ── Avionics (readsb-only, will be undefined for OpenSky) ──────
     ias: optionalFinite(raw.ias),
@@ -230,6 +238,10 @@ export interface ParseOptions {
   includeGround?: boolean;
   /** Require barometric altitude. Default: true. */
   requireBaroAltitude?: boolean;
+  /** Provider that supplied this response. */
+  positionProvider?: string;
+  /** Provider response time in Unix seconds or milliseconds. */
+  responseTime?: number;
 }
 
 /**
@@ -248,7 +260,7 @@ export function parseAircraftList(
 
   for (const raw of rawList) {
     if (!raw || typeof raw !== "object") continue;
-    const state = parseRawAircraft(raw);
+    const state = parseRawAircraft(raw, options);
     if (!state) continue;
 
     // Filter ground aircraft unless specifically requested
