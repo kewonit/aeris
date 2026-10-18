@@ -10,9 +10,13 @@ export type RouteAirport = {
   longitude: number;
 };
 
-export type RouteSource = "adsbdb" | "hexdb" | "opensky";
+export type RouteSource = "vrs" | "adsbdb" | "hexdb" | "opensky";
 
-/** A route one provider reports for a callsign, before any position check. */
+/**
+ * One leg a provider reports for a callsign, before any position check. A
+ * flight number that calls at several airports is reported as one route
+ * per leg, in order.
+ */
 export type ReportedRoute = {
   callsign: string;
   origin: RouteAirport;
@@ -32,7 +36,12 @@ export const ROUTE_HIT_TTL_MS = 15 * 60_000;
 export const ROUTE_MISS_TTL_MS = 2 * 60_000;
 const LOOKUP_TIMEOUT_MS = 15_000;
 const CALLSIGN_PATTERN = /^[A-Z0-9]{1,8}$/;
-const ROUTE_SOURCES: readonly RouteSource[] = ["adsbdb", "hexdb", "opensky"];
+const ROUTE_SOURCES: readonly RouteSource[] = [
+  "vrs",
+  "adsbdb",
+  "hexdb",
+  "opensky",
+];
 
 const cache = createTtlCache<ReportedRoute[]>(300);
 const inflight = new Map<string, Promise<ReportedRoute[]>>();

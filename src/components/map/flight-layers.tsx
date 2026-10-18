@@ -6,35 +6,32 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
-import type { TrailEntry } from "@/lib/trails/types";
-import { type PickingInfo, MapView } from "@deck.gl/core";
+import type { TrailTrack } from "@/lib/trails/types";
+import {
+  type Layer,
+  type PickingInfo,
+  MapView,
+  WebMercatorViewport,
+} from "@deck.gl/core";
 
-import type {
-  DeckGLOverlay,
-  ElevatedPoint,
-  Snapshot,
-} from "./flight-layer-constants";
+import type { DeckGLOverlay, Snapshot } from "./flight-layer-constants";
 import {
   DEFAULT_ANIM_DURATION_MS,
   MIN_ANIM_DURATION_MS,
   MAX_ANIM_DURATION_MS,
   TELEPORT_THRESHOLD,
   TRACK_DAMPING,
-  MLAT_POSITION_ALPHA,
   AIRCRAFT_PICK_RADIUS_PX,
   SELECTION_FADE_MS,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
-  BASE_AIRCRAFT_SIZE,
   LOD_3D_ZOOM_IN,
   LOD_3D_ZOOM_OUT,
   type FlightLayerProps,
 } from "./flight-layer-constants";
 
 import {
-  aircraftSizeMultiplier,
-  tintAircraftColor,
-  applySpecialTint,
+  aircraftColor,
   AIRCRAFT_ICON_MAPPING,
   getHaloUrl,
   getRingUrl,
@@ -43,45 +40,97 @@ import {
 
 import { lerpAngle, smoothStep } from "./flight-math";
 
+import { createAttitudeState, updateAttitudes } from "./aircraft-attitude";
 import {
-  computePitchByIcao,
-  computeBankByIcao,
+  carryForward,
   computeInterpolatedFlights,
+  displayHeading,
   FLIGHT_RENDER_STALE_MS,
   getSafeInterpolationProgress,
+  noteReceipt,
+  reportLeadMs,
   updateInterpolatedInPlace,
+  type ReceiptDelays,
 } from "./flight-interpolation";
 
-import { buildTrailLayers } from "./flight-layer-builders";
-import { buildSelectionPulseLayers } from "./flight-layer-builders";
-import { buildAircraftModelLayers } from "./aircraft-model-layers";
+import { buildSelectionPulseLayers } from "./selection-pulse-layers";
+import { buildTrailLayers, createTrailRenderCache } from "./trail-layers";
+import { createFpvMotion, type FpvMotion } from "./fpv-motion";
+import {
+  buildAircraftModelLayers,
+  buildFollowedAircraftLayer,
+} from "./aircraft-model-layers";
+import {
+  fpvFollowedFootprintPx,
+  fpvGroundPixelsPerSecond,
+} from "./camera-controller-utils";
+import {
+  aircraftFootprintPixels,
+  aircraftTailShare,
+  aircraftWingspanMeters,
+  altitudeMagnification,
+  type AircraftScreenSize,
+  metersPerPixel,
+} from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
-import { trailStore } from "@/lib/trails/store/trail-store";
-import { getZoomAdjustedElevationScale } from "./altitude-projection";
-import { altitudeToColor, altitudeToElevation } from "@/lib/flight-utils";
+import { aircraftElevationMeters } from "./altitude-projection";
+import { altitudeToColor, MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
-  ACTIVE_FRAME_INTERVAL_MS,
-  OVERVIEW_FRAME_INTERVAL_MS,
+  frameIntervalMs,
   isFrameDue,
+  overviewFrameIntervalMs,
 } from "./frame-rate";
 
+/** Flat icons are never pitched, so their trails meet a level tail. */
+const NO_PITCH = new Map<string, number>();
+/**
+ * The followed aircraft is drawn this wide on screen, whatever the zoom, so
+ * it reads as the one the camera rides with without filling the view. On a
+ * narrow screen it is drawn narrower, this share of the width.
+ */
+const FPV_FOLLOWED_PX = 100;
+const NO_FLIGHTS: FlightState[] = [];
+const FPV_FOLLOWED_WIDTH_SHARE = 1 / 6;
+
+/**
+ * deck's own render loop ticks on every display frame, 120 times a second
+ * on a fast display, looking for work that only the rebuilds here create.
+ * So it is stopped, and deck draws a frame with each rebuild instead. The
+ * overlay still redraws it with each map render.
+ */
+type DeckFrameLoop = { stop(): void; redraw(): void };
+function deckOf(overlay: MapboxOverlay) {
+  return (
+    overlay as unknown as {
+      _deck?: { isInitialized: boolean; animationLoop: DeckFrameLoop | null };
+    }
+  )._deck;
+}
+function stopDeckLoop(overlay: MapboxOverlay) {
+  deckOf(overlay)?.animationLoop?.stop();
+}
+/** Draws deck's frame now: layer updates, hover picking and the render. */
+function drawDeckFrame(overlay: MapboxOverlay) {
+  const deck = deckOf(overlay);
+  if (deck?.isInitialized) deck.animationLoop?.redraw();
+}
 export function FlightLayers({
   flights,
   trails,
-  selectedEnvelope = null,
   onClick,
   selectedIcao24,
   showTrails,
   trailThickness,
-  trailDistance,
+  trailMinutes,
+  trailCeilingMeters,
   showShadows,
   showAltitudeColors,
   altitudeDisplayMode,
   globeMode = false,
   fpvIcao24 = null,
-  fpvPositionRef,
+  fpvDrawnRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -97,31 +146,43 @@ export function FlightLayers({
   // Recent poll intervals for median smoothing - prevents event loop
   // stalls from inflating animDuration beyond the true poll cadence.
   const recentIntervalsRef = useRef<number[]>([]);
+  // How quickly each provider's answers reach us, to time its reports.
+  const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
+  /** The fastest reported ground speed, which paces the overview's redraws. */
+  const maxVelocityRef = useRef(0);
+  // The first person aircraft's own smoothed path, which it is drawn on so
+  // that it flies on steadily through late and missing reports, started
+  // afresh for each aircraft followed.
+  const fpvMotionRef = useRef<{ icao24: string; motion: FpvMotion } | null>(
+    null,
+  );
 
   // Persistent caches reused across animation frames to reduce GC pressure
-  const trailBasePathCacheRef = useRef(
-    new Map<string, { key: string; basePath: ElevatedPoint[] }>(),
-  );
+  const trailRenderCacheRef = useRef(createTrailRenderCache());
+  // In first person view the followed aircraft is drawn on its own, every
+  // frame, and the rest of the traffic at the overview's rate: from lists
+  // without it that last as long as the poll does, into layers kept until
+  // the next traffic frame.
+  const followedTrailCacheRef = useRef(createTrailRenderCache());
+  const trafficListsRef = useRef<{
+    raw: FlightState[];
+    drawn: FlightState[];
+    fpvId: string;
+    rawWithout: FlightState[];
+    drawnWithout: FlightState[];
+  } | null>(null);
+  const trafficLayersRef = useRef<{ builtAt: number; layers: Layer[] }>({
+    builtAt: 0,
+    layers: [],
+  });
+  const trafficFrameRef = useRef(0);
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
-  const pitchMapRef = useRef(new Map<string, number>());
-  const bankMapRef = useRef(new Map<string, number>());
-  // Reusable containers for buildTrailLayers - clear+reuse each frame
-  const handledIdsRef = useRef(new Set<string>());
-  const visibleTrailCacheRef = useRef(new Map<string, ElevatedPoint[]>());
-  const activeIcaosRef = useRef(new Set<string>());
-  // Persistent caches for slope-limited trail paths and colors across frames
-  const trailPathCacheRef = useRef(
-    new Map<string, { key: string; result: [number, number, number][] }>(),
-  );
-  const trailColorCacheRef = useRef(
-    new Map<
-      string,
-      { key: string; result: [number, number, number, number][] }
-    >(),
-  );
+  const aircraftSizesRef = useRef(new Map<string, AircraftScreenSize>());
+  // Every aircraft's shown pitch and bank, eased from frame to frame.
+  const attitudeRef = useRef(createAttitudeState());
   // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
-  const trailMapRef = useRef(new Map<string, TrailEntry>());
-  const lastTrailsForMapRef = useRef<TrailEntry[] | null>(null);
+  const trailMapRef = useRef(new Map<string, TrailTrack>());
+  const lastTrailsForMapRef = useRef<TrailTrack[] | null>(null);
 
   // Interpolation pool - reuse FlightState objects between animation frames
   // to avoid ~18K object allocations/sec from spread syntax
@@ -129,9 +190,9 @@ export function FlightLayers({
   const lastFlightsForInterpRef = useRef<FlightState[] | null>(null);
 
   // Set on tab resume, cleared when fresh flight data arrives.
-  // While true, the RAF loop clamps rawT to 1 (no dead reckoning)
-  // so aircraft freeze at last-known positions on stale data instead
-  // of extrapolating forward on minutes-old headings.
+  // While true, the RAF loop holds traffic at its current snapshot, so
+  // aircraft freeze at last-known positions on stale data instead of
+  // gliding on along minutes-old moves.
   const resumeSnapRef = useRef(false);
   const pageActiveRef = useRef(true);
   const requestRenderRef = useRef<() => void>(() => {});
@@ -141,18 +202,18 @@ export function FlightLayers({
 
   const flightsRef = useRef(flights);
   const trailsRef = useRef(trails);
-  const selectedEnvelopeRef = useRef(selectedEnvelope);
   const onClickRef = useRef(onClick);
   const showTrailsRef = useRef(showTrails);
   const trailThicknessRef = useRef(trailThickness);
-  const trailDistanceRef = useRef(trailDistance);
+  const trailMinutesRef = useRef(trailMinutes);
+  const trailCeilingMetersRef = useRef(trailCeilingMeters);
   const showShadowsRef = useRef(showShadows);
   const showAltColorsRef = useRef(showAltitudeColors);
   const altitudeDisplayModeRef = useRef(altitudeDisplayMode);
   const globeModeRef = useRef(globeMode);
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
-  const fpvPosRef = useRef(fpvPositionRef);
+  const fpvDrawnRefRef = useRef(fpvDrawnRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
 
@@ -175,15 +236,15 @@ export function FlightLayers({
     updateGlobeDotsRef.current = updateGlobeDots;
     flightsRef.current = flights;
     trailsRef.current = trails;
-    selectedEnvelopeRef.current = selectedEnvelope;
     showTrailsRef.current = showTrails;
     trailThicknessRef.current = trailThickness;
-    trailDistanceRef.current = trailDistance;
+    trailMinutesRef.current = trailMinutes;
+    trailCeilingMetersRef.current = trailCeilingMeters;
     showShadowsRef.current = showShadows;
     showAltColorsRef.current = showAltitudeColors;
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
-    fpvPosRef.current = fpvPositionRef;
+    fpvDrawnRefRef.current = fpvDrawnRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -196,18 +257,18 @@ export function FlightLayers({
     updateGlobeDots,
     flights,
     trails,
-    selectedEnvelope,
     onClick,
     showTrails,
     trailThickness,
-    trailDistance,
+    trailMinutes,
+    trailCeilingMeters,
     showShadows,
     showAltitudeColors,
     altitudeDisplayMode,
     globeMode,
     selectedIcao24,
     fpvIcao24,
-    fpvPositionRef,
+    fpvDrawnRef,
   ]);
 
   // ── Snapshot interpolation on new data ─────────────────────────────
@@ -215,6 +276,35 @@ export function FlightLayers({
   useEffect(() => {
     const now = performance.now();
     const elapsed = now - dataTimestampRef.current;
+    // Every report is placed where its aircraft is as the poll arrives.
+    const receivedAt = Date.now();
+    let fastest = 0;
+    for (const f of flights) {
+      if (f.velocity != null && f.velocity > fastest) fastest = f.velocity;
+    }
+    maxVelocityRef.current = fastest;
+    noteReceipt(receiptDelaysRef.current, flights, receivedAt);
+    const reported = (f: FlightState) =>
+      carryForward(f, reportLeadMs(f, receivedAt, receiptDelaysRef.current));
+
+    // Each report of the first person aircraft feeds its own path. A stale
+    // report is placed when it was true, so it never pulls the view back.
+    const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
+    const fpvReport = fpvId
+      ? flights.find((f) => f.icao24.toLowerCase() === fpvId)
+      : undefined;
+    if (fpvId && fpvReport) {
+      if (fpvMotionRef.current?.icao24 !== fpvId) {
+        fpvMotionRef.current = { icao24: fpvId, motion: createFpvMotion() };
+      }
+      fpvMotionRef.current.motion.observe(
+        fpvReport,
+        receivedAt,
+        reportLeadMs(fpvReport, receivedAt, receiptDelaysRef.current, Infinity),
+      );
+    } else if (!fpvId) {
+      fpvMotionRef.current = null;
+    }
 
     // If data is stale (tab was hidden 15s+), snap directly to new
     // positions instead of slowly interpolating from outdated ones.
@@ -224,11 +314,12 @@ export function FlightLayers({
     if (isStale) {
       const snap = new Map<string, Snapshot>();
       for (const f of flights) {
-        if (f.longitude != null && f.latitude != null) {
+        const at = reported(f);
+        if (at) {
           snap.set(f.icao24, {
-            lng: f.longitude,
-            lat: f.latitude,
-            alt: Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0,
+            lng: at.lng,
+            lat: at.lat,
+            alt: at.alt ?? 0,
             track: Number.isFinite(f.trueTrack) ? f.trueTrack! : 0,
           });
         }
@@ -242,8 +333,14 @@ export function FlightLayers({
       requestRenderRef.current();
       return;
     }
-    const oldLinearT = Math.min(elapsed / animDurationRef.current, 1);
-    const oldAngleT = smoothStep(oldLinearT);
+    // Where each aircraft is drawn now, which may be a little past its last
+    // report if this one came late; its next move starts from there.
+    const oldLinearT = getSafeInterpolationProgress({
+      elapsedMs: elapsed,
+      animDurationMs: animDurationRef.current,
+      pageActive: pageActiveRef.current && !resumeSnapRef.current,
+    }).tPos;
+    const oldAngleT = smoothStep(Math.min(oldLinearT, 1));
 
     const newPrev = new Map<string, Snapshot>();
     for (const f of flights) {
@@ -261,6 +358,12 @@ export function FlightLayers({
             lat: oldPrev.lat + dy * oldLinearT,
             alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldLinearT,
             track: lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
+            // Where the nose pointed as this report arrived, to turn on from.
+            heading: displayHeading(
+              oldPrev,
+              oldCurr,
+              oldLinearT * animDurationRef.current,
+            ),
           });
         } else {
           newPrev.set(id, oldCurr);
@@ -273,17 +376,18 @@ export function FlightLayers({
 
     const next = new Map<string, Snapshot>();
     for (const f of flights) {
-      if (f.longitude != null && f.latitude != null) {
+      const at = reported(f);
+      if (at) {
         const prev = newPrev.get(f.icao24);
         const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
-        const rawAlt = Number.isFinite(f.baroAltitude) ? f.baroAltitude! : 0;
+        const rawAlt = at.alt ?? 0;
 
         // MLAT positions (~100m accuracy) jitter visibly compared to
         // ADS-B (~10m). Apply EMA blending against the previous position
         // to suppress the noise while tracking real movement.
         const isMLAT = f.positionSource === "mlat";
-        let lng = f.longitude;
-        let lat = f.latitude;
+        let lng = at.lng;
+        let lat = at.lat;
         if (isMLAT && prev) {
           lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
           lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
@@ -314,7 +418,12 @@ export function FlightLayers({
       const medianInterval = sorted[Math.floor(sorted.length / 2)];
       animDurationRef.current = Math.max(
         MIN_ANIM_DURATION_MS,
-        Math.min(MAX_ANIM_DURATION_MS, medianInterval * 0.9),
+        // A move lasts the whole interval, so aircraft glide on until the
+        // next report instead of arriving early and standing still. A poll
+        // that comes early, as the first one does after the view moves to a
+        // new area, covers only its own short stretch of flight, so its move
+        // is as short, or aircraft would crawl through it.
+        Math.min(MAX_ANIM_DURATION_MS, medianInterval, observedInterval),
       );
     }
     dataTimestampRef.current = now;
@@ -415,6 +524,7 @@ export function FlightLayers({
       });
       overlayRef.current = overlay;
       map!.addControl(overlay as unknown as maplibregl.IControl);
+      stopDeckLoop(overlay);
       return overlay;
     }
 
@@ -456,9 +566,7 @@ export function FlightLayers({
         overlayRef.current = null;
       }
       const restoredOverlay = createOverlay();
-      trailBasePathCacheRef.current.clear();
-      trailPathCacheRef.current.clear();
-      trailColorCacheRef.current.clear();
+      trailRenderCacheRef.current = createTrailRenderCache();
       requestRenderRef.current();
       deckCanvas = restoredOverlay.getCanvas();
       if (deckCanvas && deckCanvas !== mapCanvas) {
@@ -516,12 +624,13 @@ export function FlightLayers({
       180, 220, 255, 200,
     ];
 
-    const isPageActive = () =>
-      document.visibilityState === "visible" &&
-      (typeof document.hasFocus !== "function" || document.hasFocus());
+    // Only a hidden page pauses the map. A visible but unfocused window, such
+    // as one on a second screen, keeps animating.
+    const isPageActive = () => document.visibilityState === "visible";
     let lastRenderedAt = 0;
     let needsRender = true;
     let continueAnimating = true;
+    let cameraMoving = false;
 
     function scheduleFrame() {
       if (
@@ -549,11 +658,6 @@ export function FlightLayers({
       animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
       lastFlightsForInterpRef.current = null;
       resumeSnapRef.current = true;
-
-      trailBasePathCacheRef.current.clear();
-      trailPathCacheRef.current.clear();
-      trailColorCacheRef.current.clear();
-      visibleTrailCacheRef.current.clear();
     }
 
     function markPageInactive() {
@@ -570,8 +674,6 @@ export function FlightLayers({
       freezeAtCurrentSnapshots();
 
       if (pageActiveRef.current) {
-        // Preserve existing trails but reset bootstrap counter so gaps fill quickly.
-        trailStore.handleVisibilityResume();
         requestRender();
       }
     }
@@ -585,21 +687,35 @@ export function FlightLayers({
     }
     pageActiveRef.current = isPageActive();
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("blur", markPageInactive);
-    window.addEventListener("focus", handlePageResume);
     window.addEventListener("pagehide", markPageInactive);
     window.addEventListener("pageshow", handlePageResume);
     document.addEventListener("freeze", markPageInactive);
     document.addEventListener("resume", handlePageResume);
-    map?.on("zoom", requestRender);
+    // Sizes and trail heads depend on the camera, so a moving camera redraws
+    // at a faster cadence to keep them in step with it.
+    function onCameraMove() {
+      cameraMoving = true;
+      requestRender();
+    }
+    map?.on("move", onCameraMove);
     map?.on("style.load", requestRender);
+    // Hover picking happens in deck's frame. A mouse move runs one, at most
+    // once a display frame, without rebuilding the layers.
+    let pickFrameId = 0;
+    function onMouseMove() {
+      if (pickFrameId !== 0) return;
+      pickFrameId = requestAnimationFrame(() => {
+        pickFrameId = 0;
+        const overlay = overlayRef.current;
+        if (overlay) drawDeckFrame(overlay);
+      });
+    }
+    map?.on("mousemove", onMouseMove);
 
     function buildAndPushLayers(now: number) {
       animFrameRef.current = 0;
 
-      // Skip rendering while the tab is hidden or the window is blurred.
-      // Focus can be lost while the page remains visible, so checking only
-      // document.hidden still lets stale trail/aircraft frames churn.
+      // Skip rendering while the tab is hidden.
       if (!isPageActive()) {
         if (pageActiveRef.current) {
           markPageInactive();
@@ -607,9 +723,32 @@ export function FlightLayers({
         return;
       }
 
-      const frameInterval = fpvIcao24Ref.current
-        ? ACTIVE_FRAME_INTERVAL_MS
-        : OVERVIEW_FRAME_INTERVAL_MS;
+      const maxPixelsPerSecond = map
+        ? maxVelocityRef.current /
+          metersPerPixel(map.getZoom(), map.getCenter().lat)
+        : Infinity;
+      const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
+      const frameInterval = frameIntervalMs({
+        fpv: fpvId != null,
+        cameraMoving,
+        fading:
+          (selectedIcao24Ref.current != null ||
+            prevSelectedRef.current != null) &&
+          now - selectionChangeTimeRef.current < SELECTION_FADE_MS,
+        maxPixelsPerSecond,
+        groundPixelsPerSecond:
+          fpvId && map
+            ? fpvGroundPixelsPerSecond({
+                cameraAltitude: map.transform.getCameraAltitude(),
+                pitch: map.getPitch(),
+                fovDegrees: map.transform.fov,
+                heightPx: map.getCanvas().clientHeight,
+                speedMps:
+                  interpolatedMapRef.current.get(fpvId)?.velocity ??
+                  maxVelocityRef.current,
+              })
+            : Infinity,
+      });
       if (!isFrameDue(lastRenderedAt, now, frameInterval)) {
         scheduleFrame();
         return;
@@ -617,6 +756,7 @@ export function FlightLayers({
 
       if (!needsRender && !continueAnimating) return;
       needsRender = false;
+      cameraMoving = false;
       lastRenderedAt = now;
 
       const overlay = overlayRef.current;
@@ -650,11 +790,7 @@ export function FlightLayers({
           // that resume window we render the latest authoritative snapshot only.
           pageActive: pageActiveRef.current && !resumeSnapRef.current,
         });
-        const rawT = fpvIcao24Ref.current
-          ? progress.rawT
-          : Math.min(progress.rawT, 1);
         const tPos = progress.tPos;
-        const tAngle = smoothStep(smoothStep(smoothStep(tPos)));
 
         const currentFlights = flightsRef.current;
         const currentTrails = trailsRef.current;
@@ -668,8 +804,6 @@ export function FlightLayers({
             prevSnapshotsRef.current,
             currSnapshotsRef.current,
             tPos,
-            tAngle,
-            rawT,
             animDurationRef.current,
           );
           interpArrayRef.current = interpolated;
@@ -691,33 +825,8 @@ export function FlightLayers({
             prevSnapshotsRef.current,
             currSnapshotsRef.current,
             tPos,
-            tAngle,
-            rawT,
             animDurationRef.current,
           );
-        }
-
-        // FPV position output - O(1) Map lookup instead of O(n) find
-        const fpvId = fpvIcao24Ref.current?.toLowerCase() ?? null;
-        const fpvPosOut = fpvPosRef.current;
-        if (fpvPosOut && fpvId) {
-          const fpvF = interpolatedMapRef.current.get(fpvId) ?? null;
-          if (
-            fpvF &&
-            Number.isFinite(fpvF.longitude) &&
-            Number.isFinite(fpvF.latitude)
-          ) {
-            fpvPosOut.current = {
-              lng: fpvF.longitude!,
-              lat: fpvF.latitude!,
-              alt: Number.isFinite(fpvF.baroAltitude) ? fpvF.baroAltitude : null,
-              track: Number.isFinite(fpvF.trueTrack) ? fpvF.trueTrack : null,
-            };
-          } else {
-            fpvPosOut.current = null;
-          }
-        } else if (fpvPosOut && !fpvId) {
-          fpvPosOut.current = null;
         }
 
         // Rebuild trail-by-icao24 Map only when trails reference changes
@@ -734,75 +843,205 @@ export function FlightLayers({
 
         if (!layersVisible) {
           overlay.setProps({ layers: [] });
+          drawDeckFrame(overlay);
           continueAnimating = false;
           return;
         }
 
         const altColors = showAltColorsRef.current;
-        // In FPV the camera sits inside this aircraft, so its own icon,
-        // model, shadow, and trail would block the view. Other traffic stays.
-        const visibleFlights = fpvId
-          ? interpolated.filter((flight) => flight.icao24 !== fpvId)
-          : interpolated;
-        const visibleTrails = fpvId
-          ? currentTrails.filter((trail) => trail.icao24 !== fpvId)
-          : currentTrails;
-        const modelFlights = fpvId
-          ? currentFlights.filter((flight) => flight.icao24 !== fpvId)
-          : currentFlights;
 
-        // Pitch/bank change slowly - recompute at ~10fps regardless of
-        // animation frame rate. Values are retained in pitchMapRef/bankMapRef
-        // between compute frames.
-        const PITCH_BANK_INTERVAL_MS = 100;
-        if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
-          lastPitchBankTimeRef.current = now;
-          computePitchByIcao(
-            interpolated,
-            trailMapRef.current,
-            currSnapshotsRef.current,
-            prevSnapshotsRef.current,
-            pitchMapRef.current,
-          );
-
-          computeBankByIcao(
-            interpolated,
-            prevSnapshotsRef.current,
-            currSnapshotsRef.current,
-            tAngle,
-            bankMapRef.current,
-          );
-        }
-        const pitchByIcao = pitchMapRef.current;
-        const bankByIcao = bankMapRef.current;
-
-        const layers = [];
-
-        // The FPV camera sits at the aircraft's true altitude, so traffic is
-        // drawn at true altitudes too. Otherwise the exaggerated presentation
-        // heights would float every other aircraft far above the horizon.
+        // The first person camera follows its aircraft at true height, so
+        // all traffic is drawn at true heights too: the exaggerated
+        // presentation heights would stack it far above the ground around
+        // the aircraft.
         const altitudeMode: AltitudeDisplayMode = fpvId
           ? "realistic"
           : altitudeDisplayModeRef.current;
-        // Tie the height ramp to the actual flight-layer visibility window so
-        // aircraft and trails do not appear overly flattened as they fade in.
-        const elevScale = fpvId
-          ? 1
-          : getZoomAdjustedElevationScale(currentZoom, altitudeMode);
 
-        if (layersVisible && showShadowsRef.current) {
-          layers.push(
-            new IconLayer<FlightState>({
-            id: "flight-shadows",
+        // The first person aircraft is drawn on its own smoothed path, and
+        // the camera follows it exactly where it is drawn.
+        const fpvMotion =
+          fpvId && fpvMotionRef.current?.icao24 === fpvId
+            ? fpvMotionRef.current.motion
+            : null;
+        const drawn = fpvId ? interpolatedMapRef.current.get(fpvId) : null;
+        const flown = fpvMotion?.stateAt(Date.now()) ?? null;
+        if (drawn && flown) {
+          drawn.longitude = flown.lng;
+          drawn.latitude = flown.lat;
+          if (flown.alt !== null) drawn.baroAltitude = flown.alt;
+          if (flown.track !== null) drawn.trueTrack = flown.track;
+        }
+        const drawnOut = fpvDrawnRefRef.current;
+        if (drawnOut) {
+          drawnOut.current =
+            drawn && drawn.longitude != null && drawn.latitude != null
+              ? {
+                  lng: drawn.longitude,
+                  lat: drawn.latitude,
+                  elevation: aircraftElevationMeters(
+                    drawn.baroAltitude,
+                    altitudeMode,
+                  ),
+                  track: Number.isFinite(drawn.trueTrack)
+                    ? drawn.trueTrack
+                    : null,
+                }
+              : null;
+        }
+
+        // ── LOD: 3D models vs 2D icons ────────────────────────────────
+        // At low zoom, aircraft are too small to distinguish 3D silhouettes.
+        // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
+        // to ScenegraphLayers (3D) above LOD_3D_ZOOM_IN. The hysteresis
+        // band (6.5–7.5) prevents rapid flickering at the boundary.
+        if (use3DRef.current && currentZoom < LOD_3D_ZOOM_OUT) {
+          use3DRef.current = false;
+        } else if (!use3DRef.current && currentZoom >= LOD_3D_ZOOM_IN) {
+          use3DRef.current = true;
+        }
+
+        // The followed aircraft, drawn apart from the traffic every frame.
+        const followed = use3DRef.current && drawn ? drawn : null;
+        let visibleFlights = interpolated;
+        let modelFlights = currentFlights;
+        if (followed && fpvId) {
+          let lists = trafficListsRef.current;
+          if (
+            !lists ||
+            lists.raw !== currentFlights ||
+            lists.drawn !== interpolated ||
+            lists.fpvId !== fpvId
+          ) {
+            lists = {
+              raw: currentFlights,
+              drawn: interpolated,
+              fpvId,
+              rawWithout: currentFlights.filter((f) => f.icao24 !== fpvId),
+              drawnWithout: interpolated.filter((f) => f !== followed),
+            };
+            trafficListsRef.current = lists;
+          }
+          visibleFlights = lists.drawnWithout;
+          modelFlights = lists.rawWithout;
+        }
+        const traffic = trafficLayersRef.current;
+        const trafficDue =
+          !followed ||
+          isFrameDue(
+            traffic.builtAt,
+            now,
+            overviewFrameIntervalMs(maxPixelsPerSecond),
+          );
+
+        // Pitch and bank follow each aircraft's reported motion and change
+        // slowly, so they are eased at ~10fps whatever the frame rate.
+        const PITCH_BANK_INTERVAL_MS = 100;
+        if (now - lastPitchBankTimeRef.current >= PITCH_BANK_INTERVAL_MS) {
+          lastPitchBankTimeRef.current = now;
+          updateAttitudes(currentFlights, attitudeRef.current, now);
+        }
+        const pitchByIcao = attitudeRef.current.pitch;
+        const bankByIcao = attitudeRef.current.bank;
+
+        const frameLayers: Layer[] = [];
+
+        // Every aircraft's drawn size, shared by models, icons, shadows, and
+        // trail heads so they agree. 3D models are drawn at their height,
+        // where perspective would enlarge them, so that enlargement is
+        // measured and divided back out.
+        const aircraftSizes = aircraftSizesRef.current;
+        if (trafficDue) aircraftSizes.clear();
+        let project: ((position: [number, number, number]) => number[]) | null =
+          null;
+        const bearing = map?.getBearing() ?? 0;
+        // The follow camera sits close behind its aircraft, whose own ground
+        // point is then behind the camera, so sizes are measured against the
+        // map's centre instead (altitudeMagnification).
+        let groundReference: [number, number] | undefined;
+        if (use3DRef.current && map) {
+          const canvas = map.getCanvas();
+          const center = map.getCenter();
+          if (fpvId) groundReference = [center.lng, center.lat];
+          const viewport = new WebMercatorViewport({
+            width: canvas.clientWidth,
+            height: canvas.clientHeight,
+            longitude: center.lng,
+            latitude: center.lat,
+            zoom: currentZoom,
+            pitch: map.getPitch(),
+            bearing,
+            padding: map.getPadding(),
+          });
+          project = (position) => viewport.project(position);
+        }
+        const magnificationOf = (flight: FlightState) =>
+          project
+            ? altitudeMagnification(
+                project,
+                flight.longitude!,
+                flight.latitude!,
+                aircraftElevationMeters(flight.baroAltitude, altitudeMode),
+                bearing,
+                groundReference,
+              )
+            : 1;
+        for (const flight of trafficDue ? visibleFlights : NO_FLIGHTS) {
+          if (flight.longitude == null || flight.latitude == null) continue;
+          aircraftSizes.set(flight.icao24, {
+            footprintPx: aircraftFootprintPixels(
+              aircraftWingspanMeters(flight),
+              currentZoom,
+              flight.latitude,
+            ),
+            magnification: magnificationOf(flight),
+            tailShare: aircraftTailShare(flight, use3DRef.current),
+          });
+        }
+        if (
+          followed &&
+          map &&
+          followed.longitude != null &&
+          followed.latitude != null
+        ) {
+          const camera = map.transform.getCameraLngLat();
+          aircraftSizes.set(followed.icao24, {
+            footprintPx: fpvFollowedFootprintPx(
+              Math.min(
+                FPV_FOLLOWED_PX,
+                map.getCanvas().clientWidth * FPV_FOLLOWED_WIDTH_SHARE,
+              ),
+              {
+                lng: followed.longitude,
+                lat: followed.latitude,
+                elevation: aircraftElevationMeters(
+                  followed.baroAltitude,
+                  altitudeMode,
+                ),
+              },
+              {
+                lng: camera.lng,
+                lat: camera.lat,
+                altitude: map.transform.getCameraAltitude(),
+              },
+            ),
+            magnification: magnificationOf(followed),
+            tailShare: aircraftTailShare(followed, true),
+          });
+        }
+        const footprintOf = (flight: FlightState) =>
+          aircraftSizes.get(flight.icao24)?.footprintPx ?? 20;
+
+        const shadowLayer = (id: string, data: FlightState[], frame: number) =>
+          new IconLayer<FlightState>({
+            id,
             pickable: false,
             visible: true,
-            data: visibleFlights,
+            data,
             opacity: globeFade,
             getPosition: (d) => [d.longitude!, d.latitude!, 0],
             getIcon: () => "aircraft",
-            getSize: (d) =>
-              BASE_AIRCRAFT_SIZE *
-              aircraftSizeMultiplier(d.typeCode, d.category),
+            getSize: footprintOf,
             getColor: () => [0, 0, 0, 60],
             getAngle: (d) =>
               360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -812,39 +1051,59 @@ export function FlightLayers({
             sizeUnits: "pixels",
             sizeScale: 1,
             updateTriggers: {
-              getPosition: visualFrameRef.current,
-              getAngle: visualFrameRef.current,
+              getPosition: frame,
+              getAngle: frame,
+              getSize: frame,
             },
-            }),
+          });
+        const trailParams = {
+          aircraftSizes,
+          pitchByIcao: use3DRef.current ? pitchByIcao : NO_PITCH,
+          glow: true,
+          zoom: currentZoom,
+          trailMap: trailMapRef.current,
+          selectedIcao24: selectedIcao24Ref.current,
+          trailMinutes: trailMinutesRef.current,
+          ceilingMeters: trailCeilingMetersRef.current,
+          thickness: trailThicknessRef.current,
+          altColors,
+          altitudeDisplayMode: altitudeMode,
+          defaultColor: DEFAULT_COLOR,
+          opacity: globeFade,
+        };
+        const modelParams = {
+          interpolatedMap: interpolatedMapRef.current,
+          dataVersion: dataVersionRef.current,
+          layersVisible,
+          globeFade,
+          aircraftSizes,
+          altitudeDisplayMode: altitudeMode,
+          altColors,
+          defaultColor: DEFAULT_COLOR,
+          pitchByIcao,
+          bankByIcao,
+          handleHover: stableHover,
+          handleClick: stableClick,
+        };
+
+        if (trafficDue) {
+          traffic.builtAt = now;
+          trafficFrameRef.current += 1;
+          const trafficFrame = trafficFrameRef.current;
+          const layers: Layer[] = [];
+
+        if (layersVisible && showShadowsRef.current) {
+          layers.push(
+            shadowLayer("flight-shadows", visibleFlights, trafficFrame),
           );
         }
 
         if (layersVisible && showTrailsRef.current) {
           layers.push(
             ...buildTrailLayers({
-            interpolated: visibleFlights,
-            interpolatedMap: interpolatedMapRef.current,
-            currentTrails: visibleTrails,
-            trailMap: trailMapRef.current,
-            selectedIcao24: selectedIcao24Ref.current,
-            selectedEnvelope: selectedEnvelopeRef.current,
-            trailDistance: trailDistanceRef.current,
-            trailThickness: trailThicknessRef.current,
-            altColors,
-            altitudeDisplayMode: altitudeMode,
-            defaultColor: DEFAULT_COLOR,
-            elapsed,
-            visualFrame: visualFrameRef.current,
-            globeFade,
-            currentZoom,
-            elevScale,
-            visible: true,
-            trailBasePathCache: trailBasePathCacheRef.current,
-            trailPathCache: trailPathCacheRef.current,
-            trailColorCache: trailColorCacheRef.current,
-            handledIdsSet: handledIdsRef.current,
-            visibleTrailCacheMap: visibleTrailCacheRef.current,
-            activeIcaosSet: activeIcaosRef.current,
+              ...trailParams,
+              flights: visibleFlights,
+              cache: trailRenderCacheRef.current,
             }),
           );
         }
@@ -866,7 +1125,6 @@ export function FlightLayers({
             elapsed,
             globeFade,
             currentZoom,
-            elevScale,
             altitudeDisplayMode: altitudeMode,
             haloUrl,
             ringUrl,
@@ -878,17 +1136,6 @@ export function FlightLayers({
           }
         }
 
-        // ── LOD: 3D models vs 2D icons ────────────────────────────────
-        // At low zoom, aircraft are too small to distinguish 3D silhouettes.
-        // Switch to a single IconLayer (2D) below LOD_3D_ZOOM_OUT and back
-        // to ScenegraphLayers (3D) above LOD_3D_ZOOM_IN. The hysteresis
-        // band (6.5–7.5) prevents rapid flickering at the boundary.
-        if (use3DRef.current && currentZoom < LOD_3D_ZOOM_OUT) {
-          use3DRef.current = false;
-        } else if (!use3DRef.current && currentZoom >= LOD_3D_ZOOM_IN) {
-          use3DRef.current = true;
-        }
-
         if (!layersVisible) {
           // Native MapLibre globe layers own low-zoom rendering. Leaving the
           // Deck layer list empty releases its per-layer buffers and work.
@@ -896,21 +1143,9 @@ export function FlightLayers({
           // 3D: one ScenegraphLayer per model type
           layers.push(
             ...buildAircraftModelLayers({
+              ...modelParams,
               rawFlights: modelFlights,
-              interpolatedMap: interpolatedMapRef.current,
-              frameCounter: visualFrameRef.current,
-              dataVersion: dataVersionRef.current,
-              layersVisible,
-              globeFade,
-              elevScale,
-              currentZoom,
-              altitudeDisplayMode: altitudeMode,
-              altColors,
-              defaultColor: DEFAULT_COLOR,
-              pitchByIcao,
-              bankByIcao,
-              handleHover: stableHover,
-              handleClick: stableClick,
+              frameCounter: trafficFrame,
             }),
           );
         } else {
@@ -925,21 +1160,15 @@ export function FlightLayers({
               getPosition: (d) => [
                 d.longitude!,
                 d.latitude!,
-                altitudeToElevation(
-                  d.baroAltitude,
-                  altitudeMode,
-                ) * elevScale,
+                aircraftElevationMeters(d.baroAltitude, altitudeMode),
               ],
               getIcon: () => "aircraft",
-              getSize: (d) =>
-                BASE_AIRCRAFT_SIZE *
-                aircraftSizeMultiplier(d.typeCode, d.category),
+              getSize: footprintOf,
               getColor: (d) => {
                 const base = altColors
                   ? altitudeToColor(d.baroAltitude)
                   : DEFAULT_COLOR;
-                const catColor = tintAircraftColor(base, d.category);
-                return applySpecialTint(catColor, d.dbFlags, d.emergencyStatus);
+                return aircraftColor(base, d);
               },
               getAngle: (d) =>
                 360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
@@ -953,19 +1182,46 @@ export function FlightLayers({
               autoHighlight: true,
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
-                getPosition: [
-                  visualFrameRef.current,
-                  elevScale,
-                  altitudeMode,
-                ],
-                getAngle: visualFrameRef.current,
+                getPosition: [trafficFrame, altitudeMode],
+                getAngle: trafficFrame,
+                getSize: trafficFrame,
                 getColor: [dataVersionRef.current, altColors],
               },
             }),
           );
         }
 
-        overlay.setProps({ layers });
+          traffic.layers = layers;
+        }
+        frameLayers.push(...traffic.layers);
+
+        if (followed && layersVisible) {
+          const frame = visualFrameRef.current;
+          if (showShadowsRef.current) {
+            frameLayers.push(
+              shadowLayer("flight-shadow-followed", [followed], frame),
+            );
+          }
+          if (showTrailsRef.current) {
+            frameLayers.push(
+              ...buildTrailLayers({
+                ...trailParams,
+                flights: [followed],
+                cache: followedTrailCacheRef.current,
+                idSuffix: "followed",
+              }),
+            );
+          }
+          frameLayers.push(
+            buildFollowedAircraftLayer(followed, {
+              ...modelParams,
+              frameCounter: frame,
+            }),
+          );
+        }
+
+        overlay.setProps({ layers: frameLayers });
+        drawDeckFrame(overlay);
 
         const selectionAnimating =
           (selectedIcao24Ref.current != null || prevSelectedRef.current != null) &&
@@ -974,7 +1230,7 @@ export function FlightLayers({
           layersVisible &&
           ((!resumeSnapRef.current &&
             currentFlights.length > 0 &&
-            tPos < 1) ||
+            progress.moving) ||
             fpvId != null ||
             selectionAnimating);
         if (continueAnimating) scheduleFrame();
@@ -994,13 +1250,13 @@ export function FlightLayers({
         animFrameRef.current = 0;
       }
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("blur", markPageInactive);
-      window.removeEventListener("focus", handlePageResume);
       window.removeEventListener("pagehide", markPageInactive);
       window.removeEventListener("pageshow", handlePageResume);
       document.removeEventListener("freeze", markPageInactive);
       document.removeEventListener("resume", handlePageResume);
-      map?.off("zoom", requestRender);
+      map?.off("move", onCameraMove);
+      map?.off("mousemove", onMouseMove);
+      if (pickFrameId !== 0) cancelAnimationFrame(pickFrameId);
       map?.off("style.load", requestRender);
     };
   }, [atlasUrl, haloUrl, ringUrl, stableHover, stableClick, map]);

@@ -2,93 +2,91 @@
 
 import {
   forwardRef,
-  useRef,
-  useState,
   useEffect,
-  useCallback,
-  type HTMLAttributes,
+  useRef,
+  type ComponentPropsWithoutRef,
+  type Ref,
+  type UIEvent,
 } from "react";
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
+
 import { cn } from "@/lib/utils";
 
-type ScrollAreaProps = HTMLAttributes<HTMLDivElement>;
+/** How long the scrollbar stays after the content last scrolled. */
+const SCROLL_HIDE_DELAY_MS = 800;
 
+type ScrollAreaProps = ComponentPropsWithoutRef<
+  typeof ScrollAreaPrimitive.Root
+> & {
+  /**
+   * Classes for the element that scrolls. A max-height goes here, not on
+   * the root, or the content is clipped instead of scrolled.
+   */
+  viewportClassName?: string;
+  viewportRef?: Ref<HTMLDivElement>;
+};
+
+/**
+ * A vertical scroll area whose scrollbar floats over the content, so it
+ * never takes width and nothing reflows when it appears. The scrollbar
+ * exists only while the content overflows, shows while the pointer is over
+ * the area or the content is scrolling, by wheel, touch or keyboard, and
+ * its thumb can be dragged.
+ *
+ * The root is a flex column so the viewport fills it however the root gets
+ * its height: a fixed height, a flex parent, or only a max-height.
+ */
 export const ScrollArea = forwardRef<HTMLDivElement, ScrollAreaProps>(
-  ({ className, children, ...props }, ref) => {
-    const viewportRef = useRef<HTMLDivElement>(null);
-    const thumbRef = useRef<HTMLDivElement>(null);
-    const [thumbHeight, setThumbHeight] = useState(0);
-    const [thumbTop, setThumbTop] = useState(0);
-    const [visible, setVisible] = useState(false);
-    const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  ({ className, viewportClassName, viewportRef, children, ...props }, ref) => {
+    const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const updateThumb = useCallback(() => {
-      const vp = viewportRef.current;
-      if (!vp) return;
-
-      const ratio = vp.clientHeight / vp.scrollHeight;
-      if (ratio >= 1) {
-        setVisible(false);
-        return;
-      }
-
-      setThumbHeight(Math.max(ratio * vp.clientHeight, 24));
-      setThumbTop(
-        (vp.scrollTop / (vp.scrollHeight - vp.clientHeight)) *
-          (vp.clientHeight - Math.max(ratio * vp.clientHeight, 24)),
-      );
-      setVisible(true);
-
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-      hideTimer.current = setTimeout(() => setVisible(false), 1200);
-    }, []);
-
-    useEffect(() => {
-      const vp = viewportRef.current;
-      if (!vp) return;
-
-      const onScroll = () => updateThumb();
-      vp.addEventListener("scroll", onScroll, { passive: true });
-
-      const observer = new ResizeObserver(() => updateThumb());
-      observer.observe(vp);
-
-      return () => {
-        vp.removeEventListener("scroll", onScroll);
-        observer.disconnect();
+    useEffect(
+      () => () => {
         if (hideTimer.current) clearTimeout(hideTimer.current);
-      };
-    }, [updateThumb]);
+      },
+      [],
+    );
+
+    // Marked on the root directly, so scrolling never re-renders the content.
+    const showWhileScrolling = (event: UIEvent<HTMLDivElement>) => {
+      const root = event.currentTarget.parentElement;
+      if (!root) return;
+      root.dataset.scrolling = "";
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => {
+        delete root.dataset.scrolling;
+      }, SCROLL_HIDE_DELAY_MS);
+    };
 
     return (
-      <div
+      <ScrollAreaPrimitive.Root
         ref={ref}
-        className={cn("relative overflow-hidden", className)}
+        type="auto"
+        className={cn(
+          "group/scroll relative flex flex-col overflow-hidden",
+          className,
+        )}
         {...props}
       >
-        <div
+        <ScrollAreaPrimitive.Viewport
           ref={viewportRef}
-          className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-none"
-          style={{ scrollbarWidth: "none" }}
-          onMouseEnter={updateThumb}
-        >
-          {children}
-        </div>
-        <div
+          onScroll={showWhileScrolling}
+          // Radix lays the content out as a table, which lets long text widen
+          // the area and stops it truncating; as a block it keeps to the width.
           className={cn(
-            "absolute right-0.5 top-0 bottom-0 w-1.5 transition-opacity duration-300",
-            visible ? "opacity-100" : "opacity-0",
+            "min-h-0 w-full flex-1 overscroll-contain [&>div]:block!",
+            viewportClassName,
           )}
         >
-          <div
-            ref={thumbRef}
-            className="absolute w-full rounded-full bg-accent transition-[background-color] duration-150 hover:bg-border"
-            style={{
-              height: thumbHeight,
-              transform: `translateY(${thumbTop}px)`,
-            }}
-          />
-        </div>
-      </div>
+          {children}
+        </ScrollAreaPrimitive.Viewport>
+        <ScrollAreaPrimitive.Scrollbar
+          orientation="vertical"
+          className="flex w-2 touch-none select-none p-0.5 opacity-0 transition-opacity duration-300 group-hover/scroll:opacity-100 group-data-scrolling/scroll:opacity-100"
+        >
+          <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-border transition-colors hover:bg-subtle" />
+        </ScrollAreaPrimitive.Scrollbar>
+      </ScrollAreaPrimitive.Root>
     );
   },
 );

@@ -145,7 +145,7 @@ export function AtcFeedDropdown({
               No feeds for this area
             </p>
           ) : (
-            <ScrollArea className="max-h-65">
+            <ScrollArea viewportClassName="max-h-65">
               <div className="py-1">
                 {groupedFeeds.map((group) => (
                   <div key={group.type}>

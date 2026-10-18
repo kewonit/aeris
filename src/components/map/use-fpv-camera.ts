@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import type maplibregl from "maplibre-gl";
-import {
-  fpvCameraOptions,
-  setMapInteractionsEnabled,
-  type FpvCameraPosition,
-} from "./camera-controller-utils";
+import maplibregl from "maplibre-gl";
+import { fpvFollowCamera, normalizeLng } from "./camera-controller-utils";
+import type { FpvDrawnPosition } from "./flight-layer-constants";
+import { createFollowPause, FOLLOW_RETURN_MS } from "./fpv-follow";
+import { highlightAeroways } from "./fpv-scenery";
 import { normalizeBearing } from "./flight-interpolation";
-import type { FlightState } from "@/lib/opensky";
-import { ACTIVE_FRAME_INTERVAL_MS, isFrameDue } from "./frame-rate";
 
-const FPV_ENTER_DURATION_MS = 1_100;
-/** Time for the camera heading to cover about 63% of a turn. */
-const FPV_BEARING_TIME_CONSTANT_MS = 170;
+export const FPV_ENTER_DURATION_MS = 1_100;
+/**
+ * Close behind a landing aircraft the camera sits nearer the ground than
+ * the map's usual zoom limit allows; clamped, it would fall behind. The
+ * limit is raised for the session.
+ */
+const FPV_MAX_ZOOM = 18;
 const FPV_SKY_RESTORE_MS = 600;
 const EMPTY_PADDING = { top: 0, right: 0, bottom: 0, left: 0 } as const;
 const FPV_DARK_SKY: maplibregl.SkySpecification = {
@@ -32,29 +33,88 @@ const FPV_LIGHT_SKY: maplibregl.SkySpecification = {
   "fog-ground-blend": 0.18,
   "atmosphere-blend": 0.9,
 };
+/** Map events that a drag, scroll or rotate by hand begins with. */
+const INTERACTION_EVENTS = [
+  "dragstart",
+  "zoomstart",
+  "rotatestart",
+  "pitchstart",
+  "move",
+] as const;
+
+function isDarkTheme(): boolean {
+  return document.documentElement.classList.contains("dark");
+}
 
 function fpvSky(): maplibregl.SkySpecification {
-  return document.documentElement.classList.contains("dark")
-    ? FPV_DARK_SKY
-    : FPV_LIGHT_SKY;
+  return isDarkTheme() ? FPV_DARK_SKY : FPV_LIGHT_SKY;
+}
+
+type CameraPose = {
+  center: maplibregl.LngLat;
+  zoom: number;
+  pitch: number;
+  bearing: number;
+  roll: number;
+  elevation: number;
+};
+
+function currentPose(map: maplibregl.Map): CameraPose {
+  return {
+    center: map.getCenter(),
+    zoom: map.getZoom(),
+    pitch: map.getPitch(),
+    bearing: map.getBearing(),
+    roll: map.getRoll(),
+    elevation: map.getCenterElevation(),
+  };
+}
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+/** The camera part way from one pose to the follow pose. */
+function blendCamera(
+  from: CameraPose,
+  to: maplibregl.CameraOptions,
+  t: number,
+): maplibregl.CameraOptions {
+  const target = maplibregl.LngLat.convert(to.center!);
+  const lng =
+    from.center.lng +
+    (((target.lng - from.center.lng + 540) % 360) - 180) * t;
+  const bearingTurn = ((to.bearing! - from.bearing + 540) % 360) - 180;
+  return {
+    center: [
+      normalizeLng(lng),
+      from.center.lat + (target.lat - from.center.lat) * t,
+    ],
+    zoom: from.zoom + (to.zoom! - from.zoom) * t,
+    pitch: from.pitch + (to.pitch! - from.pitch) * t,
+    bearing: normalizeBearing(from.bearing + bearingTurn * t),
+    roll: from.roll + ((to.roll ?? 0) - from.roll) * t,
+    elevation: from.elevation + ((to.elevation ?? 0) - from.elevation) * t,
+  };
 }
 
 /**
- * Flies the camera into the cockpit of the FPV aircraft and keeps it there.
+ * Flies the camera in behind the first person aircraft and keeps it there,
+ * every frame, looking along its track with the aircraft in view.
  *
- * The effect is keyed on the aircraft id, not on its latest state, so a
- * poll that misses the aircraft holds the last camera instead of leaving
- * FPV. Entry waits for the first known position, which also covers deep
- * links that open before the first poll.
+ * The camera follows the aircraft exactly where the flight layers draw it,
+ * which glides smoothly between reports, so the aircraft never leaves the
+ * frame. Entry waits for the first frame it is drawn, which also covers
+ * deep links that open before the first poll.
+ *
+ * The map can still be dragged, zoomed and turned: following pauses while
+ * it is, and eases back shortly after it stops.
  */
 export function useFpvCamera(
   map: maplibregl.Map | null,
   isLoaded: boolean,
   fpvIcao24: string | null,
-  fpvFlightRef: MutableRefObject<FlightState | null>,
-  fpvPosRef: MutableRefObject<
-    MutableRefObject<FpvCameraPosition | null> | undefined
-  >,
+  drawnRef: MutableRefObject<FpvDrawnPosition | null>,
   isFpvActiveRef: MutableRefObject<boolean>,
 ) {
   // The sky to restore after FPV. It is captured once per FPV session, so
@@ -76,90 +136,109 @@ export function useFpvCamera(
     }
     savedSkyRef.current ??= { sky: map.getSky() };
     map.setSky(fpvSky());
-    // A style change replaces the sky, so save the new style's sky instead.
-    const onStyleLoad = () => {
-      savedSkyRef.current = { sky: map.getSky() };
-      map.setSky(fpvSky());
-    };
-    map.on("style.load", onStyleLoad);
 
     isFpvActiveRef.current = true;
     map.stop();
-    setMapInteractionsEnabled(map, false);
+    const previousMaxZoom = map.getMaxZoom();
+    map.setMaxZoom(Math.max(previousMaxZoom, FPV_MAX_ZOOM));
+
+    let restoreAeroways = highlightAeroways(
+      map,
+      isDarkTheme() ? "dark" : "light",
+    );
+    // A style change replaces the sky and the runway paint.
+    const onStyleLoad = () => {
+      savedSkyRef.current = { sky: map.getSky() };
+      map.setSky(fpvSky());
+      restoreAeroways = highlightAeroways(
+        map,
+        isDarkTheme() ? "dark" : "light",
+      );
+    };
+    map.on("style.load", onStyleLoad);
+
+    // Only a move with a browser event behind it is the user's; the ones
+    // this loop makes carry none.
+    const pause = createFollowPause();
+    const onInteraction = (event: { originalEvent?: Event }) => {
+      if (event.originalEvent) pause.interact(performance.now());
+    };
+    for (const type of INTERACTION_EVENTS) map.on(type, onInteraction);
 
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     let frameId: number | null = null;
-    let lastFrameAt = 0;
-    let enteredUntil: number | null = null;
-    let cameraBearing = normalizeBearing(map.getBearing());
+    let lastBearing = normalizeBearing(map.getBearing());
+    // The way in, and the way back after the map was moved by hand.
+    let transition: {
+      from: CameraPose;
+      startedAt: number;
+      durationMs: number;
+    } | null = null;
+    let entered = reduceMotion;
+    let wasPaused = false;
+    // The flight layers publish a new position each time they redraw. In
+    // between, the camera has nowhere new to go, and moving it anyway would
+    // only make the map render again for the same picture.
+    let lastDrawn: FpvDrawnPosition | null = null;
 
-    const currentPosition = (): FpvCameraPosition | null => {
-      const interpolated = fpvPosRef.current?.current;
-      if (interpolated) return interpolated;
-      const live = fpvFlightRef.current;
-      if (live?.longitude == null || live.latitude == null) return null;
-      return {
-        lng: live.longitude,
-        lat: live.latitude,
-        alt: live.baroAltitude,
-        track: live.trueTrack,
-      };
-    };
-
-    const enter = (position: FpvCameraPosition, now: number) => {
-      if (position.track !== null) {
-        cameraBearing = normalizeBearing(position.track);
-      }
-      const camera = fpvCameraOptions(map, position, cameraBearing);
-      if (!camera) return;
-      const duration = reduceMotion ? 0 : FPV_ENTER_DURATION_MS;
-      if (duration === 0) {
-        map.jumpTo({ ...camera, padding: EMPTY_PADDING });
-      } else {
-        map.flyTo({
-          ...camera,
-          padding: EMPTY_PADDING,
-          duration,
-          essential: false,
-        });
-      }
-      enteredUntil = now + duration;
-    };
-
-    const follow = (position: FpvCameraPosition, elapsedMs: number) => {
-      if (position.track !== null) {
-        const delta = ((position.track - cameraBearing + 540) % 360) - 180;
-        const weight = 1 - Math.exp(-elapsedMs / FPV_BEARING_TIME_CONSTANT_MS);
-        cameraBearing = normalizeBearing(cameraBearing + delta * weight);
-      }
-      const camera = fpvCameraOptions(
-        map,
-        { ...position, track: cameraBearing },
-        cameraBearing,
-      );
-      if (camera) map.jumpTo({ ...camera, padding: EMPTY_PADDING });
-    };
-
-    const onFrame = (now: number) => {
+    const onFrame = (frameTime: number) => {
       frameId = requestAnimationFrame(onFrame);
-      if (!isFrameDue(lastFrameAt, now, ACTIVE_FRAME_INTERVAL_MS)) return;
-      const elapsedMs = lastFrameAt > 0 ? now - lastFrameAt : 0;
-      lastFrameAt = now;
+      const drawn = drawnRef.current;
+      if (!drawn) return;
+      if (drawn === lastDrawn && !transition) return;
+      lastDrawn = drawn;
+      const target = fpvFollowCamera(map, drawn, lastBearing);
+      if (!target) return;
+      lastBearing = target.bearing ?? lastBearing;
 
-      const position = currentPosition();
-      if (!position) return;
-      if (enteredUntil === null) enter(position, now);
-      else if (now >= enteredUntil) follow(position, elapsedMs);
+      if (pause.paused(frameTime)) {
+        wasPaused = true;
+        transition = null;
+        return;
+      }
+      if (wasPaused) {
+        wasPaused = false;
+        transition = {
+          from: currentPose(map),
+          startedAt: frameTime,
+          durationMs: reduceMotion ? 0 : FOLLOW_RETURN_MS,
+        };
+      } else if (!entered) {
+        entered = true;
+        transition = {
+          from: currentPose(map),
+          startedAt: frameTime,
+          durationMs: FPV_ENTER_DURATION_MS,
+        };
+      }
+
+      if (transition) {
+        const t =
+          transition.durationMs > 0
+            ? (frameTime - transition.startedAt) / transition.durationMs
+            : 1;
+        if (t < 1) {
+          map.jumpTo({
+            ...blendCamera(transition.from, target, easeInOut(Math.max(0, t))),
+            padding: EMPTY_PADDING,
+          });
+          return;
+        }
+        transition = null;
+      }
+      map.jumpTo({ ...target, padding: EMPTY_PADDING });
     };
     frameId = requestAnimationFrame(onFrame);
 
     return () => {
       if (frameId !== null) cancelAnimationFrame(frameId);
       map.off("style.load", onStyleLoad);
+      for (const type of INTERACTION_EVENTS) map.off(type, onInteraction);
       map.stop();
-      setMapInteractionsEnabled(map, true);
+      restoreAeroways();
+      map.setMaxZoom(previousMaxZoom);
       isFpvActiveRef.current = false;
       // Wait for the exit transition before putting the sky back, unless
       // another FPV session starts first and cancels this.
@@ -176,5 +255,5 @@ export function useFpvCamera(
         }
       }, FPV_SKY_RESTORE_MS);
     };
-  }, [map, isLoaded, fpvIcao24, fpvFlightRef, fpvPosRef, isFpvActiveRef]);
+  }, [map, isLoaded, fpvIcao24, drawnRef, isFpvActiveRef]);
 }

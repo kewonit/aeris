@@ -23,12 +23,15 @@ export type Settings = {
   orbitDirection: OrbitDirection;
   showTrails: boolean;
   trailThickness: number;
-  trailDistance: number;
+  /** How many minutes of each aircraft's path to draw. */
+  trailMinutes: number;
+  /** Whether aircraft flying above `trailCeilingFt` are drawn without trails. */
+  hideHighTrails: boolean;
+  trailCeilingFt: number;
   showShadows: boolean;
   showAltitudeColors: boolean;
   altitudeDisplayMode: AltitudeDisplayMode;
   unitSystem: UnitSystem;
-  fpvChaseDistance: number;
   globeMode: boolean;
   showAirspace: boolean;
   airspaceOpacity: number;
@@ -40,10 +43,12 @@ export type Settings = {
 
 export const TRAIL_THICKNESS_MIN = 0.5;
 export const TRAIL_THICKNESS_MAX = 8;
-export const TRAIL_DISTANCE_MIN = 12;
-export const TRAIL_DISTANCE_MAX = 120;
-const FPV_CHASE_DISTANCE_MIN = 0.003;
-const FPV_CHASE_DISTANCE_MAX = 0.01;
+export const TRAIL_MINUTES_MIN = 1;
+export const TRAIL_MINUTES_MAX = 10;
+export const TRAIL_CEILING_FT_MIN = 1_000;
+export const TRAIL_CEILING_FT_MAX = 45_000;
+export const TRAIL_CEILING_FT_STEP = 1_000;
+const METERS_PER_FOOT = 0.3048;
 export const AIRSPACE_OPACITY_MIN = 0.25;
 export const AIRSPACE_OPACITY_MAX = 1.0;
 export const WEATHER_RADAR_OPACITY_MIN = 0.15;
@@ -62,18 +67,20 @@ export function normalizeSettings(input: Settings): Settings {
           TRAIL_THICKNESS_MAX,
         )
       : DEFAULT_SETTINGS.trailThickness,
-    trailDistance: Number.isFinite(input.trailDistance)
+    trailMinutes: Number.isFinite(input.trailMinutes)
       ? Math.round(
-          clamp(input.trailDistance, TRAIL_DISTANCE_MIN, TRAIL_DISTANCE_MAX),
+          clamp(input.trailMinutes, TRAIL_MINUTES_MIN, TRAIL_MINUTES_MAX),
         )
-      : DEFAULT_SETTINGS.trailDistance,
-    fpvChaseDistance: Number.isFinite(input.fpvChaseDistance)
-      ? clamp(
-          input.fpvChaseDistance,
-          FPV_CHASE_DISTANCE_MIN,
-          FPV_CHASE_DISTANCE_MAX,
-        )
-      : DEFAULT_SETTINGS.fpvChaseDistance,
+      : DEFAULT_SETTINGS.trailMinutes,
+    trailCeilingFt: Number.isFinite(input.trailCeilingFt)
+      ? Math.round(
+          clamp(
+            input.trailCeilingFt,
+            TRAIL_CEILING_FT_MIN,
+            TRAIL_CEILING_FT_MAX,
+          ) / TRAIL_CEILING_FT_STEP,
+        ) * TRAIL_CEILING_FT_STEP
+      : DEFAULT_SETTINGS.trailCeilingFt,
     airspaceOpacity: Number.isFinite(input.airspaceOpacity)
       ? clamp(
           input.airspaceOpacity,
@@ -91,18 +98,26 @@ export function normalizeSettings(input: Settings): Settings {
   };
 }
 
+/** The height above which aircraft get no trail, in metres, or null. */
+export function trailCeilingMeters(settings: Settings): number | null {
+  return settings.hideHighTrails
+    ? settings.trailCeilingFt * METERS_PER_FOOT
+    : null;
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   autoOrbit: false,
   orbitSpeed: 0.06,
   orbitDirection: "clockwise",
   showTrails: true,
   trailThickness: 1.0,
-  trailDistance: 48,
+  trailMinutes: 3,
+  hideHighTrails: true,
+  trailCeilingFt: 20_000,
   showShadows: true,
   showAltitudeColors: true,
   altitudeDisplayMode: "presentation",
   unitSystem: "aviation",
-  fpvChaseDistance: 0.0048,
   globeMode: false,
   showAirspace: false,
   airspaceOpacity: 0.78,
@@ -113,7 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "aeris:settings";
-const STORAGE_VERSION = 6;
+const STORAGE_VERSION = 8;
 const WRITE_DEBOUNCE_MS = 300;
 
 const LEGACY_TRAIL_THICKNESS_DEFAULT = 1.3;
@@ -126,9 +141,15 @@ type StorageEnvelope = {
   data: Settings;
 };
 
+/**
+ * @param legacyTrailDistance The trail length in points that settings before
+ *   version 7 stored; it only decides whether the old thickness default was
+ *   left untouched.
+ */
 export function migrateSettingsDefaults(
   input: Settings,
   fromVersion: number,
+  legacyTrailDistance?: number,
 ): Settings {
   if (fromVersion >= STORAGE_VERSION) {
     return input;
@@ -144,22 +165,26 @@ export function migrateSettingsDefaults(
     next.autoOrbit = false;
   }
 
+  // High trails are hidden by default from version 8. Earlier saves stored
+  // the old default with everything else, so it is switched on once.
+  if (fromVersion < 8) {
+    next.hideHighTrails = true;
+  }
+
   if (
     fromVersion < 4 &&
     next.trailThickness === LEGACY_TRAIL_THICKNESS_DEFAULT &&
-    next.trailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
+    legacyTrailDistance === LEGACY_TRAIL_DISTANCE_DEFAULT
   ) {
     next.trailThickness = DEFAULT_SETTINGS.trailThickness;
-    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
   }
 
   if (
     fromVersion < 5 &&
     next.trailThickness === PREVIOUS_TRAIL_THICKNESS_DEFAULT &&
-    next.trailDistance === PREVIOUS_TRAIL_DISTANCE_DEFAULT
+    legacyTrailDistance === PREVIOUS_TRAIL_DISTANCE_DEFAULT
   ) {
     next.trailThickness = DEFAULT_SETTINGS.trailThickness;
-    next.trailDistance = DEFAULT_SETTINGS.trailDistance;
   }
 
   return next;
@@ -179,10 +204,15 @@ function isValidSettings(obj: unknown): obj is Settings {
     Number.isFinite(s.trailThickness) &&
     s.trailThickness >= TRAIL_THICKNESS_MIN &&
     s.trailThickness <= TRAIL_THICKNESS_MAX &&
-    typeof s.trailDistance === "number" &&
-    Number.isFinite(s.trailDistance) &&
-    s.trailDistance >= TRAIL_DISTANCE_MIN &&
-    s.trailDistance <= TRAIL_DISTANCE_MAX &&
+    typeof s.trailMinutes === "number" &&
+    Number.isFinite(s.trailMinutes) &&
+    s.trailMinutes >= TRAIL_MINUTES_MIN &&
+    s.trailMinutes <= TRAIL_MINUTES_MAX &&
+    typeof s.hideHighTrails === "boolean" &&
+    typeof s.trailCeilingFt === "number" &&
+    Number.isFinite(s.trailCeilingFt) &&
+    s.trailCeilingFt >= TRAIL_CEILING_FT_MIN &&
+    s.trailCeilingFt <= TRAIL_CEILING_FT_MAX &&
     typeof s.showShadows === "boolean" &&
     typeof s.showAltitudeColors === "boolean" &&
     (s.altitudeDisplayMode === "presentation" ||
@@ -190,10 +220,6 @@ function isValidSettings(obj: unknown): obj is Settings {
     (s.unitSystem === "aviation" ||
       s.unitSystem === "metric" ||
       s.unitSystem === "imperial") &&
-    typeof s.fpvChaseDistance === "number" &&
-    Number.isFinite(s.fpvChaseDistance) &&
-    s.fpvChaseDistance >= FPV_CHASE_DISTANCE_MIN &&
-    s.fpvChaseDistance <= FPV_CHASE_DISTANCE_MAX &&
     typeof s.globeMode === "boolean" &&
     typeof s.showAirspace === "boolean" &&
     typeof s.airspaceOpacity === "number" &&
@@ -218,6 +244,7 @@ function loadSettings(): Settings {
     const envelope: StorageEnvelope = JSON.parse(raw);
     if (envelope.v !== STORAGE_VERSION || !isValidSettings(envelope.data)) {
       const merged = { ...DEFAULT_SETTINGS };
+      let legacyTrailDistance: number | undefined;
       if (typeof envelope.data === "object" && envelope.data !== null) {
         const d = envelope.data as Record<string, unknown>;
         for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
@@ -225,9 +252,14 @@ function loadSettings(): Settings {
             (merged as Record<string, unknown>)[key] = d[key];
           }
         }
+        if (typeof d.trailDistance === "number") {
+          legacyTrailDistance = d.trailDistance;
+        }
       }
       const version = Number.isFinite(envelope.v) ? envelope.v : 0;
-      return normalizeSettings(migrateSettingsDefaults(merged, version));
+      return normalizeSettings(
+        migrateSettingsDefaults(merged, version, legacyTrailDistance),
+      );
     }
     return normalizeSettings(
       migrateSettingsDefaults(

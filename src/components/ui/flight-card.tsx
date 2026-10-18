@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ArrowRight, ChevronDown, ChevronRight, Plane } from "lucide-react";
+import { useAircraftFreshness } from "@/hooks/use-aircraft-freshness";
 import { useAircraftPhotos } from "@/hooks/use-aircraft-photos";
-import { useSettings, type UnitSystem } from "@/hooks/use-settings";
+import { useSettings } from "@/hooks/use-settings";
 import type { FlightRouteInfo } from "@/hooks/use-route-info";
 import { useRouteInfo } from "@/hooks/use-route-info";
 import type { FlightState } from "@/lib/opensky";
@@ -14,21 +14,24 @@ import { formatAirportCode } from "@/lib/route-lookup";
 import {
   formatAltitude,
   formatSpeed,
-  formatSpeedFromKnots,
   formatVerticalSpeed,
 } from "@/lib/unit-formatters";
 import {
+  type AircraftDetailRow,
+  aircraftVerticalRate,
+  buildAircraftDetailRows,
   buildAircraftSidebarViewModel,
-  cleanText,
+  describeMissingRoute,
   formatAircraftDataSources,
-  formatAircraftFreshness,
-  hasEmergencyStatus,
+  formatAircraftIdentity,
   formatAircraftName,
+  formatTimeSinceTakeoff,
+  hasEmergencyStatus,
   isMilitaryAircraft,
-  positionSourceLabel,
 } from "@/lib/aircraft-sidebar";
 import { AirlineLogo } from "@/components/ui/airline-logo";
 import { HeroBanner } from "@/components/ui/hero-banner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type FlightCardProps = {
   flight: FlightState;
@@ -43,17 +46,12 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
   const { photos, aircraft: photoAircraft, loading: photosLoading } =
     useAircraftPhotos(flight.icao24, flight.registration);
   const details = buildAircraftSidebarViewModel(flight, airline, photoAircraft);
-  const freshness = useFreshness(
-    flight.provenance.observationTime ?? flight.provenance.responseTime,
-  );
+  const freshness = useAircraftFreshness(flight.provenance);
   const sources = formatAircraftDataSources(
     flight.provenance.contributingSources,
   );
 
-  const identity =
-    cleanText(flight.callsign) ??
-    details.registration ??
-    flight.icao24.toUpperCase();
+  const identity = formatAircraftIdentity(flight, details);
   const aircraftName = formatAircraftName(details);
   // Both lines always render, so details that arrive later (registry,
   // photo metadata) fill them in place instead of pushing content down.
@@ -63,14 +61,14 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
       .filter(Boolean)
       .join(" · ") || `ICAO ${flight.icao24.toUpperCase()}`;
   const heading = isFiniteNumber(flight.trueTrack) ? flight.trueTrack : null;
-  const verticalRate = flight.verticalRate ?? flight.geomRate ?? null;
+  const verticalRate = aircraftVerticalRate(flight);
   const canEnterFpv =
     isFiniteNumber(flight.longitude) &&
     isFiniteNumber(flight.latitude) &&
     !flight.onGround;
 
   return (
-    <div className="h-full overflow-y-auto overscroll-contain pb-6 [scrollbar-width:thin]">
+    <ScrollArea className="h-full" viewportClassName="pb-6">
       <HeroBanner
         photo={photos[0] ?? null}
         loading={photosLoading}
@@ -100,7 +98,10 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           </p>
         )}
 
-        <RouteSummary routeInfo={routeInfo} />
+        <RouteSummary
+          routeInfo={routeInfo}
+          now={flight.provenance.responseTime}
+        />
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5">
           <Fact label="Altitude" value={formatAltitude(flight.baroAltitude, units)} />
@@ -119,6 +120,16 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           />
         </dl>
 
+        <AircraftDetails
+          key={flight.icao24}
+          rows={buildAircraftDetailRows(
+            flight,
+            details,
+            units,
+            settings.showDebugData,
+          )}
+        />
+
         {onToggleFpv && (
           <button
             type="button"
@@ -131,19 +142,11 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           </button>
         )}
 
-        <AircraftDetails
-          key={flight.icao24}
-          flight={flight}
-          details={details}
-          units={units}
-          showDebugData={settings.showDebugData}
-        />
-
         <p className="mt-4 text-micro text-subtle">
           {[freshness, sources.join(", ")].filter(Boolean).join(" · ")}
         </p>
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -174,35 +177,54 @@ function AirlineMark({
 }
 
 /**
- * The reported route, or a note while it loads or when none is reported.
- * Every state keeps the same height so the facts below never move.
+ * The route, or a note while it loads or when none is reported. A route
+ * the aircraft was seen to take off on says when; one only as reported
+ * says so. Every state keeps the same height so the facts below never move.
+ *
+ * @param now The time the aircraft was last reported, in milliseconds.
  */
-export function RouteSummary({ routeInfo }: { routeInfo: FlightRouteInfo }) {
+export function RouteSummary({
+  routeInfo,
+  now,
+}: {
+  routeInfo: FlightRouteInfo;
+  now: number;
+}) {
   const origin = routeInfo.available ? formatAirportCode(routeInfo.origin) : "";
-  const destination = routeInfo.available
-    ? formatAirportCode(routeInfo.destination)
-    : "";
+  const destination = formatAirportCode(routeInfo.destination);
+  const departedAt = routeInfo.departedAt;
 
   return (
-    <section aria-label="Reported route" className="border-t border-border py-4">
-      <p className="text-label text-subtle">Reported route</p>
-      {origin && destination ? (
+    <section aria-label="Route" className="border-t border-border py-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-label text-subtle">
+          {departedAt !== null ? "Route" : "Reported route"}
+        </p>
+        {departedAt !== null && (
+          <p className="truncate text-label text-subtle">
+            {formatTimeSinceTakeoff(departedAt, now)}
+          </p>
+        )}
+      </div>
+      {origin ? (
         <div className="mt-1 grid h-11 grid-cols-[1fr_auto_1fr] items-center gap-3">
           <RouteEndpoint code={origin} place={routeInfo.origin?.municipality ?? ""} />
           <ArrowRight className="size-4 text-subtle" aria-label="to" />
-          <RouteEndpoint
-            code={destination}
-            place={routeInfo.destination?.municipality ?? ""}
-            alignEnd
-          />
+          {destination ? (
+            <RouteEndpoint
+              code={destination}
+              place={routeInfo.destination?.municipality ?? ""}
+              alignEnd
+            />
+          ) : (
+            <p className="min-w-0 truncate text-right text-small text-subtle">
+              Not reported
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-1 flex h-11 items-center text-small text-subtle">
-          {routeInfo.loading
-            ? "Looking up the route…"
-            : routeInfo.mismatch
-              ? "The reported route doesn’t match this aircraft"
-              : "No route reported for this flight"}
+          {describeMissingRoute(routeInfo)}
         </p>
       )}
     </section>
@@ -242,55 +264,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AircraftDetails({
-  flight,
-  details,
-  units,
-  showDebugData,
-}: {
-  flight: FlightState;
-  details: ReturnType<typeof buildAircraftSidebarViewModel>;
-  units: UnitSystem;
-  showDebugData: boolean;
-}) {
-  const country = [details.registrationCountryFlag, details.registrationCountry]
-    .filter(Boolean)
-    .join(" ");
-  const rows: [string, string | null][] = [
-    ["ICAO address", flight.icao24.toUpperCase()],
-    ["Registration", details.registration],
-    ["Registered in", country || null],
-    ["Manufacturer", details.manufacturer],
-    ["Model", details.model],
-    ["Type code", details.typeCode],
-    ["Status", flight.onGround ? "On ground" : "Airborne"],
-    [
-      "Position",
-      isFiniteNumber(flight.latitude) && isFiniteNumber(flight.longitude)
-        ? formatPosition(flight.latitude, flight.longitude)
-        : null,
-    ],
-    [
-      "GPS altitude",
-      isFiniteNumber(flight.geoAltitude)
-        ? formatAltitude(flight.geoAltitude, units)
-        : null,
-    ],
-    [
-      "True airspeed",
-      isFiniteNumber(flight.tas) ? formatSpeedFromKnots(flight.tas, units) : null,
-    ],
-    ["Squawk", cleanText(flight.squawk)],
-    ["Position method", positionSourceLabel(flight.positionSource)],
-  ];
-  if (showDebugData) {
-    rows.push(
-      ["NACp", formatDebugNumber(flight.debugData?.nacP)],
-      ["NIC", formatDebugNumber(flight.debugData?.nic)],
-      ["ADS-B version", formatDebugNumber(flight.debugData?.version)],
-    );
-  }
-
+function AircraftDetails({ rows }: { rows: AircraftDetailRow[] }) {
   return (
     <details className="group border-b border-border">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-small text-foreground marker:content-none">
@@ -301,37 +275,16 @@ function AircraftDetails({
         />
       </summary>
       <dl className="pb-3">
-        {rows
-          .filter((row): row is [string, string] => Boolean(row[1]))
-          .map(([label, value]) => (
-            <div
-              key={label}
-              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 py-1.5 text-small"
-            >
-              <dt className="text-subtle">{label}</dt>
-              <dd className="min-w-0 text-right text-foreground">{value}</dd>
-            </div>
-          ))}
+        {rows.map(({ key, label, value }) => (
+          <div
+            key={key}
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 py-1.5 text-small"
+          >
+            <dt className="text-subtle">{label}</dt>
+            <dd className="min-w-0 text-right text-foreground">{value}</dd>
+          </div>
+        ))}
       </dl>
     </details>
   );
-}
-
-function useFreshness(updatedAt: number): string {
-  const [now, setNow] = useState(updatedAt);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return formatAircraftFreshness(updatedAt, now);
-}
-
-function formatPosition(latitude: number, longitude: number): string {
-  const latitudeDirection = latitude >= 0 ? "N" : "S";
-  const longitudeDirection = longitude >= 0 ? "E" : "W";
-  return `${Math.abs(latitude).toFixed(2)}° ${latitudeDirection}, ${Math.abs(longitude).toFixed(2)}° ${longitudeDirection}`;
-}
-
-function formatDebugNumber(value: number | null | undefined): string | null {
-  return isFiniteNumber(value) ? String(value) : null;
 }

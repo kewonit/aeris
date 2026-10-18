@@ -19,6 +19,7 @@ import { MainTabs, type MainTab } from "./main-tabs";
 import { PhotoBanner } from "./photo-banner";
 import { RunwaysList } from "./runways-list";
 import { TafSection } from "./taf-section";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAirportPhoto, useMetar, useTaf } from "./use-airport-data";
 import { WeatherSection } from "./weather-section";
@@ -125,7 +126,7 @@ export function AirportInfoCard({
   };
 
   const body = (
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 [scrollbar-width:thin]">
+    <ScrollArea className="min-h-0 flex-1" viewportClassName="pb-6">
       {!collapsed && (
         <PhotoBanner
           photo={photoState.photo}
@@ -233,7 +234,7 @@ export function AirportInfoCard({
           </Tabs>
         </div>
       )}
-    </div>
+    </ScrollArea>
   );
 
   if (!isMobile) return <div className="flex h-full flex-col">{body}</div>;

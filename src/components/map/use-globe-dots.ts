@@ -5,7 +5,7 @@ import maplibregl from "maplibre-gl";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeToColor } from "@/lib/flight-utils";
 import { type PickingInfo } from "@deck.gl/core";
-import type { TrailEntry } from "@/lib/trails/types";
+import type { TrailTrack } from "@/lib/trails/types";
 import {
   densifyGreatCircle2D,
   splitAtAntimeridian,
@@ -33,14 +33,14 @@ export function useGlobeDots(
   map: maplibregl.Map | null,
   isLoaded: boolean,
   flightsRef: MutableRefObject<FlightState[]>,
-  trailsRef: MutableRefObject<TrailEntry[]>,
+  trailsRef: MutableRefObject<TrailTrack[]>,
   dataTimestampRef: MutableRefObject<number>,
   onClickRef: MutableRefObject<(info: PickingInfo<FlightState> | null) => void>,
   showTrailsRef: MutableRefObject<boolean>,
 ) {
   const lastGeoJsonUpdateRef = useRef(0);
   const lastGeoJsonTimestampRef = useRef(0);
-  const lastTrailsRef = useRef<TrailEntry[] | null>(null);
+  const lastTrailsRef = useRef<TrailTrack[] | null>(null);
   const lastShowTrailsRef = useRef<boolean | null>(null);
   const geoJsonClearedRef = useRef(false);
   const globeZoomEnteredAtRef = useRef(0);
@@ -302,22 +302,23 @@ export function useGlobeDots(
                 const trailFeatures: GeoJSON.Feature[] = [];
 
                 for (const trail of trails) {
-                  if (trail.path.length < 2) continue;
+                  // Only the newest part: older parts are separated by a gap
+                  // in reception and are too short to read at globe zoom.
+                  const part = trail.parts[trail.parts.length - 1];
+                  if (!part || part.length < 2) continue;
 
                   // Get the trail color from the most recent altitude
-                  const lastAlt =
-                    trail.baroAltitude ??
-                    trail.altitudes[trail.altitudes.length - 1] ??
-                    0;
-                  const c = altitudeToColor(lastAlt);
+                  const c = altitudeToColor(part[part.length - 1].alt ?? 0);
                   const color = `rgba(${c[0]},${c[1]},${c[2]},0.7)`;
 
                   // Limit to last N points for performance at globe zoom
                   const maxPts = 60;
-                  const rawPath =
-                    trail.path.length > maxPts
-                      ? trail.path.slice(trail.path.length - maxPts)
-                      : trail.path;
+                  const rawPath = part
+                    .slice(-maxPts)
+                    .map((sample): [number, number] => [
+                      sample.lng,
+                      sample.lat,
+                    ]);
 
                   // Unwrap longitudes for continuity
                   const unwrapped = unwrapLngPath(rawPath);

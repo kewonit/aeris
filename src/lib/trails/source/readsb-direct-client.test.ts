@@ -43,7 +43,49 @@ test("direct trace fetch rethrows aborts instead of treating them as missing dat
 
     assert.deepEqual(requestedUrls, [
       "https://globe.airplanes.live/data/traces/b0/trace_full_3c66b0.json",
+      "https://globe.airplanes.live/data/traces/b0/trace_recent_3c66b0.json",
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("direct trace fetch merges trace_recent onto a lagging trace_full", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input) => {
+    const recent = String(input).includes("trace_recent");
+    return {
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () =>
+        recent
+          ? {
+              timestamp: 1_000,
+              trace: [
+                [60, 50.3, 8.4, 1_300, 190, 20, 0],
+                [90, 50.4, 8.5, 1_400, 190, 20, 0],
+              ],
+            }
+          : {
+              timestamp: 1_000,
+              trace: [
+                [0, 50.1, 8.1, 1_000, 180, 15, 0],
+                [30, 50.2, 8.3, 1_200, 190, 20, 0],
+                [60, 50.3, 8.4, 1_300, 190, 20, 0],
+              ],
+            },
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchReadsbDirectTrack("airplanes-live", "3c66b0");
+
+    assert.equal(result.outcome, "full-history");
+    assert.deepEqual(
+      result.track?.path.map((waypoint) => waypoint.time),
+      [1_000, 1_030, 1_060, 1_090],
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

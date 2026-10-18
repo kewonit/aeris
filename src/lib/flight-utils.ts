@@ -1,7 +1,11 @@
-import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import { projectDisplayedAltitudeMeters } from "@/components/map/altitude-projection";
 
 const MAX_ALTITUDE_METERS = 13000;
+
+/** EMA alpha for MLAT position smoothing. MLAT accuracy (~100m) is 10x
+ *  worse than ADS-B (~10m), so we blend toward the previous position to
+ *  suppress jitter. 0.65 retains responsiveness while cutting noise. The
+ *  map and the trail store both apply it, so trails meet the aircraft. */
+export const MLAT_POSITION_ALPHA = 0.65;
 
 type RGB = [number, number, number];
 
@@ -47,13 +51,6 @@ export function altitudeToColor(
 
   const last = ALTITUDE_STOPS[ALTITUDE_STOPS.length - 1];
   return [last.color[0], last.color[1], last.color[2], 210];
-}
-
-export function altitudeToElevation(
-  altitude: number | null,
-  mode: AltitudeDisplayMode = "presentation",
-): number {
-  return projectDisplayedAltitudeMeters(altitude, mode);
 }
 
 export function formatCallsign(callsign: string | null): string {

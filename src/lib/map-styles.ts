@@ -67,6 +67,11 @@ export type MapStyle = {
   name: string;
   style: MapStyleSpec;
   preview: string;
+  /**
+   * A still of the style over the Bay Area at zoom 9, rendered from the
+   * style itself and served locally. CARTO's raster tiles, which the
+   * previews used to load, now return an "API key required" placeholder.
+   */
   previewUrl: string;
   dark: boolean;
   terrainProfile?: TerrainProfile;
@@ -113,7 +118,7 @@ export const MAP_STYLES: MapStyle[] = [
     style:
       "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json",
     preview: "linear-gradient(135deg, #191a1a 0%, #2d2d2d 50%, #191a1a 100%)",
-    previewUrl: "https://a.basemaps.cartocdn.com/dark_nolabels/3/4/2@2x.png",
+    previewUrl: "/map-previews/dark.webp",
     dark: true,
   },
   {
@@ -122,7 +127,7 @@ export const MAP_STYLES: MapStyle[] = [
     style:
       "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json",
     preview: "linear-gradient(135deg, #111416 0%, #1d2427 50%, #101315 100%)",
-    previewUrl: "https://a.basemaps.cartocdn.com/dark_nolabels/3/4/2@2x.png",
+    previewUrl: "/map-previews/dark-terrain.webp",
     dark: true,
     terrainProfile: "dark",
   },
@@ -131,7 +136,7 @@ export const MAP_STYLES: MapStyle[] = [
     name: "Annotated",
     style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
     preview: "linear-gradient(135deg, #1a1c1e 0%, #33363a 50%, #1a1c1e 100%)",
-    previewUrl: "https://a.basemaps.cartocdn.com/dark_all/3/4/2@2x.png",
+    previewUrl: "/map-previews/dark-labels.webp",
     dark: true,
   },
   {
@@ -140,8 +145,7 @@ export const MAP_STYLES: MapStyle[] = [
     style:
       "https://basemaps.cartocdn.com/gl/voyager-nolabels-gl-style/style.json",
     preview: "linear-gradient(135deg, #f2efe9 0%, #d4cfc4 50%, #f2efe9 100%)",
-    previewUrl:
-      "https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/3/4/2@2x.png",
+    previewUrl: "/map-previews/voyager.webp",
     dark: false,
   },
   {
@@ -149,8 +153,7 @@ export const MAP_STYLES: MapStyle[] = [
     name: "Light Annotated",
     style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
     preview: "linear-gradient(135deg, #e8e4dc 0%, #ccc7bc 50%, #e8e4dc 100%)",
-    previewUrl:
-      "https://a.basemaps.cartocdn.com/rastertiles/voyager/3/4/2@2x.png",
+    previewUrl: "/map-previews/voyager-labels.webp",
     dark: false,
   },
   {
@@ -158,8 +161,7 @@ export const MAP_STYLES: MapStyle[] = [
     name: "Satellite",
     style: SATELLITE_STYLE,
     preview: "linear-gradient(135deg, #0a1628 0%, #1a3050 50%, #0a1628 100%)",
-    previewUrl:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4",
+    previewUrl: "/map-previews/satellite.webp",
     dark: true,
   },
   {
@@ -167,8 +169,7 @@ export const MAP_STYLES: MapStyle[] = [
     name: "Topo",
     style: ESRI_TOPO_STYLE,
     preview: "linear-gradient(135deg, #d4cbb3 0%, #c4b89c 50%, #e0d8c4 100%)",
-    previewUrl:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/3/2/4",
+    previewUrl: "/map-previews/topo.webp",
     dark: false,
   },
 ];

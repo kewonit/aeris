@@ -11,7 +11,7 @@ import type { City } from "@/lib/cities";
 /** Normal polling interval - readsb allows 1 req/s; 5s gives 2× data density at 0.2 req/s. */
 const POLL_INTERVAL_MS = 5_000;
 
-/** Backoff on rate limit (429) or repeated errors. */
+/** Backoff on rate limit (429). */
 const RATE_LIMIT_BACKOFF_MS = 15_000;
 
 /** If tab was hidden longer than this, fetch immediately on resume. */
@@ -30,7 +30,7 @@ const FPV_POINT_RADIUS = 2;
 const MAX_EMPTY_STREAK = 3;
 
 /**
- * Fetches flights via adsb.lol → adsb.fi → airplanes.live → OpenSky fallback.
+ * Fetches flights from whichever provider answers quickest.
  * In FPV mode the query center moves with the tracked aircraft.
  * City changes are ignored while in FPV.
  */
@@ -173,6 +173,8 @@ export function useFlights(
           lon,
           radiusDeg,
           controller.signal,
+          // The FPV aircraft stays after it lands, so its roll-out is seen.
+          inFpv ? { keepOnGround: fpvIcao24Ref.current } : undefined,
         );
 
         setSource(result.source ?? null);
@@ -229,11 +231,13 @@ export function useFlights(
 
         scheduleNext(target, POLL_INTERVAL_MS);
       } catch (err) {
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        if (isAbort) return;
+        // Only this fetch's own abort is a cancel: a newer fetch or the hook
+        // winding down replaced it and owns the schedule. Anything else,
+        // such as every provider timing out, must not stop polling.
+        if (controller.signal.aborted) return;
         setSource("none");
         setError(err instanceof Error ? err.message : "Unknown error");
-        scheduleNext(target, RATE_LIMIT_BACKOFF_MS);
+        scheduleNext(target, POLL_INTERVAL_MS);
       } finally {
         if (abortRef.current === controller) setLoading(false);
       }

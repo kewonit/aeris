@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 
 import {
   fetchFlightByHex,
@@ -362,7 +362,7 @@ test("429 remains rate limiting and does not open the circuit", async () => {
   }
 });
 
-test("one-off lookup success does not change point-polling stickiness", async () => {
+test("a one-off lookup answered quickly by both does not reorder point polling", async () => {
   resetAllCircuits();
   let phase: "lookup" | "point" = "lookup";
   const pointCalls: string[] = [];
@@ -405,6 +405,197 @@ test("invalid callsigns are rejected before any provider request", async () => {
       rateLimited: false,
     });
     assert.equal(fetchCount, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a point request that times out on adsb.lol is answered by adsb.fi", async () => {
+  resetAllCircuits();
+  const providers: (string | null)[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  // Fire every timeout at once, so the 8 s provider timeout trips now.
+  globalThis.setTimeout = ((handler: () => void) =>
+    originalSetTimeout(handler, 0)) as typeof setTimeout;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    if (provider !== "adsb") return readsbResponse([rawAircraft()]);
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("Aborted", "AbortError")),
+      );
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchFlightsByPoint(12.5, 77.6, 2);
+    assert.equal(result.source, "adsbfi");
+    assert.equal(result.flights.length, 1);
+    assert.deepEqual(providers, ["adsb", "adsbfi"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("the caller's own abort still cancels a point request", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let calls = 0;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1;
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("Aborted", "AbortError")),
+      );
+      controller.abort();
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      fetchFlightsByPoint(12.5, 77.6, 2, controller.signal),
+      (err: Error) => err.name === "AbortError",
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+/** A request that never answers, failing only once its signal aborts. */
+function hangUntilAborted(init?: RequestInit): Promise<Response> {
+  return new Promise<Response>((_, reject) => {
+    init?.signal?.addEventListener("abort", () =>
+      reject(new DOMException("Aborted", "AbortError")),
+    );
+  });
+}
+
+/** Runs `run` with every timer firing at once, so provider timeouts trip now. */
+async function withImmediateTimers<T>(run: () => Promise<T>): Promise<T> {
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: () => void) =>
+    originalSetTimeout(handler, 0)) as typeof setTimeout;
+  try {
+    return await run();
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+}
+
+test("after a timeout a provider is asked last, so the next lookup never waits on it", async () => {
+  resetAllCircuits();
+  const providers: (string | null)[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    return provider === "adsb"
+      ? hangUntilAborted(init)
+      : readsbResponse([rawAircraft()]);
+  }) as typeof fetch;
+
+  try {
+    await withImmediateTimers(() => fetchFlightsByHex("abc123"));
+    assert.deepEqual(providers, ["adsb", "adsbfi"]);
+
+    providers.length = 0;
+    const result = await fetchFlightsByHex("abc123");
+    assert.equal(result.flights.length, 1);
+    assert.deepEqual(providers, ["adsbfi"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("three timeouts in a row open a provider's circuit, so it is skipped", async () => {
+  resetAllCircuits();
+  const providers: (string | null)[] = [];
+  const originalFetch = globalThis.fetch;
+  // Rate limits elsewhere keep adsb.lol in the running without tripping
+  // the other circuits.
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    return provider === "adsb"
+      ? hangUntilAborted(init)
+      : new Response(null, { status: 429 });
+  }) as typeof fetch;
+
+  try {
+    await withImmediateTimers(async () => {
+      for (let i = 0; i < 3; i++) await fetchFlightsByHex("abc123");
+    });
+    const circuit = getCircuitState("adsb");
+    assert.equal(circuit.state, "open");
+    assert.ok(circuit.cooldownRemaining > 59_000);
+
+    providers.length = 0;
+    await withImmediateTimers(() => fetchFlightsByHex("abc123"));
+    assert.ok(!providers.includes("adsb"), providers.join(","));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a slow adsb.lol is hedged by adsb.fi after 1.2 s, and is not counted as failed", async (t) => {
+  resetAllCircuits();
+  mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  t.after(() => mock.timers.reset());
+  const providers: (string | null)[] = [];
+  const aborted: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const provider = providerFromRequest(input.toString());
+    providers.push(provider);
+    if (provider !== "adsb") return readsbResponse([rawAircraft()]);
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted.push("adsb");
+        reject(new DOMException("Aborted", "AbortError"));
+      });
+    });
+  }) as typeof fetch;
+
+  try {
+    const pending = fetchFlightsByPoint(12.5, 77.6, 2);
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.deepEqual(providers, ["adsb"]);
+    mock.timers.tick(1_200);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    const result = await pending;
+    assert.equal(result.source, "adsbfi");
+    assert.equal(result.flights.length, 1);
+    assert.deepEqual(providers, ["adsb", "adsbfi"]);
+    assert.deepEqual(aborted, ["adsb"]);
+    assert.equal(getCircuitState("adsb").state, "closed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a timeout before rate limits still reports the poll as rate limited", async () => {
+  resetAllCircuits();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    providerFromRequest(input.toString()) === "adsb"
+      ? hangUntilAborted(init)
+      : new Response(null, { status: 429 })) as typeof fetch;
+
+  try {
+    const result = await withImmediateTimers(() =>
+      fetchFlightsByPoint(12.5, 77.6, 2),
+    );
+    assert.equal(result.rateLimited, true);
+    assert.deepEqual(result.flights, []);
+    // Rate limits never trip a circuit.
+    for (const tier of ["adsbfi", "airplanes", "opensky"]) {
+      assert.equal(getCircuitState(tier).state, "closed", tier);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

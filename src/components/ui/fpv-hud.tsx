@@ -17,7 +17,8 @@ import {
   Navigation,
 } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
-import { formatCallsign, headingToCardinal } from "@/lib/flight-utils";
+import { cleanText, formatAircraftIdentity } from "@/lib/aircraft-sidebar";
+import { headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { airlineLogoCandidates } from "@/lib/airline-logos";
 import {
@@ -26,6 +27,11 @@ import {
   wasAirlineLogoRecentlyFailed,
 } from "@/lib/logo-cache";
 import { useSettings } from "@/hooks/use-settings";
+import {
+  reportAgeSeconds,
+  selectedHeading,
+  SIGNAL_LOST_AFTER_S,
+} from "./fpv-hud-format";
 import {
   altitudeValueFromFeet,
   altitudeValueFromMeters,
@@ -164,6 +170,16 @@ export function FpvHud({ flight: liveFlight, onExit }: FpvHudProps) {
   return <FpvInstruments flight={flight} onExit={onExit} />;
 }
 
+/** Seconds since the aircraft was last heard, ticking once a second. */
+function useReportAge(provenance: FlightState["provenance"]): number {
+  const [now, setNow] = useState(() => provenance.responseTime);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return reportAgeSeconds(provenance, now);
+}
+
 function FpvInstruments({
   flight,
   onExit,
@@ -172,6 +188,9 @@ function FpvInstruments({
   onExit: () => void;
 }) {
   const { settings } = useSettings();
+  // The view flies on without reports; the HUD says so instead of
+  // pretending its numbers are current.
+  const signalLost = useReportAge(flight.provenance) > SIGNAL_LOST_AFTER_S;
   const altDisplay = altitudeValueFromMeters(
     flight.baroAltitude,
     settings.unitSystem,
@@ -205,10 +224,7 @@ function FpvInstruments({
     flight.navAltitudeFms,
     settings.unitSystem,
   );
-  const selHdg =
-    flight.navHeading != null && Number.isFinite(flight.navHeading)
-      ? Math.round(flight.navHeading)
-      : null;
+  const selHdg = selectedHeading(flight);
   const navModes = flight.navModes ?? null;
   const rollDeg = flight.roll ?? null;
   const trackRateVal = flight.trackRate ?? null;
@@ -352,7 +368,9 @@ function FpvInstruments({
             <div className="min-w-0">
               <div className="flex items-center gap-1">
                 <p className="truncate text-label text-foreground sm:text-small">
-                  {formatCallsign(flight.callsign)}
+                  {formatAircraftIdentity(flight, {
+                    registration: cleanText(flight.registration),
+                  })}
                 </p>
                 {isMilitary ? (
                   <span className="flex shrink-0 items-center gap-0.5 text-micro text-warning">
@@ -367,8 +385,10 @@ function FpvInstruments({
                   </span>
                 ) : null}
               </div>
-              <p className="truncate text-micro text-subtle">
-                {airline ?? flight.registrationCountry}
+              <p className="truncate text-micro text-subtle" aria-live="polite">
+                {signalLost
+                  ? "Signal lost"
+                  : (airline ?? flight.registrationCountry)}
               </p>
             </div>
           </div>

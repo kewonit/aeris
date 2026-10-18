@@ -1,5 +1,8 @@
 import type { AircraftDetails } from "@/hooks/use-aircraft-photos";
+import type { UnitSystem } from "@/hooks/use-settings";
 import type { FlightState } from "@/lib/opensky";
+import { isFiniteNumber } from "@/lib/opensky-parsing";
+import { formatAltitude, formatSpeedFromKnots } from "@/lib/unit-formatters";
 
 export type AircraftSidebarViewModel = {
   airline: string | null;
@@ -80,6 +83,24 @@ export function formatAircraftFreshness(
   return `Updated ${ageSeconds} ${unit} ago`;
 }
 
+/** How long ago a take-off was seen, as "Took off 1 h 5 min ago". */
+export function formatTimeSinceTakeoff(
+  takeoffSeconds: number,
+  now: number,
+): string {
+  const minutes = Math.max(
+    0,
+    Math.floor((now / 1_000 - takeoffSeconds) / 60),
+  );
+  if (minutes < 1) return "Took off just now";
+  if (minutes < 60) return `Took off ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest
+    ? `Took off ${hours} h ${rest} min ago`
+    : `Took off ${hours} h ago`;
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   "adsb.fi": "adsb.fi",
   "adsb.lol": "adsb.lol",
@@ -117,4 +138,124 @@ export function positionSourceLabel(
 
 export function hasEmergencyStatus(status: string | null | undefined): boolean {
   return Boolean(status && status !== "none");
+}
+
+/** What to call the aircraft: its callsign, else registration, else ICAO address. */
+export function formatAircraftIdentity(
+  flight: Pick<FlightState, "callsign" | "icao24">,
+  details: Pick<AircraftSidebarViewModel, "registration">,
+): string {
+  return (
+    cleanText(flight.callsign) ??
+    details.registration ??
+    flight.icao24.toUpperCase()
+  );
+}
+
+/** The climb or descent rate, from the barometer or else GPS. */
+export function aircraftVerticalRate(
+  flight: Pick<FlightState, "verticalRate" | "geomRate">,
+): number | null {
+  return flight.verticalRate ?? flight.geomRate ?? null;
+}
+
+/** Why no route is shown, in the route's place. */
+export function describeMissingRoute(route: {
+  loading: boolean;
+  mismatch: boolean;
+}): string {
+  if (route.loading) return "Looking up the route…";
+  if (route.mismatch) return "The reported route doesn’t match this aircraft";
+  return "No route reported for this flight";
+}
+
+export function formatAircraftPosition(
+  latitude: number,
+  longitude: number,
+): string {
+  const latitudeDirection = latitude >= 0 ? "N" : "S";
+  const longitudeDirection = longitude >= 0 ? "E" : "W";
+  return `${Math.abs(latitude).toFixed(2)}° ${latitudeDirection}, ${Math.abs(longitude).toFixed(2)}° ${longitudeDirection}`;
+}
+
+export type AircraftDetailKey =
+  | "icao"
+  | "registration"
+  | "country"
+  | "manufacturer"
+  | "model"
+  | "typeCode"
+  | "status"
+  | "position"
+  | "gpsAltitude"
+  | "trueAirspeed"
+  | "squawk"
+  | "positionMethod"
+  | "nacp"
+  | "nic"
+  | "adsbVersion";
+
+export type AircraftDetailRow = {
+  key: AircraftDetailKey;
+  label: string;
+  value: string;
+};
+
+function formatDebugNumber(value: number | null | undefined): string | null {
+  return isFiniteNumber(value) ? String(value) : null;
+}
+
+/**
+ * The aircraft's details, in order, leaving out any that are unknown. The
+ * desktop sidebar and the phone card both list them, so they stay alike.
+ */
+export function buildAircraftDetailRows(
+  flight: FlightState,
+  details: AircraftSidebarViewModel,
+  units: UnitSystem,
+  showDebugData: boolean,
+): AircraftDetailRow[] {
+  const country = [details.registrationCountryFlag, details.registrationCountry]
+    .filter(Boolean)
+    .join(" ");
+  const rows: [AircraftDetailKey, string, string | null][] = [
+    ["icao", "ICAO address", flight.icao24.toUpperCase()],
+    ["registration", "Registration", details.registration],
+    ["country", "Registered in", country || null],
+    ["manufacturer", "Manufacturer", details.manufacturer],
+    ["model", "Model", details.model],
+    ["typeCode", "Type code", details.typeCode],
+    ["status", "Status", flight.onGround ? "On ground" : "Airborne"],
+    [
+      "position",
+      "Position",
+      isFiniteNumber(flight.latitude) && isFiniteNumber(flight.longitude)
+        ? formatAircraftPosition(flight.latitude, flight.longitude)
+        : null,
+    ],
+    [
+      "gpsAltitude",
+      "GPS altitude",
+      isFiniteNumber(flight.geoAltitude)
+        ? formatAltitude(flight.geoAltitude, units)
+        : null,
+    ],
+    [
+      "trueAirspeed",
+      "True airspeed",
+      isFiniteNumber(flight.tas) ? formatSpeedFromKnots(flight.tas, units) : null,
+    ],
+    ["squawk", "Squawk", cleanText(flight.squawk)],
+    ["positionMethod", "Position method", positionSourceLabel(flight.positionSource)],
+  ];
+  if (showDebugData) {
+    rows.push(
+      ["nacp", "NACp", formatDebugNumber(flight.debugData?.nacP)],
+      ["nic", "NIC", formatDebugNumber(flight.debugData?.nic)],
+      ["adsbVersion", "ADS-B version", formatDebugNumber(flight.debugData?.version)],
+    );
+  }
+  return rows.flatMap(([key, label, value]) =>
+    value ? [{ key, label, value }] : [],
+  );
 }

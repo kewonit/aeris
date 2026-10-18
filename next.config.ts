@@ -46,13 +46,6 @@ const nextConfig: NextConfig = {
     "@luma.gl/core",
     "@luma.gl/webgl",
   ],
-  images: {
-    remotePatterns: [
-      { hostname: "a.basemaps.cartocdn.com" },
-      { hostname: "server.arcgisonline.com" },
-      { hostname: "tile.opentopomap.org" },
-    ],
-  },
   async headers() {
     return [
       {

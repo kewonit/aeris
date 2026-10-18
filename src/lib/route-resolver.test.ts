@@ -39,28 +39,6 @@ test("uses direct hexdb fallback after adsbdb misses", async () => {
       return jsonResponse({ flight: "UAL123", route: "KSFO-EGLL" });
     }
 
-    if (url === "https://hexdb.io/api/v1/airport/icao/KSFO") {
-      return jsonResponse({
-        airport: "San Francisco International Airport",
-        country_code: "US",
-        iata: "SFO",
-        icao: "KSFO",
-        latitude: 37.618999,
-        longitude: -122.375,
-      });
-    }
-
-    if (url === "https://hexdb.io/api/v1/airport/icao/EGLL") {
-      return jsonResponse({
-        airport: "London Heathrow Airport",
-        country_code: "GB",
-        iata: "LHR",
-        icao: "EGLL",
-        latitude: 51.4706,
-        longitude: -0.461941,
-      });
-    }
-
     return jsonResponse({ status: "404", error: "not found" }, { status: 404 });
   }) as typeof fetch;
 
@@ -150,7 +128,9 @@ test("caches provider 404 misses", async () => {
 
     assert.equal(first, null);
     assert.equal(second, null);
-    assert.equal(requestCount, 3);
+    // adsbdb, hexdb and OpenSky, and both files the standing data could
+    // keep UAL's routes in.
+    assert.equal(requestCount, 5);
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();
@@ -173,7 +153,7 @@ test("does not cache transient provider failures", async () => {
 
     assert.equal(first, null);
     assert.equal(second, null);
-    assert.equal(requestCount, 6);
+    assert.equal(requestCount, 8);
   } finally {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();
@@ -303,4 +283,167 @@ test("returns every provider's route in priority order", async () => {
     globalThis.fetch = originalFetch;
     clearRouteResolverCache();
   }
+});
+
+const STANDING_DATA = "https://raw.githubusercontent.com/vradarserver/standing-data/main";
+
+function csvResponse(text: string) {
+  return new Response(`\uFEFF${text}`, {
+    status: 200,
+    headers: { "content-type": "text/plain" },
+  });
+}
+
+async function withProviders(
+  respond: (url: string) => Response | undefined,
+  run: (urls: string[]) => Promise<void>,
+): Promise<void> {
+  clearRouteResolverCache();
+  const originalFetch = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    return respond(url) ?? jsonResponse({ status: "404" }, { status: 404 });
+  }) as typeof fetch;
+  try {
+    await run(urls);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRouteResolverCache();
+  }
+}
+
+const legsOf = (routes: { source: string; origin: { icao: string }; destination: { icao: string } }[]) =>
+  routes.map((route) => [route.source, `${route.origin.icao}-${route.destination.icao}`]);
+
+test("standing data comes first, with one route per leg of a flight with stops", async () => {
+  await withProviders(
+    (url) => {
+      if (url === `${STANDING_DATA}/routes/schema-01/U/UAL-all.csv`) {
+        return csvResponse(
+          "Callsign,Code,Number,AirlineCode,AirportCodes\r\n" +
+            "UAL246,UAL,246,UAL,KORD-KPHL\r\n" +
+            "UAL247,UAL,247,UAL,KPHL-KORD-KOMA\r\n",
+        );
+      }
+      if (url === "https://hexdb.io/api/v1/route/icao/UAL247") {
+        return jsonResponse({ flight: "UAL247", route: "KPHL-KORD-KDEN" });
+      }
+      return undefined;
+    },
+    async () => {
+      const { routes } = await resolveReportedRoutes("UAL247");
+      // hexdb's PHL to ORD repeats the standing data's, so it is listed once.
+      assert.deepEqual(legsOf(routes), [
+        ["vrs", "KPHL-KORD"],
+        ["vrs", "KORD-KOMA"],
+        ["hexdb", "KORD-KDEN"],
+      ]);
+    },
+  );
+});
+
+test("one standing data file answers every flight of its airline", async () => {
+  await withProviders(
+    (url) => {
+      if (url === `${STANDING_DATA}/routes/schema-01/R/RYR-all.csv`) {
+        return jsonResponse({ status: "404" }, { status: 404 });
+      }
+      // A large airline's routes are split by the flight number's first digit.
+      if (url === `${STANDING_DATA}/routes/schema-01/R/RYR-2.csv`) {
+        return csvResponse(
+          "Callsign,Code,Number,AirlineCode,AirportCodes\n" +
+            "RYR2LW,RYR,2LW,RYR,EGSS-LIPY\n" +
+            "RYR20,RYR,20,RYR,EIDW-EGNT\n",
+        );
+      }
+      return undefined;
+    },
+    async (urls) => {
+      assert.deepEqual(legsOf((await resolveReportedRoutes("RYR2LW")).routes), [
+        ["vrs", "EGSS-LIPY"],
+      ]);
+      assert.deepEqual(legsOf((await resolveReportedRoutes("RYR20")).routes), [
+        ["vrs", "EIDW-EGNT"],
+      ]);
+      const routeFiles = urls.filter((url) => url.includes("/routes/schema-01/"));
+      assert.deepEqual(routeFiles, [
+        `${STANDING_DATA}/routes/schema-01/R/RYR-all.csv`,
+        `${STANDING_DATA}/routes/schema-01/R/RYR-2.csv`,
+      ]);
+    },
+  );
+});
+
+test("airports carry the city a traveller would name, whichever provider reported them", async () => {
+  await withProviders(
+    (url) => {
+      if (url === "https://hexdb.io/api/v1/route/icao/BAW875") {
+        return jsonResponse({ flight: "BAW875", route: "LROP-EGLL" });
+      }
+      if (url === `${STANDING_DATA}/airports/schema-01/L/LR.csv`) {
+        return csvResponse(
+          "Code,Name,ICAO,IATA,Location,CountryISO2,Latitude,Longitude,AltitudeFeet\n" +
+            "LROP,Henri Coandă International Airport,LROP,OTP,Bucharest,RO,44.571111,26.085,314\n",
+        );
+      }
+      return undefined;
+    },
+    async (urls) => {
+      const [route] = (await resolveReportedRoutes("BAW875")).routes;
+      assert.equal(route.source, "hexdb");
+      assert.equal(route.origin.iata, "OTP");
+      assert.equal(route.origin.municipality, "Bucharest");
+      // Without a standing data row, the app's own airport list names it.
+      assert.equal(route.destination.municipality, "London");
+      assert.ok(!urls.some((url) => url.includes("hexdb.io/api/v1/airport")));
+    },
+  );
+});
+
+test("an airport the app does not list comes from the standing data", async () => {
+  await withProviders(
+    (url) => {
+      if (url.includes("opensky-network.org")) {
+        return jsonResponse({ callsign: "EZY8013", route: ["EGKK", "XRHO"] });
+      }
+      if (url === `${STANDING_DATA}/airports/schema-01/X/XR.csv`) {
+        return csvResponse(
+          "Code,Name,ICAO,IATA,Location,CountryISO2,Latitude,Longitude,AltitudeFeet\n" +
+            'XRHO,Diagoras Airport,XRHO,RHO,"Rodes, Island",GR,36.405399,28.086201,17\n',
+        );
+      }
+      return undefined;
+    },
+    async () => {
+      const [route] = (await resolveReportedRoutes("EZY8013")).routes;
+      assert.equal(route.destination.name, "Diagoras Airport");
+      assert.equal(route.destination.municipality, "Rodes, Island");
+      assert.equal(route.destination.latitude, 36.405399);
+    },
+  );
+});
+
+test("keeps an adsbdb route between airports it names by IATA code alone", async () => {
+  await withProviders(
+    (url) =>
+      url === "https://api.adsbdb.com/v0/callsign/XYZ12"
+        ? jsonResponse({
+            response: {
+              flightroute: {
+                origin: { iata_code: "AAA", latitude: -17.35, longitude: -145.51 },
+                destination: { iata_code: "BBB", latitude: -16.5, longitude: -151.75 },
+              },
+            },
+          })
+        : undefined,
+    async () => {
+      const { routes } = await resolveReportedRoutes("XYZ12");
+      assert.deepEqual(
+        routes.map((route) => [route.origin.iata, route.destination.iata]),
+        [["AAA", "BBB"]],
+      );
+    },
+  );
 });

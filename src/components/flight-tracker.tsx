@@ -9,12 +9,11 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useDragControls } from "motion/react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Map as MapView, type MapRef } from "@/components/map/map";
-import type { FpvCameraPosition } from "@/components/map/camera-controller-utils";
 import { CameraController } from "@/components/map/camera-controller";
 import {
   CLOSED_MAP_PANEL_CAMERA_STATE,
@@ -42,6 +41,7 @@ import {
 } from "@/components/ui/aeris-left-sidebar";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
+import { MapToggles } from "@/components/ui/map-toggles";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
 import { AtcPlayerBar } from "@/components/ui/atc-panel";
@@ -51,7 +51,11 @@ const AirportInfoCard = dynamic(() =>
   ),
 );
 import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
-import { SettingsProvider, useSettings } from "@/hooks/use-settings";
+import {
+  SettingsProvider,
+  trailCeilingMeters,
+  useSettings,
+} from "@/hooks/use-settings";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useFlights } from "@/hooks/use-flights";
 import { useTrailSystem } from "@/hooks/use-trail-system";
@@ -64,6 +68,7 @@ import { MobileFlightToast } from "@/components/ui/mobile-flight-toast";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
+import type { FpvDrawnPosition } from "@/components/map/flight-layer-constants";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
@@ -124,6 +129,9 @@ function FlightTrackerInner({
   );
 
   const [cityOverride, setCityOverride] = useState<City | undefined>();
+  // Where the first person aircraft is drawn, shared from the flight
+  // layers to the camera that follows it.
+  const fpvDrawnRef = useRef<FpvDrawnPosition | null>(null);
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
   const [followIcao24, setFollowIcao24] = useState<string | null>(null);
@@ -140,14 +148,15 @@ function FlightTrackerInner({
 
   const pendingFpvRef = useRef<string | null>(resolveInitialFpv());
 
-  const fpvPositionRef = useRef<FpvCameraPosition | null>(null);
-
   const [fpvSeedCenter, setFpvSeedCenter] = useState<{
     lng: number;
     lat: number;
   } | null>(null);
 
   const lookupAbortRef = useRef<AbortController | null>(null);
+  // The phone's flight card is dragged from its photo and header only, so
+  // the rest of it scrolls normally.
+  const flightSheetDrag = useDragControls();
   const [selectedAirportIata, setSelectedAirportIata] = useState<string | null>(
     null,
   );
@@ -260,7 +269,6 @@ function FlightTrackerInner({
     selectedIcao24,
     historyEnabled: !!selectedIcao24 && !fpvIcao24,
   });
-  const mergedTrails = trailState.trails;
 
   // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
   const displayFlightMap = useMemo(() => {
@@ -299,6 +307,21 @@ function FlightTrackerInner({
     syncFpvToUrl(fpvIcao24, activeCity);
   }, [fpvIcao24, activeCity]);
 
+  // Ends FPV however it ends; the camera always pulls back out to the
+  // aircraft. Leaving deliberately keeps it selected with its card open on
+  // desktop. After a landing or when the feed has lost it, the aircraft is
+  // off the map, which shows none on the ground, so nothing stays selected.
+  const endFpv = useCallback(
+    (how: "exited" | "landed" | "lost") => {
+      if (!fpvIcao24) return;
+      setSelectedIcao24(how === "exited" ? fpvIcao24 : null);
+      setFpvIcao24(null);
+      setFpvSeedCenter(null);
+      if (how === "exited" && !isMobile) setLeftPanel({ kind: "flight" });
+    },
+    [fpvIcao24, isMobile],
+  );
+
   const { repoStars } = useFlightMonitors({
     pendingFpvRef,
     fpvIcao24,
@@ -315,6 +338,7 @@ function FlightTrackerInner({
     setFollowIcao24,
     setCityOverride,
     setFpvSeedCenter,
+    endFpv,
   });
 
   const atc = useAtcStream();
@@ -388,14 +412,13 @@ function FlightTrackerInner({
   );
 
   const handleDeselectFlight = useCallback(() => {
-    setLeftPanel((panel) => (panel?.kind === "flight" ? null : panel));
     if (fpvIcao24) {
-      setSelectedIcao24(fpvIcao24);
-      setFpvIcao24(null);
-    } else {
-      setSelectedIcao24(null);
+      endFpv("exited");
+      return;
     }
-  }, [fpvIcao24]);
+    setLeftPanel((panel) => (panel?.kind === "flight" ? null : panel));
+    setSelectedIcao24(null);
+  }, [endFpv, fpvIcao24]);
 
   const enterFpv = useCallback(
     (icao24: string) => {
@@ -417,13 +440,7 @@ function FlightTrackerInner({
     [displayFlightMap],
   );
 
-  const handleExitFpv = useCallback(() => {
-    if (!fpvIcao24) return;
-    setSelectedIcao24(fpvIcao24);
-    setFpvIcao24(null);
-    setFpvSeedCenter(null);
-    if (!isMobile) setLeftPanel({ kind: "flight" });
-  }, [fpvIcao24, isMobile]);
+  const handleExitFpv = useCallback(() => endFpv("exited"), [endFpv]);
 
   const handleToggleFpv = useCallback(
     (icao24: string) => {
@@ -714,7 +731,7 @@ function FlightTrackerInner({
             followFlight={followFlight}
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
-            fpvPositionRef={fpvPositionRef}
+            fpvDrawnRef={fpvDrawnRef}
             panelCamera={panelCamera}
           />
           {!fpvIcao24 && (
@@ -739,19 +756,19 @@ function FlightTrackerInner({
           />
           <FlightLayers
             flights={displayFlights}
-            trails={mergedTrails}
-            selectedEnvelope={trailState.selectedEnvelope}
+            trails={trailState.trails}
             onClick={handleClick}
             selectedIcao24={fpvIcao24 ?? selectedIcao24}
             showTrails={settings.showTrails}
             trailThickness={settings.trailThickness}
-            trailDistance={settings.trailDistance}
+            trailMinutes={settings.trailMinutes}
+            trailCeilingMeters={trailCeilingMeters(settings)}
             showShadows={settings.showShadows}
             showAltitudeColors={settings.showAltitudeColors}
             altitudeDisplayMode={settings.altitudeDisplayMode}
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
-            fpvPositionRef={fpvPositionRef}
+            fpvDrawnRef={fpvDrawnRef}
           />
         </MapView>
       </div>
@@ -805,24 +822,29 @@ function FlightTrackerInner({
 
         {!fpvIcao24 && (
           <div
-            className="aeris-left-chrome pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0"
+            className="aeris-left-chrome pointer-events-none absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 flex flex-col items-start gap-2 sm:bottom-4 sm:left-4 sm:mb-0"
             data-panel-open={desktopLeftPanelOpen}
           >
-            <StatusBar
-              flightCount={flights.length}
-              cityName={activeCity.name}
-              cityIata={activeCity.iata}
-              cityCoordinates={activeCity.coordinates}
-              loading={loading}
-              rateLimited={rateLimited}
-              retryIn={retryIn}
-              onNorthUp={handleNorthUp}
-              onResetView={handleResetView}
-              onRandomAirport={handleRandomAirport}
-              atc={atc}
-              atcToggle={atcToggle}
-              source={source}
-            />
+            <div className="pointer-events-auto">
+              <MapToggles />
+            </div>
+            <div className="pointer-events-auto">
+              <StatusBar
+                flightCount={flights.length}
+                cityName={activeCity.name}
+                cityIata={activeCity.iata}
+                cityCoordinates={activeCity.coordinates}
+                loading={loading}
+                rateLimited={rateLimited}
+                retryIn={retryIn}
+                onNorthUp={handleNorthUp}
+                onResetView={handleResetView}
+                onRandomAirport={handleRandomAirport}
+                atc={atc}
+                atcToggle={atcToggle}
+                source={source}
+              />
+            </div>
           </div>
         )}
 
@@ -873,10 +895,12 @@ function FlightTrackerInner({
                 mass: 0.8,
               }}
               drag="y"
+              dragListener={false}
+              dragControls={flightSheetDrag}
               dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0, bottom: 0.6 }}
+              dragElastic={{ top: 0, bottom: 0.8 }}
               onDragEnd={(_, info) => {
-                if (info.offset.y > 80 || info.velocity.y > 300) {
+                if (info.offset.y > 60 || info.velocity.y > 250) {
                   handleDeselectFlight();
                 }
               }}
@@ -885,6 +909,7 @@ function FlightTrackerInner({
                 flight={displayFlight}
                 onClose={handleDeselectFlight}
                 onToggleFpv={handleToggleFpv}
+                onGrab={(event) => flightSheetDrag.start(event)}
               />
             </motion.div>
           )}

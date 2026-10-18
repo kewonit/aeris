@@ -159,6 +159,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), READSB_FETCH_TIMEOUT_MS);
+  // A browser that has had its answer from another provider lets go of
+  // this request; the upstream one is let go too.
+  request.signal.addEventListener("abort", () => controller.abort());
 
   try {
     const upstream = await fetch(buildUpstreamUrl(provider, path), {

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import {
+  ArrowUpToLine,
   RotateCw,
   Route,
   Layers,
@@ -23,14 +24,18 @@ import {
   WEATHER_RADAR_OPACITY_MAX,
   TRAIL_THICKNESS_MIN,
   TRAIL_THICKNESS_MAX,
-  TRAIL_DISTANCE_MIN,
-  TRAIL_DISTANCE_MAX,
+  TRAIL_MINUTES_MIN,
+  TRAIL_MINUTES_MAX,
+  TRAIL_CEILING_FT_MIN,
+  TRAIL_CEILING_FT_MAX,
+  TRAIL_CEILING_FT_STEP,
   type OrbitDirection,
   type UnitSystem,
   type Settings,
 } from "@/hooks/use-settings";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { formatAltitude } from "@/lib/unit-formatters";
 
 const SHORTCUTS = [
   { key: "N", description: "North up" },
@@ -126,10 +131,24 @@ export function SettingsContent({
               value={settings.trailThickness}
               onChange={(v) => update("trailThickness", v)}
             />
-            <TrailDistanceSlider
-              value={settings.trailDistance}
-              onChange={(v) => update("trailDistance", v)}
+            <TrailLengthSlider
+              value={settings.trailMinutes}
+              onChange={(v) => update("trailMinutes", v)}
             />
+            <SettingRow
+              icon={<ArrowUpToLine className="h-4 w-4" />}
+              title="Hide high trails"
+              description="No trails for aircraft above a set height"
+              checked={settings.hideHighTrails}
+              onChange={(v) => update("hideHighTrails", v)}
+            />
+            {settings.hideHighTrails && (
+              <TrailCeilingSlider
+                value={settings.trailCeilingFt}
+                unitSystem={settings.unitSystem}
+                onChange={(v) => update("trailCeilingFt", v)}
+              />
+            )}
           </>
         )}
         <SettingRow
@@ -377,7 +396,7 @@ function TrailThicknessSlider({
   );
 }
 
-function TrailDistanceSlider({
+function TrailLengthSlider({
   value,
   onChange,
 }: {
@@ -392,19 +411,53 @@ function TrailDistanceSlider({
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-small font-medium text-foreground">
-            Trail distance
+            Trail length
           </p>
           <span className="text-caption text-muted-foreground">
-            {value} pts
+            {value} min
           </span>
         </div>
         <Slider
-          min={TRAIL_DISTANCE_MIN}
-          max={TRAIL_DISTANCE_MAX}
+          min={TRAIL_MINUTES_MIN}
+          max={TRAIL_MINUTES_MAX}
           step={1}
           value={[value]}
           onValueChange={(vals) => onChange(vals[0])}
-          aria-label="Trail distance"
+          aria-label="Trail length"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrailCeilingSlider({
+  value,
+  unitSystem,
+  onChange,
+}: {
+  value: number;
+  unitSystem: UnitSystem;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-3.5 rounded-lg px-3 py-2.5 text-left">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
+        <ArrowUpToLine className="h-4 w-4" />
+      </div>
+      <div className="flex flex-1 min-w-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-small font-medium text-foreground">Hide above</p>
+          <span className="text-caption text-muted-foreground">
+            {formatAltitude(value * 0.3048, unitSystem)}
+          </span>
+        </div>
+        <Slider
+          min={TRAIL_CEILING_FT_MIN}
+          max={TRAIL_CEILING_FT_MAX}
+          step={TRAIL_CEILING_FT_STEP}
+          value={[value]}
+          onValueChange={(vals) => onChange(vals[0])}
+          aria-label="Hide trails above"
         />
       </div>
     </div>
@@ -625,22 +678,77 @@ export const CHANGELOG: {
 }[] = [
   {
     version: "0.8.9",
-    date: "Aug 24, 2026",
+    date: "Oct 18, 2026",
     entries: [
+      {
+        title: "More accurate routes",
+        description:
+          "Routes now come first from Virtual Radar Server's community route data, updated daily, and a flight with stops shows the leg it is flying. When the aircraft's history shows its take-off, the card says when it took off and shows only a route from that airport, or the departure on its own when no source reports one. When sources disagree, it shows the route the aircraft is actually flying, never one it is flying backwards, has overflown or is too high to land at. Airports are named by the city travellers know.",
+      },
+      {
+        title: "Realistic flight",
+        description:
+          "Aircraft pitch and bank as real ones do, so an ordinary approach no longer looks like a nose dive, and every model faces and banks the right way. Traffic glides at a steady speed between reports instead of surging and slowing, and turns onto each new course rather than snapping.",
+      },
+      {
+        title: "First person view rebuilt",
+        description:
+          "The camera follows close behind the aircraft, looking along its track with the aircraft always in view: nearer on an approach, further back at cruise. It moves smoothly on the aircraft's own path between reports, and when reports drop out it flies on and says the signal is lost. You can drag, zoom and turn the map, and it eases back to following when you stop. Runways stand out on the approach, and however it ends, the view pulls back out to the aircraft.",
+      },
+      {
+        title: "Steadier flight trails",
+        description:
+          "Trails follow each aircraft's reported positions in time order, run cleanly into the aircraft's tail in its own colour, and keep their shape as new positions arrive. A selected flight's history no longer folds back on itself or steps where it meets the live trail. Trail length is set in minutes, three by default, and high trails can be hidden.",
+      },
+      {
+        title: "Better-proportioned aircraft",
+        description:
+          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed out, they keep shrinking, so busy skies no longer turn into a carpet of aircraft. Zoomed in to an airport, they appear at their real size, and their heights stay the same as you zoom.",
+      },
+      {
+        title: "Quicker receivers",
+        description:
+          "The map asks whichever receiver has been answering fastest first, and when one is slow it asks the next after about a second and takes the first answer, so a slow receiver never holds the map up. It remembers which was fast across reloads and checks the others about once a minute, so a receiver that recovers is picked up again on its own.",
+      },
+      {
+        title: "Quick toolbar",
+        description:
+          "A toolbar on the left switches trails, high trails, altitude colours and exaggerated heights. Every toolbar button has a tooltip, and the sidebars scroll without shifting their content.",
+      },
+      {
+        title: "One design system",
+        description:
+          "Sidebars, panels and cards share one type scale, palette and set of surfaces in light and dark, and the aircraft and airport panels follow one flight-card layout. The phone's aircraft card shows the same route and details as the sidebar.",
+      },
+      {
+        title: "Simpler aircraft details",
+        description:
+          "Restored the aircraft photo header and flight summary. The sidebar names the aircraft, such as Boeing 767-332, and hides unsupported labels. The map keeps the selected aircraft centred while panels open and close.",
+      },
+      {
+        title: "Airport cards",
+        description:
+          "Airport cards show how many runways the airport has, in place of the viewer's own clock, which was labelled as local time.",
+      },
+      {
+        title: "Aircraft data trust",
+        description:
+          "Added aircraft provenance, selected-aircraft fusion and local registry metadata, so the details shown for an aircraft say where they came from.",
+      },
       {
         title: "Open aviation data updates",
         description:
           "Added deterministic refresh and validation commands for open aircraft and registration data. Scheduled source checks can open a weekly review PR when generated data changes.",
       },
       {
-        title: "Aircraft data and route trust",
+        title: "Map style previews",
         description:
-          "Added aircraft provenance, selected-aircraft fusion, local registry metadata, and position-aware checks for reported routes.",
+          "The map style picker shows a still of each style instead of CARTO's API key notice, and no longer loads preview tiles from other sites.",
       },
       {
-        title: "Simpler aircraft details",
+        title: "Fixes",
         description:
-          "Restored the aircraft photo header and flight summary. The sidebar hides unsupported labels. The map keeps selected aircraft centered during panel transitions.",
+          "The rotate buttons turn the map the way their labels say. The map keeps animating when the window loses focus, and polling recovers when every provider times out. The app name, GitHub star count and altitude key are back.",
       },
     ],
   },
