@@ -1,20 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("canonicalizeCityRequest normalizes aliases, case, and legacy city params", async () => {
-  const moduleExports = (await import("./city-routing").catch(
-    () => ({}) as Record<string, unknown>,
-  )) as {
-    canonicalizeCityRequest?: (
-      code: string,
-      searchParams?: string | URLSearchParams,
-    ) => string | null;
-  };
+import { canonicalizeCityRequest } from "./city-routing";
 
-  assert.equal(typeof moduleExports.canonicalizeCityRequest, "function");
-
-  const canonicalizeCityRequest = moduleExports.canonicalizeCityRequest!;
-
+test("canonicalizeCityRequest normalizes aliases, case, and legacy city params", () => {
   assert.equal(canonicalizeCityRequest("nyc"), "/city/jfk");
   assert.equal(canonicalizeCityRequest("BOM"), "/city/bom");
   assert.equal(
@@ -25,9 +14,7 @@ test("canonicalizeCityRequest normalizes aliases, case, and legacy city params",
   assert.equal(canonicalizeCityRequest("zzz"), null);
 });
 
-test("canonicalizeCityRequest preserves repeated query values from route params", async () => {
-  const { canonicalizeCityRequest } = await import("./city-routing");
-
+test("canonicalizeCityRequest preserves repeated query values from route params", () => {
   assert.equal(
     canonicalizeCityRequest("BOM", {
       city: "bom",

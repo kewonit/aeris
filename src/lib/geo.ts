@@ -104,48 +104,6 @@ export function greatCircleIntermediate(
 }
 
 /**
- * Densify a path segment along a great-circle arc.
- * Inserts intermediate points between each consecutive pair of points
- * when the segment angular distance exceeds `thresholdDeg`.
- *
- * Works with [lng, lat, altitude] elevated points. Altitude is linearly
- * interpolated.
- */
-export function densifyGreatCircle(
-  path: Array<[number, number, number]>,
-  thresholdDeg: number = 0.5,
-  maxPointsPerSegment: number = 32,
-): Array<[number, number, number]> {
-  if (path.length < 2) return path.slice();
-
-  const result: Array<[number, number, number]> = [path[0]];
-
-  for (let i = 0; i < path.length - 1; i++) {
-    const [lng1, lat1, alt1] = path[i];
-    const [lng2, lat2, alt2] = path[i + 1];
-
-    const dist = gcDistanceDeg(lng1, lat1, lng2, lat2);
-
-    if (dist > thresholdDeg) {
-      const n = Math.min(
-        maxPointsPerSegment,
-        Math.max(2, Math.ceil(dist / thresholdDeg)),
-      );
-      for (let j = 1; j < n; j++) {
-        const t = j / n;
-        const [lng, lat] = greatCircleIntermediate(lng1, lat1, lng2, lat2, t);
-        const alt = alt1 + (alt2 - alt1) * t;
-        result.push([lng, lat, alt]);
-      }
-    }
-
-    result.push(path[i + 1]);
-  }
-
-  return result;
-}
-
-/**
  * Densify a 2D path along great-circle arcs.
  */
 export function densifyGreatCircle2D(

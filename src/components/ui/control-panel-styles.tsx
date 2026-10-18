@@ -16,7 +16,7 @@ export function StyleContent({
 }) {
   return (
     <ScrollArea className="h-full">
-      <div className="grid grid-cols-2 sm:grid-cols-2 gap-2.5 sm:gap-3 p-4 sm:p-5 pt-2">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 p-4 sm:p-5 pt-2">
         {MAP_STYLES.map((style, i) => (
           <StyleTile
             key={style.id}
@@ -27,8 +27,8 @@ export function StyleContent({
           />
         ))}
       </div>
-      <div className="border-t border-foreground/5 px-5 py-3">
-        <p className="text-[11px] font-medium text-foreground/25">
+      <div className="border-t border-border px-5 py-3">
+        <p className="text-caption text-subtle">
           Satellite © Esri · Terrain © AWS/Mapzen Terrain Tiles · Base maps ©
           CARTO
         </p>
@@ -61,10 +61,10 @@ function StyleTile({
       className="group relative flex flex-col gap-2 text-left"
     >
       <div
-        className={`relative aspect-16/10 w-full overflow-hidden rounded-xl transition-all duration-200 ${
+        className={`relative aspect-16/10 w-full overflow-hidden rounded-lg transition-all duration-200 ${
           isActive
-            ? "ring-2 ring-primary/50 ring-offset-2 ring-offset-background/80 shadow-[0_0_20px_rgba(0,0,0,0.06)] dark:shadow-[0_0_20px_rgba(255,255,255,0.06)]"
-            : "ring-1 ring-foreground/10 group-hover:ring-foreground/20"
+            ? "ring-2 ring-primary/50 ring-offset-2 ring-offset-background/80 shadow-lift"
+            : "ring-1 ring-border group-hover:ring-border"
         }`}
       >
         <div
@@ -83,7 +83,7 @@ function StyleTile({
           }`}
           draggable={false}
         />
-        <div className="absolute inset-0 rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-16px_28px_-10px_rgba(0,0,0,0.4)]" />
+        <div className="absolute inset-0 rounded-lg" />
 
         <AnimatePresence>
           {isActive && (
@@ -96,7 +96,7 @@ function StyleTile({
                 stiffness: 500,
                 damping: 28,
               }}
-              className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground shadow-md shadow-background/30"
+              className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground shadow-lift shadow-background/30"
             >
               <Check className="h-3 w-3 text-background" strokeWidth={3} />
             </motion.div>
@@ -106,16 +106,16 @@ function StyleTile({
 
       <div className="flex items-center gap-1.5 px-0.5">
         <span
-          className={`text-[12px] font-semibold tracking-tight transition-colors ${
+          className={`text-label transition-colors ${
             isActive
-              ? "text-foreground/95"
-              : "text-foreground/55 group-hover:text-foreground/75"
+              ? "text-foreground"
+              : "text-muted-foreground group-hover:text-foreground"
           }`}
         >
           {style.name}
         </span>
         {style.dark && (
-          <span className="h-0.5 w-0.5 rounded-full bg-foreground/25" />
+          <span className="h-0.5 w-0.5 rounded-full bg-border" />
         )}
       </div>
     </motion.button>

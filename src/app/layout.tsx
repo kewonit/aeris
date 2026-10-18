@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Fragment_Mono, Instrument_Sans } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { ThemeProvider } from "@wrksz/themes/next";
 import { Toaster } from "sonner";
@@ -11,8 +11,15 @@ import {
 } from "@/lib/seo";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+const instrumentSans = Instrument_Sans({
+  variable: "--font-instrument",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const fragmentMono = Fragment_Mono({
+  variable: "--font-fragment",
+  weight: "400",
   subsets: ["latin"],
   display: "swap",
 });
@@ -112,8 +119,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#000000",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaf9" },
+    { media: "(prefers-color-scheme: dark)", color: "#121214" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -123,7 +133,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${instrumentSans.variable} ${fragmentMono.variable}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

@@ -73,12 +73,7 @@ function CollapsedAttribution({ onExpand }: { onExpand: () => void }) {
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.15 }}
       onClick={onExpand}
-      className="flex h-5 w-5 items-center justify-center rounded-full backdrop-blur-xl transition-colors"
-      style={{
-        backgroundColor: "rgb(var(--ui-bg) / 0.35)",
-        border: "1px solid rgb(var(--ui-fg) / 0.06)",
-        color: "rgb(var(--ui-fg) / 0.3)",
-      }}
+      className="flex h-5 w-5 items-center justify-center rounded-full transition-colors bg-background border border-border text-subtle"
       aria-label="Show map attribution"
       title="Map data attribution"
     >
@@ -100,27 +95,20 @@ function ExpandedAttribution({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 4 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="flex items-center gap-1.5 rounded-lg px-2 py-1 backdrop-blur-xl"
-      style={{
-        backgroundColor: "rgb(var(--ui-bg) / 0.45)",
-        border: "1px solid rgb(var(--ui-fg) / 0.06)",
-      }}
+      className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
     >
       <button
         onClick={onCollapse}
-        className="shrink-0 transition-colors"
-        style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
+        className="shrink-0 transition-colors text-subtle"
         aria-label="Collapse attribution"
       >
         <Info className="h-2.5 w-2.5" />
       </button>
       <span
-        className="flex flex-wrap items-center gap-x-1 text-[9px] leading-tight tracking-wide"
-        style={{ color: "rgb(var(--ui-fg) / 0.35)" }}
+        className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle"
       >
         <span
-          className="font-medium"
-          style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
+          className="font-medium text-subtle"
         >
           ©
         </span>
@@ -130,15 +118,13 @@ function ExpandedAttribution({
               href={attr.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:underline"
-              style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+              className="transition-colors hover:underline text-subtle"
             >
               {attr.label}
             </a>
             {i < attributions.length - 1 && (
               <span
-                className="ml-1"
-                style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
+                className="ml-1 text-subtle"
               >
                 ·
               </span>
@@ -146,8 +132,7 @@ function ExpandedAttribution({
           </span>
         ))}
         <span
-          className="ml-0.5"
-          style={{ color: "rgb(var(--ui-fg) / 0.15)" }}
+          className="ml-0.5 text-subtle"
         >
           ·
         </span>
@@ -155,20 +140,18 @@ function ExpandedAttribution({
           href="https://opensky-network.org/"
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:underline"
-          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+          className="transition-colors hover:underline text-subtle"
         >
           OpenSky Network
         </a>
-        <span className="ml-0.5" style={{ color: "rgb(var(--ui-fg) / 0.15)" }}>
+        <span className="ml-0.5 text-subtle">
           ·
         </span>
         <a
           href="https://adsb.fi/"
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:underline"
-          style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
+          className="transition-colors hover:underline text-subtle"
         >
           adsb.fi
         </a>

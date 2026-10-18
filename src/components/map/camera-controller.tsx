@@ -5,6 +5,7 @@ import { useMap } from "./map";
 import {
   centerLngLatForScreenOffset,
   projectLngLatElevationPixelDelta,
+  type FpvCameraPosition,
   smoothstep,
 } from "./camera-controller-utils";
 import { getZoomAdjustedElevationScale } from "./altitude-projection";
@@ -36,7 +37,6 @@ const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
 
-type FpvPosition = { lng: number; lat: number; alt: number; track: number };
 
 /**
  * Returns the map center that puts the aircraft as drawn (lifted by its
@@ -72,21 +72,23 @@ function drawnAircraftCenter(
 export function CameraController({
   city,
   followFlight = null,
+  fpvIcao24 = null,
   fpvFlight = null,
   fpvPositionRef,
   panelCamera,
 }: {
   city: City;
   followFlight?: FlightState | null;
+  /** The FPV selection. Stays set while a poll misses the aircraft. */
+  fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
-  fpvPositionRef?: MutableRefObject<FpvPosition | null>;
+  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
   panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
   const prevCityRef = useRef<string | null>(null);
   const prevFollowRef = useRef<string | null>(null);
-  const prevFpvRef = useRef<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbitFrameRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
@@ -98,11 +100,13 @@ export function CameraController({
   const isFpvActiveRef = useRef(false);
   const fpvFlightRef = useRef<FlightState | null>(fpvFlight);
   const fpvPosRef = useRef(fpvPositionRef);
+  const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
+  const fpvKey = fpvIcao24;
 
   useEffect(() => {
     fpvPosRef.current = fpvPositionRef;
@@ -165,6 +169,8 @@ export function CameraController({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const panelMotion = mapPanelMotionOptions(reduceMotion);
+    const isExitingFpv =
+      previousFpvKeyRef.current !== null && fpvKey === null;
     const insetChanged =
       Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
 
@@ -175,9 +181,22 @@ export function CameraController({
       previousPanelFocusRef.current = null;
       previousPanelInsetRef.current = 0;
 
-      if (!shouldResetPadding || cityTransitionTargetRef.current) return;
+      if (
+        (!shouldResetPadding && !isExitingFpv) ||
+        cityTransitionTargetRef.current
+      ) {
+        return;
+      }
 
       map.easeTo({
+        ...(isExitingFpv
+          ? {
+              center: city.coordinates,
+              zoom: DEFAULT_ZOOM,
+              pitch: DEFAULT_PITCH,
+              bearing: DEFAULT_BEARING,
+            }
+          : {}),
         padding,
         ...panelMotion,
       });
@@ -205,6 +224,13 @@ export function CameraController({
 
     map.easeTo({
       ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+      ...(isExitingFpv
+        ? {
+            zoom: DEFAULT_ZOOM,
+            pitch: DEFAULT_PITCH,
+            bearing: DEFAULT_BEARING,
+          }
+        : {}),
       padding,
       ...panelMotion,
     });
@@ -257,8 +283,14 @@ export function CameraController({
     panelCamera.kind,
     panelCamera.leftInsetPx,
     hasPanelCoordinates,
+    fpvKey,
     settings.altitudeDisplayMode,
+    city.coordinates,
   ]);
+
+  useEffect(() => {
+    previousFpvKeyRef.current = fpvKey;
+  }, [fpvKey]);
 
   // Follow flight init
   useEffect(() => {
@@ -330,17 +362,13 @@ export function CameraController({
     followFlight?.trueTrack,
   ]);
 
-  // FPV camera hook
   useFpvCamera(
     map,
     isLoaded,
-    fpvFlight,
-    city,
+    fpvIcao24,
     fpvFlightRef,
     fpvPosRef,
     isFpvActiveRef,
-    prevFpvRef,
-    settings.altitudeDisplayMode,
   );
 
   // North-up & reset-view

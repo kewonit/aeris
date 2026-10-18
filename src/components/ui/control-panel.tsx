@@ -31,6 +31,10 @@ import {
   ChangelogContent,
 } from "@/components/ui/control-panel-settings";
 
+/** The round buttons that sit on the map. */
+export const MAP_BUTTON_CLASS =
+  "grid size-9 place-items-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:text-foreground";
+
 export type ControlPanelTabId =
   | "search"
   | "style"
@@ -112,39 +116,25 @@ export function ControlPanel({
   return (
     <>
       {MAIN_TABS.map(({ id, icon: Icon, label }) => (
-        <motion.button
+        <button
           key={id}
           onClick={() => open(id)}
-          className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-          style={{
-            borderWidth: 1,
-            borderColor: "rgb(var(--ui-fg) / 0.06)",
-            backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-            color: "rgb(var(--ui-fg) / 0.5)",
-          }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          type="button"
+          className={MAP_BUTTON_CLASS}
           aria-label={label}
         >
-          <Icon className="h-4 w-4" />
-        </motion.button>
+          <Icon className="size-4" />
+        </button>
       ))}
 
-      <motion.button
+      <button
+        type="button"
         onClick={() => open("settings")}
-        className="flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-2xl transition-colors"
-        style={{
-          borderWidth: 1,
-          borderColor: "rgb(var(--ui-fg) / 0.06)",
-          backgroundColor: "rgb(var(--ui-fg) / 0.03)",
-          color: "rgb(var(--ui-fg) / 0.5)",
-        }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        className={MAP_BUTTON_CLASS}
         aria-label="Settings"
       >
-        <Settings className="h-4 w-4" />
-      </motion.button>
+        <Settings className="size-4" />
+      </button>
 
       {portalMounted &&
         createPortal(
@@ -256,7 +246,7 @@ function PanelDialog({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-80 bg-background/70"
+        className="fixed inset-0 z-80 bg-scrim"
         onClick={onClose}
       />
 
@@ -276,10 +266,10 @@ function PanelDialog({
         aria-modal="true"
         aria-labelledby="panel-dialog-title"
       >
-        <div className="flex flex-col sm:flex-row overflow-hidden rounded-2xl sm:rounded-3xl border border-border bg-popover shadow-[0_40px_100px_rgba(0,0,0,0.25)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)_inset] h-[75vh] sm:h-auto sm:max-h-[85vh]">
+        <div className="flex flex-col sm:flex-row overflow-hidden rounded-lg sm:rounded-xl border border-border bg-popover shadow-lift h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}
           <div className="hidden sm:flex w-52 shrink-0 flex-col border-r border-border bg-card/60 py-5 px-3">
-            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/40">
+            <p className="mb-3 px-2 text-caption text-subtle">
               Controls
             </p>
             <nav className="flex flex-col gap-0.5">
@@ -289,16 +279,16 @@ function PanelDialog({
                   <button
                     key={id}
                     onClick={() => onTabChange(id)}
-                    className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                    className={`group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors ${
                       active
-                        ? "text-foreground/90"
-                        : "text-foreground/40 hover:text-foreground/55 hover:bg-foreground/4"
+                        ? "text-foreground"
+                        : "text-subtle hover:text-muted-foreground hover:bg-card"
                     }`}
                   >
                     {active && (
                       <motion.div
                         layoutId="panel-tab-bg"
-                        className="absolute inset-0 rounded-xl bg-foreground/8"
+                        className="absolute inset-0 rounded-lg bg-accent"
                         transition={{
                           type: "spring",
                           stiffness: 400,
@@ -307,7 +297,7 @@ function PanelDialog({
                       />
                     )}
                     <Icon className="relative h-4 w-4 shrink-0" />
-                    <span className="relative text-[14px] font-medium">
+                    <span className="relative text-small font-medium">
                       {label}
                     </span>
                   </button>
@@ -321,7 +311,7 @@ function PanelDialog({
             <div className="flex sm:hidden items-center justify-between px-4 pt-4 pb-2">
               <h2
                 id="panel-dialog-title"
-                className="text-[14px] font-semibold tracking-tight text-foreground/90"
+                className="text-small font-medium text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
@@ -330,18 +320,18 @@ function PanelDialog({
             <div className="hidden sm:flex items-center justify-between px-5 pt-5 pb-2">
               <h2
                 id="panel-dialog-title"
-                className="text-[15px] font-semibold tracking-tight text-foreground/90"
+                className="text-body font-medium text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
               <motion.button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/6 transition-colors hover:bg-foreground/12"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-card transition-colors hover:bg-accent"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 aria-label="Close"
               >
-                <X className="h-3.5 w-3.5 text-foreground/35" />
+                <X className="h-3.5 w-3.5 text-subtle" />
               </motion.button>
             </div>
 
@@ -407,17 +397,17 @@ function PanelDialog({
                   <button
                     key={id}
                     onClick={() => onTabChange(id)}
-                    className={`relative flex flex-1 items-center justify-center rounded-lg py-2.5 transition-colors ${
+                    className={`relative flex flex-1 items-center justify-center rounded-md py-2.5 transition-colors ${
                       active
-                        ? "text-foreground/90"
-                        : "text-foreground/40 active:bg-foreground/6"
+                        ? "text-foreground"
+                        : "text-subtle active:bg-card"
                     }`}
                     aria-label={label}
                   >
                     {active && (
                       <motion.div
                         layoutId="panel-tab-bg-mobile"
-                        className="absolute inset-0 rounded-lg bg-foreground/8"
+                        className="absolute inset-0 rounded-md bg-accent"
                         transition={{
                           type: "spring",
                           stiffness: 400,
@@ -432,11 +422,11 @@ function PanelDialog({
             </nav>
             <motion.button
               onClick={onClose}
-              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/6 transition-colors active:bg-foreground/12"
+              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card transition-colors active:bg-accent"
               whileTap={{ scale: 0.9 }}
               aria-label="Close"
             >
-              <X className="h-3.5 w-3.5 text-foreground/40" />
+              <X className="h-3.5 w-3.5 text-subtle" />
             </motion.button>
           </div>
         </div>

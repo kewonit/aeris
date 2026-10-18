@@ -113,7 +113,7 @@ export const CountryFlag = memo(function CountryFlag({
   if (!resolvedCode) {
     return (
       <span
-        className={`inline-block bg-foreground/5 rounded ${className}`}
+        className={`inline-block bg-card rounded-sm ${className}`}
         style={wrapperStyle}
         aria-hidden="true"
       />
@@ -123,7 +123,7 @@ export const CountryFlag = memo(function CountryFlag({
   if (svg === undefined) {
     return (
       <span
-        className={`inline-block bg-foreground/5 animate-pulse rounded ${className}`}
+        className={`inline-block bg-card animate-pulse rounded-sm ${className}`}
         style={wrapperStyle}
         aria-hidden="true"
       />
@@ -134,7 +134,7 @@ export const CountryFlag = memo(function CountryFlag({
     // Fallback: show ISO code in a styled badge
     return (
       <span
-        className={`inline-flex items-center justify-center bg-foreground/8 rounded text-[9px] font-bold tracking-wider text-foreground/40 uppercase ${className}`}
+        className={`inline-flex items-center justify-center bg-accent rounded-sm text-micro text-subtle ${className}`}
         style={wrapperStyle}
         aria-label={label ?? `Country: ${resolvedCode}`}
         title={label ?? resolvedCode}

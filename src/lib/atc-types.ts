@@ -45,22 +45,6 @@ export type AtcStreamStatus =
   | "blocked";
 
 /**
- * Full state of the ATC audio stream.
- */
-export interface AtcStreamState {
-  /** Currently active feed, or null if nothing selected */
-  feed: AtcFeed | null;
-  /** Current playback status */
-  status: AtcStreamStatus;
-  /** Volume level 0–1 */
-  volume: number;
-  /** Error message when status is 'error' or 'blocked' */
-  error?: string;
-  /** Whether the fallback proxy is being used */
-  usingProxy: boolean;
-}
-
-/**
  * Feed type priority for sorting (lower = higher priority).
  */
 export const FEED_TYPE_PRIORITY: Record<AtcFeedType, number> = {

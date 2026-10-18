@@ -17,6 +17,8 @@ export type MapPanelPadding = {
 };
 
 export const MAP_PANEL_TRANSITION_MS = 480;
+/** mapPanelEaseOutCubic as a CSS timing function. */
+export const MAP_PANEL_EASE_CSS = "cubic-bezier(0.333333, 1, 0.666667, 1)";
 
 export const CLOSED_MAP_PANEL_CAMERA_STATE: MapPanelCameraState = {
   open: false,

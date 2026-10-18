@@ -1,7 +1,5 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { projectDisplayedAltitudeMeters } from "@/components/map/altitude-projection";
-import type { UnitSystem } from "@/hooks/use-settings";
-import { formatAltitude, formatSpeed } from "@/lib/unit-formatters";
 
 const MAX_ALTITUDE_METERS = 13000;
 
@@ -56,28 +54,6 @@ export function altitudeToElevation(
   mode: AltitudeDisplayMode = "presentation",
 ): number {
   return projectDisplayedAltitudeMeters(altitude, mode);
-}
-
-export function metersToFeet(meters: number | null): string {
-  return formatAltitude(meters, "aviation");
-}
-
-export function msToKnots(ms: number | null): string {
-  return formatSpeed(ms, "aviation");
-}
-
-export function formatAltitudeForUnits(
-  meters: number | null,
-  unitSystem: UnitSystem,
-): string {
-  return formatAltitude(meters, unitSystem);
-}
-
-export function formatSpeedForUnits(
-  ms: number | null,
-  unitSystem: UnitSystem,
-): string {
-  return formatSpeed(ms, unitSystem);
 }
 
 export function formatCallsign(callsign: string | null): string {

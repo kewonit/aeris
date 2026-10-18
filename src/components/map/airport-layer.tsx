@@ -49,26 +49,6 @@ const airportGeoJson: GeoJSON.FeatureCollection = {
   ),
 };
 
-const LAYER_CSS = `
-.airport-beacon{position:relative;width:20px;height:20px;pointer-events:none}
-.airport-beacon-core{position:absolute;inset:7px;border-radius:50%;background:rgba(255,255,255,0.3);box-shadow:0 0 6px rgba(255,255,255,0.1)}
-.airport-beacon-ring{position:absolute;inset:2px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);animation:ab-pulse 6s ease-out infinite}
-.airport-beacon-ring:nth-child(2){animation-delay:2s}
-.airport-beacon-ring:nth-child(3){animation-delay:4s}
-@keyframes ab-pulse{0%{transform:scale(1);opacity:0.3}100%{transform:scale(2.5);opacity:0}}
-.airport-popup .maplibregl-popup-content{background:rgba(12,12,14,0.9);color:rgba(255,255,255,0.8);font:500 11px/1.4 system-ui,sans-serif;padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);backdrop-filter:blur(12px);box-shadow:0 4px 20px rgba(0,0,0,0.4)}
-.airport-popup .maplibregl-popup-tip{border-top-color:rgba(12,12,14,0.9)}
-`;
-
-let _cssInjected = false;
-function injectCSS() {
-  if (_cssInjected) return;
-  const el = document.createElement("style");
-  el.textContent = LAYER_CSS;
-  document.head.appendChild(el);
-  _cssInjected = true;
-}
-
 function resolveCity(iata: string): City {
   const preset = CITIES.find((c) => c.iata === iata);
   if (preset) return preset;
@@ -91,7 +71,6 @@ export function AirportLayer({
 
   useEffect(() => {
     if (!map || !isLoaded) return;
-    injectCSS();
     const m = map;
 
     const dotColor = isDark

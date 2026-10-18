@@ -12,12 +12,6 @@ import { X } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarProvider,
-} from "@/components/ui/sidebar";
 
 const FlightCard = dynamic(() =>
   import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
@@ -75,7 +69,7 @@ export function AerisLeftSidebar({
   onRestoreFocus,
 }: AerisLeftSidebarProps) {
   const isOpen = leftPanel !== null;
-  const sidebarRootRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const currentSnapshot = useMemo<AerisLeftPanelSnapshot | null>(
     () =>
       leftPanel?.kind === "flight" && displayFlight
@@ -103,23 +97,18 @@ export function AerisLeftSidebar({
   }
 
   useEffect(() => {
-    const sidebarContainer = sidebarRootRef.current?.querySelector<HTMLElement>(
-      '[data-slot="sidebar-container"]',
-    );
-    if (!sidebarContainer) return;
+    const aside = asideRef.current;
+    if (!aside) return;
 
     const reportInset = () => {
       onInsetChange(
-        Math.max(
-          0,
-          sidebarContainer.offsetWidth - AERIS_LEFT_SIDEBAR_OVERLAP_PX,
-        ),
+        Math.max(0, aside.offsetWidth - AERIS_LEFT_SIDEBAR_OVERLAP_PX),
       );
     };
 
     reportInset();
     const observer = new ResizeObserver(reportInset);
-    observer.observe(sidebarContainer);
+    observer.observe(aside);
 
     return () => observer.disconnect();
   }, [onInsetChange]);
@@ -130,12 +119,8 @@ export function AerisLeftSidebar({
       ? snapshotMemory.retained
       : null);
 
-  const title =
-    snapshot?.kind === "flight"
-      ? "Aircraft details"
-      : snapshot?.kind === "airport"
-        ? "Airport Board"
-        : "Aeris";
+  const label =
+    snapshot?.kind === "airport" ? "Airport details" : "Aircraft details";
 
   const handleCloseButton = () => {
     if (leftPanel?.kind === "flight") {
@@ -149,75 +134,47 @@ export function AerisLeftSidebar({
   };
 
   return (
-    <SidebarProvider
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose();
+    <aside
+      ref={asideRef}
+      aria-label={label}
+      aria-hidden={!isOpen}
+      inert={!isOpen}
+      data-open={isOpen}
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && !isOpen) {
+          setSnapshotMemory({ observed: null, retained: null });
+        }
       }}
-      persistState={false}
-      keyboardShortcut={false}
-      ref={sidebarRootRef}
-      className="pointer-events-none fixed inset-0 z-40 min-h-0 w-auto overflow-visible bg-transparent"
+      className="pointer-events-auto fixed inset-y-0 left-0 z-40 hidden w-(--aeris-sidebar-width) flex-col border-r border-border bg-background text-foreground transition-transform duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-full sm:flex"
       style={
-        {
-          "--sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH,
-        } as CSSProperties
+        { "--aeris-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH } as CSSProperties
       }
     >
-      <Sidebar
-        side="left"
-        variant="sidebar"
-        collapsible="offcanvas"
-        reserveSpace={false}
-        aria-hidden={!isOpen}
-        inert={isOpen ? undefined : true}
-        onTransitionEnd={(event) => {
-          if (
-            event.target === event.currentTarget &&
-            event.propertyName === "translate" &&
-            !isOpen
-          ) {
-            setSnapshotMemory({ observed: null, retained: null });
-          }
-        }}
-        className="pointer-events-auto border-0 border-transparent p-0 shadow-none"
+      <button
+        type="button"
+        onClick={handleCloseButton}
+        className="absolute top-2 right-2 z-10 grid size-11 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+        aria-label={`Close ${label.toLowerCase()}`}
       >
-        <SidebarHeader className="border-0 px-5 py-4 shadow-none">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="min-w-0 truncate text-[14px] font-semibold leading-5 tracking-tight text-sidebar-foreground/90">
-              {title}
-            </h2>
-            <button
-              type="button"
-              onClick={handleCloseButton}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/80 text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/75"
-              aria-label="Close left panel"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </SidebarHeader>
+        <span className="grid size-8 place-items-center rounded-full bg-background shadow-lift">
+          <X className="size-4" aria-hidden="true" />
+        </span>
+      </button>
 
-        <SidebarContent className="gap-0 overflow-hidden border-0 p-0 shadow-none">
-          <div className="min-h-0 flex-1">
-            {snapshot?.kind === "flight" ? (
-              <FlightCard
-                flight={snapshot.flight}
-                onToggleFpv={onToggleFpv}
-              />
-            ) : snapshot?.kind === "airport" ? (
-              <AirportInfoCard
-                board={snapshot.board}
-                onSelectFlight={onSelectAirportFlight}
-                selectedIcao24={snapshot.selectedIcao24}
-                onClose={onCloseAirport}
-                atc={atc}
-                variant="sidebar"
-              />
-            ) : null}
-          </div>
-        </SidebarContent>
-      </Sidebar>
-    </SidebarProvider>
+      <div className="min-h-0 flex-1">
+        {snapshot?.kind === "flight" ? (
+          <FlightCard flight={snapshot.flight} onToggleFpv={onToggleFpv} />
+        ) : snapshot?.kind === "airport" ? (
+          <AirportInfoCard
+            board={snapshot.board}
+            onSelectFlight={onSelectAirportFlight}
+            selectedIcao24={snapshot.selectedIcao24}
+            onClose={onCloseAirport}
+            atc={atc}
+            variant="sidebar"
+          />
+        ) : null}
+      </div>
+    </aside>
   );
 }

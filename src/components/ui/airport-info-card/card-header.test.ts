@@ -19,7 +19,7 @@ const TEST_AIRPORT: Airport = {
   elevation_ft: 13,
 };
 
-test("CardHeader omits the flight category badge when category data is missing", () => {
+test("CardHeader omits the flight category when the METAR has none", () => {
   const html = renderToStaticMarkup(
     createElement(CardHeader, {
       airport: TEST_AIRPORT,
@@ -27,13 +27,29 @@ test("CardHeader omits the flight category badge when category data is missing",
       metar: {
         rawOb: "KSFO 201656Z 30015KT 10SM FEW008 13/09 A2992",
       },
-      collapsed: false,
-      onToggleCollapse: () => {},
     }),
   );
 
   assert.match(html, /SFO/);
   assert.match(html, /KSFO/);
-  assert.doesNotMatch(html, /ring-foreground\/6/);
+  assert.doesNotMatch(html, /VFR|IFR/);
   assert.doesNotMatch(html, />-</);
+});
+
+test("CardHeader shows sheet controls only on mobile", () => {
+  const sidebar = renderToStaticMarkup(
+    createElement(CardHeader, { airport: TEST_AIRPORT, icao: "KSFO", metar: null }),
+  );
+  const sheet = renderToStaticMarkup(
+    createElement(CardHeader, {
+      airport: TEST_AIRPORT,
+      icao: "KSFO",
+      metar: { rawOb: "KSFO", fltcat: "IFR" },
+      sheet: { collapsed: false, onToggleCollapse: () => {}, onClose: () => {} },
+    }),
+  );
+
+  assert.doesNotMatch(sidebar, /<button/);
+  assert.match(sheet, /Close airport details/);
+  assert.match(sheet, /IFR/);
 });

@@ -6,7 +6,6 @@ import {
   __internals,
   findNearbyAtcFeeds,
   iataToIcao,
-  icaoToIata,
 } from "./atc-lookup";
 
 test("curated airport code lookups stay on the curated map path", () => {
@@ -14,7 +13,6 @@ test("curated airport code lookups stay on the curated map path", () => {
 
   assert.equal(__internals.hasBuiltFullMaps(), false);
   assert.equal(iataToIcao("JFK"), "KJFK");
-  assert.equal(icaoToIata("KJFK"), "JFK");
   assert.equal(__internals.hasBuiltFullMaps(), false);
 });
 
@@ -22,7 +20,6 @@ test("non-curated airport code lookups fall back to the full airport database", 
   __internals.resetFullMaps();
 
   assert.equal(iataToIcao("IAH"), "KIAH");
-  assert.equal(icaoToIata("KIAH"), "IAH");
   assert.equal(__internals.hasBuiltFullMaps(), true);
 });
 

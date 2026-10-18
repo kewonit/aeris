@@ -47,29 +47,11 @@ const SOURCE_LABELS: Record<string, string> = {
   none: "Unavailable",
 };
 
-const SOURCE_COLORS: Record<string, string> = {
-  adsb: "rgb(52, 211, 153)", // emerald
-  adsbfi: "rgb(34, 211, 238)", // cyan
-  opensky: "rgb(251, 191, 36)", // amber
-  airplanes: "rgb(96, 165, 250)", // blue
-  none: "rgb(248, 113, 113)", // red
-};
-
-function circuitBadge(
-  state: CircuitState,
-  cooldownMs: number,
-): { label: string; color: string } {
-  switch (state) {
-    case "closed":
-      return { label: "OK", color: "rgb(52, 211, 153)" };
-    case "open":
-      return {
-        label: `DOWN ${Math.ceil(cooldownMs / 1000)}s`,
-        color: "rgb(248, 113, 113)",
-      };
-    case "half-open":
-      return { label: "PROBING", color: "rgb(251, 191, 36)" };
-  }
+/** Circuit breaker state, shown only when a provider is cooling down or probing. */
+function circuitLabel(state: CircuitState, cooldownMs: number): string | null {
+  if (state === "open") return `Retry in ${Math.ceil(cooldownMs / 1000)}s`;
+  if (state === "half-open") return "Retrying";
+  return null;
 }
 
 // ── Provider Dropdown ──────────────────────────────────────────────────
@@ -109,155 +91,44 @@ export function ProviderDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl border shadow-2xl shadow-background/60 backdrop-blur-2xl sm:w-70 sm:max-w-none"
-          style={{
-            borderColor: "rgb(var(--ui-fg) / 0.08)",
-            backgroundColor: "rgb(var(--ui-bg) / 0.75)",
-          }}
+          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div
-            className="flex items-center justify-between px-4 py-2.5"
-            style={{ borderBottom: "1px solid rgb(var(--ui-fg) / 0.06)" }}
-          >
-            <div className="flex items-center gap-2">
-              <Satellite className="h-3 w-3 text-emerald-400/70" />
-              <span
-                className="text-[10px] font-semibold tracking-widest uppercase"
-                style={{ color: "rgb(var(--ui-fg) / 0.35)" }}
-              >
-                Providers
-              </span>
+          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+            <div className="flex items-center gap-2 text-label text-subtle">
+              <Satellite className="size-3" aria-hidden="true" />
+              Data provider
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-foreground/5 active:bg-foreground/10"
+              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
               aria-label="Close provider selector"
             >
-              <X
-                className="h-3 w-3"
-                style={{ color: "rgb(var(--ui-fg) / 0.3)" }}
-              />
+              <X className="size-3.5" />
             </button>
           </div>
 
           {/* Provider list */}
           <div className="py-1">
-            {/* Auto option */}
-            <button
-              type="button"
-              onClick={() => handleSelect("auto")}
-              className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
-                isAutoMode ? "bg-foreground/6" : "hover:bg-foreground/3 active:bg-foreground/6"
-              }`}
-            >
-              <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                <Circle
-                  className="h-2.5 w-2.5"
-                  style={{
-                    color: isAutoMode
-                      ? "rgb(52, 211, 153)"
-                      : "rgb(var(--ui-fg) / 0.2)",
-                  }}
-                  fill={isAutoMode ? "rgb(52, 211, 153)" : "transparent"}
-                />
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-0 text-left">
-                <span
-                  className="truncate text-[11px] font-medium leading-snug"
-                  style={{
-                    color: isAutoMode
-                      ? "rgb(var(--ui-fg) / 0.85)"
-                      : "rgb(var(--ui-fg) / 0.55)",
-                  }}
-                >
-                  Auto
-                </span>
-                <span
-                  className="text-[9px] leading-snug"
-                  style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-                >
-                  Uses best available
-                </span>
-              </div>
-              <span
-                className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
-                style={{
-                  backgroundColor: "rgb(52, 211, 153, 0.07)",
-                  color: "rgb(52, 211, 153)",
-                }}
-              >
-                REC
-              </span>
-            </button>
-
-            {/* Individual providers */}
+            <ProviderOption
+              label="Auto"
+              description="Uses the best available provider"
+              selected={isAutoMode}
+              onSelect={() => handleSelect("auto")}
+            />
             {PROVIDERS.map((provider) => {
-              const isSelected = override === provider.id;
-              const isActive = currentSource === provider.id;
               const circuit = getCircuitState(provider.id);
-              const badge = circuitBadge(
-                circuit.state,
-                circuit.cooldownRemaining,
-              );
               return (
-                <button
+                <ProviderOption
                   key={provider.id}
-                  type="button"
-                  onClick={() => handleSelect(provider.id)}
-                  className={`group flex w-full items-center gap-2.5 px-3.5 py-2 transition-colors ${
-                    isSelected
-                      ? "bg-foreground/6"
-                      : "hover:bg-foreground/3 active:bg-foreground/6"
-                  }`}
-                >
-                  <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    <Circle
-                      className="h-2.5 w-2.5"
-                      style={{
-                        color: isActive
-                          ? (SOURCE_COLORS[provider.id] ??
-                            "rgb(var(--ui-fg) / 0.2)")
-                          : isSelected
-                            ? "rgb(var(--ui-fg) / 0.5)"
-                            : "rgb(var(--ui-fg) / 0.2)",
-                      }}
-                      fill={
-                        isActive
-                          ? (SOURCE_COLORS[provider.id] ?? "transparent")
-                          : "transparent"
-                      }
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0 text-left">
-                    <span
-                      className="truncate text-[11px] font-medium leading-snug"
-                      style={{
-                        color: isActive
-                          ? "rgb(var(--ui-fg) / 0.85)"
-                          : "rgb(var(--ui-fg) / 0.55)",
-                      }}
-                    >
-                      {provider.label}
-                    </span>
-                    <span
-                      className="text-[9px] leading-snug"
-                      style={{ color: "rgb(var(--ui-fg) / 0.25)" }}
-                    >
-                      {provider.description}
-                    </span>
-                  </div>
-                  <span
-                    className="shrink-0 rounded px-1.5 py-px text-[8px] font-bold tracking-wider"
-                    style={{
-                      backgroundColor: `${badge.color}12`,
-                      color: badge.color,
-                    }}
-                  >
-                    {badge.label}
-                  </span>
-                </button>
+                  label={provider.label}
+                  description={provider.description}
+                  selected={override === provider.id}
+                  live={currentSource === provider.id}
+                  status={circuitLabel(circuit.state, circuit.cooldownRemaining)}
+                  onSelect={() => handleSelect(provider.id)}
+                />
               );
             })}
           </div>
@@ -290,38 +161,69 @@ export function ProviderTrigger({
         ? (SOURCE_LABELS[source] ?? source)
         : "Connecting…";
 
-  const dotColor = rateLimited
-    ? "text-amber-400/80"
-    : source === "none"
-      ? "text-red-400/80"
-      : source === "opensky"
-        ? "text-amber-400/80"
-        : source === "adsbfi"
-          ? "text-cyan-400/80"
-          : source === "airplanes"
-            ? "text-blue-400/80"
-            : "text-emerald-400/80";
+  const tone =
+    rateLimited || source === "opensky"
+      ? "text-warning"
+      : source === "none"
+        ? "text-danger"
+        : "text-subtle";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2"
+      className="flex items-center gap-2 text-label text-muted-foreground transition-colors hover:text-foreground"
       aria-label="Select ADS-B provider"
     >
-      <div className="relative">
-        <Satellite className={`h-3 w-3 ${dotColor}`} />
-      </div>
-      <span
-        className="text-[11px] font-medium tracking-wide"
-        style={{ color: "rgb(var(--ui-fg) / 0.4)" }}
-      >
-        {label}
-      </span>
-      <ChevronUp
-        className="h-3 w-3 transition-colors"
-        style={{ color: "rgb(var(--ui-fg) / 0.35)" }}
+      <Satellite className={`size-3 ${tone}`} aria-hidden="true" />
+      {label}
+      <ChevronUp className="size-3 text-subtle" aria-hidden="true" />
+    </button>
+  );
+}
+
+function ProviderOption({
+  label,
+  description,
+  selected,
+  live = false,
+  status = null,
+  onSelect,
+}: {
+  label: string;
+  description: string;
+  selected: boolean;
+  live?: boolean;
+  status?: string | null;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
+        selected ? "bg-card" : "hover:bg-card"
+      }`}
+    >
+      <Circle
+        className={`size-2.5 shrink-0 ${selected ? "fill-tint text-tint" : "text-border"}`}
+        aria-hidden="true"
       />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-small text-foreground">
+          {label}
+          {live && <span className="ml-1.5 text-label text-tint">Live</span>}
+        </span>
+        <span className="block truncate text-label text-subtle">
+          {description}
+        </span>
+      </span>
+      {status && (
+        <span className="shrink-0 font-mono text-micro text-warning">
+          {status}
+        </span>
+      )}
     </button>
   );
 }

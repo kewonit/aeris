@@ -1,9 +1,9 @@
+import type { FpvCameraPosition } from "./camera-controller-utils";
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import type { TrailEntry } from "@/hooks/use-trail-history";
-import type { TrailEnvelope } from "@/lib/trails/types";
+import type { TrailEntry, TrailEnvelope } from "@/lib/trails/types";
 import type { MutableRefObject } from "react";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
@@ -31,9 +31,7 @@ export const TRACK_DAMPING = 0.18;
  *  suppress jitter. 0.65 retains responsiveness while cutting noise. */
 export const MLAT_POSITION_ALPHA = 0.65;
 export const TRAIL_SMOOTHING_ITERATIONS = 3;
-export const AIRCRAFT_PX_PER_UNIT = 0.3;
 export const BASE_AIRCRAFT_SIZE = 20;
-export const AIRCRAFT_MAX_PIXELS = 18;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 
@@ -78,10 +76,5 @@ export type FlightLayerProps = {
   altitudeDisplayMode: AltitudeDisplayMode;
   globeMode?: boolean;
   fpvIcao24?: string | null;
-  fpvPositionRef?: MutableRefObject<{
-    lng: number;
-    lat: number;
-    alt: number;
-    track: number;
-  } | null>;
+  fpvPositionRef?: MutableRefObject<FpvCameraPosition | null>;
 };

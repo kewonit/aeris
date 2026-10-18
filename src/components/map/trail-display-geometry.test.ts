@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { TrailEntry } from "@/hooks/use-trail-history";
+import type { TrailEntry } from "@/lib/trails/types";
 
 import { buildTrailDisplayGeometry } from "./trail-display-geometry";
 
