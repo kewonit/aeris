@@ -1,6 +1,9 @@
 // ── readsb API Client ────────────────────────────────────────────────
 //
-// 4-tier fallback: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
+// Four providers: adsb.lol proxy, adsb.fi proxy, airplanes.live proxy and
+// OpenSky. They are asked quickest-first, as learned from their recent
+// answers, and a slow one is hedged: after a short wait the next is asked
+// too and the first answer wins (provider-race.ts, provider-health.ts).
 // Override: ?provider=airplanes|adsb|adsbfi|opensky in the URL.
 // ────────────────────────────────────────────────────────────────────────
 
@@ -14,6 +17,8 @@ import {
   fetchFlightByCallsign as openskyFetchByCallsign,
   fetchFlightByIcao24 as openskyFetchByIcao24,
 } from "./opensky-flights";
+import { providerHealth } from "./provider-health";
+import { raceProviders, type Candidate } from "./provider-race";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -62,12 +67,8 @@ const CIRCUIT_BASE_COOLDOWN_MS = 60_000; // 60 s
 const CIRCUIT_MAX_COOLDOWN_MS = 300_000; // 5 min
 
 const circuits = new Map<string, TierCircuit>();
-
-// Sticky preference is deliberately point-polling state only. One-off
-// lookups and global searches must neither read nor update it.
-const STICKY_WINDOW_MS = 60_000; // 60 s
-let stickySource: string | null = null;
-let stickyUntil = 0;
+/** Point polls so far, for the periodic measuring pass. */
+let pointPolls = 0;
 
 class ProviderHttpError extends Error {
   constructor(
@@ -159,11 +160,11 @@ export function getCircuitState(tierId: string): {
   };
 }
 
-/** Reset all circuits (e.g. on network reconnect). */
+/** Reset all circuits and what was learned about providers' speed. */
 export function resetAllCircuits(): void {
   circuits.clear();
-  stickySource = null;
-  stickyUntil = 0;
+  providerHealth.reset();
+  pointPolls = 0;
 }
 
 let _onlineListenerRegistered = false;
@@ -199,15 +200,24 @@ export function setProviderOverride(provider: ProviderName): void {
     url.searchParams.set("provider", provider);
   }
 
-  stickySource = null;
-  stickyUntil = 0;
   window.history.replaceState({}, "", url.toString());
   window.dispatchEvent(new Event(PROVIDER_CHANGE_EVENT));
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const PROXY_TIMEOUT_MS = 8_000;
+const PROXY_TIMEOUT_MS = 6_000;
+/**
+ * How long the provider in front gets before the next is asked as well.
+ * A healthy provider answers well inside this; a slow one costs one extra
+ * request and no longer holds the map up.
+ */
+const HEDGE_DELAY_MS = 1_200;
+/**
+ * Every so many point polls, every provider is asked at once, so that a
+ * provider that has recovered is seen to be quick again and asked first.
+ */
+const MEASURE_EVERY_POLLS = 12;
 const PROVIDER_LABELS = {
   adsb: "adsb.lol",
   adsbfi: "adsb.fi",
@@ -350,88 +360,93 @@ async function fetchFromOpenSkyPoint(
 
 interface NamedTier {
   id: string;
-  fn: () => Promise<FlightState[]>;
-}
-
-function recordStickySuccess(tierId: string): void {
-  stickySource = tierId;
-  stickyUntil = Date.now() + STICKY_WINDOW_MS;
+  fn: (signal: AbortSignal) => Promise<FlightState[]>;
 }
 
 interface FallbackOptions {
   /** A valid empty lookup is a miss, so continue to the next provider. */
   continueOnEmpty?: boolean;
-  /** Only continuous point polling may use or update sticky preference. */
-  usePointSticky?: boolean;
+  /** Ask every provider at once, to measure them all. */
+  measureAll?: boolean;
 }
 
+function isRateLimit(err: Error): boolean {
+  if (err instanceof ProviderHttpError && err.status === 429) return true;
+  const msg = err.message.toLowerCase();
+  return msg.includes("429") || msg.includes("rate limit");
+}
+
+/**
+ * Asks the providers quickest-first, hedging a slow one with the next, and
+ * answers with the first acceptable result. Only the caller's abort
+ * cancels the lookup; a provider that timed out or failed is a failure of
+ * that provider, counted against its circuit, and the race moves on.
+ */
 async function runFallbackChain(
   tiers: NamedTier[],
   signal?: AbortSignal,
   options?: FallbackOptions,
 ): Promise<FlightApiFetchResult> {
-  let lastError: Error | null = null;
-  let allSkipped = true;
-  let lastTriedId: string | undefined;
-  let lastEmptySource: string | undefined;
-
-  const orderedTiers =
-    options?.usePointSticky && stickySource && Date.now() < stickyUntil
-      ? [
-          ...tiers.filter((t) => t.id === stickySource),
-          ...tiers.filter((t) => t.id !== stickySource),
-        ]
-      : tiers;
-
-  for (const { id, fn } of orderedTiers) {
+  const order = providerHealth.order(tiers.map((t) => t.id));
+  const candidates: Candidate<FlightState[]>[] = [];
+  for (const id of order) {
     if (shouldSkipTier(id)) continue;
-    allSkipped = false;
-    lastTriedId = id;
-
-    try {
-      const flights = await fn();
-      recordSuccess(id);
-
-      if (options?.continueOnEmpty && flights.length === 0) {
-        lastEmptySource = id;
-        continue;
-      }
-
-      if (options?.usePointSticky) recordStickySuccess(id);
-      return { flights, rateLimited: false, source: id };
-    } catch (err) {
-      // Only the caller's abort cancels the lookup. A provider that timed
-      // out or failed in any other way is skipped for the next one; giving
-      // up here would leave the caller thinking it had been cancelled.
-      if (signal?.aborted) throw err;
-
-      if (!isNonCircuitError(err)) recordFailure(id, err);
-
-      lastError = err instanceof Error ? err : new Error(String(err));
-    }
+    const tier = tiers.find((t) => t.id === id)!;
+    candidates.push({ id, run: tier.fn });
   }
 
-  if (lastEmptySource) {
-    return { flights: [], rateLimited: false, source: lastEmptySource };
-  }
-
-  if (allSkipped) {
+  if (candidates.length === 0) {
     return { flights: [], rateLimited: false, source: "none" };
   }
 
-  const msg = lastError?.message?.toLowerCase() ?? "";
-  if (msg.includes("429") || msg.includes("rate limit")) {
-    return { flights: [], rateLimited: true, source: lastTriedId };
+  // A measuring pass asks every proxied provider at once; OpenSky's
+  // credits are only spent when the rest have failed.
+  const startAtOnce = options?.measureAll
+    ? candidates.filter((c) => c.id !== "opensky").length
+    : 1;
+  const outcome = await raceProviders(candidates, {
+    hedgeDelayMs: HEDGE_DELAY_MS,
+    accept: options?.continueOnEmpty
+      ? (flights) => flights.length > 0
+      : undefined,
+    startAtOnce,
+    signal,
+  });
+
+  for (const [id, latencyMs] of outcome.latencies) {
+    recordSuccess(id);
+    providerHealth.noteAnswer(id, latencyMs);
+  }
+  for (const { id, error } of outcome.failures) {
+    if (isNonCircuitError(error)) continue;
+    recordFailure(id, error);
+    providerHealth.noteFailure(id);
   }
 
-  throw lastError ?? new Error("All flight providers failed");
+  if (outcome.winner) {
+    const { id, value } = outcome.winner;
+    return { flights: value, rateLimited: false, source: id };
+  }
+
+  const lastMiss = outcome.misses[outcome.misses.length - 1];
+  if (lastMiss) {
+    return { flights: [], rateLimited: false, source: lastMiss };
+  }
+
+  const rateLimited = outcome.failures.find((f) => isRateLimit(f.error));
+  if (rateLimited) {
+    return { flights: [], rateLimited: true, source: rateLimited.id };
+  }
+
+  const last = outcome.failures[outcome.failures.length - 1];
+  throw last?.error ?? new Error("All flight providers failed");
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
 
 /**
  * Fetch flights within a radius of a geographic point.
- * Uses the fallback chain: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
+ * Asks the providers quickest-first and hedges a slow one with the next.
  */
 export async function fetchFlightsByPoint(
   lat: number,
@@ -456,7 +471,7 @@ export async function fetchFlightsByPoint(
     // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseReadsbResponse(resp, "adsb", options);
       },
@@ -467,7 +482,7 @@ export async function fetchFlightsByPoint(
     // adsb.fi via proxy - public secondary fallback
     tiers.push({
       id: "adsbfi",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseReadsbResponse(resp, "adsbfi", options);
       },
@@ -478,7 +493,7 @@ export async function fetchFlightsByPoint(
     // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseReadsbResponse(resp, "airplanes", options);
       },
@@ -489,23 +504,26 @@ export async function fetchFlightsByPoint(
     // OpenSky - last resort
     tiers.push({
       id: "opensky",
-      fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
+      fn: (signal) => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
     });
   }
 
   if (override === "opensky") {
     tiers.push({
       id: "opensky",
-      fn: () => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
+      fn: (signal) => fetchFromOpenSkyPoint(cLat, cLon, radiusDeg, signal),
     });
   }
 
-  return runFallbackChain(tiers, signal, { usePointSticky: true });
+  pointPolls += 1;
+  return runFallbackChain(tiers, signal, {
+    measureAll: override === "auto" && pointPolls % MEASURE_EVERY_POLLS === 0,
+  });
 }
 
 /**
  * Fetch all aircraft returned for an ICAO24 hex address.
- * Uses the fallback chain: adsb.lol proxy → adsb.fi proxy → airplanes.live proxy → OpenSky.
+ * Asks the providers quickest-first and hedges a slow one with the next.
  */
 export async function fetchFlightsByHex(
   icao24: string,
@@ -528,7 +546,7 @@ export async function fetchFlightsByHex(
     // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseReadsbResponse(resp, "adsb", parseOpts);
       },
@@ -539,7 +557,7 @@ export async function fetchFlightsByHex(
     // adsb.fi via proxy - public secondary fallback
     tiers.push({
       id: "adsbfi",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseReadsbResponse(resp, "adsbfi", parseOpts);
       },
@@ -550,7 +568,7 @@ export async function fetchFlightsByHex(
     // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseReadsbResponse(resp, "airplanes", parseOpts);
       },
@@ -561,7 +579,7 @@ export async function fetchFlightsByHex(
     // OpenSky - last resort
     tiers.push({
       id: "opensky",
-      fn: async () => {
+      fn: async (signal) => {
         const result = await openskyFetchByIcao24(normalized, signal);
         return result.flight ? [result.flight] : [];
       },
@@ -571,7 +589,7 @@ export async function fetchFlightsByHex(
   if (override === "opensky") {
     tiers.push({
       id: "opensky",
-      fn: async () => {
+      fn: async (signal) => {
         const result = await openskyFetchByIcao24(normalized, signal);
         return result.flight ? [result.flight] : [];
       },
@@ -610,7 +628,7 @@ export async function fetchFlightsByCallsign(
     // adsb.lol via proxy - primary data source
     tiers.push({
       id: "adsb",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsb", signal);
         return parseReadsbResponse(resp, "adsb", parseOpts);
       },
@@ -621,7 +639,7 @@ export async function fetchFlightsByCallsign(
     // adsb.fi via proxy - public secondary fallback
     tiers.push({
       id: "adsbfi",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "adsbfi", signal);
         return parseReadsbResponse(resp, "adsbfi", parseOpts);
       },
@@ -632,7 +650,7 @@ export async function fetchFlightsByCallsign(
     // airplanes.live via proxy - secondary fallback
     tiers.push({
       id: "airplanes",
-      fn: async () => {
+      fn: async (signal) => {
         const resp = await fetchViaProxy(readsbPath, "airplanes", signal);
         return parseReadsbResponse(resp, "airplanes", parseOpts);
       },
@@ -642,7 +660,7 @@ export async function fetchFlightsByCallsign(
   if (override === "auto" || override === "opensky") {
     tiers.push({
       id: "opensky",
-      fn: async () => {
+      fn: async (signal) => {
         const result = await openskyFetchByCallsign(normalized, signal);
         if (result.rateLimited) throw new Error("OpenSky rate limited (429)");
         return result.flight ? [result.flight] : [];

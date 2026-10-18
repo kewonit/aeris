@@ -21,17 +21,9 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Primary - server proxy" },
-  {
-    id: "adsbfi",
-    label: "adsb.fi",
-    description: "Public fallback - server proxy",
-  },
-  {
-    id: "airplanes",
-    label: "Airplanes.live",
-    description: "Fallback - server proxy",
-  },
+  { id: "adsb", label: "adsb.lol", description: "Server proxy" },
+  { id: "adsbfi", label: "adsb.fi", description: "Server proxy" },
+  { id: "airplanes", label: "Airplanes.live", description: "Server proxy" },
   {
     id: "opensky",
     label: "OpenSky",
@@ -113,7 +105,7 @@ export function ProviderDropdown({
           <div className="py-1">
             <ProviderOption
               label="Auto"
-              description="Uses the best available provider"
+              description="Fastest provider first, switches on its own"
               selected={isAutoMode}
               onSelect={() => handleSelect("auto")}
             />

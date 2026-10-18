@@ -706,6 +706,11 @@ export const CHANGELOG: {
           "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed out, they keep shrinking, so busy skies no longer turn into a carpet of aircraft. Zoomed in to an airport, they appear at their real size, and their heights stay the same as you zoom.",
       },
       {
+        title: "Quicker receivers",
+        description:
+          "The map asks whichever receiver has been answering fastest first, and when one is slow it asks the next after about a second and takes the first answer, so a slow receiver never holds the map up. It remembers which was fast across reloads and checks the others about once a minute, so a receiver that recovers is picked up again on its own.",
+      },
+      {
         title: "Quick toolbar",
         description:
           "A toolbar on the left switches trails, high trails, altitude colours and exaggerated heights. Every toolbar button has a tooltip, and the sidebars scroll without shifting their content.",

@@ -43,7 +43,7 @@ export const PROVIDERS: readonly FlightApiProvider[] = [
 
 // ── API Constants ──────────────────────────────────────────────────────
 
-export const READSB_FETCH_TIMEOUT_MS = 10_000;
+export const READSB_FETCH_TIMEOUT_MS = 8_000;
 export const ICAO24_REGEX = /^[0-9a-f]{6}$/i;
 export const MAX_RADIUS_NM = 250;
 
