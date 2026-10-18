@@ -1,0 +1,78 @@
+name: Refresh aviation data
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 10.13.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build and check the snapshot
+        run: |
+          pnpm data:refresh
+          pnpm test:data
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aviation-data
+          path: public/data/aviation
+          retention-days: 7
+
+  pull-request:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+
+      - name: Replace the snapshot with the built one
+        run: rm -rf public/data/aviation
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: aviation-data
+          path: public/data/aviation
+
+      - id: date
+        run: echo "today=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          branch: chore/refresh-open-aviation-data
+          base: main
+          delete-branch: true
+          draft: true
+          commit-message: "Refresh open aviation data"
+          title: "Refresh open aviation data (${{ steps.date.outputs.today }})"
+          body: |
+            Weekly refresh of the Mictronics and FAA aircraft snapshot.
+            The build job ran `pnpm data:refresh` and `pnpm test:data`.
+          add-paths: public/data/aviation/**

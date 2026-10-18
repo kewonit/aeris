@@ -122,6 +122,18 @@ All variables are optional - Aeris runs with no secrets. See `.env.example` for 
 
 Live readsb data (adsb.lol, adsb.fi, then airplanes.live) is fetched through the server proxy; OpenSky is the final automatic fallback. No provider credentials are configured. The adsb.fi public API is limited to one request per second per IP for personal, non-commercial use and is credited in the application as required by its terms.
 
+## Open Aviation Data
+
+`public/data/aviation` holds an aircraft registry snapshot built from the [Mictronics aircraft database](https://github.com/Mictronics/aircraft-database) and the [FAA releasable aircraft database](https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download). Records are split into small chunks by ICAO address, so selecting an aircraft loads one chunk of about 100 KB or less. The generator reads only registration, type, model, manufacturer, and database flags. It never copies FAA owner names or addresses.
+
+```bash
+pnpm data:refresh   # download both sources and rebuild the snapshot
+pnpm data:check     # check the committed files against the manifest
+pnpm test:data
+```
+
+A workflow rebuilds the snapshot every Monday and opens a draft PR when it changes. [NOTICE.md](public/data/aviation/NOTICE.md) lists the source licenses.
+
 ## License
 
 AGPL-3.0
