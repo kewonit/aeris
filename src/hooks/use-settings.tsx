@@ -8,6 +8,7 @@ import {
   useEffect,
   useRef,
   useSyncExternalStore,
+  useMemo,
   type ReactNode,
 } from "react";
 
@@ -103,6 +104,20 @@ export function trailCeilingMeters(settings: Settings): number | null {
   return settings.hideHighTrails
     ? settings.trailCeilingFt * METERS_PER_FOOT
     : null;
+}
+
+/** The flight layers' props that come straight from settings. */
+export function flightLayerSettings(settings: Settings) {
+  return {
+    showTrails: settings.showTrails,
+    trailThickness: settings.trailThickness,
+    trailMinutes: settings.trailMinutes,
+    trailCeilingMeters: trailCeilingMeters(settings),
+    showShadows: settings.showShadows,
+    showAltitudeColors: settings.showAltitudeColors,
+    altitudeDisplayMode: settings.altitudeDisplayMode,
+    globeMode: settings.globeMode,
+  };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -305,7 +320,14 @@ export function useSettings() {
   return ctx;
 }
 
-export function SettingsProvider({ children }: { children: ReactNode }) {
+export function SettingsProvider({
+  children,
+  overrides,
+}: {
+  children: ReactNode;
+  /** Settings a page fixes for itself, over the visitor's saved ones. Keep it stable. */
+  overrides?: Partial<Settings>;
+}) {
   const hydrated = useSyncExternalStore(
     subscribeNoop,
     getSettingsSnapshot,
@@ -313,7 +335,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
 
   const [override, setOverride] = useState<Settings | undefined>();
-  const settings = override ?? hydrated;
+  const saved = override ?? hydrated;
+  const settings = useMemo(
+    () => (overrides ? { ...saved, ...overrides } : saved),
+    [saved, overrides],
+  );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
