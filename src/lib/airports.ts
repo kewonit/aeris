@@ -1,4 +1,3 @@
-import type { City } from "./cities";
 
 export type Airport = {
   iata: string;
@@ -12,8 +11,6 @@ export type Airport = {
   /** Elevation in feet AMSL. null when OurAirports has no value. */
   elevation_ft: number | null;
 };
-
-const DEFAULT_RADIUS = 2.5;
 
 export const AIRPORTS: Airport[] = [
   {
@@ -90704,16 +90701,7 @@ export function findAirportByIcao(icao: string): Airport | undefined {
   return ICAO_LOOKUP.get(code);
 }
 
-export function airportToCity(airport: Airport): City {
-  return {
-    id: airport.iata.toLowerCase(),
-    name: airport.city,
-    country: airport.country,
-    iata: airport.iata,
-    coordinates: [airport.lng, airport.lat],
-    radius: DEFAULT_RADIUS,
-  };
-}
+export { airportToCity } from "./airport-city";
 
 /**
  * Find the nearest airport to a given coordinate.

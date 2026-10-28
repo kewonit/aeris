@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AtcFeed, AtcStreamStatus } from "@/lib/atc-types";
 import { VALID_MOUNT_POINTS } from "@/lib/atc-feeds";
+import { attachLiveStream, canStreamLive } from "@/lib/atc-live-source";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -12,6 +13,11 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BROADCAST_CHANNEL_NAME = "aeris:atc-playback";
+
+/** Only a refusal to autoplay needs a tap; a failed load arrives as the element's error event. */
+function isAutoplayBlock(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotAllowedError";
+}
 
 export function getAtcReconnectDelayMs(attempt: number): number {
   const safeAttempt = Number.isFinite(attempt)
@@ -98,6 +104,7 @@ export function useAtcStream(): UseAtcStreamReturn {
   const tabIdRef = useRef<string>(createTabId());
   const broadcastRef = useRef<BroadcastChannel | null>(null);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detachLiveRef = useRef<(() => void) | null>(null);
   const proxyAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
   const stopRef = useRef<() => void>(() => {});
@@ -116,6 +123,9 @@ export function useAtcStream(): UseAtcStreamReturn {
       clearTimeout(stalledTimerRef.current);
       stalledTimerRef.current = null;
     }
+
+    detachLiveRef.current?.();
+    detachLiveRef.current = null;
 
     const audio = audioRef.current;
     if (audio) {
@@ -229,7 +239,7 @@ export function useAtcStream(): UseAtcStreamReturn {
   // ── Reconnection logic ────────────────────────────────────────────
 
   const scheduleReconnectAttempt = useCallback(
-    (targetFeed: AtcFeed, useProxy: boolean) => {
+    (targetFeed: AtcFeed) => {
       if (stoppedManuallyRef.current) return;
       if (reconnectTimerRef.current) return;
 
@@ -247,7 +257,10 @@ export function useAtcStream(): UseAtcStreamReturn {
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = null;
         if (feedRef.current?.id !== targetFeed.id) return;
-        startPlaybackRef.current(targetFeed, useProxy, true);
+        // Each retry starts over from the proxy, the path that can work, and
+        // may still fall back to direct once.
+        proxyAttemptedRef.current = false;
+        startPlaybackRef.current(targetFeed, true, true);
       }, delay);
     },
     [],
@@ -297,7 +310,15 @@ export function useAtcStream(): UseAtcStreamReturn {
         setError(null);
       }
 
-      audio.src = src;
+      // The proxy is same-origin, so it can go through Media Source and start
+      // in a second or two. A failure there takes the element's error path.
+      if (useProxy && canStreamLive()) {
+        detachLiveRef.current = attachLiveStream(audio, src, () => {
+          if (audioRef.current === audio) audio.dispatchEvent(new Event("error"));
+        });
+      } else {
+        audio.src = src;
+      }
 
       audio.addEventListener("playing", () => {
         if (audioRef.current !== audio) return;
@@ -329,7 +350,10 @@ export function useAtcStream(): UseAtcStreamReturn {
         if (!stalledTimerRef.current) {
           stalledTimerRef.current = setTimeout(() => {
             stalledTimerRef.current = null;
-            if (audioRef.current === audio) setStatus("loading");
+            // While retrying a failed feed, stay on the error until it plays.
+            if (audioRef.current === audio && reconnectAttemptsRef.current === 0) {
+              setStatus("loading");
+            }
           }, 1200);
         }
       });
@@ -365,7 +389,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         }
 
         // Try to reconnect (silently, up to MAX_RECONNECT_ATTEMPTS)
-        scheduleReconnectAttempt(targetFeed, useProxy);
+        scheduleReconnectAttempt(targetFeed);
       });
 
       audio.addEventListener("stalled", () => {
@@ -374,7 +398,10 @@ export function useAtcStream(): UseAtcStreamReturn {
         if (!stalledTimerRef.current) {
           stalledTimerRef.current = setTimeout(() => {
             stalledTimerRef.current = null;
-            if (audioRef.current === audio) setStatus("loading");
+            // While retrying a failed feed, stay on the error until it plays.
+            if (audioRef.current === audio && reconnectAttemptsRef.current === 0) {
+              setStatus("loading");
+            }
           }, 1200);
         }
       });
@@ -382,13 +409,13 @@ export function useAtcStream(): UseAtcStreamReturn {
       audio.addEventListener("ended", () => {
         if (audioRef.current !== audio) return;
         // Live streams shouldn't end, but if they do, reconnect
-        scheduleReconnectAttempt(targetFeed, useProxy);
+        scheduleReconnectAttempt(targetFeed);
       });
 
       // Start playback - requires user gesture (handled by UI click)
-      audio.play().catch(() => {
+      audio.play().catch((playError: unknown) => {
         // Autoplay blocked - user must interact first
-        if (audioRef.current !== audio) return;
+        if (audioRef.current !== audio || !isAutoplayBlock(playError)) return;
         setStatus("blocked");
         setError("Tap to listen - browser requires interaction.");
       });
@@ -440,7 +467,8 @@ export function useAtcStream(): UseAtcStreamReturn {
 
     setStatus("loading");
     setError(null);
-    audio.play().catch(() => {
+    audio.play().catch((playError: unknown) => {
+      if (audioRef.current !== audio || !isAutoplayBlock(playError)) return;
       setStatus("blocked");
       setError("Tap to listen - browser requires interaction.");
     });

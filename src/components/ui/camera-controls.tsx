@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useRef,
   useEffect,
@@ -222,7 +223,20 @@ function useFullscreen() {
   return { isFullscreen, toggle, supported, mounted };
 }
 
-export function CameraControls() {
+export type CameraControlGroup = "zoom" | "pitch" | "bearing" | "place";
+
+const ALL_GROUPS: readonly CameraControlGroup[] = ["zoom", "pitch", "bearing", "place"];
+
+function GroupDivider() {
+  return <div className="mx-auto my-0.5 h-px w-6 bg-border" />;
+}
+
+/** The map's camera buttons. Pages can show only some `groups`, in the usual order. */
+export function CameraControls({
+  groups = ALL_GROUPS,
+}: {
+  groups?: readonly CameraControlGroup[];
+} = {}) {
   const { flyToMe, locating } = useGeolocation();
   const {
     isFullscreen,
@@ -230,79 +244,43 @@ export function CameraControls() {
     supported: fsSupported,
     mounted,
   } = useFullscreen();
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        type: "spring",
-        stiffness: 300,
-        damping: 24,
-        delay: 0.55,
-      }}
-      className="flex flex-col items-center rounded-lg border border-border bg-background"
-      role="toolbar"
-      aria-label="Camera controls"
-    >
-      <TooltipProvider>
+
+  const sections: Record<CameraControlGroup, React.ReactNode> = {
+    zoom: (
+      <>
         <ControlButton type="zoom" direction={1} label="Zoom in">
           <Plus className="h-3.5 w-3.5" />
         </ControlButton>
         <Divider />
-        <ControlButton
-          type="zoom"
-          direction={-1}
-          label="Zoom out"
-        >
+        <ControlButton type="zoom" direction={-1} label="Zoom out">
           <Minus className="h-3.5 w-3.5" />
         </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
-        <ControlButton
-          type="pitch"
-          direction={-1}
-          label="Tilt up"
-          hint="Flatter view"
-        >
+      </>
+    ),
+    pitch: (
+      <>
+        <ControlButton type="pitch" direction={-1} label="Tilt up" hint="Flatter view">
           <ChevronsUp className="h-3.5 w-3.5" />
         </ControlButton>
         <Divider />
-        <ControlButton
-          type="pitch"
-          direction={1}
-          label="Tilt down"
-          hint="More 3D"
-        >
+        <ControlButton type="pitch" direction={1} label="Tilt down" hint="More 3D">
           <ChevronsDown className="h-3.5 w-3.5" />
         </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
-        <ControlButton
-          type="bearing"
-          direction={-1}
-          label="Rotate clockwise"
-        >
+      </>
+    ),
+    bearing: (
+      <>
+        <ControlButton type="bearing" direction={-1} label="Rotate clockwise">
           <RotateCw className="h-3.5 w-3.5" />
         </ControlButton>
         <Divider />
-        <ControlButton
-          type="bearing"
-          direction={1}
-          label="Rotate counter-clockwise"
-        >
+        <ControlButton type="bearing" direction={1} label="Rotate counter-clockwise">
           <RotateCcw className="h-3.5 w-3.5" />
         </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
+      </>
+    ),
+    place: (
+      <>
         <ActionButton
           label="Fly to my location"
           hint={locating ? "Finding you…" : undefined}
@@ -326,6 +304,31 @@ export function CameraControls() {
             </ActionButton>
           </>
         )}
+      </>
+    ),
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{
+        type: "spring",
+        stiffness: 300,
+        damping: 24,
+        delay: 0.55,
+      }}
+      className="flex flex-col items-center rounded-lg border border-border bg-background"
+      role="toolbar"
+      aria-label="Camera controls"
+    >
+      <TooltipProvider>
+        {ALL_GROUPS.filter((group) => groups.includes(group)).map((group, i) => (
+          <Fragment key={group}>
+            {i > 0 && <GroupDivider />}
+            {sections[group]}
+          </Fragment>
+        ))}
       </TooltipProvider>
     </motion.div>
   );

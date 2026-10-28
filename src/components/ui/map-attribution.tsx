@@ -8,11 +8,17 @@ import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
 type MapAttributionProps = {
   styleId: string;
   showAirspace?: boolean;
+  /** Stay folded to the info button until it's tapped, at every width. */
+  startCollapsed?: boolean;
 };
 
 const SM_BREAKPOINT = 640;
 
-export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
+export function MapAttribution({
+  styleId,
+  showAirspace,
+  startCollapsed = false,
+}: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
   const attributions = getAttributions(styleId, { showAirspace });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,6 +27,7 @@ export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
 
   // Expand by default on larger screens (after mount to avoid hydration mismatch)
   useEffect(() => {
+    if (startCollapsed) return;
     const mq = window.matchMedia(`(min-width: ${SM_BREAKPOINT}px)`);
     const sync = () => setExpanded(mq.matches);
     const raf = window.requestAnimationFrame(sync);
@@ -30,14 +37,14 @@ export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
       window.cancelAnimationFrame(raf);
       mq.removeEventListener("change", sync);
     };
-  }, []);
+  }, [startCollapsed]);
 
-  // Close on outside click for small screens
+  // Close on outside click for small screens, or anywhere when it starts collapsed
   useEffect(() => {
     if (!expanded) return;
     function handlePointerDown(e: PointerEvent) {
       if (
-        window.innerWidth >= SM_BREAKPOINT ||
+        (!startCollapsed && window.innerWidth >= SM_BREAKPOINT) ||
         !containerRef.current ||
         containerRef.current.contains(e.target as Node)
       )
@@ -46,7 +53,7 @@ export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [expanded]);
+  }, [expanded, startCollapsed]);
 
   return (
     <div ref={containerRef} className="flex items-end justify-end">
