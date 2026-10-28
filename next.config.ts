@@ -24,6 +24,7 @@ const cspHeader = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
+  media-src 'self' blob:;
   connect-src 'self' data: https://opensky-network.org https://*.basemaps.cartocdn.com https://basemaps.cartocdn.com https://server.arcgisonline.com https://s3.amazonaws.com https://tile.opentopomap.org https://www.google-analytics.com https://www.googletagmanager.com https://api.github.com https://api.airplanes.live https://api.adsb.lol https://res.cloudinary.com https://api.rainviewer.com ${directTraceConnectSrc};
   worker-src 'self' blob:;
   child-src blob:;

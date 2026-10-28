@@ -30,3 +30,11 @@ test("browser-direct trail providers are allowed by the CSP connect-src list", a
     );
   }
 });
+test("live ATC can stream through Media Source", async () => {
+  const headerConfigs = await nextConfig.headers?.();
+  const cspHeader = headerConfigs
+    ?.find((entry) => entry.source === "/(.*)")
+    ?.headers.find((header) => header.key === "Content-Security-Policy")?.value;
+  const mediaSrc = cspHeader?.match(/media-src\s+([^;]+);?/)?.[1].trim().split(/\s+/) ?? [];
+  assert.deepEqual(mediaSrc, ["'self'", "blob:"]);
+});
