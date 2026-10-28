@@ -59,7 +59,7 @@ function LiveFlightMapInner({
         />
       </MapView>
       <div className={attributionClassName}>
-        <MapAttribution styleId={style.id} />
+        <MapAttribution styleId={style.id} startCollapsed />
       </div>
     </>
   );

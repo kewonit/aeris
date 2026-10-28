@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "@wrksz/themes/client";
 import { LiveFlightMap } from "@/components/map/live-flight-map";
+import { CameraControls } from "@/components/ui/camera-controls";
 import { useAtcStream } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
+import { useIdle } from "@/hooks/use-idle";
 import type { Settings } from "@/hooks/use-settings";
 import { airportToCity } from "@/lib/airport-city";
 import type { AtcFeed, AtcStreamStatus } from "@/lib/atc-types";
@@ -26,8 +28,11 @@ import { VoiceWave } from "./voice-wave";
 const DEFAULT_TOWER = "KJFK";
 const OUTBOUND_URL = "https://outbound.edbn.me";
 const POP = { type: "spring", stiffness: 520, damping: 38 } as const;
-/** The map turns slowly around the tower while you listen. */
-const MAP_SETTINGS: Partial<Settings> = { autoOrbit: true };
+/** The map holds still around the tower, whatever the tracker is set to. */
+const MAP_SETTINGS: Partial<Settings> = { autoOrbit: false };
+/** How long the camera buttons stay up after the last touch, key or mouse move. */
+const CONTROLS_IDLE_MS = 3000;
+const CAMERA_GROUPS = ["pitch"] as const;
 
 function feedsOf(airport: AtcAirport): AtcFeed[] {
   return airport.feeds.map((feed) => ({
@@ -53,8 +58,8 @@ function feedLabel(feed: AtcFeed, airport: AtcAirport, feeds: AtcFeed[]): string
   return feed.name.replace(new RegExp(`^(${airport.iata}|${airport.city})\\s+`, "i"), "");
 }
 
+/** Said where the wave would be; a playing feed shows its wave instead. */
 const STATUS_TEXT: Partial<Record<AtcStreamStatus, string>> = {
-  playing: "Live",
   loading: "Connecting",
   blocked: "Tap play",
   error: "Unavailable",
@@ -63,7 +68,7 @@ const STATUS_TEXT: Partial<Record<AtcStreamStatus, string>> = {
 function Pill({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <span
-      className={`flex h-9 items-center gap-1.5 rounded-full bg-background text-small font-medium shadow-lift transition-colors group-hover:bg-card ${className}`}
+      className={`flex h-9 items-center rounded-full bg-background text-small font-medium shadow-lift transition-colors group-hover:bg-card ${className}`}
     >
       {children}
     </span>
@@ -164,8 +169,8 @@ function FeedPicker({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={POP}
-            style={{ transformOrigin: "bottom left" }}
-            className="scrollbar-none absolute bottom-full left-0 z-20 mb-2 max-h-[min(320px,50dvh)] w-64 max-w-[calc(100vw-48px)] overflow-y-auto overscroll-contain rounded-lg bg-card p-1.5 shadow-lift"
+            style={{ transformOrigin: "bottom right" }}
+            className="scrollbar-none absolute bottom-full right-0 z-20 mb-2 max-h-[min(320px,50dvh)] w-64 max-w-[calc(100vw-48px)] overflow-y-auto overscroll-contain rounded-lg bg-card p-1.5 shadow-lift"
           >
             {feeds.map((f, i) => (
               <button
@@ -216,7 +221,9 @@ export function AtcRadio({
   const [feedId, setFeedId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [peek, setPeek] = useState(0);
-  const [speaking, setSpeaking] = useState(false);
+  const [overControls, setOverControls] = useState(false);
+  const idle = useIdle(CONTROLS_IDLE_MS);
+  const controlsShown = !idle || overControls;
 
   const airport = byIcao.get(icao) ?? airports[0];
   const feeds = useMemo(() => feedsOf(airport), [airport]);
@@ -282,15 +289,15 @@ export function AtcRadio({
 
       <nav className="pointer-events-none absolute inset-x-4 top-[max(16px,env(safe-area-inset-top))] z-10 flex items-center justify-between">
         <Link href="/" className="group pointer-events-auto" aria-label="Back to the Aeris map">
-          <Pill className="pl-2 pr-3.5">
+          <Pill className="gap-1 pl-2 pr-3.5">
             <ChevronLeft className="size-4 text-muted-foreground" aria-hidden="true" />
             Aeris
           </Pill>
         </Link>
         <a href={OUTBOUND_URL} target="_blank" rel="noopener" className="group pointer-events-auto">
-          <Pill className="pl-1.5 pr-3">
+          <Pill className="gap-2 pl-2 pr-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/outbound.svg" alt="" width={24} height={24} className="size-6" />
+            <img src="/brand/outbound.svg" alt="" width={20} height={20} className="size-5" />
             Outbound
             <ArrowUpRight className="size-3.5 text-subtle" aria-hidden="true" />
           </Pill>
@@ -299,45 +306,48 @@ export function AtcRadio({
 
       <motion.section
         aria-label="Now playing"
-        className="absolute bottom-[calc(var(--peek)+12px)] left-1/2 z-10 w-[min(calc(100%-32px),360px)] -translate-x-1/2 sm:bottom-[calc(var(--peek)+20px)]"
+        className="absolute bottom-[calc(var(--peek)+12px)] left-1/2 z-10 w-[min(calc(100%-32px),640px)] -translate-x-1/2 sm:bottom-[calc(var(--peek)+16px)]"
         style={{ "--peek": `${peek}px`, pointerEvents: peek ? "auto" : "none" } as React.CSSProperties}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: peek ? 1 : 0, y: peek ? 0 : 12 }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}
       >
-        <div className="rounded-xl bg-background p-5 shadow-lift">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0" title={[airport.name, countryName].filter(Boolean).join(", ")}>
-              <h1 className="text-title font-medium">{airport.iata}</h1>
-              <p className="mt-0.5 truncate text-small text-muted-foreground">{airport.city}</p>
-            </div>
+        <div className="flex items-center gap-4 rounded-xl bg-background py-3 pl-5 pr-3 shadow-lift">
+          <div
+            className="min-w-0 sm:w-28 sm:shrink-0"
+            title={[airport.name, countryName].filter(Boolean).join(", ")}
+          >
+            <h1 className="text-title font-medium">{airport.iata}</h1>
             <p
               role="status"
               aria-live="polite"
-              className={`flex h-7 shrink-0 items-center gap-1.5 text-label ${
-                status === "error" ? "text-danger" : "text-muted-foreground"
-              }`}
+              className={`truncate text-small ${status === "error" ? "text-danger sm:text-muted-foreground" : "text-muted-foreground"}`}
             >
-              {onAir && (
-                <span
-                  aria-hidden="true"
-                  className={`size-1.5 rounded-full bg-danger transition-transform ${
-                    status === "loading" ? "animate-pulse opacity-60" : speaking ? "scale-150" : ""
-                  }`}
-                />
-              )}
-              {statusText}
+              {/* Narrow cards have no wave, so the status takes the city's place. */}
+              <span className={statusText ? "hidden sm:inline" : ""}>{airport.city}</span>
+              {statusText && <span className="sm:hidden">{statusText}</span>}
             </p>
           </div>
 
-          <VoiceWave
-            audioElement={atc.audioElement}
-            active={status === "playing" && atc.usingProxy}
-            onLevel={setSpeaking}
-            className="mt-4 h-10 w-full [@media(max-height:560px)]:hidden"
-          />
+          <div className="relative hidden h-10 min-w-0 flex-1 sm:block">
+            <VoiceWave
+              audioElement={atc.audioElement}
+              active={status === "playing" && atc.usingProxy}
+              className="size-full"
+            />
+            {statusText && (
+              <span
+                aria-hidden="true"
+                className={`absolute inset-0 flex items-center justify-center text-label ${
+                  status === "error" ? "text-danger" : "text-muted-foreground"
+                }`}
+              >
+                <span className="bg-background px-2">{statusText}</span>
+              </span>
+            )}
+          </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="ml-auto flex min-w-0 items-center gap-2 sm:ml-0">
             {feed ? (
               <FeedPicker key={airport.icao} feeds={feeds} feed={feed} airport={airport} onTune={tune} />
             ) : (
@@ -360,6 +370,16 @@ export function AtcRadio({
           </div>
         </div>
       </motion.section>
+
+      <div
+        className={`absolute right-4 top-1/2 z-10 -translate-y-1/2 transition-opacity duration-300 ${
+          controlsShown ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onPointerEnter={() => setOverControls(true)}
+        onPointerLeave={() => setOverControls(false)}
+      >
+        <CameraControls groups={CAMERA_GROUPS} />
+      </div>
 
       <TowerSheet
         airports={airports}

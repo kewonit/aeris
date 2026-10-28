@@ -97,8 +97,23 @@ export function TowerSheet({
   const [rest, setRest] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [mapSeen, setMapSeen] = useState(false);
   if (open && !mapSeen) setMapSeen(true);
+  // Closing the sheet puts the search away with it.
+  if (!open && searching) {
+    setSearching(false);
+    setQuery("");
+  }
+
+  const startSearch = useCallback(() => {
+    setSearching(true);
+    onOpenChange(true);
+  }, [onOpenChange]);
+  const stopSearch = useCallback(() => {
+    setSearching(false);
+    setQuery("");
+  }, []);
 
   // Resting offset = sheet height less its header, measured live.
   useEffect(() => {
@@ -122,14 +137,31 @@ export function TowerSheet({
     return () => controls.stop();
   }, [open, rest, y]);
 
+  // Escape backs out of search first, then closes; "/" opens search from anywhere.
   useEffect(() => {
-    if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+      if (event.key === "Escape" && open) {
+        if (searching) stopSearch();
+        else onOpenChange(false);
+        return;
+      }
+      const target = event.target as HTMLElement;
+      if (
+        event.key === "/" &&
+        !searching &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !target.isContentEditable &&
+        !target.closest("input, textarea, select")
+      ) {
+        event.preventDefault();
+        startSearch();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
+  }, [open, searching, onOpenChange, startSearch, stopSearch]);
 
   const onDragEnd = useCallback(
     (_: unknown, info: PanInfo) => {
@@ -225,53 +257,66 @@ export function TowerSheet({
           >
             <span className="h-[5px] w-9 rounded-full bg-border" />
           </button>
-          <div className="flex items-center gap-2">
-            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md bg-card px-3">
-              <Search className="size-4 shrink-0 text-subtle" aria-hidden="true" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onFocus={() => onOpenChange(true)}
-                placeholder="Search towers"
-                aria-label="Search towers"
-                className="min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-subtle"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    inputRef.current?.focus();
-                  }}
-                  aria-label="Clear search"
-                  className="flex size-5 items-center justify-center rounded-full bg-subtle text-background"
-                >
-                  <X className="size-3" strokeWidth={2.5} />
-                </button>
-              )}
-            </label>
-            {open && (
+          {searching && (
+            <div className="flex h-[61px] items-center gap-3">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md bg-card px-3">
+                <Search className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+                <input
+                  ref={inputRef}
+                  autoFocus
+                  type="search"
+                  enterKeyHint="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search towers"
+                  aria-label="Search towers"
+                  className="min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-subtle [&::-webkit-search-cancel-button]:hidden"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      inputRef.current?.focus();
+                    }}
+                    aria-label="Clear search"
+                    className="flex size-5 items-center justify-center rounded-full bg-subtle text-background"
+                  >
+                    <X className="size-3" strokeWidth={2.5} />
+                  </button>
+                )}
+              </label>
               <button
                 type="button"
-                onClick={() => onOpenChange(false)}
-                aria-label="Close"
-                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card text-muted-foreground transition-colors hover:text-foreground"
+                onClick={stopSearch}
+                className="shrink-0 text-body text-tint transition-opacity hover:opacity-80"
               >
-                <X className="size-4" />
+                Cancel
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           <div
-            className="scrollbar-none -mx-4 mt-2 flex gap-0.5 overflow-x-auto px-3 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)]"
+            className={`scrollbar-none -mx-4 gap-0.5 overflow-x-auto px-3 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)] ${searching ? "hidden" : "flex"}`}
             role="group"
             aria-label="Countries"
           >
             <button
               type="button"
+              onClick={startSearch}
+              aria-label="Search towers"
+              title="Search towers (/)"
+              className="flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-md py-2 transition-colors hover:bg-card"
+            >
+              <span className="flex h-6 w-9 items-center justify-center rounded-sm bg-card ring-1 ring-border">
+                <Search className="size-4 text-muted-foreground" aria-hidden="true" />
+              </span>
+              <span className="text-caption text-muted-foreground">Search</span>
+            </button>
+            <button
+              type="button"
               onClick={() => pickCountry(null)}
-              aria-pressed={open && country === null && !query}
+              aria-pressed={open && country === null}
               className="flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-md py-2 transition-colors hover:bg-card aria-pressed:bg-card"
             >
               <span className="flex h-6 w-9 items-center justify-center rounded-sm bg-card ring-1 ring-border">
