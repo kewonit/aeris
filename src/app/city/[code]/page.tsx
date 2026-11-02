@@ -25,7 +25,7 @@ function getCityTitle(city: { name: string; iata: string }) {
 }
 
 function getCityDescription(city: { name: string; iata: string }) {
-  return `Track flights above ${city.name} in real-time 3D. See live ADS-B aircraft around ${city.iata.toUpperCase()} with altitude-aware rendering - low altitudes glow cyan, high altitudes shift to gold. Free and open source.`;
+  return `Live flights over ${city.name} (${city.iata.toUpperCase()}), on a map that shows their altitude in 3D. Free and open source.`;
 }
 
 export async function generateMetadata({

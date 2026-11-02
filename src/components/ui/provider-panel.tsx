@@ -22,13 +22,13 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Server proxy" },
-  { id: "adsbfi", label: "adsb.fi", description: "Server proxy" },
-  { id: "airplanes", label: "Airplanes.live", description: "Server proxy" },
+  { id: "adsb", label: "adsb.lol", description: "" },
+  { id: "adsbfi", label: "adsb.fi", description: "" },
+  { id: "airplanes", label: "Airplanes.live", description: "" },
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Last resort - limited credits",
+    description: "Backup · limited",
   },
 ];
 
@@ -90,7 +90,7 @@ export function ProviderDropdown({
           <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
             <div className="flex items-center gap-2 text-label text-subtle">
               <Satellite className="size-3" aria-hidden="true" />
-              Data provider
+              Flight feed
             </div>
             <button
               type="button"
@@ -106,7 +106,7 @@ export function ProviderDropdown({
           <div className="py-1">
             <ProviderOption
               label="Auto"
-              description="Fastest provider first, switches on its own"
+              description="The fastest feed, switching when one falters"
               selected={isAutoMode}
               onSelect={() => handleSelect("auto")}
             />
@@ -219,9 +219,11 @@ function ProviderOption({
           {label}
           {live && <span className="ml-1.5 text-label text-tint">Live</span>}
         </span>
-        <span className="block truncate text-label text-subtle">
-          {description}
-        </span>
+        {description && (
+          <span className="block truncate text-label text-subtle">
+            {description}
+          </span>
+        )}
       </span>
       {status && (
         <span className="shrink-0 font-mono text-micro text-warning">

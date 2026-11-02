@@ -47,7 +47,7 @@ const SHORTCUTS = [
   { key: "F", description: "Follow the open aircraft" },
   { key: "V", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
-  { key: "A", description: "Toggle ATC panel" },
+  { key: "A", description: "Air traffic control" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 
@@ -96,7 +96,7 @@ export function SettingsContent({
         <SettingRow
           icon={<RotateCw className="h-4 w-4" />}
           title="Auto-orbit"
-          description="Camera rotation with higher battery and GPU usage"
+          description="Uses more battery"
           checked={settings.autoOrbit}
           onChange={(v) => update("autoOrbit", v)}
         />
@@ -123,7 +123,6 @@ export function SettingsContent({
         <SettingRow
           icon={<Route className="h-4 w-4" />}
           title="Flight trails"
-          description="Altitude-colored trails behind aircraft"
           checked={settings.showTrails}
           onChange={(v) => update("showTrails", v)}
         />
@@ -140,8 +139,7 @@ export function SettingsContent({
             <SettingRow
               icon={<ArrowUpToLine className="h-4 w-4" />}
               title="Hide high trails"
-              description="No trails for aircraft above a set height"
-              checked={settings.hideHighTrails}
+                  checked={settings.hideHighTrails}
               onChange={(v) => update("hideHighTrails", v)}
             />
             {settings.hideHighTrails && (
@@ -156,14 +154,12 @@ export function SettingsContent({
         <SettingRow
           icon={<Layers className="h-4 w-4" />}
           title="Ground shadows"
-          description="Shadow projections on the map surface"
           checked={settings.showShadows}
           onChange={(v) => update("showShadows", v)}
         />
         <SettingRow
           icon={<Palette className="h-4 w-4" />}
           title="Altitude colors"
-          description="Color aircraft and trails by altitude"
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
         />
@@ -189,19 +185,17 @@ export function SettingsContent({
         {/* ── Airspace ── */}
         <SectionHeader title="Airspace" />
 
-        <SettingRow
-          icon={<Shield className="h-4 w-4" />}
-          title="Airspace overlay"
-          description={
-            airspaceAvailable
-              ? "Show classified airspace boundaries (OpenAIP)"
-              : "Unavailable on this deployment until OPENAIP_API_KEY is configured"
-          }
-          checked={showAirspace}
-          onChange={(v) => update("showAirspace", v)}
-          disabled={!airspaceAvailable}
-          badge={airspaceAvailable ? undefined : "SETUP"}
-        />
+        {/* Without an OpenAIP key there is no airspace to offer, so the
+            row is left out rather than shown switched off. */}
+        {airspaceAvailable && (
+          <SettingRow
+            icon={<Shield className="h-4 w-4" />}
+            title="Airspace"
+            description="Classes and boundaries, from OpenAIP"
+            checked={showAirspace}
+            onChange={(v) => update("showAirspace", v)}
+          />
+        )}
 
         {showAirspace && (
           <AirspaceOpacitySlider
@@ -216,7 +210,7 @@ export function SettingsContent({
         <SettingRow
           icon={<CloudRain className="h-4 w-4" />}
           title="Weather radar"
-          description="Live precipitation radar overlay (RainViewer)"
+          description="From RainViewer"
           checked={settings.showWeatherRadar}
           onChange={(v) => update("showWeatherRadar", v)}
         />
@@ -233,11 +227,11 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Globe className="h-4 w-4" />}
-          title="Globe mode"
-          description="Display earth as a 3D sphere when zoomed out"
+          title="Globe"
+          description="The earth as a sphere when zoomed out"
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
-          badge="BETA"
+          badge="Beta"
         />
 
         {/* ── Advanced ── */}
@@ -245,8 +239,8 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Cpu className="h-4 w-4" />}
-          title="Show debug data"
-          description="Display raw receiver metrics and route source"
+          title="Signal details"
+          description="NACp, NIC and ADS-B version in an aircraft's details"
           checked={settings.showDebugData}
           onChange={(v) => update("showDebugData", v)}
         />
@@ -556,7 +550,7 @@ function SettingRow({
 }: {
   icon: ReactNode;
   title: string;
-  description: string;
+  description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
@@ -587,9 +581,11 @@ function SettingRow({
             <span className="text-label text-tint">{badge}</span>
           )}
         </div>
-        <p className="mt-0.5 text-caption leading-relaxed text-subtle">
-          {description}
-        </p>
+        {description && (
+          <p className="mt-0.5 text-caption leading-relaxed text-subtle">
+            {description}
+          </p>
+        )}
       </div>
       <Toggle checked={checked} />
     </button>

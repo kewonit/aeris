@@ -11,7 +11,6 @@ import {
   Loader2,
   X,
   AlertTriangle,
-  Server,
   AudioLines,
 } from "lucide-react";
 import type { AtcFeed, AtcFeedType } from "@/lib/atc-types";
@@ -273,7 +272,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             type="button"
             onClick={() => atc.resume()}
             className="flex h-7 w-13 shrink-0 items-center justify-center rounded-sm text-tint transition-colors hover:bg-card"
-            aria-label="Tap to start"
+            aria-label="Start listening"
           >
             <Play className="size-4" />
           </button>
@@ -306,7 +305,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
               }`}
             >
               {isBlocked
-                ? "Tap to listen"
+                ? "Press play to listen"
                 : isError && atc.error
                   ? atc.error
                   : atc.feed.name}
@@ -316,12 +315,6 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             <span className="font-mono text-micro text-subtle">
               {atc.feed.frequency}
             </span>
-            {atc.usingProxy && atc.status === "playing" && (
-              <span className="flex items-center gap-0.5 text-micro text-subtle">
-                <Server className="size-2" aria-hidden="true" />
-                proxy
-              </span>
-            )}
           </div>
         </button>
 

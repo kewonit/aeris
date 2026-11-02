@@ -349,7 +349,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         // If direct playback failed, try proxy fallback
         if (!useProxy && !proxyAttemptedRef.current) {
           proxyAttemptedRef.current = true;
-          setError("Direct stream blocked. Trying proxy...");
+          setError("Reconnecting…");
           startPlaybackRef.current(targetFeed, true);
           return;
         }
@@ -390,7 +390,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         // Autoplay blocked - user must interact first
         if (audioRef.current !== audio) return;
         setStatus("blocked");
-        setError("Tap to listen - browser requires interaction.");
+        setError("Press play to listen");
       });
     },
     [cleanupAudio, scheduleReconnectAttempt, updateMediaSession],

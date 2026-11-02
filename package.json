@@ -1,7 +1,7 @@
 {
   "name": "aeris",
   "version": "0.8.9",
-  "description": "Real-time 3D flight tracking - altitude-aware, visually stunning.",
+  "description": "A live map of flights, with altitude shown in 3D.",
   "author": "kewonit",
   "license": "AGPL-3.0",
   "private": true,

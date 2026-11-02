@@ -1,8 +1,8 @@
 # Aeris
 
-Real-time 3D flight tracking - altitude-aware, visually stunning.
+A live map of flights, with altitude shown in 3D.
 
-Aeris renders live air traffic over the world's busiest airspaces on a premium dark-mode map. Flights are separated by altitude in true 3D: low altitudes glow cyan, high altitudes shift to gold. Select a city, and the camera glides to that airspace with spring-eased animation.
+Every aircraft is drawn at its height and coloured by it, from green near the ground to blue at cruise. Pick one and aeris says what it is doing and where it is going, in a sentence: "Descending into BOM · about 14 min out". Follow it, ride along in first person, or share a link that opens on it.
 
 [Live Demo](https://aeris.edbn.me) | [HN discussion](https://news.ycombinator.com/item?id=47048004)
 
@@ -41,11 +41,14 @@ Open [http://localhost:3000](http://localhost:3000).
 src/
 ├── app/
 │   ├── globals.css            Tailwind config, theme vars
-│   ├── layout.tsx             Root layout (Inter font)
+│   ├── layout.tsx             Root layout (Instrument Sans, Fragment Mono)
 │   ├── page.tsx               Entry - renders <FlightTracker />
 │   └── api/flights/route.ts   readsb provider proxy (validation + rate limiting)
 ├── components/
 │   ├── flight-tracker.tsx     Orchestrator - state, camera, layers, UI
+│   ├── place/                 The aircraft and airport cards, the phone's sheet, the desktop's panel
+│   ├── search/search-pill.tsx One field for flights, airports and places
+│   ├── chrome/                Map menu, follow chip, hover card, compass, locate
 │   ├── map/
 │   │   ├── map.tsx            MapLibre GL wrapper with React context
 │   │   ├── flight-layers.tsx  Deck.gl overlay - icons, trails, shadows, animation
@@ -53,8 +56,7 @@ src/
 │   │   └── aircraft-model-layers.ts   Builds per-model ScenegraphLayers
 │   └── ui/
 │       ├── altitude-legend.tsx
-│       ├── control-panel.tsx  Tabbed dialog - search, map style, settings
-│       ├── flight-card.tsx    Hover card with flight details
+│       ├── control-panel.tsx  Settings, shortcuts, changelog and about
 │       ├── scroll-area.tsx    Custom scrollbar
 │       ├── slider.tsx         Orbit speed slider (Radix)
 │       └── status-bar.tsx     Live status indicator
