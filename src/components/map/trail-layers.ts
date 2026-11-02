@@ -20,7 +20,6 @@ import {
 } from "./trail-geometry";
 
 const METERS_PER_DEGREE = 111_320;
-const HEAD_STEPS = 10;
 /** A faint, wide halo under each trail, so it reads as light, not wire. */
 const GLOW_WIDTH_SCALE = 4;
 const GLOW_EXTRA_PX = 3;
@@ -67,15 +66,31 @@ const SOFT_EDGE = [new SoftEdgeExtension()];
 const NO_DEPTH_WRITE = { depthWriteEnabled: false };
 
 /**
- * The head keeps the lead only where it lies this many half-lengths, and
- * at least this many pixels, from the aircraft's centre, so the curve from
- * the trail's direction onto the heading turns gently enough to read as
- * one line.
+ * The join turns the trail onto the nose over this many half-lengths of
+ * the model, and at least this many pixels, so it reads as one line...
  */
-const LEAD_CLEARANCE_HALF_LENGTHS = 3;
-const LEAD_CLEARANCE_PX = 48;
-/** Halvings that place the join's start along a lead segment, to 1/4096. */
-const START_SEARCH_STEPS = 12;
+const JOIN_TURN_HALF_LENGTHS = 3;
+const JOIN_TURN_PX = 48;
+/**
+ * ...and moves it onto the tail over at least that, and at least this many
+ * times how far the aircraft sits off its trail, sideways or in height, so
+ * the bend that takes it there stays under about 3°.
+ */
+const JOIN_LENGTH_PER_OFFSET = 36;
+/** The join is drawn with a point about this many pixels apart... */
+const JOIN_SPACING_PX = 1.5;
+/**
+ * ...and with at most this many. Only a join long on screen, zoomed in
+ * where few aircraft are in view, needs that many.
+ */
+const JOIN_MAX_POINTS = 160;
+/**
+ * Of those, a point is drawn once the line has turned this far since the
+ * last one, or run on this many pixels, so a straight piece strays from
+ * the curve by at most about a twentieth of a pixel.
+ */
+const JOIN_KEEP_TURN_RAD = (0.75 * Math.PI) / 180;
+const JOIN_KEEP_RUN_PX = 24;
 /**
  * When a new sample reshapes the newest stretch of trail, as when the
  * aircraft turns harder or eases off, the join eases from its old shape
@@ -126,11 +141,6 @@ type HeadOptions = {
   zoom: number;
 };
 
-function cubic(a: number, b: number, c: number, d: number, u: number) {
-  const v = 1 - u;
-  return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * d;
-}
-
 function lerpVertex(a: TrailVertex, b: TrailVertex, u: number): TrailVertex {
   return [
     a[0] + (b[0] - a[0]) * u,
@@ -140,44 +150,182 @@ function lerpVertex(a: TrailVertex, b: TrailVertex, u: number): TrailVertex {
 }
 
 function lerpColor(a: Rgba, b: Rgba, u: number): Rgba {
-  return a.map((channel, index) => channel + (b[index] - channel) * u) as Rgba;
+  return [
+    a[0] + (b[0] - a[0]) * u,
+    a[1] + (b[1] - a[1]) * u,
+    a[2] + (b[2] - a[2]) * u,
+    a[3] + (b[3] - a[3]) * u,
+  ];
 }
 
-type Direction = [east: number, north: number];
+/** Metres east, north and up. */
+type Vec3 = [number, number, number];
 
-function normalized(east: number, north: number): Direction | null {
-  const length = Math.hypot(east, north);
-  return length > 0 ? [east / length, north / length] : null;
+/** A horizontal length; Math.hypot is several times slower. */
+function planar(east: number, north: number): number {
+  return Math.sqrt(east * east + north * north);
+}
+
+/** smootherstep: 0 at 0 and 1 at 1, flat to its second derivative at both. */
+function smootherstep(x: number): number {
+  return x * x * x * (x * (6 * x - 15) + 10);
 }
 
 /**
- * The trail's direction through a lead vertex: halfway between the way it
- * arrives and the way it leaves, so the direction turns smoothly as the
- * join's start passes the vertex.
+ * The trail as a smooth curve through the lead's vertices, measured by
+ * horizontal distance along it. The lead is a curve sampled every few
+ * hundred metres; read through a Catmull-Rom spline it stays round however
+ * far the map is zoomed in. Points are in metres east and north of the
+ * lead's first vertex, and metres up.
  */
-function vertexDirection(lead: TrailLead, index: number): Direction | null {
-  const arriving = lead.tangents[index];
-  const leaving = lead.tangents[index + 1];
-  if (!arriving || !leaving) return arriving ?? leaving ?? null;
-  return normalized(arriving[0] + leaving[0], arriving[1] + leaving[1]);
+type LeadCurve = {
+  points: Vec3[];
+  /** Horizontal distance from the lead's start to each vertex. */
+  along: number[];
+  colors: Rgba[];
+  /** The lead's first vertex, and metres per degree of longitude there. */
+  originLng: number;
+  originLat: number;
+  metersPerLng: number;
+};
+
+/** A lead changes only with a new sample, so its curve is worked out once. */
+const leadCurves = new WeakMap<TrailLead, LeadCurve>();
+
+function leadCurve(lead: TrailLead): LeadCurve {
+  const known = leadCurves.get(lead);
+  if (known) return known;
+  const [originLng, originLat] = lead.path[0];
+  const metersPerLng =
+    METERS_PER_DEGREE * Math.cos((originLat * Math.PI) / 180);
+  const points = lead.path.map(
+    ([lng, lat, z]): Vec3 => [
+      (lng - originLng) * metersPerLng,
+      (lat - originLat) * METERS_PER_DEGREE,
+      z,
+    ],
+  );
+  const along = [0];
+  for (let index = 1; index < points.length; index += 1) {
+    const [a, b] = [points[index - 1], points[index]];
+    along.push(along[index - 1] + planar(b[0] - a[0], b[1] - a[1]));
+  }
+  const curve = {
+    points,
+    along,
+    colors: lead.colors,
+    originLng,
+    originLat,
+    metersPerLng,
+  };
+  leadCurves.set(lead, curve);
+  return curve;
 }
 
-function blendDirections(
-  a: Direction | null,
-  b: Direction | null,
-  u: number,
-): Direction | null {
-  if (!a || !b) return a ?? b;
-  return normalized(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u);
+/** The segment `distance` along the curve lies on, and how far along it. */
+function segmentAt(curve: LeadCurve, distance: number): [number, number] {
+  const { along } = curve;
+  let index = 0;
+  while (index < along.length - 2 && along[index + 1] < distance) index += 1;
+  const span = along[index + 1] - along[index];
+  return [index, span > 0 ? (distance - along[index]) / span : 0];
 }
 
 /**
- * The newest stretch of trail and the curve from it into the aircraft's
- * tail, rebuilt every frame as the aircraft moves. The lead is kept up to
- * where the aircraft has caught up with it; the curve leaves it along the
- * trail's own direction and arrives at the tail as the model is drawn,
- * along its heading and at its pitched height, so the trail always enters
- * the tail straight on, whatever the model's size, crab angle or climb.
+ * Writes into `out` the point `t` of the way along segment `index`, on a
+ * Catmull-Rom spline through the curve's points.
+ */
+function pointOn(curve: LeadCurve, index: number, t: number, out: Vec3): Vec3 {
+  const { points } = curve;
+  const b = points[index];
+  const c = points[index + 1] ?? b;
+  const a = points[index - 1];
+  const d = points[index + 2];
+  const t2 = t * t;
+  const t3 = t2 * t;
+  for (let i = 0; i < 3; i += 1) {
+    // Past either end, the spline runs on in a straight line.
+    const ai = a ? a[i] : 2 * b[i] - c[i];
+    const di = d ? d[i] : 2 * c[i] - b[i];
+    out[i] =
+      0.5 *
+      (2 * b[i] +
+        (c[i] - ai) * t +
+        (2 * ai - 5 * b[i] + 4 * c[i] - di) * t2 +
+        (3 * b[i] - ai - 3 * c[i] + di) * t3);
+  }
+  return out;
+}
+
+/** The curve's point, and its direction per horizontal metre, at a distance. */
+function curveAt(curve: LeadCurve, distance: number): [Vec3, Vec3] {
+  const { points, along } = curve;
+  const [index, t] = segmentAt(curve, distance);
+  const b = points[index];
+  const c = points[index + 1] ?? b;
+  const a = points[index - 1] ?? (b.map((v, i) => 2 * v - c[i]) as Vec3);
+  const d = points[index + 2] ?? (c.map((v, i) => 2 * v - b[i]) as Vec3);
+  const t2 = t * t;
+  const position = pointOn(curve, index, t, [0, 0, 0]);
+  const span = along[index + 1] - along[index];
+  const slope = [0, 1, 2].map(
+    (i) =>
+      (0.5 *
+        (c[i] -
+          a[i] +
+          2 * (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t +
+          3 * (3 * b[i] - a[i] - 3 * c[i] + d[i]) * t2)) /
+      (span > 0 ? span : 1),
+  ) as Vec3;
+  return [position, perHorizontalMetre(slope)];
+}
+
+/** A direction scaled so that its horizontal part is one metre long. */
+function perHorizontalMetre([east, north, up]: Vec3): Vec3 {
+  const run = planar(east, north);
+  return run > 0 ? [east / run, north / run, up / run] : [0, 0, 0];
+}
+
+/** How far along the lead the point nearest `target` lies, horizontally. */
+function nearestAlong(curve: LeadCurve, [east, north]: Vec3): number {
+  const { points, along } = curve;
+  let best = Infinity;
+  let bestAlong = along[along.length - 1];
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const [a, b] = [points[index], points[index + 1]];
+    const runEast = b[0] - a[0];
+    const runNorth = b[1] - a[1];
+    const run = runEast * runEast + runNorth * runNorth;
+    const t =
+      run > 0
+        ? Math.min(
+            1,
+            Math.max(
+              0,
+              ((east - a[0]) * runEast + (north - a[1]) * runNorth) / run,
+            ),
+          )
+        : 0;
+    const gap = planar(a[0] + runEast * t - east, a[1] + runNorth * t - north);
+    // Nearer the lead's end wins a tie, so the join keeps to the newest pass.
+    if (gap < best - 1e-9) {
+      best = gap;
+      bestAlong = along[index] + (along[index + 1] - along[index]) * t;
+    }
+  }
+  return bestAlong;
+}
+
+/**
+ * The newest stretch of trail, bent smoothly onto the aircraft's tail,
+ * rebuilt every frame as the aircraft moves.
+ *
+ * The trail is kept as it is up to a point behind the aircraft. From there
+ * it is bent, a little more each metre, until it ends exactly at the tail,
+ * pointing along the fuselage as the model is drawn, at its heading and
+ * pitch. The bend starts with no change in direction or curvature, and
+ * ends with none either, so the line leaves the trail without a seam and
+ * enters the tail dead straight, whatever the model's size, crab or climb.
  *
  * @param pitchDegrees The model's drawn pitch, in deck's sense: negative
  *   raises the nose, which lowers the tail.
@@ -192,17 +340,24 @@ export function buildTrailHead(
   if (flight.longitude == null || flight.latitude == null) return null;
 
   const lat = flight.latitude;
-  const lng = snapLngToReference(flight.longitude, lead.path[0][0]);
-  const metersPerLng = METERS_PER_DEGREE * Math.cos((lat * Math.PI) / 180);
-  // Positions relative to the aircraft, in metres east and north.
-  const local = ([vertexLng, vertexLat]: TrailVertex): [number, number] => [
-    (vertexLng - lng) * metersPerLng,
-    (vertexLat - lat) * METERS_PER_DEGREE,
+  const curve = leadCurve(lead);
+  const { originLng, originLat, metersPerLng } = curve;
+  const toVertex = ([east, north, z]: Vec3): TrailVertex => [
+    originLng + east / metersPerLng,
+    originLat + north / METERS_PER_DEGREE,
+    z,
   ];
+  // The aircraft, in the lead's own metres.
+  const centreEast =
+    (snapLngToReference(flight.longitude, originLng) - originLng) *
+    metersPerLng;
+  const centreNorth = (lat - originLat) * METERS_PER_DEGREE;
 
   const track = flight.trueTrack;
-  const [lastEast, lastNorth] = local(lead.path[lead.path.length - 1]);
-  const lastDistance = Math.hypot(lastEast, lastNorth);
+  const last = curve.points[curve.points.length - 1];
+  const lastEast = last[0] - centreEast;
+  const lastNorth = last[1] - centreNorth;
+  const lastDistance = planar(lastEast, lastNorth);
   const heading: [number, number] | null =
     track != null && Number.isFinite(track)
       ? [Math.sin((track * Math.PI) / 180), Math.cos((track * Math.PI) / 180)]
@@ -210,142 +365,224 @@ export function buildTrailHead(
         ? [-lastEast / lastDistance, -lastNorth / lastDistance]
         : null;
   if (!heading) return null;
-  const [headingEast, headingNorth] = heading;
 
   // One screen pixel, and the model's half-length on screen, in metres at
   // the aircraft's height.
   const pixel = metersPerPixel(options.zoom, lat) / size.magnification;
   const halfLength = size.tailShare * size.footprintPx * pixel;
-  const clearance = Math.max(
-    LEAD_CLEARANCE_HALF_LENGTHS * halfLength,
-    LEAD_CLEARANCE_PX * pixel,
-  );
   // A pitched model's tail sits nearer, and lower when climbing or higher
-  // when descending, than a level one's.
+  // when descending, than a level one's. The nose's direction is kept per
+  // horizontal metre, as the trail's is.
   const climb = (-pitchDegrees * Math.PI) / 180;
-  const tailBehind = halfLength * Math.cos(climb);
-  const tailEast = -headingEast * tailBehind;
-  const tailNorth = -headingNorth * tailBehind;
-  const behindTail = ([east, north]: [number, number]) =>
-    (tailEast - east) * headingEast + (tailNorth - north) * headingNorth;
-  const clearOfAircraft = (vertex: TrailVertex) => {
-    const position = local(vertex);
-    return (
-      behindTail(position) > 0 &&
-      Math.hypot(position[0], position[1]) >= clearance
-    );
-  };
-
-  // Drop the lead's newest vertices while the aircraft is over them or
-  // ahead of it, or they would end the trail beside the fuselage. A slow
-  // aircraft drawn far larger than life can cover all of it; the join then
-  // starts from the lead's first vertex, where the cached trail ends.
-  let startIndex = lead.path.length - 1;
-  while (startIndex > 0 && !clearOfAircraft(lead.path[startIndex])) {
-    startIndex -= 1;
-  }
-
-  // The join leaves the trail exactly where the trail stops being clear of
-  // the aircraft, between the newest clear vertex and the next, so it
-  // slides along the trail as the aircraft flies rather than stepping from
-  // vertex to vertex.
-  let start = lead.path[startIndex];
-  let startColor = lead.colors[startIndex];
-  let tangent = vertexDirection(lead, startIndex);
-  let startBetweenVertices = false;
-  const next = startIndex + 1;
-  if (next < lead.path.length && clearOfAircraft(start)) {
-    const from = lead.path[startIndex];
-    const to = lead.path[next];
-    let clear = 0;
-    let blocked = 1;
-    for (let step = 0; step < START_SEARCH_STEPS; step += 1) {
-      const middle = (clear + blocked) / 2;
-      if (clearOfAircraft(lerpVertex(from, to, middle))) clear = middle;
-      else blocked = middle;
-    }
-    if (clear > 0) {
-      start = lerpVertex(from, to, clear);
-      startColor = lerpColor(lead.colors[startIndex], lead.colors[next], clear);
-      tangent = blendDirections(tangent, vertexDirection(lead, next), clear);
-      startBetweenVertices = true;
-    }
-  }
-
-  const [startEast, startNorth] = local(start);
-  const spanEast = tailEast - startEast;
-  const spanNorth = tailNorth - startNorth;
-  const span = Math.hypot(spanEast, spanNorth);
-  if (!(span > 0)) return null;
-  // A trail leaving away from the tail would loop, so it leaves towards it.
-  const [leaveEast, leaveNorth] =
-    tangent && tangent[0] * spanEast + tangent[1] * spanNorth > 0
-      ? tangent
-      : [spanEast / span, spanNorth / span];
-  const reach = span / 3;
-
+  const nose: Vec3 = [heading[0], heading[1], Math.tan(climb)];
   const altitude = flight.onGround ? 0 : flight.baroAltitude;
-  // The trail rides at the aircraft's height, so the head only climbs or
-  // descends as far as the aircraft has since the lead's sample. The model
-  // is pitched along that same drawn slope, so ending at its tail, rather
-  // than level with its centre, has the trail run straight into it.
-  const startZ = start[2];
-  const tailZ =
-    aircraftElevationMeters(altitude, options.altitudeDisplayMode) -
-    halfLength * Math.sin(climb);
+  const centreZ = aircraftElevationMeters(
+    altitude,
+    options.altitudeDisplayMode,
+  );
+  const tail: Vec3 = [
+    centreEast - heading[0] * halfLength * Math.cos(climb),
+    centreNorth - heading[1] * halfLength * Math.cos(climb),
+    centreZ - halfLength * Math.sin(climb),
+  ];
+
   const base = options.altColors
     ? altitudeToColor(altitude)
     : options.defaultColor;
   const [r, g, b] = aircraftColor(base, flight);
   const endColor: Rgba = [r, g, b, lead.headAlpha];
 
-  const path = lead.path.slice(0, startIndex + 1);
-  const colors = lead.colors.slice(0, startIndex + 1);
-  if (startBetweenVertices) {
-    path.push(start);
-    colors.push(startColor);
-  }
-  let keptEast = startEast;
-  let keptNorth = startNorth;
-  for (let step = 1; step <= HEAD_STEPS; step += 1) {
-    // Samples bunch up at both ends, so the last segment lies along the
-    // heading rather than cutting the curve at an angle.
-    const t = step / HEAD_STEPS;
-    const u = t * t * (3 - 2 * t);
-    const east = cubic(
-      startEast,
-      startEast + leaveEast * reach,
-      tailEast - headingEast * reach,
-      tailEast,
-      u,
-    );
-    const north = cubic(
-      startNorth,
-      startNorth + leaveNorth * reach,
-      tailNorth - headingNorth * reach,
-      tailNorth,
-      u,
-    );
-    // Points under a pixel apart only add joints whose overlapping corners
-    // blend twice into bright, flickering specks; the tail is always kept.
+  // Where the trail passes nearest the tail, and how far the tail sits from
+  // there. The lead runs on to the newest sample, so this is usually right
+  // beside the aircraft.
+  const nearest = nearestAlong(curve, tail);
+  const [onTrail, trailward] = curveAt(curve, nearest);
+  const offset = tail.map((v, i) => v - onTrail[i]) as Vec3;
+  // How far off the trail's own line the tail sits, sideways or in height;
+  // along the trail, the bend only stretches it.
+  const ahead = offset[0] * trailward[0] + offset[1] * trailward[1];
+  const aside = Math.hypot(
+    offset[0] - trailward[0] * ahead,
+    offset[1] - trailward[1] * ahead,
+    offset[2] - trailward[2] * ahead,
+  );
+  // Turning onto the nose stays close behind the aircraft, so it never
+  // reaches back far enough to be disturbed when a new sample moves where
+  // the cached trail ends; moving onto the tail reaches back only as far as
+  // the aircraft's offset needs.
+  const turnLength = Math.min(
+    nearest,
+    Math.max(JOIN_TURN_HALF_LENGTHS * halfLength, JOIN_TURN_PX * pixel),
+  );
+  const length = Math.min(
+    nearest,
+    Math.max(turnLength, JOIN_LENGTH_PER_OFFSET * aside),
+  );
+  const spacing = JOIN_SPACING_PX * pixel;
+
+  const path: TrailVertex[] = [];
+  const colors: Rgba[] = [];
+  let kept: Vec3 | null = null;
+  const keep = (point: Vec3, color: Rgba, always = false) => {
+    // Points under a pixel apart only add joints that blend twice into
+    // bright specks; the tail is always kept.
     if (
-      step < HEAD_STEPS &&
-      Math.hypot(east - keptEast, north - keptNorth) < pixel
+      !always &&
+      kept &&
+      Math.sqrt(
+        (point[0] - kept[0]) ** 2 +
+          (point[1] - kept[1]) ** 2 +
+          (point[2] - kept[2]) ** 2,
+      ) < pixel
     ) {
-      continue;
+      return;
     }
-    keptEast = east;
-    keptNorth = north;
-    path.push([
-      lng + east / metersPerLng,
-      lat + north / METERS_PER_DEGREE,
-      startZ + (tailZ - startZ) * u,
-    ]);
-    colors.push(
-      startColor.map(
-        (channel, index) => channel + (endColor[index] - channel) * u,
-      ) as Rgba,
-    );
+    kept = point;
+    path.push(toVertex(point));
+    colors.push(color);
+  };
+
+  // The lead is drawn as it is up to where the bend begins.
+  const bendFrom = nearest - length;
+  for (let index = 0; index < curve.points.length; index += 1) {
+    if (curve.along[index] >= bendFrom - 1e-6) break;
+    path.push(lead.path[index]);
+    colors.push(lead.colors[index]);
+    kept = curve.points[index];
+  }
+
+  if (!(length > spacing)) {
+    // The aircraft covers the whole lead, or the lead is a single point:
+    // run straight from where the trail ends into the tail.
+    keep(curve.points[0], curve.colors[0], true);
+    keep(tail, endColor, true);
+    return path.length >= 2 ? { icao24: flight.icao24, path, colors } : null;
+  }
+
+  // Each point of the bend is the trail's point `back` metres behind the
+  // nearest one, moved part of the way to the tail and turned part of the
+  // way to the nose. Both shares fall from all at the tail to nothing,
+  // each over its own length, with no change of slope or curvature at
+  // either end; the turn's share is what lets the line arrive along the
+  // nose.
+  const turnEast = trailward[0] - nose[0];
+  const turnNorth = trailward[1] - nose[1];
+  const turnUp = trailward[2] - nose[2];
+  // Worked out every 1.5 px or so: densely where the line turns onto the
+  // nose, and over the rest of the bend as finely as the budget allows.
+  const backs: number[] = [];
+  const reach = length - turnLength;
+  const farSteps =
+    reach > 0
+      ? Math.min(
+          JOIN_MAX_POINTS / 2,
+          Math.ceil((reach + Math.hypot(...offset)) / spacing),
+        )
+      : 0;
+  for (let step = 0; step < farSteps; step += 1) {
+    backs.push(length - (reach * step) / farSteps);
+  }
+  const nearSteps = Math.min(
+    JOIN_MAX_POINTS / 2,
+    Math.max(4, Math.ceil((turnLength + Math.hypot(...offset)) / spacing)),
+  );
+  for (let step = 0; step <= nearSteps; step += 1) {
+    backs.push(turnLength * (1 - step / nearSteps));
+  }
+  const onCurve: Vec3 = [0, 0, 0];
+  const { along } = curve;
+  const lastSegment = Math.max(0, along.length - 2);
+  let segment = 0;
+  // The bend is worked out finely but drawn only where it turns: a point
+  // is kept once the line has turned a little since the last one, or run
+  // on a long way, so each straight piece strays from the curve by a
+  // small fraction of a pixel.
+  let previousEast = 0;
+  let previousNorth = 0;
+  let previousUp = 0;
+  let stepEast = 0;
+  let stepNorth = 0;
+  let stepUp = 0;
+  let stepRun = 0;
+  let turnedSinceKept = 0;
+  let runSinceKept = 0;
+  const keepRun = JOIN_KEEP_RUN_PX * pixel;
+  for (let step = 0; step < backs.length; step += 1) {
+    const share = length > 0 ? backs[step] / length : 0;
+    const distance = nearest - backs[step];
+    while (segment < lastSegment && along[segment + 1] < distance) {
+      segment += 1;
+    }
+    const span = along[segment + 1] - along[segment];
+    const t = span > 0 ? (distance - along[segment]) / span : 0;
+    pointOn(curve, segment, t, onCurve);
+    const moved = 1 - smootherstep(share);
+    const turnShare = (share * length) / turnLength;
+    const rest = 1 - turnShare;
+    const turned =
+      turnShare < 1
+        ? turnLength * turnShare * rest * rest * rest * (1 + 3 * turnShare)
+        : 0;
+    const east = onCurve[0] + moved * offset[0] + turned * turnEast;
+    const north = onCurve[1] + moved * offset[1] + turned * turnNorth;
+    const up = onCurve[2] + moved * offset[2] + turned * turnUp;
+    const last = step === backs.length - 1;
+    if (step > 0) {
+      // Climbs and descents bend the line on a tilted map as much as turns
+      // do, so the bend is measured in three dimensions.
+      const runEast = east - previousEast;
+      const runNorth = north - previousNorth;
+      const runUp = up - previousUp;
+      const run = Math.sqrt(
+        runEast * runEast + runNorth * runNorth + runUp * runUp,
+      );
+      if (run > 0) {
+        if (stepRun > 0) {
+          // The sine of the turn, which for turns this small is the turn;
+          // a turn back on itself counts as a large one.
+          const crossEast = stepNorth * runUp - stepUp * runNorth;
+          const crossNorth = stepUp * runEast - stepEast * runUp;
+          const crossUp = stepEast * runNorth - stepNorth * runEast;
+          const ahead =
+            stepEast * runEast + stepNorth * runNorth + stepUp * runUp;
+          turnedSinceKept +=
+            ahead < 0
+              ? Math.PI / 2
+              : Math.sqrt(
+                  crossEast * crossEast +
+                    crossNorth * crossNorth +
+                    crossUp * crossUp,
+                ) /
+                (stepRun * run);
+        }
+        runSinceKept += run;
+        stepEast = runEast;
+        stepNorth = runNorth;
+        stepUp = runUp;
+        stepRun = run;
+      }
+    }
+    previousEast = east;
+    previousNorth = north;
+    previousUp = up;
+    if (
+      step === 0 ||
+      last ||
+      turnedSinceKept >= JOIN_KEEP_TURN_RAD ||
+      runSinceKept >= keepRun
+    ) {
+      const trailColor = lerpColor(
+        curve.colors[segment],
+        curve.colors[segment + 1] ?? curve.colors[segment],
+        t,
+      );
+      const before = path.length;
+      keep([east, north, up], lerpColor(trailColor, endColor, moved), last);
+      if (path.length > before) {
+        turnedSinceKept = 0;
+        runSinceKept = 0;
+      }
+    }
   }
   return { icao24: flight.icao24, path, colors };
 }
@@ -490,7 +727,11 @@ export function easeHead(
     const span = fromDistances[segment] - near;
     const u = span > 0 ? (distance - near) / span : 0;
     const old = lerpVertex(from.path[segment + 1], from.path[segment], u);
-    const oldColor = lerpColor(from.colors[segment + 1], from.colors[segment], u);
+    const oldColor = lerpColor(
+      from.colors[segment + 1],
+      from.colors[segment],
+      u,
+    );
     path.push(lerpVertex(to.path[index], old, keep));
     colors.push(lerpColor(to.colors[index], oldColor, keep));
   }
@@ -534,7 +775,12 @@ export function buildTrailLayers(params: TrailLayerParams) {
     if (!geometry.lead || !size) continue;
     const pitch = params.pitchByIcao.get(flight.icao24);
     let head = buildTrailHead(geometry.lead, flight, size, params, pitch);
-    const join = joinFor(params.cache.joins, flight.icao24, geometry.lead, params.now);
+    const join = joinFor(
+      params.cache.joins,
+      flight.icao24,
+      geometry.lead,
+      params.now,
+    );
     if (head && join.previous) {
       const eased = (params.now - join.changedAt) / JOIN_EASE_MS;
       const old =
