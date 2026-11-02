@@ -192,9 +192,15 @@ export function FlightLayers({
     rawWithout: FlightState[];
     drawnWithout: FlightState[];
   } | null>(null);
-  const trafficLayersRef = useRef<{ builtAt: number; layers: Layer[] }>({
+  const trafficLayersRef = useRef<{
+    builtAt: number;
+    layers: Layer[];
+    /** Whether deck drew on the sphere when these layers were built. */
+    onSphere: boolean;
+  }>({
     builtAt: 0,
     layers: [],
+    onSphere: false,
   });
   const trafficFrameRef = useRef(0);
   const interpolatedMapRef = useRef(new Map<string, FlightState>());
@@ -769,8 +775,29 @@ export function FlightLayers({
     document.addEventListener("resume", handlePageResume);
     // Sizes and trail heads depend on the camera, so a moving camera redraws
     // at a faster cadence to keep them in step with it.
+    // deck draws on the sphere up to zoom 12 and flat past it, which turns
+    // every aircraft half a turn, and the overlay redraws deck with the
+    // map's next render using the layers it has. So when the camera
+    // crosses that zoom, the layers are rebuilt for deck's new frame at
+    // once, before that render, or aircraft would face backwards for a
+    // frame.
+    let drawnOnSphere: boolean | null = null;
     function onCameraMove() {
       cameraMoving = true;
+      if (
+        map &&
+        drawnOnSphere !== null &&
+        deckDrawsOnSphere(map, map.getZoom()) !== drawnOnSphere
+      ) {
+        if (animFrameRef.current !== 0) {
+          cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = 0;
+        }
+        needsRender = true;
+        lastRenderedAt = 0;
+        buildAndPushLayers(performance.now());
+        return;
+      }
       requestRender();
     }
     map?.on("move", onCameraMove);
@@ -843,6 +870,7 @@ export function FlightLayers({
       const currentZoom = map?.getZoom() ?? 10;
       const isGlobe = globeModeRef.current;
       const onSphere = map ? deckDrawsOnSphere(map, currentZoom) : false;
+      drawnOnSphere = onSphere;
 
       let globeFade = 1;
       let layersVisible = true;
@@ -1063,6 +1091,7 @@ export function FlightLayers({
         const traffic = trafficLayersRef.current;
         const trafficDue =
           !followed ||
+          traffic.onSphere !== onSphere ||
           isFrameDue(
             traffic.builtAt,
             now,
@@ -1231,6 +1260,7 @@ export function FlightLayers({
 
         if (trafficDue) {
           traffic.builtAt = now;
+          traffic.onSphere = onSphere;
           trafficFrameRef.current += 1;
           const trafficFrame = trafficFrameRef.current;
           const layers: Layer[] = [];
