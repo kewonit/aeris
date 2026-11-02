@@ -76,7 +76,12 @@ import { preloadAllModels } from "./aircraft-model-mapping";
 import { buildRouteAheadLayer } from "./route-ahead-layer";
 import { publishHover } from "./hover-store";
 import { aircraftElevationMeters } from "./altitude-projection";
-import { altitudeToColor, MLAT_POSITION_ALPHA } from "@/lib/flight-utils";
+import {
+  altitudeThemeKey,
+  altitudeToColor,
+  MLAT_POSITION_ALPHA,
+  setAltitudeTheme,
+} from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
@@ -259,6 +264,7 @@ export function FlightLayers({
     followDrawnRefRef.current = followDrawnRef;
     routeAheadRef.current = routeAhead;
     isDarkRef.current = isDark;
+    setAltitudeTheme(isDark ? "dark" : "light");
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -1229,7 +1235,7 @@ export function FlightLayers({
                 getPosition: [trafficFrame, altitudeMode],
                 getAngle: trafficFrame,
                 getSize: trafficFrame,
-                getColor: [dataVersionRef.current, altColors],
+                getColor: [dataVersionRef.current, altColors, altitudeThemeKey()],
               },
             }),
           );

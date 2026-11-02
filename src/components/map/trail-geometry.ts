@@ -1,5 +1,5 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import { altitudeToColor } from "@/lib/flight-utils";
+import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { snapLngToReference } from "@/lib/geo";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
@@ -413,6 +413,7 @@ export function getTrailGeometry(
   const projectionKey = [
     options.altitudeDisplayMode,
     options.altColors,
+    altitudeThemeKey(),
     options.defaultColor.join(","),
     category,
     dbFlags,

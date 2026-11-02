@@ -1017,7 +1017,7 @@ function FlightTrackerInner({
               <CameraControls autoHide />
             </div>
             <div className="pointer-events-auto">
-              <AltitudeLegend />
+              <AltitudeLegend dark={mapStyle.dark} />
             </div>
             <div className="pointer-events-auto">
               <MapAttribution

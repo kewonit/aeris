@@ -1,22 +1,40 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useSettings } from "@/hooks/use-settings";
+import {
+  ALTITUDE_RAMP_TOP_METERS,
+  altitudeRamp,
+  altitudeRampPosition,
+} from "@/lib/flight-utils";
 import { formatAltitude } from "@/lib/unit-formatters";
 
-const RAMP =
-  "rgb(72,210,160), rgb(160,195,80), rgb(235,150,60), rgb(240,110,80), rgb(220,85,130), rgb(180,90,190), rgb(120,110,220), rgb(100,170,240)";
-const TICKS = [13000, 6096, 3048, 1524, 610, 152, 0];
+const TICKS = [ALTITUDE_RAMP_TOP_METERS, 6096, 3048, 1524, 610, 152, 0];
+const SCALE_PX = 128;
+const GRADIENT_STOPS = 12;
 
 /**
- * The key to the altitude colours. It rests as a small chip with the ramp
- * in it; pressing it opens the full scale, pressing again puts it away.
+ * The key to the altitude colours, drawn from the same ramp the aircraft
+ * are, for the map in view. It rests as a small chip with the ramp in it;
+ * pressing it opens the full scale, with each height where its colour is.
  */
-export const AltitudeLegend = memo(function AltitudeLegend() {
+export const AltitudeLegend = memo(function AltitudeLegend({
+  dark,
+}: {
+  dark: boolean;
+}) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const low = formatAltitude(0, settings.unitSystem);
-  const high = formatAltitude(13000, settings.unitSystem);
+  const high = formatAltitude(ALTITUDE_RAMP_TOP_METERS, settings.unitSystem);
+
+  const ramp = useMemo(() => {
+    const colors = altitudeRamp(dark ? "dark" : "light");
+    return Array.from({ length: GRADIENT_STOPS }, (_, i) => {
+      const [r, g, b] = colors[Math.round((i / (GRADIENT_STOPS - 1)) * (colors.length - 1))];
+      return `rgb(${r},${g},${b})`;
+    }).join(", ");
+  }, [dark]);
 
   return (
     <button
@@ -34,14 +52,18 @@ export const AltitudeLegend = memo(function AltitudeLegend() {
         Altitude
       </span>
       {open ? (
-        <span className="flex items-center gap-2">
+        <span className="flex gap-2">
           <span
-            className="h-32 w-1.5 rounded-full"
-            style={{ background: `linear-gradient(to top, ${RAMP})` }}
+            className="w-1.5 rounded-full"
+            style={{ height: SCALE_PX, background: `linear-gradient(to top, ${ramp})` }}
           />
-          <span className="flex h-32 flex-col justify-between text-left">
+          <span className="relative w-16" style={{ height: SCALE_PX }}>
             {TICKS.map((tick) => (
-              <span key={tick} className="text-micro text-muted-foreground">
+              <span
+                key={tick}
+                className="absolute left-0 -translate-y-1/2 text-micro whitespace-nowrap text-muted-foreground"
+                style={{ top: `${(1 - altitudeRampPosition(tick)) * 100}%` }}
+              >
                 {formatAltitude(tick, settings.unitSystem)}
               </span>
             ))}
@@ -50,7 +72,7 @@ export const AltitudeLegend = memo(function AltitudeLegend() {
       ) : (
         <span
           className="h-1.5 w-12 rounded-full"
-          style={{ background: `linear-gradient(to right, ${RAMP})` }}
+          style={{ background: `linear-gradient(to right, ${ramp})` }}
           aria-hidden="true"
         />
       )}

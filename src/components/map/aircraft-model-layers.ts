@@ -21,7 +21,7 @@ import {
 } from "@deck.gl/mesh-layers";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToColor } from "@/lib/flight-utils";
+import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { aircraftColor } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
 import {
@@ -326,7 +326,7 @@ function modelLayer(
         getPosition: [frameCounter, altitudeDisplayMode],
         getOrientation: frameCounter,
         getScale: frameCounter,
-        getColor: [dataVersion, altColors],
+        getColor: [dataVersion, altColors, altitudeThemeKey()],
       },
       _lighting: "pbr",
       pickable: hasData,
