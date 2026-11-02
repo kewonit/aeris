@@ -32,10 +32,7 @@ import {
   modelUrl,
   resolveModelKeyCached,
 } from "./aircraft-model-mapping";
-import {
-  type AircraftScreenSize,
-  recordModelTailShare,
-} from "./aircraft-size";
+import type { AircraftScreenSize } from "./aircraft-size";
 import { aircraftElevationMeters } from "./altitude-projection";
 import { sphereTurn } from "./globe-frame";
 
@@ -119,15 +116,6 @@ export function normalizeScene(
 }
 
 /**
- * How far behind its centre a model's tail sits, as a share of its
- * footprint. Every normalised model has its fuselage along X. Aiming just
- * inside the tail keeps the trail's end under the model.
- */
-export function modelTailShareFor(footprint: ModelFootprint): number {
-  return (0.9 * footprint.x) / 2;
-}
-
-/**
  * deck's [pitch, yaw, roll] for a normalised model. deck turns by roll,
  * then pitch, then yaw, each about a fixed axis; with the nose along +X
  * that is heading, then pitch, then bank in the aircraft's own frame.
@@ -152,7 +140,7 @@ type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
 
 const sceneLoaders = new Map<AircraftModelKey, GetScene>();
 
-/** deck's default scene choice, normalised, recording where its tail is. */
+/** deck's default scene choice, normalised. */
 function sceneLoaderFor(key: AircraftModelKey): GetScene {
   let loader = sceneLoaders.get(key);
   if (!loader) {
@@ -164,12 +152,7 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
         typeof scenegraph.scene === "object"
           ? scenegraph.scene
           : scenegraph.scenes[scenegraph.scene || 0];
-      const footprint = scene
-        ? normalizeScene(scene, modelNoseTurn(key))
-        : null;
-      if (footprint) {
-        recordModelTailShare(key, modelTailShareFor(footprint));
-      }
+      if (scene) normalizeScene(scene, modelNoseTurn(key));
       return scene;
     };
     sceneLoaders.set(key, loader);

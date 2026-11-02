@@ -1,33 +1,30 @@
 import type { FlightState } from "@/lib/opensky";
 
 import {
-  type AircraftModelKey,
   MODEL_KEY_WINGSPAN,
   resolveModelKeyCached,
 } from "./aircraft-model-mapping";
+import { MODEL_TAIL_POINTS } from "./model-tail-points";
 
 /** Metres per pixel at zoom 0 on the equator, with deck's 512 px tiles. */
 const METERS_PER_PIXEL_AT_ZOOM_0 = 78_271.517;
 
+/** Where a 2D icon's tail sits, as shares of its footprint. */
+const ICON_TAIL = { share: 0.4, rise: 0 };
+
 /**
- * Share of an aircraft's footprint from its centre back to its tail, for
- * 2D icons and for 3D models that have not loaded yet.
+ * Where the trail meets an aircraft as drawn: how far behind its centre,
+ * and how far above it, as shares of its footprint. A 3D model's is the
+ * end of its tail cone, measured from the model (see model-tail-points),
+ * so the trail runs out of the cone rather than out of the fin.
  */
-const DEFAULT_TAIL_SHARE = 0.4;
-
-const modelTailShares = new Map<AircraftModelKey, number>();
-
-/** Records where a loaded model's tail sits, measured from its geometry. */
-export function recordModelTailShare(key: AircraftModelKey, share: number) {
-  modelTailShares.set(key, share);
-}
-
-/** Share of the drawn footprint from an aircraft's centre to its tail. */
-export function aircraftTailShare(flight: FlightState, model: boolean) {
-  if (!model) return DEFAULT_TAIL_SHARE;
-  return (
-    modelTailShares.get(resolveModelKeyCached(flight)) ?? DEFAULT_TAIL_SHARE
-  );
+export function aircraftTail(
+  flight: FlightState,
+  model: boolean,
+): { share: number; rise: number } {
+  if (!model) return ICON_TAIL;
+  const point = MODEL_TAIL_POINTS[resolveModelKeyCached(flight)];
+  return point ? { share: point.back, rise: point.up } : ICON_TAIL;
 }
 
 // Wingspans in metres, from manufacturer specs, for types where the class
@@ -139,6 +136,8 @@ export type AircraftScreenSize = {
   magnification: number;
   /** Share of the footprint from the centre back to the tail. */
   tailShare: number;
+  /** Share of the footprint the tail sits above the centre; 0 if unset. */
+  tailRise?: number;
 };
 
 export function metersPerPixel(zoom: number, latitude: number): number {

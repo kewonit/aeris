@@ -366,13 +366,15 @@ export function buildTrailHead(
         : null;
   if (!heading) return null;
 
-  // One screen pixel, and the model's half-length on screen, in metres at
-  // the aircraft's height.
+  // One screen pixel, and how far the tail sits behind the model's centre
+  // and above it, in metres at the aircraft's height.
   const pixel = metersPerPixel(options.zoom, lat) / size.magnification;
   const halfLength = size.tailShare * size.footprintPx * pixel;
+  const rise = (size.tailRise ?? 0) * size.footprintPx * pixel;
   // A pitched model's tail sits nearer, and lower when climbing or higher
-  // when descending, than a level one's. The nose's direction is kept per
-  // horizontal metre, as the trail's is.
+  // when descending, than a level one's; the cone's height above the
+  // centre tilts with it. The nose's direction is kept per horizontal
+  // metre, as the trail's is.
   const climb = (-pitchDegrees * Math.PI) / 180;
   const nose: Vec3 = [heading[0], heading[1], Math.tan(climb)];
   const altitude = flight.onGround ? 0 : flight.baroAltitude;
@@ -380,10 +382,11 @@ export function buildTrailHead(
     altitude,
     options.altitudeDisplayMode,
   );
+  const behind = halfLength * Math.cos(climb) + rise * Math.sin(climb);
   const tail: Vec3 = [
-    centreEast - heading[0] * halfLength * Math.cos(climb),
-    centreNorth - heading[1] * halfLength * Math.cos(climb),
-    centreZ - halfLength * Math.sin(climb),
+    centreEast - heading[0] * behind,
+    centreNorth - heading[1] * behind,
+    centreZ - halfLength * Math.sin(climb) + rise * Math.cos(climb),
   ];
 
   const base = options.altColors

@@ -783,6 +783,35 @@ test("a climbing aircraft takes the trail into its lowered tail along its fusela
   }
 });
 
+test("the trail runs out of the tail cone, tilted with the model", () => {
+  const level: TrailLead = {
+    ...LEAD,
+    path: LEAD.path.map(([lng, lat]) => [lng, lat, 3_000]),
+  };
+  // A cone ending 5% of the footprint below the model's centre.
+  const cone: AircraftScreenSize = { ...SIZE, tailRise: -0.05 };
+  const rise = -0.05 * 24 * metersPerPixel(14, 37.5);
+  for (const pitch of [0, -10, 6]) {
+    const aircraft = flight();
+    const head = buildTrailHead(level, aircraft, cone, HEAD_OPTIONS, pitch);
+    assert.ok(head);
+    const climb = (-pitch * Math.PI) / 180;
+    const end = head.path.at(-1)!;
+    assert.ok(
+      Math.abs(
+        end[2] -
+          (3_000 - HALF_LENGTH * Math.sin(climb) + rise * Math.cos(climb)),
+      ) < 1e-6,
+    );
+    assert.ok(
+      Math.abs(
+        gapToAircraft(end, aircraft) -
+          (HALF_LENGTH * Math.cos(climb) + rise * Math.sin(climb)),
+      ) < 0.5,
+    );
+  }
+});
+
 test("a level aircraft's trail still meets its tail level", () => {
   const level: TrailLead = {
     ...LEAD,

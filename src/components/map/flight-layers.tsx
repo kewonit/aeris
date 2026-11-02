@@ -71,7 +71,7 @@ import {
 } from "./camera-controller-utils";
 import {
   aircraftFootprintPixels,
-  aircraftTailShare,
+  aircraftTail,
   aircraftWingspanMeters,
   altitudeMagnification,
   type AircraftScreenSize,
@@ -1139,6 +1139,10 @@ export function FlightLayers({
           });
           project = (position) => viewport.project(position);
         }
+        const tailOf = (flight: FlightState, model: boolean) => {
+          const tail = aircraftTail(flight, model);
+          return { tailShare: tail.share, tailRise: tail.rise };
+        };
         const magnificationOf = (flight: FlightState) =>
           project
             ? altitudeMagnification(
@@ -1159,7 +1163,7 @@ export function FlightLayers({
               flight.latitude,
             ),
             magnification: magnificationOf(flight),
-            tailShare: aircraftTailShare(flight, use3DRef.current),
+            ...tailOf(flight, use3DRef.current),
           });
         }
         if (
@@ -1190,7 +1194,7 @@ export function FlightLayers({
               },
             ),
             magnification: magnificationOf(followed),
-            tailShare: aircraftTailShare(followed, true),
+            ...tailOf(followed, true),
           });
         }
         const footprintOf = (flight: FlightState) =>
