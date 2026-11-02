@@ -48,6 +48,7 @@ const SHORTCUTS = [
   { key: "V", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
   { key: "A", description: "Air traffic control" },
+  { key: "T", description: "Traffic trails" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 
@@ -122,20 +123,21 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Route className="h-4 w-4" />}
-          title="Flight trails"
+          title="Traffic trails"
+          description="When off, only the aircraft you open shows its trail"
           checked={settings.showTrails}
           onChange={(v) => update("showTrails", v)}
         />
+        <TrailThicknessSlider
+          value={settings.trailThickness}
+          onChange={(v) => update("trailThickness", v)}
+        />
+        <TrailLengthSlider
+          value={settings.trailMinutes}
+          onChange={(v) => update("trailMinutes", v)}
+        />
         {settings.showTrails && (
           <>
-            <TrailThicknessSlider
-              value={settings.trailThickness}
-              onChange={(v) => update("trailThickness", v)}
-            />
-            <TrailLengthSlider
-              value={settings.trailMinutes}
-              onChange={(v) => update("trailMinutes", v)}
-            />
             <SettingRow
               icon={<ArrowUpToLine className="h-4 w-4" />}
               title="Hide high trails"

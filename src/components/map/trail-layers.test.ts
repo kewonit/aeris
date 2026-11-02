@@ -407,3 +407,35 @@ test("a level aircraft's trail still meets its tail level", () => {
   const run = horizontalDistanceFromLngLat(before[0], before[1], end[0], end[1]);
   assert.ok(Math.abs(Math.atan2(end[2] - before[2], run)) < 0.01);
 });
+
+test("with traffic trails off, only the open or followed aircraft draws one", () => {
+  const two = [
+    flight({ longitude: eastbound(9).lng }),
+    flight({ icao24: "def456", longitude: eastbound(9).lng }),
+  ];
+  const off = (overrides: Partial<TrailLayerParams>) =>
+    layerData(
+      buildTrailLayers(layerParams({ flights: two, allTraffic: false, ...overrides })),
+      "flight-trails",
+    );
+
+  // Nothing open: the layers stay, with nothing in them.
+  assert.equal(off({}).length, 0);
+  assert.equal(off({ selectedIcao24: "def456" }).length, 1);
+  assert.equal(off({ followIcao24: "abc123" }).length, 1);
+  assert.equal(
+    layerData(buildTrailLayers(layerParams({ flights: two })), "flight-trails").length,
+    2,
+  );
+});
+
+test("a followed aircraft above the height limit keeps its trail", () => {
+  const high = [flight({ longitude: eastbound(9).lng, baroAltitude: 11_000 })];
+  const drawn = (overrides: Partial<TrailLayerParams>) =>
+    layerData(
+      buildTrailLayers(layerParams({ flights: high, ceilingMeters: 6_000, ...overrides })),
+      "flight-trails",
+    ).length;
+  assert.equal(drawn({}), 0);
+  assert.equal(drawn({ followIcao24: "abc123" }), 1);
+});

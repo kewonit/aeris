@@ -37,11 +37,14 @@ export function useGlobeDots(
   dataTimestampRef: MutableRefObject<number>,
   onClickRef: MutableRefObject<(info: PickingInfo<FlightState> | null) => void>,
   showTrailsRef: MutableRefObject<boolean>,
+  /** The aircraft that keeps its trail with traffic trails off. */
+  selectedIcao24Ref: MutableRefObject<string | null>,
 ) {
   const lastGeoJsonUpdateRef = useRef(0);
   const lastGeoJsonTimestampRef = useRef(0);
   const lastTrailsRef = useRef<TrailTrack[] | null>(null);
   const lastShowTrailsRef = useRef<boolean | null>(null);
+  const lastSelectedRef = useRef<string | null>(null);
   const geoJsonClearedRef = useRef(false);
   const globeZoomEnteredAtRef = useRef(0);
   // Cache last visibility state to avoid calling setLayoutProperty every frame
@@ -238,10 +241,12 @@ export function useGlobeDots(
             dataTimestampRef.current !== lastGeoJsonTimestampRef.current ||
             trailsRef.current !== lastTrailsRef.current ||
             showTrailsRef.current !== lastShowTrailsRef.current ||
+            selectedIcao24Ref.current !== lastSelectedRef.current ||
             enteredNativeGlobe ||
             geoJsonClearedRef.current;
           const settingChanged =
-            showTrailsRef.current !== lastShowTrailsRef.current;
+            showTrailsRef.current !== lastShowTrailsRef.current ||
+            selectedIcao24Ref.current !== lastSelectedRef.current;
           const throttleExpired =
             lastGeoJsonUpdateRef.current === 0 ||
             now - lastGeoJsonUpdateRef.current > GEOJSON_THROTTLE_MS;
@@ -294,14 +299,17 @@ export function useGlobeDots(
               | maplibregl.GeoJSONSource
               | undefined;
             if (trailSrc) {
-              // Respect the showTrails user setting
-              if (!showTrailsRef.current) {
-                trailSrc.setData({ type: "FeatureCollection", features: [] });
-              } else {
+              // With traffic trails off, only the open aircraft keeps one.
+              const allTraffic = showTrailsRef.current;
+              const selected = selectedIcao24Ref.current?.toLowerCase() ?? null;
+              {
                 const trails = trailsRef.current;
                 const trailFeatures: GeoJSON.Feature[] = [];
 
                 for (const trail of trails) {
+                  if (!allTraffic && trail.icao24.toLowerCase() !== selected) {
+                    continue;
+                  }
                   // Only the newest part: older parts are separated by a gap
                   // in reception and are too short to read at globe zoom.
                   const part = trail.parts[trail.parts.length - 1];
@@ -357,13 +365,14 @@ export function useGlobeDots(
                   type: "FeatureCollection",
                   features: trailFeatures,
                 });
-              } // end showTrails check
+              }
             }
 
             lastGeoJsonUpdateRef.current = now;
             lastGeoJsonTimestampRef.current = dataTimestampRef.current;
             lastTrailsRef.current = trailsRef.current;
             lastShowTrailsRef.current = showTrailsRef.current;
+            lastSelectedRef.current = selectedIcao24Ref.current;
             geoJsonClearedRef.current = false;
           }
         }

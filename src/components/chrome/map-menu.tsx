@@ -140,7 +140,7 @@ export const MapMenu = memo(function MapMenu({
 
             <section aria-label="Layers" className="border-t border-border py-1">
               <Switch
-                label="Flight trails"
+                label="Traffic trails"
                 checked={settings.showTrails}
                 onChange={(value) => update("showTrails", value)}
               />

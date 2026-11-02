@@ -442,6 +442,10 @@ function FlightTrackerInner({
     setAtcToggle((c) => c + 1);
   }, []);
 
+  const handleToggleTrails = useCallback(() => {
+    update("showTrails", !settings.showTrails);
+  }, [update, settings.showTrails]);
+
   const handleClick = useCallback(
     (info: PickingInfo<FlightState> | null) => {
       if (fpvIcao24) return;
@@ -733,6 +737,7 @@ function FlightTrackerInner({
     onToggleFollow: handleToggleFollowKey,
     onToggleMenu: handleToggleMenu,
     onToggleAtc: handleToggleAtc,
+    onToggleTrails: handleToggleTrails,
     isFpv: fpvIcao24 !== null,
   });
 

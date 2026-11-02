@@ -259,6 +259,13 @@ export type TrailLayerParams = HeadOptions & {
   pitchByIcao: Map<string, number>;
   trailMap: Map<string, TrailTrack>;
   selectedIcao24: string | null;
+  /** The aircraft followed or flown in first person, if any. */
+  followIcao24?: string | null;
+  /**
+   * Whether all traffic draws trails. When false, only the selected and
+   * followed aircraft do.
+   */
+  allTraffic?: boolean;
   trailMinutes: number;
   /** Aircraft flying above this many metres get no trail; null for none. */
   ceilingMeters: number | null;
@@ -271,9 +278,17 @@ export type TrailLayerParams = HeadOptions & {
   idSuffix?: string;
 };
 
+/** Whether an aircraft is open or followed, and so always keeps its trail. */
+function isTracked(icao24: string, params: TrailLayerParams): boolean {
+  return (
+    (params.selectedIcao24 != null && icao24 === params.selectedIcao24) ||
+    (params.followIcao24 != null && icao24 === params.followIcao24)
+  );
+}
+
 /**
- * Whether the height limit hides an aircraft's trail. The selected
- * aircraft and aircraft on the ground always keep theirs.
+ * Whether the height limit hides an aircraft's trail. The selected and
+ * followed aircraft, and aircraft on the ground, always keep theirs.
  */
 function isAboveCeiling(
   flight: FlightState,
@@ -282,7 +297,7 @@ function isAboveCeiling(
   const altitude = flight.baroAltitude;
   if (
     params.ceilingMeters == null ||
-    flight.icao24 === params.selectedIcao24 ||
+    isTracked(flight.icao24, params) ||
     flight.onGround ||
     altitude == null ||
     !Number.isFinite(altitude)
@@ -302,7 +317,9 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const aboveCeiling = new Set<string>();
   const windowMs = params.trailMinutes * 60_000;
 
+  const allTraffic = params.allTraffic ?? true;
   for (const flight of params.flights) {
+    if (!allTraffic && !isTracked(flight.icao24, params)) continue;
     if (isAboveCeiling(flight, params)) {
       aboveCeiling.add(flight.icao24);
       continue;

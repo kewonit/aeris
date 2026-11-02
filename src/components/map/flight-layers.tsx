@@ -251,6 +251,7 @@ export function FlightLayers({
     dataTimestampRef,
     onClickRef,
     showTrailsRef,
+    selectedIcao24Ref,
   );
 
   // Stabilize updateGlobeDots via ref so the animation loop doesn't restart on every render
@@ -1182,6 +1183,8 @@ export function FlightLayers({
           zoom: currentZoom,
           trailMap: trailMapRef.current,
           selectedIcao24: selectedIcao24Ref.current,
+          followIcao24: fpvId ?? followIcao24Ref.current?.toLowerCase() ?? null,
+          allTraffic: showTrailsRef.current,
           trailMinutes: trailMinutesRef.current,
           ceilingMeters: trailCeilingMetersRef.current,
           thickness: trailThicknessRef.current,
@@ -1217,7 +1220,7 @@ export function FlightLayers({
           );
         }
 
-        if (layersVisible && showTrailsRef.current) {
+        if (layersVisible) {
           layers.push(
             ...buildTrailLayers({
               ...trailParams,
@@ -1321,16 +1324,14 @@ export function FlightLayers({
               shadowLayer("flight-shadow-followed", [followed], frame),
             );
           }
-          if (showTrailsRef.current) {
-            frameLayers.push(
-              ...buildTrailLayers({
-                ...trailParams,
-                flights: [followed],
-                cache: followedTrailCacheRef.current,
-                idSuffix: "followed",
-              }),
-            );
-          }
+          frameLayers.push(
+            ...buildTrailLayers({
+              ...trailParams,
+              flights: [followed],
+              cache: followedTrailCacheRef.current,
+              idSuffix: "followed",
+            }),
+          );
           frameLayers.push(
             buildFollowedAircraftLayer(followed, {
               ...modelParams,
