@@ -44,7 +44,7 @@ const nextConfig: NextConfig = {
     "@deck.gl/layers",
     "@deck.gl/geo-layers",
     "@deck.gl/mesh-layers",
-    "@deck.gl/mapbox",
+    "@deck.gl/maplibre",
     "@deck.gl/react",
     "@loaders.gl/core",
     "@loaders.gl/gltf",

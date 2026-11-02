@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { MapboxOverlay } from "@deck.gl/mapbox";
+import { MapLibreOverlay } from "@deck.gl/maplibre";
 import { IconLayer } from "@deck.gl/layers";
 import { useMap } from "./map";
 import type { FlightState } from "@/lib/opensky";
@@ -10,7 +10,6 @@ import type { TrailTrack } from "@/lib/trails/types";
 import {
   type Layer,
   type PickingInfo,
-  MapView,
   WebMercatorViewport,
 } from "@deck.gl/core";
 
@@ -113,18 +112,18 @@ const FPV_FOLLOWED_WIDTH_SHARE = 1 / 6;
  * overlay still redraws it with each map render.
  */
 type DeckFrameLoop = { stop(): void; redraw(): void };
-function deckOf(overlay: MapboxOverlay) {
+function deckOf(overlay: MapLibreOverlay) {
   return (
     overlay as unknown as {
       _deck?: { isInitialized: boolean; animationLoop: DeckFrameLoop | null };
     }
   )._deck;
 }
-function stopDeckLoop(overlay: MapboxOverlay) {
+function stopDeckLoop(overlay: MapLibreOverlay) {
   deckOf(overlay)?.animationLoop?.stop();
 }
 /** Draws deck's frame now: layer updates, hover picking and the render. */
-function drawDeckFrame(overlay: MapboxOverlay) {
+function drawDeckFrame(overlay: MapLibreOverlay) {
   const deck = deckOf(overlay);
   if (deck?.isInitialized) deck.animationLoop?.redraw();
 }
@@ -148,7 +147,7 @@ export function FlightLayers({
   isDark = true,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
-  const overlayRef = useRef<MapboxOverlay | null>(null);
+  const overlayRef = useRef<MapLibreOverlay | null>(null);
   const atlasUrl = getAircraftAtlasUrl();
   const haloUrl = getHaloUrl();
   const ringUrl = getRingUrl();
@@ -574,10 +573,18 @@ export function FlightLayers({
   useEffect(() => {
     if (!map || !isLoaded) return;
 
-    function createOverlay(): MapboxOverlay {
-      const overlay = new MapboxOverlay({
+    function createOverlay(): MapLibreOverlay {
+      const overlay: MapLibreOverlay = new MapLibreOverlay({
+        // deck's loop is stopped once deck has set itself up: stopped any
+        // sooner, deck 9.4 never finishes and draws nothing.
+        onLoad: () => {
+          stopDeckLoop(overlay);
+          requestRenderRef.current();
+        },
+        // Drawn over the map in its own canvas. With no views given, deck
+        // takes the map's projection: a globe view on the globe, so traffic
+        // and trails sit on the sphere at every zoom.
         interleaved: false,
-        views: new MapView({ id: "mapbox" }) as never,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         useDevicePixels: 1,
         deviceProps: {
@@ -588,7 +595,6 @@ export function FlightLayers({
       });
       overlayRef.current = overlay;
       map!.addControl(overlay as unknown as maplibregl.IControl);
-      stopDeckLoop(overlay);
       return overlay;
     }
 

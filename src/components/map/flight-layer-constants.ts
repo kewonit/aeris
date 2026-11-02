@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import { type MapboxOverlay } from "@deck.gl/mapbox";
+import { type MapLibreOverlay } from "@deck.gl/maplibre";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
@@ -7,7 +7,7 @@ import type { TrailTrack } from "@/lib/trails/types";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
 
-export type DeckGLOverlay = MapboxOverlay & {
+export type DeckGLOverlay = MapLibreOverlay & {
   pickObject?(opts: {
     x: number;
     y: number;
