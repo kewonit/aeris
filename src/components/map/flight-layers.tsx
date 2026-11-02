@@ -23,6 +23,7 @@ import {
   AIRCRAFT_PICK_RADIUS_PX,
   SELECTION_FADE_MS,
   APPEAR_MS,
+  FPV_EXIT_MS,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
   LOD_3D_ZOOM_IN,
@@ -38,7 +39,7 @@ import {
   getAircraftAtlasUrl,
 } from "./aircraft-appearance";
 
-import { lerpAngle, smoothStep } from "./flight-math";
+import { angleDelta, lerpAngle, smoothStep } from "./flight-math";
 
 import { createAttitudeState, updateAttitudes } from "./aircraft-attitude";
 import {
@@ -209,7 +210,14 @@ export function FlightLayers({
   // While true, the RAF loop holds traffic at its current snapshot, so
   // aircraft freeze at last-known positions on stale data instead of
   // gliding on along minutes-old moves.
-  const resumeSnapRef = useRef(false);
+  /** Set on return to a tab left long enough that traffic fades back in. */
+  const staleResumeRef = useRef(false);
+  /** First person just ended: its aircraft eases back onto the map's path. */
+  const fpvExitRef = useRef<{
+    icao24: string;
+    motion: FpvMotion;
+    since: number;
+  } | null>(null);
   const pageActiveRef = useRef(true);
   const requestRenderRef = useRef<() => void>(() => {});
 
@@ -317,15 +325,25 @@ export function FlightLayers({
       : undefined;
     if (fpvId && fpvReport) {
       if (fpvMotionRef.current?.icao24 !== fpvId) {
-        fpvMotionRef.current = { icao24: fpvId, motion: createFpvMotion() };
+        const motion = createFpvMotion();
+        // First person picks the aircraft up where the map draws it.
+        const shown = interpolatedMapRef.current.get(fpvId);
+        if (shown?.longitude != null && shown.latitude != null) {
+          motion.seed({
+            lng: shown.longitude,
+            lat: shown.latitude,
+            alt: Number.isFinite(shown.baroAltitude) ? shown.baroAltitude : null,
+            track: Number.isFinite(shown.trueTrack) ? shown.trueTrack : null,
+          });
+        }
+        fpvMotionRef.current = { icao24: fpvId, motion };
+        if (fpvExitRef.current?.icao24 === fpvId) fpvExitRef.current = null;
       }
       fpvMotionRef.current.motion.observe(
         fpvReport,
         receivedAt,
         reportLeadMs(fpvReport, receivedAt, receiptDelaysRef.current, Infinity),
       );
-    } else if (!fpvId) {
-      fpvMotionRef.current = null;
     }
 
     // After a long gap (a tab hidden for 15s or more) or with nothing drawn
@@ -334,10 +352,15 @@ export function FlightLayers({
       dataTimestampRef.current === 0 ||
       elapsed > FLIGHT_RENDER_STALE_MS ||
       currSnapshotsRef.current.size === 0;
-    // Traffic fades in on a blank map; after a gap it carries on in view.
-    if (currSnapshotsRef.current.size === 0 && flights.length > 0) {
+    // Traffic fades in on a blank map, or back in on return to a tab left
+    // long enough for it to have moved on; after a slow poll it flies on.
+    if (
+      flights.length > 0 &&
+      (currSnapshotsRef.current.size === 0 || (fresh && staleResumeRef.current))
+    ) {
       appearStartRef.current = now;
     }
+    staleResumeRef.current = false;
 
     // How long the coming move lasts: the usual interval between polls.
     const timing = fresh
@@ -353,10 +376,13 @@ export function FlightLayers({
     const oldLinearT = getSafeInterpolationProgress({
       elapsedMs: elapsed,
       animDurationMs: animDurationRef.current,
-      pageActive: pageActiveRef.current && !resumeSnapRef.current,
+      // Where traffic would be drawn now, whether or not the page is shown.
+      pageActive: true,
     }).tPos;
     const oldAngleT = smoothStep(Math.min(oldLinearT, 1));
 
+    const lastPrev = prevSnapshotsRef.current;
+    const lastCurr = currSnapshotsRef.current;
     const newPrev = new Map<string, Snapshot>();
     if (!fresh) {
       for (const f of flights) {
@@ -422,13 +448,20 @@ export function FlightLayers({
       }
 
       // MLAT positions (~100m accuracy) jitter visibly compared to
-      // ADS-B (~10m). Apply EMA blending against the previous position
-      // to suppress the noise while tracking real movement.
+      // ADS-B (~10m). Each is blended with where the last one, flown on,
+      // puts the aircraft now, which steadies it without slowing it down.
       let lng = at.lng;
       let lat = at.lat;
-      if (f.positionSource === "mlat") {
-        lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
-        lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
+      const lastFrom = lastPrev.get(id);
+      const lastTo = lastCurr.get(id);
+      if (f.positionSource === "mlat" && lastFrom && lastTo) {
+        const expected = lerpSnapshot(
+          lastFrom,
+          lastTo,
+          1 + elapsed / Math.max(animDurationRef.current, 1),
+        );
+        lng = expected.lng + angleDelta(expected.lng, lng) * MLAT_POSITION_ALPHA;
+        lat = expected.lat + (lat - expected.lat) * MLAT_POSITION_ALPHA;
       }
 
       // A report carried a little too far, then corrected, would draw
@@ -459,9 +492,6 @@ export function FlightLayers({
     if (timing) recentIntervalsRef.current = timing.intervals;
     animDurationRef.current = moveMs;
     dataTimestampRef.current = now;
-    // Fresh data arrived - allow dead reckoning again (was blocked during
-    // the brief window after tab resume to prevent stale-heading extrapolation).
-    resumeSnapRef.current = false;
     // Increment data version so model layers know color/scale need recomputation
     dataVersionRef.current++;
     requestRenderRef.current();
@@ -683,28 +713,26 @@ export function FlightLayers({
 
     requestRenderRef.current = requestRender;
 
-    function freezeAtCurrentSnapshots() {
-      const curr = currSnapshotsRef.current;
-      if (curr.size > 0) {
-        prevSnapshotsRef.current = new Map(curr);
-      }
-      animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
-      lastFlightsForInterpRef.current = null;
-      resumeSnapRef.current = true;
-    }
-
+    // A hidden page stops drawing and nothing else: traffic keeps its
+    // place, speed and heading, so it carries on as if watched throughout.
     function markPageInactive() {
       pageActiveRef.current = false;
       if (animFrameRef.current !== 0) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = 0;
       }
-      freezeAtCurrentSnapshots();
     }
 
     function handlePageResume() {
       pageActiveRef.current = isPageActive();
-      freezeAtCurrentSnapshots();
+      // Away long enough for traffic to have moved on: the next report
+      // fades it back in where it is, rather than jumping it there.
+      if (
+        dataTimestampRef.current > 0 &&
+        performance.now() - dataTimestampRef.current > FLIGHT_RENDER_STALE_MS
+      ) {
+        staleResumeRef.current = true;
+      }
 
       if (pageActiveRef.current) {
         requestRender();
@@ -824,9 +852,7 @@ export function FlightLayers({
         const progress = getSafeInterpolationProgress({
           elapsedMs: elapsed,
           animDurationMs: animDurationRef.current,
-          // `resumeSnapRef` stays true until fresh flight data arrives; during
-          // that resume window we render the latest authoritative snapshot only.
-          pageActive: pageActiveRef.current && !resumeSnapRef.current,
+          pageActive: pageActiveRef.current,
         });
         const tPos = progress.tPos;
 
@@ -909,6 +935,36 @@ export function FlightLayers({
           drawn.latitude = flown.lat;
           if (flown.alt !== null) drawn.baroAltitude = flown.alt;
           if (flown.track !== null) drawn.trueTrack = flown.track;
+        }
+
+        // Leaving first person, the aircraft eases back from where it flew
+        // onto the map's path, a poll behind, instead of jumping back there.
+        if (fpvMotionRef.current && fpvMotionRef.current.icao24 !== fpvId) {
+          fpvExitRef.current = { ...fpvMotionRef.current, since: now };
+          fpvMotionRef.current = null;
+        }
+        const exit = fpvExitRef.current;
+        if (exit) {
+          const share = (now - exit.since) / FPV_EXIT_MS;
+          const leaving = interpolatedMapRef.current.get(exit.icao24);
+          const was = share < 1 ? exit.motion.stateAt(Date.now()) : null;
+          if (!was || !leaving || leaving.longitude == null || leaving.latitude == null) {
+            fpvExitRef.current = null;
+          } else {
+            const toMap = smoothStep(Math.max(0, share));
+            leaving.longitude =
+              was.lng + angleDelta(was.lng, leaving.longitude) * toMap;
+            leaving.latitude = was.lat + (leaving.latitude - was.lat) * toMap;
+            if (was.alt !== null && Number.isFinite(leaving.baroAltitude)) {
+              leaving.baroAltitude =
+                was.alt + (leaving.baroAltitude! - was.alt) * toMap;
+            }
+            if (was.track !== null && Number.isFinite(leaving.trueTrack)) {
+              leaving.trueTrack = normalizeBearing(
+                lerpAngle(was.track, leaving.trueTrack!, toMap),
+              );
+            }
+          }
         }
         const drawnOut = fpvDrawnRefRef.current;
         if (drawnOut) {
@@ -1291,10 +1347,9 @@ export function FlightLayers({
           now - selectionChangeTimeRef.current < SELECTION_FADE_MS;
         continueAnimating =
           layersVisible &&
-          ((!resumeSnapRef.current &&
-            currentFlights.length > 0 &&
-            progress.moving) ||
+          ((currentFlights.length > 0 && progress.moving) ||
             fpvId != null ||
+            fpvExitRef.current != null ||
             selectionAnimating ||
             appearing);
         if (continueAnimating) scheduleFrame();

@@ -25,6 +25,8 @@ export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
 /** Traffic fades in over this long when it first appears. */
 export const APPEAR_MS = 500;
+/** Leaving first person, its aircraft eases back onto the map over this long. */
+export const FPV_EXIT_MS = 12_000;
 
 // Globe/Mercator hard-switch: dots below this zoom, flights above.
 export const GLOBE_SWITCH_ZOOM = 5.8;
