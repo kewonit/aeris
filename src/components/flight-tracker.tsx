@@ -72,6 +72,11 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAirportBoard } from "@/hooks/use-airport-board";
 import { AircraftCard } from "@/components/place/aircraft-card";
 import { FollowChip } from "@/components/chrome/follow-chip";
+import { SearchPill } from "@/components/search/search-pill";
+import {
+  locationToCity,
+  type SearchLocation,
+} from "@/lib/search-location-client";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
@@ -623,6 +628,15 @@ function FlightTrackerInner({
     [selectFlight],
   );
 
+  const handleSearchAirport = useCallback(
+    (location: SearchLocation) => handleAirportDotClick(locationToCity(location)),
+    [handleAirportDotClick],
+  );
+  const handleSearchPlace = useCallback(
+    (location: SearchLocation) => setActiveCity(locationToCity(location)),
+    [setActiveCity],
+  );
+
   const handleLookupFlight = useCallback(
     async (rawQuery: string, startFpv = false): Promise<boolean> => {
       const compactQuery = rawQuery.trim().toLowerCase().replace(/\s+/g, "");
@@ -844,7 +858,19 @@ function FlightTrackerInner({
             className="aeris-left-chrome pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4"
             data-panel-open={desktopLeftPanelOpen}
           >
-            <Brand />
+            <span className="hidden sm:block">
+              <Brand />
+            </span>
+            <div className="w-[calc(100vw-9.5rem)] sm:w-88">
+              <SearchPill
+                flights={displayFlights}
+                center={activeCity.coordinates}
+                onSelectFlight={handleSelectFlight}
+                onSelectAirport={handleSearchAirport}
+                onSelectPlace={handleSearchPlace}
+                onLookupFlight={handleLookupFlight}
+              />
+            </div>
           </div>
         )}
 
@@ -875,14 +901,8 @@ function FlightTrackerInner({
             <GitHubBadge stars={repoStars} />
             <ControlPanel
               airspaceAvailable={airspaceAvailable}
-              activeCity={activeCity}
-              onSelectCity={setActiveCity}
               activeStyle={mapStyle}
               onSelectStyle={setMapStyle}
-              flights={displayFlights}
-              activeFlightIcao24={selectedIcao24}
-              onLookupFlight={handleLookupFlight}
-              onSelectFlight={handleSelectFlight}
             />
           </div>
         )}

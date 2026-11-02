@@ -12,7 +12,6 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { SNAP, PRESS_SCALE } from "@/lib/motion";
 import {
-  Search,
   Map as MapIcon,
   Settings,
   Keyboard,
@@ -20,10 +19,7 @@ import {
   Info,
   Clock,
 } from "lucide-react";
-import type { City } from "@/lib/cities";
 import type { MapStyle } from "@/lib/map-styles";
-import type { FlightState } from "@/lib/opensky";
-import { SearchContent } from "@/components/ui/control-panel-search";
 import { StyleContent } from "@/components/ui/control-panel-styles";
 import {
   SettingsContent,
@@ -37,7 +33,6 @@ export const MAP_BUTTON_CLASS =
   "grid size-9 place-items-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:text-foreground";
 
 export type ControlPanelTabId =
-  | "search"
   | "style"
   | "settings"
   | "shortcuts"
@@ -46,10 +41,9 @@ export type ControlPanelTabId =
 
 const MAIN_TABS: {
   id: ControlPanelTabId;
-  icon: typeof Search;
+  icon: typeof Settings;
   label: string;
 }[] = [
-  { id: "search", icon: Search, label: "Search" },
   { id: "style", icon: MapIcon, label: "Map Style" },
 ];
 
@@ -65,26 +59,14 @@ const subscribePortalMount = () => () => {};
 
 type ControlPanelProps = {
   airspaceAvailable?: boolean;
-  activeCity: City;
-  onSelectCity: (city: City) => void;
   activeStyle: MapStyle;
   onSelectStyle: (style: MapStyle) => void;
-  flights: FlightState[];
-  activeFlightIcao24: string | null;
-  onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
-  onSelectFlight?: (flight: FlightState) => void;
 };
 
 export function ControlPanel({
   airspaceAvailable = true,
-  activeCity,
-  onSelectCity,
   activeStyle,
   onSelectStyle,
-  flights,
-  activeFlightIcao24,
-  onLookupFlight,
-  onSelectFlight,
 }: ControlPanelProps) {
   const [openTab, setOpenTab] = useState<ControlPanelTabId | null>(null);
   const portalMounted = useSyncExternalStore(
@@ -98,16 +80,11 @@ export function ControlPanel({
   }, []);
 
   useEffect(() => {
-    function handleOpenSearch() {
-      open("search");
-    }
     function handleOpenShortcuts() {
       open("shortcuts");
     }
-    window.addEventListener("aeris:open-search", handleOpenSearch);
     window.addEventListener("aeris:open-shortcuts", handleOpenShortcuts);
     return () => {
-      window.removeEventListener("aeris:open-search", handleOpenSearch);
       window.removeEventListener("aeris:open-shortcuts", handleOpenShortcuts);
     };
   }, [open]);
@@ -146,17 +123,8 @@ export function ControlPanel({
                 onTabChange={setOpenTab}
                 onClose={close}
                 airspaceAvailable={airspaceAvailable}
-                activeCity={activeCity}
-                onSelectCity={(c) => {
-                  onSelectCity(c);
-                  close();
-                }}
                 activeStyle={activeStyle}
                 onSelectStyle={onSelectStyle}
-                flights={flights}
-                activeFlightIcao24={activeFlightIcao24}
-                onLookupFlight={onLookupFlight}
-                onSelectFlight={onSelectFlight}
               />
             )}
           </AnimatePresence>,
@@ -171,27 +139,15 @@ function PanelDialog({
   onTabChange,
   onClose,
   airspaceAvailable,
-  activeCity,
-  onSelectCity,
   activeStyle,
   onSelectStyle,
-  flights,
-  activeFlightIcao24,
-  onLookupFlight,
-  onSelectFlight,
 }: {
   activeTab: ControlPanelTabId;
   onTabChange: (tab: ControlPanelTabId) => void;
   onClose: () => void;
   airspaceAvailable: boolean;
-  activeCity: City;
-  onSelectCity: (city: City) => void;
   activeStyle: MapStyle;
   onSelectStyle: (style: MapStyle) => void;
-  flights: FlightState[];
-  activeFlightIcao24: string | null;
-  onLookupFlight: (query: string, enterFpv?: boolean) => Promise<boolean>;
-  onSelectFlight?: (flight: FlightState) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -328,25 +284,6 @@ function PanelDialog({
 
             <div className="relative flex-1 overflow-hidden">
               <AnimatePresence mode="wait" initial={false}>
-                {activeTab === "search" && (
-                  <TabContent key="search">
-                    <SearchContent
-                      activeCity={activeCity}
-                      onSelect={onSelectCity}
-                      flights={flights}
-                      activeFlightIcao24={activeFlightIcao24}
-                      onLookupFlight={async (query, enterFpv = false) => {
-                        const found = await onLookupFlight(query, enterFpv);
-                        if (found) onClose();
-                        return found;
-                      }}
-                      onSelectFlight={(flight) => {
-                        onSelectFlight?.(flight);
-                        onClose();
-                      }}
-                    />
-                  </TabContent>
-                )}
                 {activeTab === "style" && (
                   <TabContent key="style">
                     <StyleContent
