@@ -592,8 +592,11 @@ export function FlightLayers({
         interleaved: false,
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         useDevicePixels: 1,
+        // Multisampled, so the edges of models, shadows and icons do not
+        // crawl in steps as they move and turn. At one canvas pixel per
+        // screen point it costs little on the GPU and nothing on the CPU.
         deviceProps: {
-          webgl: { antialias: false, preserveDrawingBuffer: false },
+          webgl: { antialias: true, preserveDrawingBuffer: false },
         },
         _typedArrayManagerProps: { overAlloc: 1.5, poolSize: 0 },
         layers: [],
