@@ -57,6 +57,16 @@ class SoftEdgeExtension extends LayerExtension {
 const SOFT_EDGE = [new SoftEdgeExtension()];
 
 /**
+ * Trails and their halo are see-through and write no depth. Where trails
+ * cross or merge, or a path overlaps itself at a joint, each then blends
+ * over the other the same way every frame, rather than winning or losing
+ * each pixel by a hair of depth, which flickers as anything moves; and a
+ * smoothed edge cannot cut into a trail drawn behind it. Aircraft are
+ * drawn after them, over them.
+ */
+const NO_DEPTH_WRITE = { depthWriteEnabled: false };
+
+/**
  * The head keeps the lead only where it lies this many half-lengths, and
  * at least this many pixels, from the aircraft's centre, so the curve from
  * the trail's direction onto the heading turns gently enough to read as
@@ -563,11 +573,14 @@ export function buildTrailLayers(params: TrailLayerParams) {
     capRounded: false,
     jointRounded: false,
     billboard: true,
+    parameters: NO_DEPTH_WRITE,
   };
+  // The lines smooth their own edges, so a thin trail does not crawl in
+  // steps as it moves.
+  const line = { ...shared, antialiasing: true };
   // The halo reuses the trails' own data, so it costs no extra geometry,
-  // fades out towards its edges, and writes no depth, so it never hides a
-  // trail drawn behind it. Hidden, it stays in the list so deck keeps its
-  // buffers for zooming back in.
+  // and fades out towards its edges. Hidden, it stays in the list so deck
+  // keeps its buffers for zooming back in.
   const zoomIn = Math.min(
     1,
     Math.max(
@@ -581,7 +594,6 @@ export function buildTrailLayers(params: TrailLayerParams) {
     visible: glowShare > 0,
     opacity: params.opacity * GLOW_OPACITY * glowShare,
     getWidth: params.thickness * GLOW_WIDTH_SCALE + GLOW_EXTRA_PX,
-    parameters: { depthWriteEnabled: false },
     extensions: SOFT_EDGE,
   };
 
@@ -603,14 +615,14 @@ export function buildTrailLayers(params: TrailLayerParams) {
       getColor: (head) => head.colors,
     }),
     new PathLayer<TrailBody>({
-      ...shared,
+      ...line,
       id: id("flight-trails"),
       data: params.cache.bodies,
       getPath: (body) => body.path,
       getColor: (body) => body.colors,
     }),
     new PathLayer<TrailHead>({
-      ...shared,
+      ...line,
       id: id("flight-trail-heads"),
       data: heads,
       getPath: (head) => head.path,

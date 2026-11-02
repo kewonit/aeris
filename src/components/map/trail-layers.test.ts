@@ -495,6 +495,17 @@ test("a faint, wide glow is drawn under each trail from the same data", () => {
   assert.equal(layerData(layers, "flight-trail-head-glow").length, 1);
 });
 
+test("trail lines smooth their edges, and no trail writes depth", () => {
+  const layers = buildTrailLayers(layerParams());
+  for (const id of ["flight-trails", "flight-trail-heads"]) {
+    const line = layers.find((layer) => layer.props.id === id)!;
+    assert.equal(line.props.antialiasing, true, id);
+  }
+  for (const layer of layers) {
+    assert.equal(layer.props.parameters.depthWriteEnabled, false, layer.props.id);
+  }
+});
+
 test("trails have no glow from the cockpit", () => {
   const glow = buildTrailLayers(layerParams({ glow: false })).find(
     (layer) => layer.props.id === "flight-trail-glow",
