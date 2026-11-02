@@ -1,5 +1,5 @@
 import { AIRPORTS } from "@/lib/airports";
-import { airportToCity } from "@/lib/airports";
+import { airportToCity, findNearestAirport } from "@/lib/airports";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import { DEFAULT_CITY } from "@/components/flight-tracker-utils";
@@ -58,14 +58,22 @@ export function pickRandomAirportCity(excludeIata?: string): City {
   return airportToCity(randomAirport);
 }
 
+/** How far from an aircraft its nearest airport can be and still name the area. */
+const NAMING_AIRPORT_KM = 400;
+
+/**
+ * The area to load around an aircraft far from the map: centred on the
+ * aircraft, named after the nearest airport so the status line and the
+ * address bar read as a place. Over open sea there is no name to give.
+ */
 export function cityFromFlight(flight: FlightState): City | null {
   if (flight.longitude == null || flight.latitude == null) return null;
-  const code = flight.icao24.toUpperCase();
+  const near = findNearestAirport(flight.latitude, flight.longitude, NAMING_AIRPORT_KM);
   return {
     id: `trk-${flight.icao24}`,
-    name: `Flight ${code}`,
-    country: flight.registrationCountry || "Unknown",
-    iata: code,
+    name: near ? near.city || near.name : "",
+    country: near?.country ?? flight.registrationCountry ?? "",
+    iata: near?.iata || flight.icao24.toUpperCase(),
     coordinates: [flight.longitude, flight.latitude],
     radius: 2,
   };

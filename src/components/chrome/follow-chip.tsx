@@ -47,12 +47,12 @@ export const FollowChip = memo(function FollowChip({
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-11 min-w-0 items-center gap-2 rounded-full pr-1 pl-3 text-small text-muted-foreground"
+        className="flex h-11 min-w-0 items-center rounded-full pr-1 pl-3 text-small text-muted-foreground"
         aria-label={`Following ${identity}. Open its card`}
       >
-        <span className="size-2 shrink-0 rounded-full bg-tint" aria-hidden="true" />
         <span className="truncate">
-          Following <span className="text-foreground">{identity}</span>
+          <span className="text-tint">Following</span>{" "}
+          <span className="text-foreground">{identity}</span>
           {detail !== "-" && <span className="text-subtle"> · {detail}</span>}
         </span>
       </button>

@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import dynamic from "next/dynamic";
 import type { FlightState } from "@/lib/opensky";
@@ -141,7 +140,6 @@ export function PlacePanel({
         }
       }}
       className="aeris-float pointer-events-auto fixed top-17 bottom-4 left-4 z-30 hidden w-(--place-width) flex-col overflow-hidden rounded-xl text-foreground transition-[translate,opacity] duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-4 data-[open=false]:opacity-0 sm:flex"
-      style={{ "--place-width": PLACE_PANEL_WIDTH } as CSSProperties}
     >
       <div className="min-h-0 flex-1">
         {snapshot?.kind === "flight" ? (

@@ -35,14 +35,14 @@ const VALID_ROUTE: FlightRouteInfo = {
 };
 
 const NOW = Date.UTC(2026, 9, 17, 18, 0);
-const CRUISING = { progress: null, minutesRemaining: null, phase: "cruising" } as const;
+const CRUISING = { progress: null } as const;
 
-test("RouteBlock labels a valid result as a reported route", () => {
+test("RouteBlock shows a reported route without hedging it", () => {
   const html = renderToStaticMarkup(
     createElement(RouteBlock, { routeInfo: VALID_ROUTE, status: CRUISING, now: NOW }),
   );
 
-  assert.match(html, /Reported route/);
+  assert.doesNotMatch(html, /Reported route/);
   assert.match(html, /SFO/);
   assert.match(html, /JFK/);
   assert.doesNotMatch(html, /verified/i);
@@ -114,16 +114,16 @@ test("RouteBlock shows a seen departure when no destination is reported", () => 
   assert.doesNotMatch(html, /JFK/);
 });
 
-test("RouteBlock shows progress and a landing estimate once both ends are known", () => {
+test("RouteBlock shows progress once both ends are known, and no second ETA", () => {
   const html = renderToStaticMarkup(
     createElement(RouteBlock, {
       routeInfo: VALID_ROUTE,
-      status: { progress: 0.42, minutesRemaining: 71, phase: "cruising" },
+      status: { progress: 0.42 },
       now: NOW,
     }),
   );
 
   assert.match(html, /role="progressbar"/);
   assert.match(html, /aria-valuenow="42"/);
-  assert.match(html, /Lands in about 1h 10m/);
+  assert.doesNotMatch(html, /Lands in/);
 });

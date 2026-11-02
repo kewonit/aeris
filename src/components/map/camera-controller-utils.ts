@@ -1,5 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { normalizeBearing } from "./flight-interpolation";
+import { cameraHeightMeters } from "./altitude-projection";
 
 export const DEFAULT_ZOOM = 9.2;
 export const DEFAULT_PITCH = 49;
@@ -340,4 +341,34 @@ export function setMapInteractionsEnabled(
   map.touchZoomRotate.disable();
   map.doubleClickZoom.disable();
   map.keyboard.disable();
+}
+
+/**
+ * The camera stays at least this many times an aircraft's drawn height
+ * above the ground, so a high aircraft is seen from above, not beside.
+ */
+const CAMERA_HEADROOM = 2.5;
+
+/**
+ * The closest zoom, no closer than the city view, at which the camera
+ * stays well above an aircraft drawn `elevationMeters` up, seen at `pitch`.
+ * A phone's short screen puts the camera lower, so it frames from further
+ * out than a desktop does.
+ */
+export function framingZoom(
+  map: maplibregl.Map,
+  latitude: number,
+  elevationMeters: number,
+  pitch: number = map.getPitch(),
+): number {
+  const zoom = map.getZoom();
+  const height = cameraHeightMeters(
+    zoom,
+    latitude,
+    map.getCanvas().clientHeight,
+    pitch,
+  );
+  const needed = elevationMeters * CAMERA_HEADROOM;
+  if (!(height > 0) || needed <= 0) return DEFAULT_ZOOM;
+  return Math.min(DEFAULT_ZOOM, zoom - Math.log2(needed / height));
 }

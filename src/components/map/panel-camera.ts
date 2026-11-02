@@ -92,10 +92,13 @@ export function panelVisualOffset(
   width: number,
   height: number,
 ): [number, number] {
-  const maxOffset = Math.max(0, Math.min(width, height) * 0.85);
+  // Each axis is held to its own side of the screen: a high aircraft on a
+  // tall, narrow phone is lifted mostly upward, further than the width.
+  const maxX = Math.max(0, width * 0.85);
+  const maxY = Math.max(0, height * 0.85);
   return [
-    Math.max(-maxOffset, Math.min(maxOffset, -delta.dx)),
-    Math.max(-maxOffset, Math.min(maxOffset, -delta.dy)),
+    Math.max(-maxX, Math.min(maxX, -delta.dx)),
+    Math.max(-maxY, Math.min(maxY, -delta.dy)),
   ];
 }
 

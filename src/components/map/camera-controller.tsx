@@ -9,6 +9,7 @@ import {
   DEFAULT_ZOOM,
   FPV_EXIT_DURATION_MS,
   fpvExitCamera,
+  framingZoom,
   isWellBelowCamera,
   projectLngLatElevationPixelDelta,
   smoothstep,
@@ -117,6 +118,8 @@ export function CameraController({
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
   const previousPanelBottomRef = useRef(0);
+  /** Until when a zoom in to a far selection is under way. */
+  const farZoomUntilRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
@@ -250,14 +253,33 @@ export function CameraController({
     } else {
       // A card opened from a link or a far search can find the map zoomed
       // out to the world; centring alone would leave the aircraft a dot.
-      zoomingIn = Boolean(shouldCenter && coordinates && map.getZoom() < FAR_ZOOM);
+      // The phone's sheet reports its height a moment after it opens, and
+      // that second move must not cut the zoom short or leave the
+      // selection where the old padding put it.
+      const zoomPending = performance.now() < farZoomUntilRef.current;
+      zoomingIn = Boolean(
+        coordinates &&
+          ((shouldCenter && map.getZoom() < FAR_ZOOM) || (insetChanged && zoomPending)),
+      );
+      if (zoomingIn && !zoomPending) {
+        farZoomUntilRef.current = performance.now() + FAR_ZOOM_IN_MS;
+      }
+      const recenter = Boolean(coordinates) && (shouldCenter || insetChanged);
       map.easeTo({
-        ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+        ...(recenter && coordinates ? { center: coordinates } : {}),
         padding,
         ...panelMotion,
-        ...(zoomingIn
+        ...(zoomingIn && coordinates
           ? {
-              zoom: DEFAULT_ZOOM,
+              zoom: framingZoom(
+                map,
+                coordinates[1],
+                aircraftElevationMeters(
+                  activePanel.altitudeMeters,
+                  settings.altitudeDisplayMode,
+                ),
+                DEFAULT_PITCH,
+              ),
               pitch: DEFAULT_PITCH,
               duration: reduceMotion ? 0 : FAR_ZOOM_IN_MS,
             }

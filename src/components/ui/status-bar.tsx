@@ -103,23 +103,31 @@ export const StatusBar = memo(function StatusBar({
   const isAtcPlaying = atc.status === "playing";
   return (
     <div className="relative flex flex-col items-start gap-2">
-      <div className="flex h-11 max-w-[calc(100vw-7.5rem)] items-center sm:max-w-none gap-1 aeris-float aeris-glass rounded-full px-1.5 text-label">
+      <div className="aeris-float aeris-glass flex h-11 max-w-[calc(100vw-10rem)] items-center rounded-full px-1 text-label sm:max-w-none">
+        {/* The page's one heading: the name, shown on a desktop. */}
+        <h1 className="sr-only sm:not-sr-only">
+          <span className="aeris-wordmark block pr-1 pl-3 text-muted-foreground">aeris</span>
+        </h1>
         <ProviderTrigger
           source={source ?? null}
           loading={loading}
           rateLimited={rateLimited}
           retryIn={retryIn}
+          flightCount={flightCount}
           onClick={toggleProviderDropdown}
         />
-        <span className="text-subtle" aria-hidden="true">·</span>
-        <span className="shrink-0 px-1 text-muted-foreground">
-          {flightCount.toLocaleString()} aircraft
-        </span>
         {/* The place is on the map already; a phone keeps the line short. */}
-        <span className="hidden text-subtle sm:inline" aria-hidden="true">·</span>
-        <span className="hidden min-w-0 truncate px-1 text-subtle sm:inline" title={cityName}>
-          {cityName}
-        </span>
+        {cityName ? (
+          <span
+            className="-ml-1 hidden min-w-0 items-center gap-1.5 pr-3 text-subtle sm:flex"
+            title={cityName}
+          >
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{cityName}</span>
+          </span>
+        ) : (
+          <span className="hidden w-0.5 sm:block" aria-hidden="true" />
+        )}
         <AtcTrigger
           hasFeeds={availableFeeds.length > 0}
           isPlaying={isAtcPlaying}

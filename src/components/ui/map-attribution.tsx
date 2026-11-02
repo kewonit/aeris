@@ -13,6 +13,12 @@ type MapAttributionProps = {
 
 const SM_BREAKPOINT = 640;
 
+/** The flight data, credited after the map's own sources. */
+const FEED_CREDITS: AttributionEntry[] = [
+  { label: "OpenSky Network", url: "https://opensky-network.org/" },
+  { label: "adsb.fi", url: "https://adsb.fi/" },
+];
+
 export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
   const attributions = getAttributions(styleId, { showAirspace });
@@ -50,7 +56,7 @@ export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
   }, [expanded]);
 
   return (
-    <div ref={containerRef} className="flex items-end justify-end">
+    <div ref={containerRef} className="flex items-center justify-end">
       <AnimatePresence mode="wait">
         {expanded ? (
           <ExpandedAttribution
@@ -74,11 +80,13 @@ function CollapsedAttribution({ onExpand }: { onExpand: () => void }) {
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.15 }}
       onClick={onExpand}
-      className="flex h-5 w-5 items-center justify-center rounded-full transition-colors bg-background border border-border text-subtle"
-      aria-label="Show map attribution"
-      title="Map data attribution"
+      className="grid size-11 place-items-center text-subtle transition-colors hover:text-foreground"
+      aria-label="Show map credits"
+      title="Map credits"
     >
-      <Info className="h-2.5 w-2.5" />
+      <span className="aeris-float grid size-7 place-items-center rounded-full">
+        <Info className="size-3.5" aria-hidden="true" />
+      </span>
     </motion.button>
   );
 }
@@ -96,66 +104,30 @@ function ExpandedAttribution({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 4 }}
       transition={SNAP}
-      className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
+      className="aeris-float flex min-h-7 max-w-[calc(100vw-9rem)] items-center gap-1.5 rounded-full py-1 pr-3 pl-2"
     >
       <button
         onClick={onCollapse}
-        className="shrink-0 transition-colors text-subtle"
-        aria-label="Collapse attribution"
+        className="grid size-5 shrink-0 place-items-center text-subtle transition-colors hover:text-foreground"
+        aria-label="Hide map credits"
       >
-        <Info className="h-2.5 w-2.5" />
+        <Info className="size-3" aria-hidden="true" />
       </button>
-      <span
-        className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle"
-      >
-        <span
-          className="font-medium text-subtle"
-        >
-          ©
-        </span>
-        {attributions.map((attr, i) => (
-          <span key={attr.label} className="inline-flex items-center">
+      <span className="flex flex-wrap items-center gap-x-1.5 text-micro text-subtle">
+        <span aria-hidden="true">©</span>
+        {[...attributions, ...FEED_CREDITS].map((attr, i) => (
+          <span key={attr.label} className="inline-flex items-center gap-x-1.5">
+            {i > 0 && <span aria-hidden="true">·</span>}
             <a
               href={attr.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:underline text-subtle"
+              className="transition-colors hover:text-foreground"
             >
               {attr.label}
             </a>
-            {i < attributions.length - 1 && (
-              <span
-                className="ml-1 text-subtle"
-              >
-                ·
-              </span>
-            )}
           </span>
         ))}
-        <span
-          className="ml-0.5 text-subtle"
-        >
-          ·
-        </span>
-        <a
-          href="https://opensky-network.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          OpenSky Network
-        </a>
-        <span className="ml-0.5 text-subtle">
-          ·
-        </span>
-        <a
-          href="https://adsb.fi/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          adsb.fi
-        </a>
       </span>
     </motion.div>
   );

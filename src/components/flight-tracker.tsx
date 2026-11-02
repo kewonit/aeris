@@ -47,7 +47,6 @@ const AirportInfoCard = dynamic(() =>
     (mod) => mod.AirportInfoCard,
   ),
 );
-import { Brand } from "@/components/flight-tracker-brand";
 import { MapMenu } from "@/components/chrome/map-menu";
 import { LocateButton } from "@/components/chrome/locate-button";
 import { Compass, CompassBridge } from "@/components/chrome/compass";
@@ -67,8 +66,6 @@ import { useAirportBoard } from "@/hooks/use-airport-board";
 import { AircraftCard } from "@/components/place/aircraft-card";
 import { FollowChip } from "@/components/chrome/follow-chip";
 import { HoverCard } from "@/components/chrome/hover-card";
-import { useRouteInfo } from "@/hooks/use-route-info";
-import { routeAheadPath } from "@/lib/route-ahead";
 import { SearchPill } from "@/components/search/search-pill";
 import {
   locationToCity,
@@ -397,32 +394,6 @@ function FlightTrackerInner({
 
   const atc = useAtcStream();
 
-  // The selected aircraft's way ahead, from where it was last reported to
-  // its destination, when the reported route fits it.
-  const selectedRoute = useRouteInfo(fpvIcao24 ? null : selectedFlight);
-  const routeDestination =
-    selectedRoute.available && selectedRoute.destination
-      ? selectedRoute.destination
-      : null;
-  const routeAhead = useMemo(() => {
-    if (
-      !routeDestination ||
-      !selectedFlight ||
-      selectedFlight.onGround ||
-      selectedFlight.longitude == null ||
-      selectedFlight.latitude == null
-    ) {
-      return null;
-    }
-    return routeAheadPath(
-      {
-        lng: selectedFlight.longitude,
-        lat: selectedFlight.latitude,
-        altitudeMeters: selectedFlight.baroAltitude ?? selectedFlight.geoAltitude,
-      },
-      { lng: routeDestination.longitude, lat: routeDestination.latitude },
-    );
-  }, [routeDestination, selectedFlight]);
 
   const displayFlight = selectedFlight;
 
@@ -819,9 +790,11 @@ function FlightTrackerInner({
     leftPanelInsetPx > 0
       ? `${leftPanelInsetPx}px`
       : `calc(${PLACE_PANEL_WIDTH} + 1.75rem)`;
+
   const desktopPanelStyle = {
     "--panel-duration": `${MAP_PANEL_TRANSITION_MS}ms`,
     "--panel-ease": MAP_PANEL_EASE_CSS,
+    "--place-width": PLACE_PANEL_WIDTH,
     "--aeris-left-chrome-shift": `calc(${leftPanelInset} - 1rem)`,
     "--aeris-map-center-shift": `calc(${leftPanelInset} / 2)`,
   } as CSSProperties;
@@ -887,7 +860,6 @@ function FlightTrackerInner({
             fpvDrawnRef={fpvDrawnRef}
             followIcao24={followIcao24}
             followDrawnRef={followDrawnRef}
-            routeAhead={routeAhead}
             isDark={mapStyle.dark}
           />
         </MapView>
@@ -898,12 +870,9 @@ function FlightTrackerInner({
             field spans the top, with the map menu inside it. */}
         {!fpvIcao24 && (
           <div
-            className="pointer-events-auto absolute z-20 top-3 right-3 left-3 flex items-center gap-3 sm:top-4 sm:right-auto sm:left-4"
+            className="pointer-events-auto absolute top-3 right-3 left-3 z-50 sm:top-4 sm:right-auto sm:left-4 sm:w-(--place-width)"
           >
-            <span className="hidden sm:block">
-              <Brand />
-            </span>
-            <div className="min-w-0 flex-1 sm:w-88 sm:flex-none">
+            <div className="w-full">
               <SearchPill
                 flights={displayFlights}
                 center={activeCity.coordinates}
@@ -950,7 +919,7 @@ function FlightTrackerInner({
         {/* Top right: the map menu, your location, and north when the
             map is turned. */}
         {!fpvIcao24 && (
-          <div className="pointer-events-auto absolute z-20 top-17 right-3 flex flex-col items-end gap-2 sm:top-4 sm:right-4">
+          <div className="pointer-events-auto absolute top-17 right-3 z-40 flex flex-col items-end gap-2 sm:top-4 sm:right-4">
             {!isMobile && (
               <MapMenu
                 activeStyle={mapStyle}
@@ -1004,12 +973,12 @@ function FlightTrackerInner({
           </div>
         )}
 
-        {/* ATC Player Bar - under the top row on a phone, bottom-center on desktop */}
+        {/* The ATC player sits centred just above the status line. */}
         {!fpvIcao24 && (
           <AnimatePresence>
             {atc.feed && (
               <div
-                className="aeris-map-centered-chrome pointer-events-auto absolute top-30 left-1/2 sm:top-auto sm:bottom-18"
+                className="aeris-map-centered-chrome pointer-events-auto absolute bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] left-1/2 sm:bottom-18"
                 data-panel-open={desktopLeftPanelOpen}
               >
                 <AtcPlayerBar atc={atc} onOpenFeedSelector={handleToggleAtc} />
@@ -1024,14 +993,13 @@ function FlightTrackerInner({
             <div className="pointer-events-auto">
               <CameraControls autoHide />
             </div>
-            <div className="pointer-events-auto">
-              <AltitudeLegend dark={mapStyle.dark} />
-            </div>
-            <div className="pointer-events-auto">
+            {/* Level with the status line: the credits, then the key. */}
+            <div className="pointer-events-auto flex items-center gap-2">
               <MapAttribution
                 styleId={mapStyle.id}
                 showAirspace={showAirspace}
               />
+              <AltitudeLegend dark={mapStyle.dark} />
             </div>
           </div>
         )}

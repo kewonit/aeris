@@ -27,7 +27,6 @@ import { isFiniteNumber } from "@/lib/opensky-parsing";
 import { headingToCardinal } from "@/lib/flight-utils";
 import { lookupAirline } from "@/lib/airlines";
 import { formatAirportCode } from "@/lib/route-lookup";
-import { formatDuration } from "@/lib/format-duration";
 import { describeFlightStatus, type FlightStatus } from "@/lib/flight-status";
 import { describeNotableWeather } from "@/lib/metar-words";
 import {
@@ -271,9 +270,10 @@ export function StatusBlock({
 }
 
 /**
- * Where the aircraft is coming from and going to, how far along it is,
- * and when it took off and should land. Every state keeps the same height
- * so nothing below moves when the route arrives.
+ * Where the aircraft is coming from and going to, how far along it is, and
+ * when it was seen taking off. The time left is in the status line above,
+ * so it is not said twice. Every state of the row keeps one height, so
+ * nothing below moves when the route arrives.
  *
  * @param now The time the aircraft was last reported, in milliseconds.
  */
@@ -283,17 +283,13 @@ export function RouteBlock({
   now,
 }: {
   routeInfo: FlightRouteInfo;
-  status: Pick<FlightStatus, "progress" | "minutesRemaining" | "phase">;
+  status: Pick<FlightStatus, "progress">;
   now: number;
 }) {
   const origin = routeInfo.available ? formatAirportCode(routeInfo.origin) : "";
   const destination = formatAirportCode(routeInfo.destination);
   const departedAt = routeInfo.departedAt;
   const progress = destination ? status.progress : null;
-  const lands =
-    destination && status.minutesRemaining !== null && status.phase !== "landed"
-      ? `Lands in about ${formatDuration(status.minutesRemaining, { estimate: true })}`
-      : null;
 
   return (
     <section aria-label="Route" className="px-5 py-4">
@@ -317,29 +313,26 @@ export function RouteBlock({
               </p>
             )}
           </div>
-          <div
-            className="mt-3 h-1 overflow-hidden rounded-full bg-card"
-            role={progress !== null ? "progressbar" : undefined}
-            aria-label={progress !== null ? "Share of the route flown" : undefined}
-            aria-valuemin={progress !== null ? 0 : undefined}
-            aria-valuemax={progress !== null ? 100 : undefined}
-            aria-valuenow={progress !== null ? Math.round(progress * 100) : undefined}
-          >
-            {progress !== null && (
+          {progress !== null && (
+            <div
+              className="mt-3 h-1 overflow-hidden rounded-full bg-card"
+              role="progressbar"
+              aria-label="Share of the route flown"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)}
+            >
               <div
                 className="h-full origin-left rounded-full bg-tint transition-transform duration-700"
                 style={{ transform: `scaleX(${progress})` }}
               />
-            )}
-          </div>
-          <div className="mt-1.5 flex justify-between gap-3 text-label text-subtle">
-            <span className="truncate">
-              {departedAt !== null
-                ? formatTimeSinceTakeoff(departedAt, now)
-                : "Reported route"}
-            </span>
-            {lands && <span className="truncate text-right">{lands}</span>}
-          </div>
+            </div>
+          )}
+          {departedAt !== null && (
+            <p className="mt-1.5 truncate text-label text-subtle">
+              {formatTimeSinceTakeoff(departedAt, now)}
+            </p>
+          )}
         </>
       ) : (
         <p className="flex h-11 items-center text-small text-subtle">

@@ -3,42 +3,19 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import {
   centerLngLatForScreenOffset,
-  DEFAULT_ZOOM,
+  framingZoom,
   projectLngLatElevationPixelDelta,
 } from "./camera-controller-utils";
-import { cameraHeightMeters } from "./altitude-projection";
 import type { FpvDrawnPosition } from "./flight-layer-constants";
 
 /** Following from further out than this first brings the aircraft closer. */
 const FOLLOW_MIN_ZOOM = 7.5;
 const FOLLOW_ENTRY_MS = 900;
-/**
- * The camera stays at least this many times the aircraft's drawn height
- * above the ground, so a high aircraft is seen from above, not beside.
- */
-const CAMERA_HEADROOM = 2.5;
 /** Below this, a move is too small to be worth a camera update. */
 const MOVE_EPSILON_DEG = 1e-7;
 
 /** Gestures that take the camera back from the follow. */
 const PAN_EVENTS = ["dragstart"] as const;
-
-/**
- * The closest zoom that keeps the camera well above the aircraft as drawn,
- * and no closer than the map's usual city view.
- */
-function followZoom(map: maplibregl.Map, drawn: FpvDrawnPosition): number {
-  const zoom = map.getZoom();
-  const height = cameraHeightMeters(
-    zoom,
-    drawn.lat,
-    map.getCanvas().clientHeight,
-    map.getPitch(),
-  );
-  const needed = drawn.elevation * CAMERA_HEADROOM;
-  if (!(height > 0) || needed <= 0) return DEFAULT_ZOOM;
-  return Math.min(DEFAULT_ZOOM, zoom - Math.log2(needed / height));
-}
 
 /**
  * Where to put the map's center so the aircraft, drawn above its ground
@@ -130,7 +107,7 @@ export function useFollowCamera(
 
       if (!entered) {
         entered = true;
-        const target = followZoom(map, drawn);
+        const target = framingZoom(map, drawn.lat, drawn.elevation);
         const zoom = map.getZoom();
         if (zoom > target + 0.25 || zoom < Math.min(target, FOLLOW_MIN_ZOOM)) {
           map.easeTo({

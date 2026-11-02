@@ -136,9 +136,6 @@ export const AirportInfoCard = memo(function AirportInfoCard({
           elevationFt={airport.elevation_ft}
           unitSystem={settings.unitSystem}
           runways={runways.length}
-          arrivals={arrivals}
-          departures={departures}
-          overflights={board.overflights.length}
         />
 
         <Tabs

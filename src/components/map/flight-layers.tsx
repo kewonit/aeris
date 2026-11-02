@@ -73,7 +73,6 @@ import {
   metersPerPixel,
 } from "./aircraft-size";
 import { preloadAllModels } from "./aircraft-model-mapping";
-import { buildRouteAheadLayer } from "./route-ahead-layer";
 import { publishHover } from "./hover-store";
 import { aircraftElevationMeters } from "./altitude-projection";
 import {
@@ -140,7 +139,6 @@ export function FlightLayers({
   fpvDrawnRef,
   followIcao24 = null,
   followDrawnRef,
-  routeAhead = null,
   isDark = true,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
@@ -226,8 +224,6 @@ export function FlightLayers({
   const fpvIcao24Ref = useRef(fpvIcao24);
   const fpvDrawnRefRef = useRef(fpvDrawnRef);
   const followIcao24Ref = useRef(followIcao24);
-  const routeAheadRef = useRef(routeAhead);
-  const isDarkRef = useRef(isDark);
   const followDrawnRefRef = useRef(followDrawnRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
@@ -262,8 +258,6 @@ export function FlightLayers({
     fpvDrawnRefRef.current = fpvDrawnRef;
     followIcao24Ref.current = followIcao24;
     followDrawnRefRef.current = followDrawnRef;
-    routeAheadRef.current = routeAhead;
-    isDarkRef.current = isDark;
     setAltitudeTheme(isDark ? "dark" : "light");
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
@@ -291,7 +285,6 @@ export function FlightLayers({
     fpvDrawnRef,
     followIcao24,
     followDrawnRef,
-    routeAhead,
     isDark,
   ]);
 
@@ -1244,28 +1237,6 @@ export function FlightLayers({
           traffic.layers = layers;
         }
         frameLayers.push(...traffic.layers);
-
-        // The selected aircraft's way ahead, leaving it where it is drawn.
-        const routeAheadPoints = routeAheadRef.current;
-        const selectedForRoute = selectedIcao24Ref.current?.toLowerCase() ?? null;
-        if (routeAheadPoints && selectedForRoute && !fpvId && layersVisible) {
-          const drawnSelected = interpolatedMapRef.current.get(selectedForRoute);
-          frameLayers.push(
-            buildRouteAheadLayer(
-              routeAheadPoints,
-              drawnSelected &&
-                drawnSelected.longitude != null &&
-                drawnSelected.latitude != null
-                ? {
-                    lng: drawnSelected.longitude,
-                    lat: drawnSelected.latitude,
-                    altitudeMeters: drawnSelected.baroAltitude,
-                  }
-                : null,
-              { altitudeDisplayMode: altitudeMode, dark: isDarkRef.current },
-            ),
-          );
-        }
 
         if (followed && layersVisible) {
           const frame = visualFrameRef.current;

@@ -1,4 +1,3 @@
-import type { RoutePoint } from "@/lib/route-ahead";
 import type { MutableRefObject } from "react";
 import { type MapboxOverlay } from "@deck.gl/mapbox";
 import { type PickingInfo } from "@deck.gl/core";
@@ -79,8 +78,6 @@ export type FlightLayerProps = {
   /** The followed aircraft, whose drawn position is shared like FPV's. */
   followIcao24?: string | null;
   followDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
-  /** The selected aircraft's way ahead, drawn dashed from where it is. */
-  routeAhead?: RoutePoint[] | null;
   /** Whether the map is dark, for the colour of lines drawn on it. */
   isDark?: boolean;
 };

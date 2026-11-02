@@ -94,9 +94,11 @@ test("panel visual offset reverses and bounds the elevation delta", () => {
     400,
   ]);
   assert.deepEqual(panelVisualOffset({ dx: 900, dy: -900 }, 1_000, 800), [
-    -680,
+    -850,
     680,
   ]);
+  // A phone held upright can be lifted further than it is wide.
+  assert.deepEqual(panelVisualOffset({ dx: 0, dy: -500 }, 390, 844), [-0, 500]);
 });
 
 test("panel padding uses the normalized inset only while open", () => {

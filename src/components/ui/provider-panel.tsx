@@ -139,14 +139,21 @@ export type ProviderTriggerProps = {
   rateLimited: boolean;
   /** Seconds until the feed is asked again, while it is busy. */
   retryIn?: number;
+  /** Aircraft in the feed right now. */
+  flightCount: number;
   onClick: () => void;
 };
 
+/**
+ * "adsb.fi · 203 aircraft", which opens the feed picker. On a phone a
+ * healthy feed shows only the count; trouble is always spelled out.
+ */
 export function ProviderTrigger({
   source,
   loading,
   rateLimited,
   retryIn = 0,
+  flightCount,
   onClick,
 }: ProviderTriggerProps) {
   const label = rateLimited
@@ -155,33 +162,38 @@ export function ProviderTrigger({
       : "Feed busy"
     : loading && !source
       ? "Connecting…"
-      : source
-        ? (SOURCE_LABELS[source] ?? source)
-        : "Connecting…";
-
-  const healthy = !rateLimited && Boolean(source) && source !== "none";
-  const tone =
-    rateLimited || source === "opensky"
-      ? "bg-warning"
       : source === "none"
-        ? "bg-danger"
-        : loading && !source
-          ? "bg-subtle"
-          : "bg-arrival";
+        ? "No feed"
+        : source
+          ? (SOURCE_LABELS[source] ?? source)
+          : "Connecting…";
+  const healthy = !rateLimited && Boolean(source) && source !== "none" && source !== "opensky";
+  const tone = healthy
+    ? "text-muted-foreground"
+    : source === "none"
+      ? "text-danger"
+      : rateLimited || source === "opensky"
+        ? "text-warning"
+        : "text-subtle";
+  const count = `${flightCount.toLocaleString()} aircraft`;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 transition-colors hover:bg-card hover:text-foreground ${
-        rateLimited ? "text-warning" : "text-muted-foreground"
-      }`}
-      aria-label={`Data source: ${label}`}
+      className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 rounded-full px-2.5 transition-colors hover:bg-card"
+      aria-label={`${label}, ${count}. Choose the flight feed`}
       aria-haspopup="dialog"
     >
-      <span className={`size-1.5 rounded-full ${tone}`} aria-hidden="true" />
-      {/* On a phone a healthy feed is just its dot; trouble is spelled out. */}
-      <span className={healthy ? "hidden sm:inline" : undefined}>{label}</span>
+      <span className={`truncate ${tone} ${healthy ? "hidden sm:inline" : ""}`}>
+        {label}
+      </span>
+      <span className="hidden text-subtle sm:inline" aria-hidden="true">
+        ·
+      </span>
+      <span className={`text-muted-foreground ${healthy ? "" : "hidden sm:inline"}`}>
+        {count}
+      </span>
     </button>
   );
 }
