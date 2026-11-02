@@ -6,6 +6,8 @@ import { PRESS_SCALE } from "@/lib/motion";
 
 /** The one surface for everything that floats over the map (globals.css). */
 export const FLOATING_SURFACE = "aeris-float";
+/** The frosted version, for navigation only (globals.css). */
+export const NAV_SURFACE = "aeris-float aeris-glass";
 
 /** A round 44px control that sits on the map. */
 export const MapButton = forwardRef<
@@ -17,7 +19,7 @@ export const MapButton = forwardRef<
       ref={ref}
       type="button"
       whileTap={{ scale: PRESS_SCALE }}
-      className={`grid size-11 shrink-0 place-items-center rounded-full ${FLOATING_SURFACE} transition-colors ${
+      className={`grid size-11 shrink-0 place-items-center rounded-full ${NAV_SURFACE} transition-colors ${
         active ? "text-tint" : "text-muted-foreground hover:text-foreground"
       } ${className}`}
       {...props}

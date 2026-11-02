@@ -103,7 +103,7 @@ export const StatusBar = memo(function StatusBar({
   const isAtcPlaying = atc.status === "playing";
   return (
     <div className="relative flex flex-col items-start gap-2">
-      <div className="flex h-11 max-w-[calc(100vw-7.5rem)] items-center sm:max-w-none gap-1 aeris-float rounded-full px-1.5 text-label">
+      <div className="flex h-11 max-w-[calc(100vw-7.5rem)] items-center sm:max-w-none gap-1 aeris-float aeris-glass rounded-full px-1.5 text-label">
         <ProviderTrigger
           source={source ?? null}
           loading={loading}

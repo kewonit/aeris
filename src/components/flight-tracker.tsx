@@ -191,6 +191,14 @@ function FlightTrackerInner({
   const isMobile = useIsMobile();
   const showAirspace = airspaceAvailable && settings.showAirspace;
 
+  // Frosted navigation can be turned off; the page root carries the choice.
+  useEffect(() => {
+    document.documentElement.toggleAttribute(
+      "data-solid-panels",
+      settings.solidPanels,
+    );
+  }, [settings.solidPanels]);
+
   // Sync document theme with current map style (dark/light)
   useEffect(() => {
     setTheme(mapStyle.dark ? "dark" : "light");

@@ -328,6 +328,40 @@
     inset 0 0 0 1px var(--border);
 }
 
+/* Navigation over the map is frosted: the search field, the round map
+   buttons and the status line. The fill alone is opaque enough to read
+   on any map, so the blur is only a finish, and it goes wherever it could
+   cost frames or legibility: on touch screens until a phone has been
+   measured, when the system asks for less transparency or more contrast,
+   without backdrop-filter, and with the Solid panels setting. Cards stay
+   solid, so numbers never sit over moving aircraft. */
+.aeris-glass {
+  background-color: color-mix(in oklab, var(--background) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+}
+
+@media (pointer: coarse), (prefers-reduced-transparency: reduce),
+  (prefers-contrast: more) {
+  .aeris-glass {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .aeris-glass {
+    background-color: var(--background);
+  }
+}
+
+:root[data-solid-panels] .aeris-glass {
+  background-color: var(--background);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Things that appear on their own, such as a chip or a menu, arrive the
    way dialogs do on kew.edbn.me: a short pop from just smaller. */
 .aeris-pop {

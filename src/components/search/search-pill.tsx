@@ -148,7 +148,7 @@ export const SearchPill = memo(function SearchPill({
         label="Search flights, airports and places"
         className="aeris-cmdk"
       >
-        <div className="flex h-11 items-center gap-2 aeris-float rounded-full pr-1 pl-4">
+        <div className="aeris-float aeris-glass flex h-11 items-center gap-2 rounded-full pr-1 pl-4">
           <Search className="size-4 shrink-0 text-subtle" aria-hidden="true" />
           <Command.Input
             ref={inputRef}

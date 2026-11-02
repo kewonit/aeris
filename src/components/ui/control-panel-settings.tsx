@@ -163,6 +163,13 @@ export function SettingsContent({
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
         />
+        <SettingRow
+          icon={<Layers className="h-4 w-4" />}
+          title="Solid panels"
+          description="No see-through behind the search field and map buttons"
+          checked={settings.solidPanels}
+          onChange={(v) => update("solidPanels", v)}
+        />
         <SegmentRow
           icon={<Eye className="h-4 w-4" />}
           title="Altitude mode"
