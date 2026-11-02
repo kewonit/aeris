@@ -209,7 +209,7 @@ test("search cache is scoped to the effective provider override", async () => {
     if (originalWindow) {
       Object.defineProperty(globalThis, "window", originalWindow);
     } else {
-      delete (globalThis as typeof globalThis & { window?: unknown }).window;
+      Reflect.deleteProperty(globalThis, "window");
     }
   }
 });
