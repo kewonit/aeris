@@ -66,6 +66,9 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAirportBoard } from "@/hooks/use-airport-board";
 import { AircraftCard } from "@/components/place/aircraft-card";
 import { FollowChip } from "@/components/chrome/follow-chip";
+import { HoverCard } from "@/components/chrome/hover-card";
+import { useRouteInfo } from "@/hooks/use-route-info";
+import { routeAheadPath } from "@/lib/route-ahead";
 import { SearchPill } from "@/components/search/search-pill";
 import {
   locationToCity,
@@ -385,6 +388,33 @@ function FlightTrackerInner({
   });
 
   const atc = useAtcStream();
+
+  // The selected aircraft's way ahead, from where it was last reported to
+  // its destination, when the reported route fits it.
+  const selectedRoute = useRouteInfo(fpvIcao24 ? null : selectedFlight);
+  const routeDestination =
+    selectedRoute.available && selectedRoute.destination
+      ? selectedRoute.destination
+      : null;
+  const routeAhead = useMemo(() => {
+    if (
+      !routeDestination ||
+      !selectedFlight ||
+      selectedFlight.onGround ||
+      selectedFlight.longitude == null ||
+      selectedFlight.latitude == null
+    ) {
+      return null;
+    }
+    return routeAheadPath(
+      {
+        lng: selectedFlight.longitude,
+        lat: selectedFlight.latitude,
+        altitudeMeters: selectedFlight.baroAltitude ?? selectedFlight.geoAltitude,
+      },
+      { lng: routeDestination.longitude, lat: routeDestination.latitude },
+    );
+  }, [routeDestination, selectedFlight]);
 
   const displayFlight = selectedFlight;
 
@@ -849,6 +879,8 @@ function FlightTrackerInner({
             fpvDrawnRef={fpvDrawnRef}
             followIcao24={followIcao24}
             followDrawnRef={followDrawnRef}
+            routeAhead={routeAhead}
+            isDark={mapStyle.dark}
           />
         </MapView>
       </div>
@@ -947,6 +979,8 @@ function FlightTrackerInner({
             />
           </div>
         )}
+
+        {!fpvIcao24 && <HoverCard hiddenFor={selectedIcao24} />}
 
         {/* While following with the card closed, a chip says so. */}
         {!fpvIcao24 && followFlight && selectedIcao24 !== followIcao24 && (
