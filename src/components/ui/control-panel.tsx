@@ -130,8 +130,9 @@ function PanelDialog({
     );
     if (focusable.length === 0) return;
 
-    const first = focusable[0];
-    first.focus();
+    // Focus lands on the dialog itself, so no control looks chosen before
+    // anyone has chosen it; Tab then moves into it.
+    dialog.focus({ preventScroll: true });
 
     function trapFocus(e: KeyboardEvent) {
       if (e.key !== "Tab") return;
@@ -142,7 +143,7 @@ function PanelDialog({
       const f = elements[0];
       const l = elements[elements.length - 1];
       if (e.shiftKey) {
-        if (document.activeElement === f) {
+        if (document.activeElement === f || document.activeElement === dialog) {
           e.preventDefault();
           l.focus();
         }
@@ -179,6 +180,8 @@ function PanelDialog({
         role="dialog"
         aria-modal="true"
         aria-label={CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
+        tabIndex={-1}
+        style={{ outline: "none" }}
       >
         <div className="flex flex-col sm:flex-row overflow-hidden rounded-lg sm:rounded-xl border border-border bg-popover shadow-lift h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}

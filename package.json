@@ -1,6 +1,6 @@
 {
   "name": "aeris",
-  "version": "0.8.9",
+  "version": "0.9.0",
   "description": "A live map of flights, with altitude shown in 3D.",
   "author": "kewonit",
   "license": "AGPL-3.0",
