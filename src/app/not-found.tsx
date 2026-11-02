@@ -1,75 +1,35 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Page Not Found",
-  description:
-    "The page you are looking for does not exist. Return to Aeris to track live flights in 3D.",
+  title: "Page not found",
+  description: "This page isn't here. Aeris is a live map of flights.",
   alternates: { canonical: null },
   robots: { index: false, follow: true },
 };
 
+/**
+ * A missing page, in the house style: the name, one line, and the way back
+ * to the map.
+ */
 export default function NotFound() {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100dvh",
-        background: "hsl(0 0% 0%)",
-        color: "hsl(0 0% 100%)",
-        fontFamily: "Inter, system-ui, sans-serif",
-        textAlign: "center",
-        padding: "2rem",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: "6rem",
-          fontWeight: 700,
-          margin: 0,
-          letterSpacing: "-2px",
-          opacity: 0.15,
-        }}
-      >
-        404
-      </h1>
-      <h2
-        style={{
-          fontSize: "1.5rem",
-          fontWeight: 600,
-          margin: "0.5rem 0",
-        }}
-      >
-        Page not found
-      </h2>
-      <p
-        style={{
-          fontSize: "1rem",
-          color: "hsl(0 0% 60%)",
-          maxWidth: "28rem",
-          marginTop: "0.5rem",
-        }}
-      >
-        The page you&apos;re looking for doesn&apos;t exist or has been moved.
-      </p>
-      <Link
-        href="/"
-        style={{
-          marginTop: "2rem",
-          padding: "0.75rem 2rem",
-          borderRadius: "0.5rem",
-          background: "hsl(0 0% 100%)",
-          color: "hsl(0 0% 0%)",
-          fontSize: "0.875rem",
-          fontWeight: 600,
-          textDecoration: "none",
-        }}
-      >
-        Back to Aeris
-      </Link>
-    </div>
+    <main className="grid min-h-dvh place-items-center bg-background px-6 text-foreground">
+      <div className="w-full max-w-96">
+        <p className="aeris-wordmark text-muted-foreground">aeris</p>
+        <h1 className="mt-8 text-title text-foreground">This page isn’t here.</h1>
+        <p className="mt-2 text-body text-muted-foreground">
+          The link may be old, or mistyped. The map is still live.
+        </p>
+        <Link
+          href="/"
+          className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-small text-background transition-opacity hover:opacity-90"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Back to the map
+        </Link>
+      </div>
+    </main>
   );
 }
