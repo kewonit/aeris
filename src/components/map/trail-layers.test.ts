@@ -9,12 +9,15 @@ import { aircraftColor } from "./aircraft-appearance";
 import type { AircraftScreenSize } from "./aircraft-size";
 import { metersPerPixel } from "./aircraft-size";
 import { horizontalDistanceFromLngLat } from "./flight-math";
-import type { TrailLead } from "./trail-geometry";
+import { getTrailGeometry, type TrailLead } from "./trail-geometry";
 import {
   buildTrailHead,
   buildTrailLayers,
   createTrailRenderCache,
+  easeHead,
+  type TrailHead,
   type TrailLayerParams,
+  type TrailRenderCache,
 } from "./trail-layers";
 
 function flight(overrides: Partial<FlightState> = {}): FlightState {
@@ -173,6 +176,104 @@ test("the head ends in the aircraft's own colour", () => {
   assert.deepEqual(head?.colors.at(-1), [r, g, b, LEAD.headAlpha]);
 });
 
+const METERS_PER_DEGREE = 111_320;
+/** Half a screen pixel at the test zoom, in metres. */
+const HALF_PIXEL = metersPerPixel(14, 37.5) / 2;
+
+/** Where a vertex lies, in metres east and north of the aircraft. */
+function fromAircraft([lng, lat]: number[], aircraft: FlightState): number[] {
+  return [
+    (lng - aircraft.longitude!) *
+      METERS_PER_DEGREE *
+      Math.cos((aircraft.latitude! * Math.PI) / 180),
+    (lat - aircraft.latitude!) * METERS_PER_DEGREE,
+  ];
+}
+
+/**
+ * Points along a head at these distances back from its tail end, in
+ * metres east and north of the aircraft: the head's shape as it is seen
+ * travelling with the aircraft.
+ */
+function shapeBehindTail(
+  path: number[][],
+  aircraft: FlightState,
+  distances = [40, 80, 160, 240, 320],
+): number[][] {
+  const local = path.map((vertex) => fromAircraft(vertex, aircraft));
+  return distances.map((distance) => {
+    let walked = 0;
+    for (let index = local.length - 1; index > 0; index -= 1) {
+      const [a, b] = [local[index], local[index - 1]];
+      const step = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (walked + step >= distance) {
+        const u = (distance - walked) / step;
+        return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+      }
+      walked += step;
+    }
+    return local[0];
+  });
+}
+
+function largestMove(a: number[][], b: number[][]): number {
+  return Math.max(
+    ...a.map((point, index) =>
+      Math.hypot(point[0] - b[index][0], point[1] - b[index][1]),
+    ),
+  );
+}
+
+/** An eastbound lead with a vertex about every 88 m, running on past -122. */
+const LONG_LEAD: TrailLead = {
+  path: Array.from({ length: 31 }, (_, index) => [
+    -122.02 + index * 0.001,
+    37.5,
+    2_960,
+  ]),
+  colors: Array.from({ length: 31 }, () => [200, 120, 80, 180]),
+  tangents: Array.from({ length: 31 }, () => [1, 0]),
+  headAlpha: 210,
+};
+/** 40 m north of the lead, so the join has to curve onto it. */
+const BESIDE_LEAD = 37.5 + 40 / METERS_PER_DEGREE;
+
+test("the join slides along the lead as the aircraft flies, without a jump at any vertex", () => {
+  let previous: number[][] | null = null;
+  // About 4.4 m a step, across several of the lead's vertices.
+  for (let step = 0; step <= 80; step += 1) {
+    const aircraft = flight({
+      longitude: -122 + step * 0.00005,
+      latitude: BESIDE_LEAD,
+    });
+    const head = buildTrailHead(LONG_LEAD, aircraft, SIZE, HEAD_OPTIONS);
+    assert.ok(head);
+    const shape = shapeBehindTail(head.path, aircraft);
+    if (previous) {
+      const move = largestMove(previous, shape);
+      assert.ok(move < HALF_PIXEL, `step ${step}: the join moved ${move} m`);
+    }
+    previous = shape;
+  }
+});
+
+test("the join never runs ahead of the aircraft's tail", () => {
+  for (const trueTrack of [90, 75, 105]) {
+    const aircraft = flight({ latitude: BESIDE_LEAD, trueTrack });
+    const head = buildTrailHead(LONG_LEAD, aircraft, SIZE, HEAD_OPTIONS);
+    assert.ok(head);
+    const heading = (trueTrack * Math.PI) / 180;
+    const ahead = (vertex: number[]) => {
+      const [east, north] = fromAircraft(vertex, aircraft);
+      return east * Math.sin(heading) + north * Math.cos(heading);
+    };
+    const tail = ahead(head.path.at(-1)!);
+    for (const vertex of head.path) {
+      assert.ok(ahead(vertex) <= tail + 0.01, `track ${trueTrack}`);
+    }
+  }
+});
+
 function eastbound(index: number): TrailSample {
   return {
     t: 1_000_000 + index * 5_000,
@@ -182,6 +283,75 @@ function eastbound(index: number): TrailSample {
     onGround: false,
   };
 }
+
+/** A sample on a steady right turn of about 11 km radius, 5 s apart. */
+function turning(index: number): TrailSample {
+  const angle = index * 0.06;
+  return {
+    t: 1_000_000 + index * 5_000,
+    lng: -122 + Math.sin(angle) * 0.125,
+    lat: 37.4 + Math.cos(angle) * 0.1,
+    alt: 3_000,
+    onGround: false,
+  };
+}
+
+/**
+ * The aircraft partway along that turn, flying along it, drawn 40 m north
+ * of the samples' line as an interpolated aircraft can be.
+ */
+function turningAircraft(index: number): FlightState {
+  const { lng, lat: onTurn } = turning(index);
+  const lat = onTurn + 40 / METERS_PER_DEGREE;
+  const angle = index * 0.06;
+  const east = Math.cos(angle) * 0.125 * Math.cos((lat * Math.PI) / 180);
+  const north = -Math.sin(angle) * 0.1;
+  const track = (Math.atan2(east, north) * 180) / Math.PI;
+  return flight({ longitude: lng, latitude: lat, trueTrack: (track + 360) % 360 });
+}
+
+test("a new sample does not move the join behind the aircraft", () => {
+  const cases = [
+    // Straight and level, 40 m beside the samples, 88 m short of the newest.
+    {
+      samples: Array.from({ length: 11 }, (_, index) => eastbound(index)),
+      aircraft: flight({
+        longitude: eastbound(9).lng - 0.001,
+        latitude: BESIDE_LEAD,
+      }),
+    },
+    // Turning, nearly at the newest sample, beside the samples' line.
+    {
+      samples: Array.from({ length: 11 }, (_, index) => turning(index)),
+      aircraft: turningAircraft(8.9),
+    },
+  ];
+  for (const [index, { samples, aircraft }] of cases.entries()) {
+    const headWith = (count: number) => {
+      const geometry = getTrailGeometry(
+        new Map(),
+        {
+          icao24: "abc123",
+          parts: [samples.slice(0, count)],
+          revision: count,
+          hasHistory: false,
+        },
+        {
+          windowMs: null,
+          altitudeDisplayMode: "realistic",
+          altColors: true,
+          defaultColor: HEAD_OPTIONS.defaultColor,
+          appearance: aircraft,
+        },
+      );
+      const head = buildTrailHead(geometry.lead!, aircraft, SIZE, HEAD_OPTIONS);
+      assert.ok(head);
+      return shapeBehindTail(head.path, aircraft);
+    };
+    const move = largestMove(headWith(10), headWith(11));
+    assert.ok(move < HALF_PIXEL, `case ${index}: the join moved ${move} m`);
+  }
+});
 
 function trackFor(icao24: string, revision: number): TrailTrack {
   return {
@@ -209,6 +379,7 @@ function layerParams(overrides: Partial<TrailLayerParams> = {}): TrailLayerParam
     thickness: 1,
     opacity: 1,
     cache: createTrailRenderCache(),
+    now: 0,
     ...overrides,
   };
 }
@@ -218,6 +389,82 @@ function layerData(layers: ReturnType<typeof buildTrailLayers>, id: string) {
   assert.ok(layer, id);
   return layer.props.data as unknown[];
 }
+
+test("when a new sample reshapes the join, it eases there over a quarter second", () => {
+  const aircraft = turningAircraft(8.9);
+  const samples = Array.from({ length: 10 }, (_, index) => turning(index));
+  // The next sample shows a harder turn than the one so far.
+  const harder = turning(10);
+  harder.lat -= 300 / METERS_PER_DEGREE;
+  const trackOf = (parts: TrailSample[], revision: number): TrailTrack => ({
+    icao24: "abc123",
+    parts: [parts],
+    revision,
+    hasHistory: false,
+  });
+  const headAt = (cache: TrailRenderCache, track: TrailTrack, now: number) => {
+    const layers = buildTrailLayers(
+      layerParams({
+        flights: [aircraft],
+        trailMap: new Map([["abc123", track]]),
+        cache,
+        now,
+      }),
+    );
+    const [head] = layerData(layers, "flight-trail-heads") as TrailHead[];
+    return shapeBehindTail(head.path, aircraft);
+  };
+  const before = trackOf(samples, 1);
+  const after = trackOf([...samples, harder], 2);
+  const oldShape = headAt(createTrailRenderCache(), before, 0);
+  const newShape = headAt(createTrailRenderCache(), after, 0);
+  assert.ok(largestMove(oldShape, newShape) > 1, "the sample moves the join");
+
+  const cache = createTrailRenderCache();
+  headAt(cache, before, 0);
+  // Drawn through the new head's vertices, the old shape is cut by chords
+  // a few centimetres short.
+  assert.ok(largestMove(headAt(cache, after, 1_000), oldShape) < 0.1);
+  const halfway = headAt(cache, after, 1_125);
+  assert.ok(largestMove(halfway, oldShape) > 0.1);
+  assert.ok(largestMove(halfway, newShape) > 0.1);
+  assert.ok(largestMove(headAt(cache, after, 1_250), newShape) < 0.01);
+});
+
+test("an easing join still starts where the trail now ends", () => {
+  const from: TrailHead = {
+    icao24: "abc123",
+    path: [
+      [-122.02, 37.5, 3_000],
+      [-122.01, 37.501, 3_000],
+      [-122, 37.5, 3_000],
+    ],
+    colors: [
+      [10, 10, 10, 100],
+      [10, 10, 10, 150],
+      [10, 10, 10, 200],
+    ],
+  };
+  const to: TrailHead = {
+    icao24: "abc123",
+    path: [
+      [-122.015, 37.5, 3_000],
+      [-122.008, 37.5, 3_000],
+      [-122, 37.5, 3_000],
+    ],
+    colors: [
+      [20, 20, 20, 120],
+      [20, 20, 20, 160],
+      [20, 20, 20, 200],
+    ],
+  };
+  const eased = easeHead(from, to, 0);
+  assert.deepEqual(eased.path[0], to.path[0]);
+  assert.deepEqual(eased.colors[0], to.colors[0]);
+  assert.deepEqual(eased.path.at(-1), to.path.at(-1));
+  assert.notDeepEqual(eased.path[1], to.path[1]);
+  assert.deepEqual(easeHead(from, to, 1), to);
+});
 
 test("trails are drawn only for aircraft on screen, and unchanged trails keep their data", () => {
   const params = layerParams();

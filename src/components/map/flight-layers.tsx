@@ -1208,6 +1208,7 @@ export function FlightLayers({
           altitudeDisplayMode: altitudeMode,
           defaultColor: DEFAULT_COLOR,
           opacity: globeFade,
+          now,
         };
         const modelParams = {
           interpolatedMap: interpolatedMapRef.current,

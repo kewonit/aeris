@@ -64,6 +64,14 @@ const SOFT_EDGE = [new SoftEdgeExtension()];
  */
 const LEAD_CLEARANCE_HALF_LENGTHS = 3;
 const LEAD_CLEARANCE_PX = 48;
+/** Halvings that place the join's start along a lead segment, to 1/4096. */
+const START_SEARCH_STEPS = 12;
+/**
+ * When a new sample reshapes the newest stretch of trail, as when the
+ * aircraft turns harder or eases off, the join eases from its old shape
+ * to its new one over this long rather than jumping.
+ */
+const JOIN_EASE_MS = 250;
 /**
  * A trail hidden by the height limit returns only once its aircraft is
  * this far below it, so one levelled off at the limit does not flicker.
@@ -76,15 +84,29 @@ export type TrailHead = {
   colors: Rgba[];
 };
 
+/** Which lead each aircraft's head was last drawn from. */
+type JoinState = {
+  lead: TrailLead;
+  /** The lead before the newest change, while the head eases off it. */
+  previous: TrailLead | null;
+  changedAt: number;
+};
+
 export type TrailRenderCache = {
   geometry: TrailGeometryCache;
   bodies: TrailBody[];
   /** Aircraft whose trails the height limit hid last frame. */
   aboveCeiling: Set<string>;
+  joins: Map<string, JoinState>;
 };
 
 export function createTrailRenderCache(): TrailRenderCache {
-  return { geometry: new Map(), bodies: [], aboveCeiling: new Set() };
+  return {
+    geometry: new Map(),
+    bodies: [],
+    aboveCeiling: new Set(),
+    joins: new Map(),
+  };
 }
 
 type HeadOptions = {
@@ -97,6 +119,46 @@ type HeadOptions = {
 function cubic(a: number, b: number, c: number, d: number, u: number) {
   const v = 1 - u;
   return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * d;
+}
+
+function lerpVertex(a: TrailVertex, b: TrailVertex, u: number): TrailVertex {
+  return [
+    a[0] + (b[0] - a[0]) * u,
+    a[1] + (b[1] - a[1]) * u,
+    a[2] + (b[2] - a[2]) * u,
+  ];
+}
+
+function lerpColor(a: Rgba, b: Rgba, u: number): Rgba {
+  return a.map((channel, index) => channel + (b[index] - channel) * u) as Rgba;
+}
+
+type Direction = [east: number, north: number];
+
+function normalized(east: number, north: number): Direction | null {
+  const length = Math.hypot(east, north);
+  return length > 0 ? [east / length, north / length] : null;
+}
+
+/**
+ * The trail's direction through a lead vertex: halfway between the way it
+ * arrives and the way it leaves, so the direction turns smoothly as the
+ * join's start passes the vertex.
+ */
+function vertexDirection(lead: TrailLead, index: number): Direction | null {
+  const arriving = lead.tangents[index];
+  const leaving = lead.tangents[index + 1];
+  if (!arriving || !leaving) return arriving ?? leaving ?? null;
+  return normalized(arriving[0] + leaving[0], arriving[1] + leaving[1]);
+}
+
+function blendDirections(
+  a: Direction | null,
+  b: Direction | null,
+  u: number,
+): Direction | null {
+  if (!a || !b) return a ?? b;
+  return normalized(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u);
 }
 
 /**
@@ -164,22 +226,47 @@ export function buildTrailHead(
     );
   };
 
-  // Drop the lead's newest vertices while the aircraft is over them, or
-  // they would end the trail beside the fuselage. A slow aircraft drawn
-  // far larger than life can cover all of it; the join then starts from
-  // the lead's first vertex, where the cached trail ends.
+  // Drop the lead's newest vertices while the aircraft is over them or
+  // ahead of it, or they would end the trail beside the fuselage. A slow
+  // aircraft drawn far larger than life can cover all of it; the join then
+  // starts from the lead's first vertex, where the cached trail ends.
   let startIndex = lead.path.length - 1;
   while (startIndex > 0 && !clearOfAircraft(lead.path[startIndex])) {
     startIndex -= 1;
   }
 
-  const start = lead.path[startIndex];
+  // The join leaves the trail exactly where the trail stops being clear of
+  // the aircraft, between the newest clear vertex and the next, so it
+  // slides along the trail as the aircraft flies rather than stepping from
+  // vertex to vertex.
+  let start = lead.path[startIndex];
+  let startColor = lead.colors[startIndex];
+  let tangent = vertexDirection(lead, startIndex);
+  let startBetweenVertices = false;
+  const next = startIndex + 1;
+  if (next < lead.path.length && clearOfAircraft(start)) {
+    const from = lead.path[startIndex];
+    const to = lead.path[next];
+    let clear = 0;
+    let blocked = 1;
+    for (let step = 0; step < START_SEARCH_STEPS; step += 1) {
+      const middle = (clear + blocked) / 2;
+      if (clearOfAircraft(lerpVertex(from, to, middle))) clear = middle;
+      else blocked = middle;
+    }
+    if (clear > 0) {
+      start = lerpVertex(from, to, clear);
+      startColor = lerpColor(lead.colors[startIndex], lead.colors[next], clear);
+      tangent = blendDirections(tangent, vertexDirection(lead, next), clear);
+      startBetweenVertices = true;
+    }
+  }
+
   const [startEast, startNorth] = local(start);
   const spanEast = tailEast - startEast;
   const spanNorth = tailNorth - startNorth;
   const span = Math.hypot(spanEast, spanNorth);
   if (!(span > 0)) return null;
-  const tangent = lead.tangents[startIndex];
   // A trail leaving away from the tail would loop, so it leaves towards it.
   const [leaveEast, leaveNorth] =
     tangent && tangent[0] * spanEast + tangent[1] * spanNorth > 0
@@ -201,10 +288,13 @@ export function buildTrailHead(
     : options.defaultColor;
   const [r, g, b] = aircraftColor(base, flight);
   const endColor: Rgba = [r, g, b, lead.headAlpha];
-  const startColor = lead.colors[startIndex];
 
   const path = lead.path.slice(0, startIndex + 1);
   const colors = lead.colors.slice(0, startIndex + 1);
+  if (startBetweenVertices) {
+    path.push(start);
+    colors.push(startColor);
+  }
   let keptEast = startEast;
   let keptNorth = startNorth;
   for (let step = 1; step <= HEAD_STEPS; step += 1) {
@@ -276,6 +366,8 @@ export type TrailLayerParams = HeadOptions & {
   cache: TrailRenderCache;
   /** Tells these layers apart from another set built the same frame. */
   idSuffix?: string;
+  /** The frame's time in milliseconds, which paces the join's easing. */
+  now: number;
 };
 
 /** Whether an aircraft is open or followed, and so always keeps its trail. */
@@ -310,6 +402,93 @@ function isAboveCeiling(
   return altitude > limit;
 }
 
+function joinFor(
+  joins: Map<string, JoinState>,
+  icao24: string,
+  lead: TrailLead,
+  now: number,
+): JoinState {
+  const join = joins.get(icao24);
+  if (!join) {
+    const fresh = { lead, previous: null, changedAt: now };
+    joins.set(icao24, fresh);
+    return fresh;
+  }
+  if (join.lead !== lead) {
+    join.previous = join.lead;
+    join.lead = lead;
+    join.changedAt = now;
+  }
+  return join;
+}
+
+/** Each vertex's distance back along the path from its end, in metres. */
+function distancesFromEnd(path: TrailVertex[]): number[] {
+  const metersPerLng =
+    METERS_PER_DEGREE * Math.cos((path[path.length - 1][1] * Math.PI) / 180);
+  const distances = new Array<number>(path.length);
+  distances[path.length - 1] = 0;
+  for (let index = path.length - 2; index >= 0; index -= 1) {
+    const [a, b] = [path[index], path[index + 1]];
+    distances[index] =
+      distances[index + 1] +
+      Math.hypot(
+        (b[0] - a[0]) * metersPerLng,
+        (b[1] - a[1]) * METERS_PER_DEGREE,
+      );
+  }
+  return distances;
+}
+
+/**
+ * A head partway from one shape to another. Both end at the same tail, and
+ * each point of the new head is drawn partway back to the point the same
+ * distance from the tail on the old one. Towards the far end, where both
+ * run along the cached trail, the new head takes over, so the head always
+ * meets the trail where it now ends.
+ *
+ * @param share How far the head has eased from `from` to `to`, 0 to 1.
+ */
+export function easeHead(
+  from: TrailHead,
+  to: TrailHead,
+  share: number,
+): TrailHead {
+  const fromDistances = distancesFromEnd(from.path);
+  const toDistances = distancesFromEnd(to.path);
+  const length = toDistances[0];
+  if (!(length > 0) || share >= 1) return to;
+
+  const path: TrailVertex[] = [];
+  const colors: Rgba[] = [];
+  let segment = from.path.length - 2;
+  for (let index = to.path.length - 1; index >= 0; index -= 1) {
+    const distance = toDistances[index];
+    // Walk back along the old head to the segment this distance lies on.
+    while (segment > 0 && fromDistances[segment] < distance) segment -= 1;
+    const far = Math.min(1, Math.max(0, (2 * distance) / length - 1));
+    const keep =
+      segment >= 0 && distance <= fromDistances[0]
+        ? (1 - share) * (1 - far * far * (3 - 2 * far))
+        : 0;
+    if (keep <= 0) {
+      path.push(to.path[index]);
+      colors.push(to.colors[index]);
+      continue;
+    }
+    const near = fromDistances[segment + 1];
+    const span = fromDistances[segment] - near;
+    const u = span > 0 ? (distance - near) / span : 0;
+    const old = lerpVertex(from.path[segment + 1], from.path[segment], u);
+    const oldColor = lerpColor(from.colors[segment + 1], from.colors[segment], u);
+    path.push(lerpVertex(to.path[index], old, keep));
+    colors.push(lerpColor(to.colors[index], oldColor, keep));
+  }
+  path.reverse();
+  colors.reverse();
+  return { icao24: to.icao24, path, colors };
+}
+
 export function buildTrailLayers(params: TrailLayerParams) {
   const bodies: TrailBody[] = [];
   const heads: TrailHead[] = [];
@@ -342,22 +521,28 @@ export function buildTrailLayers(params: TrailLayerParams) {
     bodies.push(...geometry.bodies);
 
     const size = params.aircraftSizes.get(flight.icao24);
-    const head =
-      geometry.lead && size
-        ? buildTrailHead(
-            geometry.lead,
-            flight,
-            size,
-            params,
-            params.pitchByIcao.get(flight.icao24),
-          )
-        : null;
+    if (!geometry.lead || !size) continue;
+    const pitch = params.pitchByIcao.get(flight.icao24);
+    let head = buildTrailHead(geometry.lead, flight, size, params, pitch);
+    const join = joinFor(params.cache.joins, flight.icao24, geometry.lead, params.now);
+    if (head && join.previous) {
+      const eased = (params.now - join.changedAt) / JOIN_EASE_MS;
+      const old =
+        eased < 1
+          ? buildTrailHead(join.previous, flight, size, params, pitch)
+          : null;
+      if (old) head = easeHead(old, head, eased * eased * (3 - 2 * eased));
+      else join.previous = null;
+    }
     if (head) heads.push(head);
   }
 
   params.cache.aboveCeiling = aboveCeiling;
   for (const icao24 of params.cache.geometry.keys()) {
     if (!drawn.has(icao24)) params.cache.geometry.delete(icao24);
+  }
+  for (const icao24 of params.cache.joins.keys()) {
+    if (!drawn.has(icao24)) params.cache.joins.delete(icao24);
   }
 
   // Keep the previous array while no trail changed, so deck.gl does not
