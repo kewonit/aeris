@@ -41,7 +41,7 @@ test("PhotoBanner keeps its space while the photo lookup runs", () => {
   assert.doesNotMatch(html, /<img/);
 });
 
-test("PhotoBanner keeps its frame without a usable photo", () => {
+test("PhotoBanner leaves no empty frame without a usable photo", () => {
   const missing = renderToStaticMarkup(
     createElement(PhotoBanner, { ...BASE, photo: null, loading: false }),
   );
@@ -55,7 +55,6 @@ test("PhotoBanner keeps its frame without a usable photo", () => {
   );
 
   for (const html of [missing, failed]) {
-    assert.match(html, /No photo of this airport/);
-    assert.doesNotMatch(html, /<img/);
+    assert.equal(html, "");
   }
 });

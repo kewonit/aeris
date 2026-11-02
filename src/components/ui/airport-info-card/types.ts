@@ -10,6 +10,9 @@ export type MetarData = {
   clouds?: { cover: string; base?: number }[];
   /** Present weather, such as "-RA BR". */
   wxString?: string;
+  /** NOAA's field name for the flight category. */
+  fltCat?: string;
+  /** The same, as older code and tests spell it. */
   fltcat?: string;
   name?: string;
 };

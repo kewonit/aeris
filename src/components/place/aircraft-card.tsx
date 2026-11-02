@@ -152,7 +152,7 @@ export const AircraftCard = memo(function AircraftCard({
         now={flight.provenance.responseTime}
       />
 
-      <div className="flex gap-2 px-5 pt-1 pb-4">
+      <div data-sheet-peek className="flex gap-2 px-5 pt-1 pb-4">
         {onToggleFollow && (
           <ActionButton
             primary

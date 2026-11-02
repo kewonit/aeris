@@ -36,20 +36,20 @@ test("CardHeader omits the flight category when the METAR has none", () => {
   assert.doesNotMatch(html, />-</);
 });
 
-test("CardHeader shows sheet controls only on mobile", () => {
-  const sidebar = renderToStaticMarkup(
+test("CardHeader offers a close button only when it can close", () => {
+  const plain = renderToStaticMarkup(
     createElement(CardHeader, { airport: TEST_AIRPORT, icao: "KSFO", metar: null }),
   );
-  const sheet = renderToStaticMarkup(
+  const closable = renderToStaticMarkup(
     createElement(CardHeader, {
       airport: TEST_AIRPORT,
       icao: "KSFO",
-      metar: { rawOb: "KSFO", fltcat: "IFR" },
-      sheet: { collapsed: false, onToggleCollapse: () => {}, onClose: () => {} },
+      metar: { rawOb: "KSFO", fltCat: "IFR" },
+      onClose: () => {},
     }),
   );
 
-  assert.doesNotMatch(sidebar, /<button/);
-  assert.match(sheet, /Close airport details/);
-  assert.match(sheet, /IFR/);
+  assert.doesNotMatch(plain, /<button/);
+  assert.match(closable, /Close SFO/);
+  assert.match(closable, /IFR/);
 });

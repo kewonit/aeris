@@ -9,13 +9,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import {
-  AnimatePresence,
-  MotionConfig,
-  motion,
-  useDragControls,
-} from "motion/react";
-import { SHEET } from "@/lib/motion";
+import { AnimatePresence, MotionConfig } from "motion/react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -33,18 +27,16 @@ import { WeatherRadarLayer } from "@/components/map/weather-radar-layer";
 import { UserLocationMarker } from "@/components/map/user-location-marker";
 import { FlightLayers } from "@/components/map/flight-layers";
 import { FpvHud } from "@/components/ui/fpv-hud";
-/** Gap between the sidebar edge and the map chrome that shifts beside it. */
-const LEFT_CHROME_GAP_PX = 8;
 
 const ControlPanel = dynamic(() =>
   import("@/components/ui/control-panel").then((mod) => mod.ControlPanel),
 );
 import {
-  AERIS_LEFT_SIDEBAR_OVERLAP_PX,
-  AERIS_LEFT_SIDEBAR_WIDTH,
-  AerisLeftSidebar,
-  type AerisLeftPanel,
-} from "@/components/ui/aeris-left-sidebar";
+  PLACE_PANEL_WIDTH,
+  PlacePanel,
+  type PlacePanelKind,
+} from "@/components/place/place-panel";
+import { PlaceSheet } from "@/components/place/place-sheet";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
 import { StatusBar } from "@/components/ui/status-bar";
@@ -95,6 +87,7 @@ import {
   useSelection,
 } from "@/hooks/use-selection";
 import type { PendingAircraftLink } from "@/hooks/use-flight-monitors";
+import type { SelectionLink } from "@/components/flight-tracker-utils";
 import {
   computeAirspaceBounds,
   FPV_BOUNDS_SNAP_DEG,
@@ -157,19 +150,17 @@ function FlightTrackerInner({
   // Where the followed aircraft is drawn, for the camera that centres it.
   const followDrawnRef = useRef<FpvDrawnPosition | null>(null);
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
-  // A shared link is read once. An airport opens at once; an aircraft waits
+  // A shared link is read once and opened after the first render, so the
+  // server's HTML and the browser's first render agree. An aircraft waits
   // in pendingLinkRef until the feed or a lookup finds it.
   const [initialLink] = useState(resolveInitialLink);
-  const [selectionState, dispatch] = useSelection(
-    initialLink?.mode === "airport"
-      ? { ...INITIAL_SELECTION, selection: { kind: "airport", iata: initialLink.iata } }
-      : INITIAL_SELECTION,
-  );
+  const [selectionState, dispatch] = useSelection(INITIAL_SELECTION);
   const selectedIcao24 = selectedAircraftIcao24(selectionState);
   const selectedAirportIata = selectedAirportOf(selectionState);
   const followIcao24 = selectionState.follow;
   const fpvIcao24 = selectionState.fpv;
   const [leftPanelInsetPx, setLeftPanelInsetPx] = useState(0);
+  const [sheetPeekPx, setSheetPeekPx] = useState(0);
   const mapRef = useRef<MapRef>(null);
 
   const restoreMapFocus = useCallback(() => {
@@ -178,9 +169,7 @@ function FlightTrackerInner({
     });
   }, []);
 
-  const pendingLinkRef = useRef<PendingAircraftLink | null>(
-    initialLink && initialLink.mode !== "airport" ? initialLink : null,
-  );
+  const pendingLinkRef = useRef<SelectionLink | null>(initialLink);
 
   const [fpvSeedCenter, setFpvSeedCenter] = useState<{
     lng: number;
@@ -188,19 +177,11 @@ function FlightTrackerInner({
   } | null>(null);
 
   const lookupAbortRef = useRef<AbortController | null>(null);
-  // The phone's flight card is dragged from its photo and header only, so
-  // the rest of it scrolls normally.
-  const flightSheetDrag = useDragControls();
   const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
 
-  const linkedAirportCity = useMemo(
-    () =>
-      initialLink?.mode === "airport" ? findCityByCode(initialLink.iata) : null,
-    [initialLink],
-  );
-  const activeCity = cityOverride ?? linkedAirportCity ?? hydratedCity;
+  const activeCity = cityOverride ?? hydratedCity;
   const mapStyle = styleOverride ?? hydratedStyle;
   const { settings, update } = useSettings();
   const { setTheme } = useTheme();
@@ -369,6 +350,14 @@ function FlightTrackerInner({
     },
     [dispatch],
   );
+  const handleAirportLink = useCallback(
+    (iata: string) => {
+      const city = findCityByCode(iata);
+      if (city) setCityOverride(city);
+      dispatch({ type: "selectAirport", iata });
+    },
+    [dispatch],
+  );
   const handleFollowLost = useCallback(
     () => dispatch({ type: "unfollow" }),
     [dispatch],
@@ -389,6 +378,7 @@ function FlightTrackerInner({
     displayFlights,
     rateLimited,
     onLinkResolved: handleLinkResolved,
+    onAirportLink: handleAirportLink,
     onFollowLost: handleFollowLost,
     onSelectionLost: handleSelectionLost,
     endFpv,
@@ -406,7 +396,7 @@ function FlightTrackerInner({
 
   // One card at a time: the desktop sidebar shows whatever is selected,
   // and nothing while flying first person.
-  const leftPanelKind: AerisLeftPanel["kind"] | null =
+  const leftPanelKind: PlacePanelKind["kind"] | null =
     isMobile || fpvIcao24
       ? null
       : selectedIcao24
@@ -414,7 +404,7 @@ function FlightTrackerInner({
         : airportBoard.isActive
           ? "airport"
           : null;
-  const leftPanel = useMemo<AerisLeftPanel | null>(
+  const leftPanel = useMemo<PlacePanelKind | null>(
     () => (leftPanelKind ? { kind: leftPanelKind } : null),
     [leftPanelKind],
   );
@@ -737,18 +727,24 @@ function FlightTrackerInner({
     isFpv: fpvIcao24 !== null,
   });
 
-  // Whether to show the mobile bottom sheet flight card
-  const showMobileFlightCard = isMobile && !fpvIcao24 && !!displayFlight;
-  // Whether to show the mobile airport bottom sheet
-  const showMobileAirportCard =
-    isMobile && !fpvIcao24 && !displayFlight && airportBoard.isActive;
   const desktopLeftPanelOpen = !isMobile && !fpvIcao24 && leftPanel !== null;
+  // The camera frames what is open beside the desktop panel, or above the
+  // phone's sheet at rest.
+  const sheetOpen = isMobile && !fpvIcao24 && (!!displayFlight || airportBoard.isActive);
+  const panelKind: "flight" | "airport" | null = desktopLeftPanelOpen
+    ? (leftPanel?.kind ?? null)
+    : sheetOpen
+      ? displayFlight
+        ? "flight"
+        : "airport"
+      : null;
+  const insets = isMobile
+    ? { leftInsetPx: 0, bottomInsetPx: sheetPeekPx }
+    : { leftInsetPx: leftPanelInsetPx, bottomInsetPx: 0 };
   const panelCamera = useMemo(() => {
-    if (!desktopLeftPanelOpen || !leftPanel) {
-      return CLOSED_MAP_PANEL_CAMERA_STATE;
-    }
+    if (!panelKind) return CLOSED_MAP_PANEL_CAMERA_STATE;
 
-    if (leftPanel.kind === "flight") {
+    if (panelKind === "flight") {
       return createMapPanelCameraState({
         kind: "flight",
         // Keyed on the selection, not the flight object, so a poll that
@@ -757,7 +753,7 @@ function FlightTrackerInner({
         longitude: displayFlight?.longitude,
         latitude: displayFlight?.latitude,
         altitudeMeters: displayFlight?.baroAltitude ?? displayFlight?.geoAltitude,
-        leftInsetPx: leftPanelInsetPx,
+        ...insets,
       });
     }
 
@@ -769,26 +765,26 @@ function FlightTrackerInner({
       longitude: airportBoard.airport?.lng,
       latitude: airportBoard.airport?.lat,
       altitudeMeters: 0,
-      leftInsetPx: leftPanelInsetPx,
+      ...insets,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- insets are read through their parts
   }, [
     airportBoard.airport,
-    desktopLeftPanelOpen,
     displayFlight,
-    leftPanel,
-    leftPanelInsetPx,
+    panelKind,
+    insets.leftInsetPx,
+    insets.bottomInsetPx,
     selectedIcao24,
   ]);
-  // Until the sidebar reports its measured width, assume its CSS width.
+  // Until the panel reports where it ends, assume its CSS width.
   const leftPanelInset =
     leftPanelInsetPx > 0
       ? `${leftPanelInsetPx}px`
-      : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} - ${AERIS_LEFT_SIDEBAR_OVERLAP_PX}px)`;
+      : `calc(${PLACE_PANEL_WIDTH} + 1.75rem)`;
   const desktopPanelStyle = {
     "--panel-duration": `${MAP_PANEL_TRANSITION_MS}ms`,
     "--panel-ease": MAP_PANEL_EASE_CSS,
-    "--aeris-left-sidebar-inset": leftPanelInset,
-    "--aeris-left-chrome-shift": `calc(${leftPanelInset} + ${LEFT_CHROME_GAP_PX}px)`,
+    "--aeris-left-chrome-shift": `calc(${leftPanelInset} - 1rem)`,
     "--aeris-map-center-shift": `calc(${leftPanelInset} / 2)`,
   } as CSSProperties;
 
@@ -797,10 +793,7 @@ function FlightTrackerInner({
       className="relative h-dvh w-screen overflow-hidden bg-sidebar"
       style={desktopPanelStyle}
     >
-      <div
-        className="aeris-map-surface absolute inset-0 z-0 overflow-hidden bg-background"
-        data-panel-open={desktopLeftPanelOpen}
-      >
+      <div className="absolute inset-0 z-0 overflow-hidden bg-background">
         <MapView
           ref={mapRef}
           mapStyle={mapStyle.style}
@@ -865,8 +858,7 @@ function FlightTrackerInner({
             field spans the top, with the map menu inside it. */}
         {!fpvIcao24 && (
           <div
-            className="aeris-left-chrome pointer-events-auto absolute z-20 top-3 right-3 left-3 flex items-center gap-3 sm:top-4 sm:right-auto sm:left-4"
-            data-panel-open={desktopLeftPanelOpen}
+            className="pointer-events-auto absolute z-20 top-3 right-3 left-3 flex items-center gap-3 sm:top-4 sm:right-auto sm:left-4"
           >
             <span className="hidden sm:block">
               <Brand />
@@ -898,12 +890,8 @@ function FlightTrackerInner({
         )}
 
         {!fpvIcao24 && !isMobile && (
-          <AerisLeftSidebar
+          <PlacePanel
             leftPanel={leftPanel}
-            onClose={() => {
-              dispatch({ type: "clear" });
-              restoreMapFocus();
-            }}
             displayFlight={displayFlight}
             onCloseFlight={handleDeselectFlight}
             onToggleFpv={handleToggleFpv}
@@ -1006,60 +994,38 @@ function FlightTrackerInner({
           </div>
         )}
 
-        {/* Mobile flight card - native bottom sheet with drag-to-dismiss */}
+        {/* On a phone, what is open sits in one sheet over the map. */}
         <AnimatePresence>
-          {showMobileFlightCard && displayFlight && (
-            <motion.div
-              key={displayFlight.icao24}
-              className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
-              initial={{ y: "100%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
-              transition={SHEET}
-              drag="y"
-              dragListener={false}
-              dragControls={flightSheetDrag}
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0, bottom: 0.8 }}
-              onDragEnd={(_, info) => {
-                if (info.offset.y > 60 || info.velocity.y > 250) {
-                  handleDeselectFlight();
-                }
-              }}
+          {sheetOpen && (
+            <PlaceSheet
+              key="place-sheet"
+              label={displayFlight ? "Aircraft" : "Airport"}
+              contentKey={
+                displayFlight
+                  ? `flight:${displayFlight.icao24}`
+                  : `airport:${airportBoard.airport?.iata ?? ""}`
+              }
+              onDismiss={displayFlight ? handleDeselectFlight : handleAirportBoardClose}
+              onPeekChange={setSheetPeekPx}
             >
-              <div className="max-h-[85dvh] overflow-y-auto overscroll-contain rounded-xl bg-background shadow-lift">
-                <div
-                  className="flex h-5 touch-none justify-center pt-2"
-                  onPointerDown={(event) => flightSheetDrag.start(event)}
-                  aria-hidden="true"
-                >
-                  <span className="h-1 w-9 rounded-full bg-border" />
-                </div>
+              {displayFlight ? (
                 <AircraftCard
                   flight={displayFlight}
                   following={followIcao24 === displayFlight.icao24}
                   onToggleFpv={handleToggleFpv}
                   onToggleFollow={toggleFollow}
                   onClose={handleDeselectFlight}
-                  onGrab={(event) => flightSheetDrag.start(event)}
                 />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Mobile airport card - self-contained bottom sheet with drag-to-dismiss */}
-        <AnimatePresence>
-          {showMobileAirportCard && (
-            <AirportInfoCard
-              key={`airport-${airportBoard.airport?.iata ?? "none"}`}
-              board={airportBoard}
-              onSelectFlight={handleAirportBoardSelect}
-              selectedIcao24={selectedIcao24}
-              onClose={handleAirportBoardClose}
-              atc={atc}
-              variant="mobile"
-            />
+              ) : (
+                <AirportInfoCard
+                  board={airportBoard}
+                  onSelectFlight={handleAirportBoardSelect}
+                  selectedIcao24={selectedIcao24}
+                  onClose={handleAirportBoardClose}
+                  atc={atc}
+                />
+              )}
+            </PlaceSheet>
           )}
         </AnimatePresence>
       </div>

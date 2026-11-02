@@ -42,7 +42,7 @@ const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
 /** Zoomed out further than this, opening a card also zooms in to it. */
-const FAR_ZOOM = 6;
+const FAR_ZOOM = 7.5;
 const FAR_ZOOM_IN_MS = 1_600;
 
 
@@ -116,6 +116,7 @@ export function CameraController({
   const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
+  const previousPanelBottomRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
@@ -183,14 +184,17 @@ export function CameraController({
       return [lng, lat];
     };
     const insetChanged =
-      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
+      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5 ||
+      Math.abs(activePanel.bottomInsetPx - previousPanelBottomRef.current) > 0.5;
 
     if (!activePanel.open) {
       const shouldResetPadding =
         previousPanelFocusRef.current !== null ||
-        previousPanelInsetRef.current > 0;
+        previousPanelInsetRef.current > 0 ||
+        previousPanelBottomRef.current > 0;
       previousPanelFocusRef.current = null;
       previousPanelInsetRef.current = 0;
+      previousPanelBottomRef.current = 0;
 
       // Leaving the cockpit always pulls out to the aircraft, whatever is
       // pending: the camera would otherwise stay in the cockpit's pose.
@@ -226,6 +230,7 @@ export function CameraController({
     if (followsCityTransition) {
       previousPanelFocusRef.current = focusKey ?? null;
       previousPanelInsetRef.current = activePanel.leftInsetPx;
+      previousPanelBottomRef.current = activePanel.bottomInsetPx;
       return;
     }
 
@@ -262,6 +267,7 @@ export function CameraController({
 
     if (shouldCenter || isExitingFpv) previousPanelFocusRef.current = focusKey;
     previousPanelInsetRef.current = activePanel.leftInsetPx;
+    previousPanelBottomRef.current = activePanel.bottomInsetPx;
 
     const shouldCorrectFlightAltitude =
       activePanel.kind === "flight" &&
@@ -315,6 +321,7 @@ export function CameraController({
     panelCamera.focusKey,
     panelCamera.kind,
     panelCamera.leftInsetPx,
+    panelCamera.bottomInsetPx,
     hasPanelCoordinates,
     fpvKey,
     settings.altitudeDisplayMode,

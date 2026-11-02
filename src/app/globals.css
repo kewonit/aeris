@@ -177,47 +177,26 @@
 }
 
 @layer components {
-  /* The map slides aside for the desktop sidebar on the camera's curve.
+  /* The desktop panel floats over the map, so the map stays whole and the
+     chrome beside the panel moves along on the camera's curve.
      flight-tracker.tsx sets --panel-duration and --panel-ease from
      map/panel-camera.ts so both stay in step. */
-  .aeris-map-surface {
-    clip-path: inset(0 0 0 0 round 0);
-    transition: clip-path var(--panel-duration) var(--panel-ease);
-    will-change: clip-path;
-    contain: layout paint style;
-    isolation: isolate;
-  }
-
   .aeris-left-chrome {
-    transform: translate3d(0, 0, 0);
-    transition: transform var(--panel-duration) var(--panel-ease);
-    will-change: transform;
+    transition: translate var(--panel-duration) var(--panel-ease);
   }
 
   .aeris-map-centered-chrome {
-    transform: translate3d(-50%, 0, 0);
-    transition: transform var(--panel-duration) var(--panel-ease);
-    will-change: transform;
+    translate: -50% 0;
+    transition: translate var(--panel-duration) var(--panel-ease);
   }
 
   @media (min-width: 640px) {
-    .aeris-map-surface[data-panel-open="true"] {
-      clip-path: inset(
-        0 0 0 var(--aeris-left-sidebar-inset) round var(--radius-xl) 0 0
-          var(--radius-xl)
-      );
-    }
-
     .aeris-left-chrome[data-panel-open="true"] {
-      transform: translate3d(var(--aeris-left-chrome-shift), 0, 0);
+      translate: var(--aeris-left-chrome-shift) 0;
     }
 
     .aeris-map-centered-chrome[data-panel-open="true"] {
-      transform: translate3d(
-        calc(-50% + var(--aeris-map-center-shift)),
-        0,
-        0
-      );
+      translate: calc(-50% + var(--aeris-map-center-shift)) 0;
     }
   }
 

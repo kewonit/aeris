@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Building2 } from "lucide-react";
 import type { AirportPhoto } from "./types";
 
 type Props = {
@@ -13,9 +12,8 @@ type Props = {
 };
 
 /**
- * The airport's Wikipedia photo. The 16:9 frame and the credit line always
- * hold their space, so the card below never moves while the photo loads or
- * when there is none.
+ * The airport's Wikipedia photo. The 16:9 frame holds its space while the
+ * photo loads; when there is none, there is no empty frame either.
  */
 export function PhotoBanner({
   photo,
@@ -27,7 +25,7 @@ export function PhotoBanner({
   const usable = photo !== null && !errored;
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const loaded = usable && loadedUrl === photo.thumbUrl;
-  const showPlaceholder = !loading && !usable;
+  if (!loading && !usable) return null;
 
   return (
     <figure className="m-0">
@@ -46,17 +44,9 @@ export function PhotoBanner({
             className={`absolute inset-0 size-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
           />
         )}
-        {showPlaceholder && (
-          <Building2
-            className="absolute inset-0 m-auto size-8 text-border"
-            aria-hidden="true"
-          />
-        )}
       </div>
-      <figcaption className="h-7 truncate px-6 pt-2 text-micro text-subtle">
-        {showPlaceholder ? (
-          "No photo of this airport"
-        ) : loaded ? (
+      <figcaption className="h-7 truncate px-5 pt-2 text-micro text-subtle">
+        {loaded ? (
           <>
             Photo:{" "}
             <a

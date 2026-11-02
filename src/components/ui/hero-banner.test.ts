@@ -43,7 +43,7 @@ test("HeroBanner keeps its space while the photo lookup runs", () => {
   assert.doesNotMatch(html, /<img/);
 });
 
-test("HeroBanner keeps its frame when the lookup finds no photo", () => {
+test("HeroBanner leaves no empty frame when the lookup finds no photo", () => {
   const html = renderToStaticMarkup(
     createElement(HeroBanner, {
       photo: null,
@@ -52,6 +52,5 @@ test("HeroBanner keeps its frame when the lookup finds no photo", () => {
     }),
   );
 
-  assert.match(html, /No photo of this aircraft/);
-  assert.doesNotMatch(html, /<img/);
+  assert.equal(html, "");
 });

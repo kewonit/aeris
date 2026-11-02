@@ -7,6 +7,8 @@ export type MapPanelCameraState = {
   coordinates: [number, number] | null;
   altitudeMeters: number | null;
   leftInsetPx: number;
+  /** The phone's sheet covers the bottom of the map by this much. */
+  bottomInsetPx: number;
 };
 
 export type MapPanelPadding = {
@@ -27,6 +29,7 @@ export const CLOSED_MAP_PANEL_CAMERA_STATE: MapPanelCameraState = {
   coordinates: null,
   altitudeMeters: null,
   leftInsetPx: 0,
+  bottomInsetPx: 0,
 };
 
 export function createMapPanelCameraState({
@@ -36,6 +39,7 @@ export function createMapPanelCameraState({
   latitude,
   altitudeMeters,
   leftInsetPx,
+  bottomInsetPx,
 }: {
   kind: MapPanelCameraKind;
   focusKey: string | null | undefined;
@@ -43,6 +47,7 @@ export function createMapPanelCameraState({
   latitude: number | null | undefined;
   altitudeMeters?: number | null;
   leftInsetPx: number | null | undefined;
+  bottomInsetPx?: number | null;
 }): MapPanelCameraState {
   return {
     open: true,
@@ -54,6 +59,7 @@ export function createMapPanelCameraState({
         ? Math.max(0, altitudeMeters)
         : null,
     leftInsetPx: normalizeLeftInset(leftInsetPx),
+    bottomInsetPx: normalizeLeftInset(bottomInsetPx),
   };
 }
 
@@ -63,7 +69,7 @@ export function mapPanelPadding(
   return {
     top: 0,
     right: 0,
-    bottom: 0,
+    bottom: state.open ? state.bottomInsetPx : 0,
     left: state.open ? state.leftInsetPx : 0,
   };
 }

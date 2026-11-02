@@ -31,7 +31,8 @@ export function WeatherSection({ metar, loading, hasIcao, unitSystem }: Props) {
   const clouds = metar.clouds
     ?.map(
       (layer) =>
-        `${cloudCoverLabel(layer.cover)}${formatCloudBaseHundredsFeet(layer.base, unitSystem)}`,
+        // NOAA gives cloud bases in feet; the formatter takes hundreds.
+        `${cloudCoverLabel(layer.cover)}${formatCloudBaseHundredsFeet(layer.base != null ? layer.base / 100 : null, unitSystem)}`,
     )
     .join(" · ");
 

@@ -19,7 +19,7 @@ const FPV_MAX_ROLLOUT_MS = 45_000;
 export type PendingAircraftLink = Extract<SelectionLink, { icao24: string }>;
 
 export interface UseFlightMonitorsOptions {
-  pendingLinkRef: React.MutableRefObject<PendingAircraftLink | null>;
+  pendingLinkRef: React.MutableRefObject<SelectionLink | null>;
   fpvIcao24: string | null;
   fpvFlight: FlightState | null;
   followIcao24: string | null;
@@ -37,6 +37,8 @@ export interface UseFlightMonitorsOptions {
     flight: FlightState,
     remote: boolean,
   ) => void;
+  /** A shared link named an airport. */
+  onAirportLink: (iata: string) => void;
   /** The followed aircraft has left the feed. */
   onFollowLost: () => void;
   /** The selected aircraft has been missing from the feed for a minute. */
@@ -65,6 +67,7 @@ export function useFlightMonitors(
     displayFlights,
     rateLimited,
     onLinkResolved,
+    onAirportLink,
     onFollowLost,
     onSelectionLost,
     endFpv,
@@ -78,6 +81,11 @@ export function useFlightMonitors(
   useEffect(() => {
     const pending = pendingLinkRef.current;
     if (!pending || fpvIcao24) return;
+    if (pending.mode === "airport") {
+      pendingLinkRef.current = null;
+      onAirportLink(pending.iata);
+      return;
+    }
 
     const match = displayFlights.find(
       (f) => f.icao24.toLowerCase() === pending.icao24,
@@ -112,7 +120,7 @@ export function useFlightMonitors(
         });
       return () => controller.abort();
     }
-  }, [displayFlights, fpvIcao24, pendingLinkRef, onLinkResolved]);
+  }, [displayFlights, fpvIcao24, pendingLinkRef, onLinkResolved, onAirportLink]);
 
   // ── FPV landing and miss counting ────────────────────────────────
 
