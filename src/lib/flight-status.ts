@@ -84,6 +84,12 @@ const APPROACH_NM = 30;
 const APPROACH_CEILING_M = 10_000 * FEET;
 /** Below this ground speed the estimate would be noise. */
 const ETA_MIN_SPEED_MPS = 50 * KNOTS;
+/**
+ * The last stretch is flown slowing down toward landing speed, so it is
+ * timed at the mean of the current speed and a typical approach speed.
+ */
+const ARRIVAL_STRETCH_NM = 100;
+const APPROACH_SPEED_MPS = 150 * KNOTS;
 /** With this little time left, the aircraft is landing now. */
 const LANDING_NOW_MIN = 2;
 
@@ -256,6 +262,18 @@ function causeFor(input: FlightStatusInput): FlightStatus["cause"] {
   return null;
 }
 
+/**
+ * Minutes to cover `distanceNm` from a ground speed of `speed` m/s: the
+ * cruise part at that speed, the last stretch slowing toward an approach.
+ */
+export function estimateMinutesRemaining(distance: number, speed: number): number {
+  const arrival = Math.min(distance, ARRIVAL_STRETCH_NM);
+  const cruise = distance - arrival;
+  const arrivalSpeed = Math.min(speed, (speed + APPROACH_SPEED_MPS) / 2);
+  const seconds = (cruise * 1_852) / speed + (arrival * 1_852) / arrivalSpeed;
+  return seconds / 60;
+}
+
 /** The line for one aircraft, recomputed whenever its position updates. */
 export function describeFlightStatus(input: FlightStatusInput): FlightStatus {
   const origin = input.route?.mismatch ? null : (input.route?.origin ?? null);
@@ -277,7 +295,7 @@ export function describeFlightStatus(input: FlightStatusInput): FlightStatus {
     distances.destination !== null &&
     speed !== null &&
     speed >= ETA_MIN_SPEED_MPS
-      ? (distances.destination * 1_852) / speed / 60
+      ? estimateMinutesRemaining(distances.destination, speed)
       : null;
 
   let timing: string | null = null;

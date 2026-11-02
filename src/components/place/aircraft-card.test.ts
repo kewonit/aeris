@@ -4,7 +4,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { RouteSummary } from "./flight-card";
+import { RouteBlock } from "./aircraft-card";
 import type { FlightRouteInfo } from "@/hooks/use-route-info";
 
 const VALID_ROUTE: FlightRouteInfo = {
@@ -35,10 +35,11 @@ const VALID_ROUTE: FlightRouteInfo = {
 };
 
 const NOW = Date.UTC(2026, 9, 17, 18, 0);
+const CRUISING = { progress: null, minutesRemaining: null, phase: "cruising" } as const;
 
-test("RouteSummary labels a valid result as a reported route", () => {
+test("RouteBlock labels a valid result as a reported route", () => {
   const html = renderToStaticMarkup(
-    createElement(RouteSummary, { routeInfo: VALID_ROUTE, now: NOW }),
+    createElement(RouteBlock, { routeInfo: VALID_ROUTE, status: CRUISING, now: NOW }),
   );
 
   assert.match(html, /Reported route/);
@@ -48,23 +49,26 @@ test("RouteSummary labels a valid result as a reported route", () => {
   assert.doesNotMatch(html, />-</);
 });
 
-test("RouteSummary keeps its row while loading and when no route is reported", () => {
+test("RouteBlock keeps its row while loading and when no route is reported", () => {
   const loading = renderToStaticMarkup(
-    createElement(RouteSummary, {
+    createElement(RouteBlock, {
       routeInfo: { ...VALID_ROUTE, available: false, loading: true },
+      status: CRUISING,
       now: NOW,
     }),
   );
   const missing = renderToStaticMarkup(
-    createElement(RouteSummary, {
+    createElement(RouteBlock, {
       routeInfo: { ...VALID_ROUTE, available: false, origin: null, destination: null },
+      status: CRUISING,
       now: NOW,
     }),
   );
 
   const mismatch = renderToStaticMarkup(
-    createElement(RouteSummary, {
+    createElement(RouteBlock, {
       routeInfo: { ...VALID_ROUTE, available: false, mismatch: true },
+      status: CRUISING,
       now: NOW,
     }),
   );
@@ -75,30 +79,31 @@ test("RouteSummary keeps its row while loading and when no route is reported", (
   assert.doesNotMatch(missing, /SFO|JFK/);
 });
 
-test("RouteSummary says when the aircraft was seen taking off", () => {
+test("RouteBlock says when the aircraft was seen taking off", () => {
   const html = renderToStaticMarkup(
-    createElement(RouteSummary, {
+    createElement(RouteBlock, {
       routeInfo: { ...VALID_ROUTE, departedAt: NOW / 1_000 - 47 * 60 },
+      status: CRUISING,
       now: NOW,
     }),
   );
 
-  assert.match(html, />Route</);
   assert.doesNotMatch(html, /Reported route/);
   assert.match(html, /Took off 47 min ago/);
   assert.match(html, /SFO/);
   assert.match(html, /JFK/);
 });
 
-test("RouteSummary shows a seen departure when no destination is reported", () => {
+test("RouteBlock shows a seen departure when no destination is reported", () => {
   const html = renderToStaticMarkup(
-    createElement(RouteSummary, {
+    createElement(RouteBlock, {
       routeInfo: {
         ...VALID_ROUTE,
         destination: null,
         departedAt: NOW / 1_000 - 90 * 60,
         source: null,
       },
+      status: CRUISING,
       now: NOW,
     }),
   );
@@ -107,4 +112,18 @@ test("RouteSummary shows a seen departure when no destination is reported", () =
   assert.match(html, /Not reported/);
   assert.match(html, /Took off 1h 30m ago/);
   assert.doesNotMatch(html, /JFK/);
+});
+
+test("RouteBlock shows progress and a landing estimate once both ends are known", () => {
+  const html = renderToStaticMarkup(
+    createElement(RouteBlock, {
+      routeInfo: VALID_ROUTE,
+      status: { progress: 0.42, minutesRemaining: 71, phase: "cruising" },
+      now: NOW,
+    }),
+  );
+
+  assert.match(html, /role="progressbar"/);
+  assert.match(html, /aria-valuenow="42"/);
+  assert.match(html, /Lands in about 1h 10m/);
 });

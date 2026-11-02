@@ -12,9 +12,10 @@ import { X } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-const FlightCard = dynamic(() =>
-  import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
+const AircraftCard = dynamic(() =>
+  import("@/components/place/aircraft-card").then((mod) => mod.AircraftCard),
 );
 
 const AirportInfoCard = dynamic(() =>
@@ -45,6 +46,8 @@ type AerisLeftSidebarProps = {
   displayFlight: FlightState | null;
   onCloseFlight: () => void;
   onToggleFpv: (icao24: string) => void;
+  followIcao24: string | null;
+  onToggleFollow?: (icao24: string) => void;
   airportBoard: AirportBoardData;
   onSelectAirportFlight: (icao24: string) => void;
   selectedIcao24: string | null;
@@ -60,6 +63,8 @@ export function AerisLeftSidebar({
   displayFlight,
   onCloseFlight,
   onToggleFpv,
+  followIcao24,
+  onToggleFollow,
   airportBoard,
   onSelectAirportFlight,
   selectedIcao24,
@@ -150,6 +155,7 @@ export function AerisLeftSidebar({
         { "--aeris-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH } as CSSProperties
       }
     >
+      {snapshot?.kind !== "flight" && (
       <button
         type="button"
         onClick={handleCloseButton}
@@ -160,10 +166,22 @@ export function AerisLeftSidebar({
           <X className="size-4" aria-hidden="true" />
         </span>
       </button>
+      )}
 
       <div className="min-h-0 flex-1">
         {snapshot?.kind === "flight" ? (
-          <FlightCard flight={snapshot.flight} onToggleFpv={onToggleFpv} />
+          <ScrollArea className="h-full">
+            <AircraftCard
+              flight={snapshot.flight}
+              following={followIcao24 === snapshot.flight.icao24}
+              onToggleFollow={onToggleFollow}
+              onToggleFpv={onToggleFpv}
+              onClose={() => {
+                onCloseFlight();
+                onRestoreFocus();
+              }}
+            />
+          </ScrollArea>
         ) : snapshot?.kind === "airport" ? (
           <AirportInfoCard
             board={snapshot.board}

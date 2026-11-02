@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RouteAirport } from "./route-lookup";
-import { describeFlightStatus, type FlightStatusInput } from "./flight-status";
+import {
+  describeFlightStatus,
+  estimateMinutesRemaining,
+  type FlightStatusInput,
+} from "./flight-status";
 
 const FT = 0.3048;
 const KT = 0.514444;
@@ -164,4 +168,19 @@ test("too slow to estimate gives no time", () => {
   const s = status({ ...along(0.5), velocity: 30 * KT });
   assert.equal(s.timing, null);
   assert.equal(s.minutesRemaining, null);
+});
+
+test("the last hundred miles are timed slowing down", () => {
+  const knots = (kt: number) => kt * KT;
+  // 50 nm at 415 kt is about 7 minutes flat out, but the aircraft slows.
+  const near = estimateMinutesRemaining(50, knots(415));
+  assert.ok(near > 10 && near < 11.5, `got ${near}`);
+  // Far out, the cruise part runs at cruise speed.
+  const far = estimateMinutesRemaining(500, knots(480));
+  assert.ok(far > 65 && far < 72, `got ${far}`);
+  // Already slow: never faster than the current speed.
+  assert.equal(
+    Math.round(estimateMinutesRemaining(10, knots(140))),
+    Math.round((10 / 140) * 60),
+  );
 });

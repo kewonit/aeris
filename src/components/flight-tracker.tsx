@@ -70,7 +70,7 @@ import { useSelectedAircraft } from "@/hooks/use-selected-aircraft";
 import { useAtcStream } from "@/hooks/use-atc-stream";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAirportBoard } from "@/hooks/use-airport-board";
-import { MobileFlightToast } from "@/components/ui/mobile-flight-toast";
+import { AircraftCard } from "@/components/place/aircraft-card";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
@@ -818,6 +818,7 @@ function FlightTrackerInner({
             displayFlight={displayFlight}
             onCloseFlight={handleDeselectFlight}
             onToggleFpv={handleToggleFpv}
+            followIcao24={followIcao24}
             airportBoard={airportBoard}
             onSelectAirportFlight={handleAirportBoardSelect}
             selectedIcao24={selectedIcao24}
@@ -925,12 +926,22 @@ function FlightTrackerInner({
                 }
               }}
             >
-              <MobileFlightToast
-                flight={displayFlight}
-                onClose={handleDeselectFlight}
-                onToggleFpv={handleToggleFpv}
-                onGrab={(event) => flightSheetDrag.start(event)}
-              />
+              <div className="max-h-[85dvh] overflow-y-auto overscroll-contain rounded-xl bg-background shadow-lift">
+                <div
+                  className="flex h-5 touch-none justify-center pt-2"
+                  onPointerDown={(event) => flightSheetDrag.start(event)}
+                  aria-hidden="true"
+                >
+                  <span className="h-1 w-9 rounded-full bg-border" />
+                </div>
+                <AircraftCard
+                  flight={displayFlight}
+                  following={followIcao24 === displayFlight.icao24}
+                  onToggleFpv={handleToggleFpv}
+                  onClose={handleDeselectFlight}
+                  onGrab={(event) => flightSheetDrag.start(event)}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -8,6 +8,8 @@ export type MetarData = {
   visib?: number | string;
   altim?: number;
   clouds?: { cover: string; base?: number }[];
+  /** Present weather, such as "-RA BR". */
+  wxString?: string;
   fltcat?: string;
   name?: string;
 };

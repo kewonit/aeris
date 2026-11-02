@@ -43,6 +43,9 @@ const FOLLOW_EASE_MS = 2000;
 const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
+/** Zoomed out further than this, opening a card also zooms in to it. */
+const FAR_ZOOM = 6;
+const FAR_ZOOM_IN_MS = 1_600;
 
 
 /**
@@ -229,6 +232,7 @@ export function CameraController({
 
     if (!shouldCenter && !insetChanged && !isExitingFpv) return;
 
+    let zoomingIn = false;
     if (isExitingFpv) {
       cityTransitionTargetRef.current = null;
       map.easeTo(
@@ -240,10 +244,20 @@ export function CameraController({
         }),
       );
     } else {
+      // A card opened from a link or a far search can find the map zoomed
+      // out to the world; centring alone would leave the aircraft a dot.
+      zoomingIn = Boolean(shouldCenter && coordinates && map.getZoom() < FAR_ZOOM);
       map.easeTo({
         ...(shouldCenter && coordinates ? { center: coordinates } : {}),
         padding,
         ...panelMotion,
+        ...(zoomingIn
+          ? {
+              zoom: DEFAULT_ZOOM,
+              pitch: DEFAULT_PITCH,
+              duration: reduceMotion ? 0 : FAR_ZOOM_IN_MS,
+            }
+          : {}),
       });
     }
 
@@ -278,7 +292,9 @@ export function CameraController({
     // takes longer to do.
     const firstEaseMs = isExitingFpv
       ? FPV_EXIT_DURATION_MS
-      : MAP_PANEL_TRANSITION_MS;
+      : zoomingIn
+        ? FAR_ZOOM_IN_MS
+        : MAP_PANEL_TRANSITION_MS;
     let refinementTimer: number | null = null;
     const correctionTimer = window.setTimeout(() => {
       if (!easeToDrawnAircraft(PANEL_VISUAL_EASE_MS)) return;
