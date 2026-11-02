@@ -178,7 +178,7 @@ function PanelDialog({
         className="fixed inset-x-3 bottom-3 top-auto z-90 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-180 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-4"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="panel-dialog-title"
+        aria-label={CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
       >
         <div className="flex flex-col sm:flex-row overflow-hidden rounded-lg sm:rounded-xl border border-border bg-popover shadow-lift h-[75vh] sm:h-auto sm:max-h-[85vh]">
           {/* Desktop sidebar (hidden on mobile) */}
@@ -217,7 +217,6 @@ function PanelDialog({
             {/* Mobile header */}
             <div className="flex sm:hidden items-center justify-between px-4 pt-4 pb-2">
               <h2
-                id="panel-dialog-title"
                 className="text-small font-medium text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
@@ -226,7 +225,6 @@ function PanelDialog({
             {/* Desktop header */}
             <div className="hidden sm:flex items-center justify-between px-5 pt-5 pb-2">
               <h2
-                id="panel-dialog-title"
                 className="text-body font-medium text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}

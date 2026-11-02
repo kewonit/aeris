@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useSettings } from "@/hooks/use-settings";
 import { formatAltitude } from "@/lib/unit-formatters";
 
@@ -12,7 +12,7 @@ const TICKS = [13000, 6096, 3048, 1524, 610, 152, 0];
  * The key to the altitude colours. It rests as a small chip with the ramp
  * in it; pressing it opens the full scale, pressing again puts it away.
  */
-export function AltitudeLegend() {
+export const AltitudeLegend = memo(function AltitudeLegend() {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const low = formatAltitude(0, settings.unitSystem);
@@ -56,4 +56,4 @@ export function AltitudeLegend() {
       )}
     </button>
   );
-}
+});

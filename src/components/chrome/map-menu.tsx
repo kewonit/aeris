@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   ArrowUpRight,
@@ -42,7 +42,7 @@ export function openPanel(tab: PanelTab) {
  * the way to settings. A style or a layer applies the moment it is picked,
  * with the map in view behind the menu.
  */
-export function MapMenu({
+export const MapMenu = memo(function MapMenu({
   activeStyle,
   onSelectStyle,
   airspaceAvailable,
@@ -231,7 +231,7 @@ export function MapMenu({
       )}
     </div>
   );
-}
+});
 
 function StyleTile({
   style,

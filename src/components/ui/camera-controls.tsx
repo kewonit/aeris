@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useRef,
-  useEffect,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { memo, useCallback, useRef, useEffect, useState, useSyncExternalStore } from "react";
 import { motion } from "motion/react";
 import { PRESS_SCALE } from "@/lib/motion";
 import {
@@ -227,7 +221,7 @@ export function useFullscreen() {
  * Zoom, tilt and turn, for a mouse. They fade away while the pointer rests
  * and are not shown on touch screens, where fingers do all three.
  */
-export function CameraControls({ autoHide = false }: { autoHide?: boolean }) {
+export const CameraControls = memo(function CameraControls({ autoHide = false }: { autoHide?: boolean }) {
   const idle = useIdle(IDLE_HIDE_MS);
   const hidden = autoHide && idle;
   return (
@@ -263,4 +257,4 @@ export function CameraControls({ autoHide = false }: { autoHide?: boolean }) {
       </TooltipProvider>
     </div>
   );
-}
+});

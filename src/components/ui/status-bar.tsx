@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { memo, useState, useCallback } from "react";
 import {
   AtcTrigger,
   AtcFeedDropdown,
@@ -32,7 +32,7 @@ type StatusBarProps = {
   source?: string | null;
 };
 
-export function StatusBar({
+export const StatusBar = memo(function StatusBar({
   flightCount,
   cityName,
   cityIata,
@@ -146,4 +146,4 @@ export function StatusBar({
       />
     </div>
   );
-}
+});

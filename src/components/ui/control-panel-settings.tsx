@@ -657,7 +657,7 @@ function Toggle({ checked }: { checked: boolean }) {
     <span
       aria-hidden="true"
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        checked ? "bg-tint" : "bg-border"
+        checked ? "bg-tint" : "bg-accent ring-1 ring-subtle ring-inset"
       }`}
     >
       <span

@@ -1,11 +1,12 @@
 "use client";
 
+import { memo } from "react";
 import { Locate, LocateFixed } from "lucide-react";
 import { useGeolocation } from "@/components/ui/camera-controls";
 import { MapButton } from "./map-button";
 
 /** Flies the map to wherever the device is, once asked. */
-export function LocateButton() {
+export const LocateButton = memo(function LocateButton() {
   const { flyToMe, locating } = useGeolocation();
   return (
     <MapButton
@@ -21,4 +22,4 @@ export function LocateButton() {
       )}
     </MapButton>
   );
-}
+});
