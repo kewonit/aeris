@@ -2,6 +2,7 @@
 
 import type { ReactNode, SVGProps } from "react";
 import { motion } from "motion/react";
+import { PRESS_SCALE } from "@/lib/motion";
 
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { useSettings } from "@/hooks/use-settings";
@@ -95,8 +96,7 @@ function ToggleButton({
         className={`flex h-8 w-8 items-center justify-center select-none transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-35 ${
           pressed ? "text-foreground" : "text-subtle"
         }`}
-        whileHover={disabled ? undefined : { scale: 1.12 }}
-        whileTap={disabled ? undefined : { scale: 0.88 }}
+        whileTap={disabled ? undefined : { scale: PRESS_SCALE }}
         aria-label={label}
         aria-pressed={pressed}
         aria-disabled={disabled || undefined}
@@ -132,14 +132,6 @@ export function MapToggles() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        type: "spring",
-        stiffness: 300,
-        damping: 24,
-        delay: 0.55,
-      }}
       className="flex flex-col items-center rounded-lg border border-border bg-background"
       role="toolbar"
       aria-label="Map layers"

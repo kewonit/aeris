@@ -32,6 +32,8 @@ const RULES: { pattern: RegExp; use: string }[] = [
     use: "tint, arrival, departure, warning, or danger",
   },
   { pattern: /\b(?:text|bg|border|ring)-(?:white|black)\/\d/, use: "a solid color token" },
+  { pattern: /\bstiffness:\s*\d/, use: "a spring from @/lib/motion (SNAP or SHEET)" },
+  { pattern: /\bwhileHover=/, use: "a color change on hover, not a scale" },
 ];
 
 // Flight categories keep the conventional VFR, MVFR, IFR, LIFR colors.

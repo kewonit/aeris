@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP, PRESS_SCALE } from "@/lib/motion";
 import {
   Search,
   Map as MapIcon,
@@ -255,12 +256,7 @@ function PanelDialog({
         initial={{ opacity: 0, scale: 0.94, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.94, y: 16 }}
-        transition={{
-          type: "spring",
-          stiffness: 400,
-          damping: 30,
-          mass: 0.8,
-        }}
+        transition={SNAP}
         className="fixed inset-x-3 bottom-3 top-auto z-90 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-180 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-4"
         role="dialog"
         aria-modal="true"
@@ -289,11 +285,7 @@ function PanelDialog({
                       <motion.div
                         layoutId="panel-tab-bg"
                         className="absolute inset-0 rounded-lg bg-accent"
-                        transition={{
-                          type: "spring",
-                          stiffness: 400,
-                          damping: 30,
-                        }}
+                        transition={SNAP}
                       />
                     )}
                     <Icon className="relative h-4 w-4 shrink-0" />
@@ -327,8 +319,7 @@ function PanelDialog({
               <motion.button
                 onClick={onClose}
                 className="flex h-7 w-7 items-center justify-center rounded-full bg-card transition-colors hover:bg-accent"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
+                whileTap={{ scale: PRESS_SCALE }}
                 aria-label="Close"
               >
                 <X className="h-3.5 w-3.5 text-subtle" />
@@ -408,11 +399,7 @@ function PanelDialog({
                       <motion.div
                         layoutId="panel-tab-bg-mobile"
                         className="absolute inset-0 rounded-md bg-accent"
-                        transition={{
-                          type: "spring",
-                          stiffness: 400,
-                          damping: 30,
-                        }}
+                        transition={SNAP}
                       />
                     )}
                     <Icon className="relative h-4 w-4 shrink-0" />
@@ -423,7 +410,7 @@ function PanelDialog({
             <motion.button
               onClick={onClose}
               className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card transition-colors active:bg-accent"
-              whileTap={{ scale: 0.9 }}
+              whileTap={{ scale: PRESS_SCALE }}
               aria-label="Close"
             >
               <X className="h-3.5 w-3.5 text-subtle" />

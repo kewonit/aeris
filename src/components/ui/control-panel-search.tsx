@@ -13,6 +13,7 @@ import {
   Plane,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import {
@@ -103,7 +104,7 @@ function SegmentedControl({
               <motion.div
                 layoutId="search-segment-bg"
                 className="absolute inset-0 rounded-md bg-popover shadow-lift border border-border"
-                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                transition={SNAP}
               />
             )}
             <span className="relative flex items-center gap-1.5">

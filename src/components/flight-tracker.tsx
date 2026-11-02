@@ -9,7 +9,13 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import { AnimatePresence, motion, useDragControls } from "motion/react";
+import {
+  AnimatePresence,
+  MotionConfig,
+  motion,
+  useDragControls,
+} from "motion/react";
+import { SHEET } from "@/lib/motion";
 import dynamic from "next/dynamic";
 import { useTheme } from "@wrksz/themes/client";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -888,12 +894,7 @@ function FlightTrackerInner({
               initial={{ y: "100%", opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
-              transition={{
-                type: "spring",
-                stiffness: 400,
-                damping: 35,
-                mass: 0.8,
-              }}
+              transition={SHEET}
               drag="y"
               dragListener={false}
               dragControls={flightSheetDrag}
@@ -946,12 +947,14 @@ export function FlightTracker({
 }: FlightTrackerProps) {
   return (
     <ErrorBoundary>
-      <SettingsProvider>
-        <FlightTrackerInner
-          airspaceAvailable={airspaceAvailable}
-          initialCity={initialCity}
-        />
-      </SettingsProvider>
+      <MotionConfig reducedMotion="user">
+        <SettingsProvider>
+          <FlightTrackerInner
+            airspaceAvailable={airspaceAvailable}
+            initialCity={initialCity}
+          />
+        </SettingsProvider>
+      </MotionConfig>
     </ErrorBoundary>
   );
 }

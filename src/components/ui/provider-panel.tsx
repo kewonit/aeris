@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import { Satellite, X, ChevronUp, Circle } from "lucide-react";
 import {
   getCircuitState,
@@ -82,7 +83,7 @@ export function ProviderDropdown({
           initial={{ opacity: 0, y: 8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          transition={SNAP}
           className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
         >
           {/* Header */}

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import { Info } from "lucide-react";
 import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
 
@@ -94,7 +95,7 @@ function ExpandedAttribution({
       initial={{ opacity: 0, scale: 0.95, y: 4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 4 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      transition={SNAP}
       className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
     >
       <button

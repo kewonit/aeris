@@ -35,6 +35,8 @@ import {
   type MapPanelCameraState,
 } from "./panel-camera";
 
+// Camera moves are never `essential`, so MapLibre jumps instead of flying
+// when the system asks for reduced motion.
 const FOLLOW_ZOOM = 10.5;
 const FOLLOW_PITCH = 55;
 const FOLLOW_EASE_MS = 2000;
@@ -143,7 +145,7 @@ export function CameraController({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const transitionOptions = isAirportPanelNavigation
       ? mapPanelMotionOptions(reducePanelMotion)
-      : { duration: CITY_FLY_MS, essential: true as const };
+      : { duration: CITY_FLY_MS, essential: false as const };
     const clearTargetTimer = window.setTimeout(() => {
       if (coordinatesMatch(cityTransitionTargetRef.current, city.coordinates)) {
         cityTransitionTargetRef.current = null;
@@ -344,7 +346,7 @@ export function CameraController({
       pitch: FOLLOW_PITCH,
       bearing,
       duration: FOLLOW_FLYTO_MS,
-      essential: true,
+      essential: false,
     });
 
     followFlyToTimerRef.current = setTimeout(() => {
@@ -367,7 +369,7 @@ export function CameraController({
         ? followFlight.trueTrack!
         : map.getBearing(),
       duration: FOLLOW_EASE_MS,
-      essential: true,
+      essential: false,
     });
   }, [
     map,
@@ -434,7 +436,7 @@ export function CameraController({
         pitch: DEFAULT_PITCH,
         bearing: DEFAULT_BEARING,
         duration: 1200,
-        essential: true,
+        essential: false,
       });
     };
 

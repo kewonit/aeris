@@ -3,6 +3,7 @@
 import { useMemo, useCallback, useRef, useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   Radio,
   Play,
@@ -120,7 +121,7 @@ export function AtcFeedDropdown({
           initial={{ opacity: 0, y: 8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          transition={SNAP}
           className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
         >
           {/* Header */}
@@ -264,7 +265,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -12 }}
-        transition={{ type: "spring", stiffness: 400, damping: 28 }}
+        transition={SNAP}
         className="flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lift sm:w-auto sm:max-w-none"
       >
         {/* Waveform or blocked play icon (left) */}

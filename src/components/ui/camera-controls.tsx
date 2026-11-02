@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { motion } from "motion/react";
+import { PRESS_SCALE } from "@/lib/motion";
 import {
   Plus,
   Minus,
@@ -80,8 +81,7 @@ function ControlButton({
       <motion.button
         type="button"
         className="flex h-8 w-8 items-center justify-center select-none text-subtle"
-        whileHover={{ scale: 1.12 }}
-        whileTap={{ scale: 0.88 }}
+        whileTap={{ scale: PRESS_SCALE }}
         aria-label={label}
         onPointerDown={handlers.onPointerDown}
         onPointerUp={handlers.onPointerUp}
@@ -152,8 +152,7 @@ function ActionButton({
       <motion.button
         type="button"
         className="flex h-8 w-8 items-center justify-center select-none text-subtle"
-        whileHover={{ scale: 1.12 }}
-        whileTap={{ scale: 0.88 }}
+        whileTap={{ scale: PRESS_SCALE }}
         aria-label={label}
         onClick={onClick}
         onContextMenu={(e) => e.preventDefault()}
@@ -232,14 +231,6 @@ export function CameraControls() {
   } = useFullscreen();
   return (
     <motion.div
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        type: "spring",
-        stiffness: 300,
-        damping: 24,
-        delay: 0.55,
-      }}
       className="flex flex-col items-center rounded-lg border border-border bg-background"
       role="toolbar"
       aria-label="Camera controls"

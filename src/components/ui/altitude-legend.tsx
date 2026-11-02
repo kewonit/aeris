@@ -10,9 +10,6 @@ export function AltitudeLegend() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.6 }}
       className="flex flex-col gap-2 rounded-lg border p-3 border-border bg-background"
       role="img"
       aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}

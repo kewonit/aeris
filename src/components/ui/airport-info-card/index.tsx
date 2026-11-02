@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion, useDragControls, useReducedMotion } from "motion/react";
+import { SHEET } from "@/lib/motion";
 import { Cloud, Info, Plane } from "lucide-react";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
 import type { Airport } from "@/lib/airports";
@@ -247,7 +248,7 @@ export function AirportInfoCard({
       exit={slide ? { y: "100%" } : { opacity: 0 }}
       transition={
         slide
-          ? { type: "spring", stiffness: 400, damping: 28, mass: 0.8 }
+          ? SHEET
           : { duration: 0 }
       }
       drag="y"

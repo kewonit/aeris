@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   ArrowUpToLine,
   RotateCw,
@@ -638,11 +639,7 @@ function SegmentRow<T extends string | number>({
                 <motion.div
                   layoutId={`seg-${title}`}
                   className="absolute inset-0 rounded-sm bg-accent"
-                  transition={{
-                    type: "spring",
-                    stiffness: 500,
-                    damping: 35,
-                  }}
+                  transition={SNAP}
                 />
               )}
               <span className="relative">{opt.label}</span>

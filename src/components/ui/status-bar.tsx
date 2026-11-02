@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import { Dices, Plane, ShieldAlert } from "lucide-react";
 import {
   AtcTrigger,
@@ -117,7 +118,7 @@ export function StatusBar({
             initial={{ opacity: 0, y: 8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            transition={SNAP}
             className="flex items-center gap-2.5 rounded-full border border-border bg-background px-3.5 py-2 text-label text-warning"
             role="alert"
           >
@@ -132,14 +133,6 @@ export function StatusBar({
 
       <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center">
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 24,
-            delay: 0.4,
-          }}
           className="flex items-center gap-3 rounded-lg border px-3.5 py-2 border-border bg-background"
           aria-live="polite"
           aria-atomic="true"
@@ -186,14 +179,6 @@ export function StatusBar({
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 24,
-            delay: 0.48,
-          }}
           className="flex items-center gap-3 rounded-lg border px-3.5 py-2 border-border bg-background"
         >
           <button

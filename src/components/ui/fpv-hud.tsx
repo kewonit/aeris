@@ -3,6 +3,7 @@
 import { useRef, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   X,
   ArrowUp,
@@ -290,7 +291,7 @@ function FpvInstruments({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      transition={SNAP}
       className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
     >
       <div
