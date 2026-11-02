@@ -28,11 +28,13 @@ export const APPEAR_MS = 500;
 /** Leaving first person, its aircraft eases back onto the map over this long. */
 export const FPV_EXIT_MS = 12_000;
 
-// Globe/Mercator hard-switch: dots below this zoom, flights above.
-export const GLOBE_SWITCH_ZOOM = 5.8;
-export const GLOBE_FADE_ZOOM_FLOOR = GLOBE_SWITCH_ZOOM - 0.05;
-export const GLOBE_FADE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM + 0.05;
-export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM;
+// On the globe, the whole earth in view is drawn as light dots by the map
+// itself; from about zoom 3.5, with a region in view, deck draws aircraft
+// and trails on the sphere. The two cross-fade over half a zoom level.
+export const GLOBE_SWITCH_ZOOM = 3.5;
+export const GLOBE_FADE_ZOOM_FLOOR = GLOBE_SWITCH_ZOOM - 0.25;
+export const GLOBE_FADE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM + 0.25;
+export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_FADE_ZOOM_CEIL;
 
 // LOD: switch between 3D ScenegraphLayers and 2D IconLayer.
 // Uses hysteresis to avoid flickering when hovering near the boundary.

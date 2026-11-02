@@ -845,7 +845,7 @@ export function FlightLayers({
           const t =
             (currentZoom - GLOBE_FADE_ZOOM_FLOOR) /
             (GLOBE_FADE_ZOOM_CEIL - GLOBE_FADE_ZOOM_FLOOR);
-          globeFade = t * t * t;
+          globeFade = smoothStep(t);
         }
       }
       // Traffic fades in when it first appears on a blank map, rather
