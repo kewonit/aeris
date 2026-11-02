@@ -89,6 +89,11 @@ import {
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import { useGlobeDots } from "./use-globe-dots";
 import {
+  aircraftIconAngle,
+  deckDrawsOnSphere,
+  ICON_PARAMETERS,
+} from "./globe-frame";
+import {
   frameIntervalMs,
   isFrameDue,
   overviewFrameIntervalMs,
@@ -834,6 +839,7 @@ export function FlightLayers({
 
       const currentZoom = map?.getZoom() ?? 10;
       const isGlobe = globeModeRef.current;
+      const onSphere = map ? deckDrawsOnSphere(map, currentZoom) : false;
 
       let globeFade = 1;
       let layersVisible = true;
@@ -1170,15 +1176,19 @@ export function FlightLayers({
             getSize: footprintOf,
             getColor: () => [0, 0, 0, 60],
             getAngle: (d) =>
-              360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
+              aircraftIconAngle(
+                Number.isFinite(d.trueTrack) ? d.trueTrack! : 0,
+                onSphere,
+              ),
             iconAtlas: atlasUrl,
             iconMapping: AIRCRAFT_ICON_MAPPING,
             billboard: false,
+            parameters: ICON_PARAMETERS,
             sizeUnits: "pixels",
             sizeScale: 1,
             updateTriggers: {
               getPosition: frame,
-              getAngle: frame,
+              getAngle: [frame, onSphere],
               getSize: frame,
             },
           });
@@ -1204,6 +1214,7 @@ export function FlightLayers({
           dataVersion: dataVersionRef.current,
           layersVisible,
           globeFade,
+          onSphere,
           aircraftSizes,
           altitudeDisplayMode: altitudeMode,
           altColors,
@@ -1299,10 +1310,14 @@ export function FlightLayers({
                 return aircraftColor(base, d);
               },
               getAngle: (d) =>
-                360 - (Number.isFinite(d.trueTrack) ? d.trueTrack! : 0),
+                aircraftIconAngle(
+                  Number.isFinite(d.trueTrack) ? d.trueTrack! : 0,
+                  onSphere,
+                ),
               iconAtlas: atlasUrl,
               iconMapping: AIRCRAFT_ICON_MAPPING,
               billboard: false,
+              parameters: ICON_PARAMETERS,
               sizeUnits: "pixels",
               sizeScale: 1,
               onHover: stableHover,
@@ -1311,7 +1326,7 @@ export function FlightLayers({
               highlightColor: [255, 255, 255, 80],
               updateTriggers: {
                 getPosition: [trafficFrame, altitudeMode],
-                getAngle: trafficFrame,
+                getAngle: [trafficFrame, onSphere],
                 getSize: trafficFrame,
                 getColor: [dataVersionRef.current, altColors, altitudeThemeKey()],
               },

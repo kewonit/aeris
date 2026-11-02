@@ -92,6 +92,7 @@ function narrowbodyParams(
     dataVersion: 0,
     layersVisible: true,
     globeFade: 1,
+    onSphere: false,
     aircraftSizes,
     altitudeDisplayMode: "realistic",
     altColors: false,
