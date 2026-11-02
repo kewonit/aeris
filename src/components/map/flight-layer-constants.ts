@@ -20,10 +20,11 @@ export type DeckGLOverlay = MapboxOverlay & {
 export const DEFAULT_ANIM_DURATION_MS = 4_500;
 export const MIN_ANIM_DURATION_MS = 1_000;
 export const MAX_ANIM_DURATION_MS = 30_000;
-export const TELEPORT_THRESHOLD = 0.3;
 export const TRACK_DAMPING = 0.18;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
+/** Traffic fades in over this long when it first appears. */
+export const APPEAR_MS = 500;
 
 // Globe/Mercator hard-switch: dots below this zoom, flights above.
 export const GLOBE_SWITCH_ZOOM = 5.8;
@@ -53,6 +54,11 @@ export type Snapshot = {
    * nose turns on from there; unset for a fresh or teleported aircraft.
    */
   heading?: number;
+  /**
+   * False when no track has been reported yet, so `track` is a placeholder
+   * and the nose takes the direction of travel instead of pointing north.
+   */
+  trackKnown?: boolean;
 };
 
 export type FlightLayerProps = {

@@ -1,6 +1,5 @@
 import type { FlightState } from "@/lib/opensky";
 import type { Snapshot } from "./flight-layer-constants";
-import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
 import { angleDelta, lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
@@ -207,7 +206,7 @@ export function displayHeading(
   elapsedMs: number,
 ): number {
   const course = resolveDisplayTrack({
-    reportedTrack: curr.track,
+    reportedTrack: curr.trackKnown === false ? null : curr.track,
     previousPosition: prev,
     currentPosition: curr,
   });
@@ -283,7 +282,8 @@ export function reportLeadMs(
 
 /**
  * Where an aircraft is `leadMs` after its reported position, flying on
- * straight at its reported speed and climb.
+ * straight at its reported speed and climb; a negative lead gives where it
+ * was that long before.
  *
  * Providers answer from caches and report positions of differing ages, so
  * two reports a poll apart can be 4 or 6 seconds of flight apart. Carried
@@ -302,7 +302,8 @@ export function carryForward(
   const track = flight.trueTrack;
   if (
     flight.onGround ||
-    !(seconds > 0) ||
+    seconds === 0 ||
+    !Number.isFinite(seconds) ||
     speed == null ||
     !Number.isFinite(speed) ||
     speed <= 0 ||
@@ -326,7 +327,67 @@ export function carryForward(
   };
 }
 
+// ── Discontinuities ────────────────────────────────────────────────────
+
+/** A jump shorter than this is never treated as one. */
+const JUMP_MIN_METERS = 3_000;
+/** Speeds below this are rounded up when judging a jump. */
+const JUMP_FLOOR_SPEED_MPS = 100;
+/** How much faster than its speed a move must be to count as a jump. */
+const JUMP_SPEED_FACTOR = 2.2;
+
+/**
+ * Whether getting from `from` to `to` in one move of `moveMs` is a jump no
+ * aircraft could fly, as when a feed loses an aircraft and finds it again
+ * kilometres on, or two feeds disagree. Such a move is not animated: the
+ * aircraft starts again where it now is, rather than racing there.
+ */
+export function isDiscontinuity(
+  from: { lng: number; lat: number },
+  to: { lng: number; lat: number },
+  moveMs: number,
+  speedMps: number | null | undefined,
+): boolean {
+  const meters = horizontalDistanceFromLngLat(from.lng, from.lat, to.lng, to.lat);
+  const seconds = Math.max(moveMs, 1_000) / 1_000;
+  const speed =
+    speedMps != null && Number.isFinite(speedMps) ? speedMps : 0;
+  return (
+    meters >
+    Math.max(
+      JUMP_MIN_METERS,
+      JUMP_SPEED_FACTOR * Math.max(speed, JUMP_FLOOR_SPEED_MPS) * seconds,
+    )
+  );
+}
+
 // ── Flight Interpolation ───────────────────────────────────────────────
+
+/** The signed change in longitude from `a` to `b`, the short way round. */
+function lngDelta(a: number, b: number): number {
+  return ((((b - a) % 360) + 540) % 360) - 180;
+}
+
+/** A longitude brought back between -180 and 180. */
+function wrapLng(lng: number): number {
+  return lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * The point `t` of the way from `prev` to `curr`, crossing the 180th
+ * meridian the short way rather than all the way round the world.
+ */
+export function lerpSnapshot(
+  prev: Snapshot,
+  curr: Snapshot,
+  t: number,
+): { lng: number; lat: number; alt: number } {
+  return {
+    lng: wrapLng(prev.lng + lngDelta(prev.lng, curr.lng) * t),
+    lat: prev.lat + (curr.lat - prev.lat) * t,
+    alt: prev.alt + (curr.alt - prev.alt) * t,
+  };
+}
 
 export function computeInterpolatedFlights(
   currentFlights: FlightState[],
@@ -351,22 +412,19 @@ export function computeInterpolatedFlights(
         trueTrack: resolveDisplayTrack({
           reportedTrack: Number.isFinite(f.trueTrack)
             ? f.trueTrack!
-            : curr.track,
+            : curr.trackKnown === false
+              ? null
+              : curr.track,
         }),
       };
     }
 
-    const dx = curr.lng - prev.lng;
-    const dy = curr.lat - prev.lat;
-    if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
-      return f;
-    }
-
+    const at = lerpSnapshot(prev, curr, tPos);
     return {
       ...f,
-      longitude: prev.lng + dx * tPos,
-      latitude: prev.lat + dy * tPos,
-      baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
+      longitude: at.lng,
+      latitude: at.lat,
+      baroAltitude: at.alt,
       trueTrack: displayHeading(prev, curr, tPos * animDuration),
     };
   });
@@ -412,18 +470,19 @@ export function updateInterpolatedInPlace(
       o.latitude = curr.lat;
       o.baroAltitude = curr.alt;
       o.trueTrack = resolveDisplayTrack({
-        reportedTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+        reportedTrack: Number.isFinite(f.trueTrack)
+          ? f.trueTrack!
+          : curr.trackKnown === false
+            ? null
+            : curr.track,
       });
       continue;
     }
 
-    const dx = curr.lng - prev.lng;
-    const dy = curr.lat - prev.lat;
-    if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) continue;
-
-    o.longitude = prev.lng + dx * tPos;
-    o.latitude = prev.lat + dy * tPos;
-    o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
+    const at = lerpSnapshot(prev, curr, tPos);
+    o.longitude = at.lng;
+    o.latitude = at.lat;
+    o.baroAltitude = at.alt;
     o.trueTrack = displayHeading(prev, curr, tPos * animDuration);
   }
 }

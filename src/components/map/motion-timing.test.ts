@@ -2,9 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { FlightState } from "@/lib/opensky";
-import { angleDelta, lerpAngle } from "./flight-math";
+import type { Snapshot } from "./flight-layer-constants";
 import {
+  angleDelta,
+  horizontalDistanceFromLngLat,
+  lerpAngle,
+} from "./flight-math";
+import {
+  carryForward,
+  computeInterpolatedFlights,
+  displayHeading,
   isBackwardMove,
+  isDiscontinuity,
+  lerpSnapshot,
   nextMoveDuration,
   resolveDisplayTrack,
 } from "./flight-interpolation";
@@ -73,4 +83,76 @@ test("a flying aircraft never moves backwards, a taxiing one may", () => {
   assert.equal(isBackwardMove(back[0], back[1], flying), true);
   assert.equal(isBackwardMove(ahead[0], ahead[1], flying), false);
   assert.equal(isBackwardMove(back[0], back[1], taxiing), false);
+});
+
+const cruising = {
+  icao24: "abc123",
+  longitude: 8,
+  latitude: 50,
+  baroAltitude: 11_000,
+  velocity: 240,
+  trueTrack: 90,
+  verticalRate: 0,
+  onGround: false,
+} as FlightState;
+
+test("a new aircraft flies at its true speed from its first frame", () => {
+  // Seeded one move back along its track, as the snapshot effect does.
+  const moveMs = 5_000;
+  const back = carryForward(cruising, -moveMs)!;
+  const at = carryForward(cruising, 0)!;
+  const prev: Snapshot = { lng: back.lng, lat: back.lat, alt: back.alt!, track: 90 };
+  const curr: Snapshot = { lng: at.lng, lat: at.lat, alt: at.alt!, track: 90 };
+  const frame = (t: number) =>
+    computeInterpolatedFlights(
+      [cruising],
+      new Map([["abc123", prev]]),
+      new Map([["abc123", curr]]),
+      t,
+      moveMs,
+    )[0];
+  const a = frame(0);
+  const b = frame(0.2);
+  const meters = horizontalDistanceFromLngLat(
+    a.longitude!,
+    a.latitude!,
+    b.longitude!,
+    b.latitude!,
+  );
+  // A fifth of a five-second move at 240 m/s is 240 m.
+  assert.ok(Math.abs(meters - 240) < 3, `moved ${meters} m`);
+  assert.equal(Math.round(b.trueTrack!), 90);
+});
+
+test("a jump no aircraft could fly snaps, and a normal move does not", () => {
+  const from = { lng: 8, lat: 50 };
+  const twentyKmEast = { lng: 8 + 20_000 / (111_320 * Math.cos((50 * Math.PI) / 180)), lat: 50 };
+  const oneMoveEast = { lng: 8 + 1_200 / (111_320 * Math.cos((50 * Math.PI) / 180)), lat: 50 };
+  assert.equal(isDiscontinuity(from, twentyKmEast, 5_000, 240), true);
+  assert.equal(isDiscontinuity(from, oneMoveEast, 5_000, 240), false);
+  // A slow feed's long move is no jump, and a taxiing aircraft's small one is not.
+  assert.equal(isDiscontinuity(from, twentyKmEast, 40_000, 240), false);
+  assert.equal(isDiscontinuity(from, { lng: 8.01, lat: 50 }, 5_000, 8), false);
+});
+
+test("crossing the 180th meridian is a short step, not a lap of the world", () => {
+  const west: Snapshot = { lng: 179.99, lat: 0, alt: 0, track: 90 };
+  const east: Snapshot = { lng: -179.99, lat: 0, alt: 0, track: 90 };
+  assert.equal(isDiscontinuity(west, east, 5_000, 240), false);
+  const mid = lerpSnapshot(west, east, 0.5);
+  assert.ok(Math.abs(Math.abs(mid.lng) - 180) < 1e-9, `mid at ${mid.lng}`);
+  const later = lerpSnapshot(west, east, 0.75);
+  assert.ok(later.lng < -179.99 + 0.01 && later.lng > -180, `later at ${later.lng}`);
+});
+
+test("without a reported track the nose follows the move, not north", () => {
+  const prev: Snapshot = { lng: 8, lat: 50, alt: 0, track: 0, trackKnown: false };
+  const curr: Snapshot = { lng: 8.02, lat: 50, alt: 0, track: 0, trackKnown: false };
+  assert.equal(Math.round(displayHeading(prev, curr, 2_000)), 90);
+});
+
+test("a report carried back goes back along its track", () => {
+  const back = carryForward(cruising, -10_000)!;
+  assert.ok(back.lng < cruising.longitude!);
+  assert.equal(back.lat, cruising.latitude);
 });

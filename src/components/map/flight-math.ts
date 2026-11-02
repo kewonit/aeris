@@ -28,7 +28,8 @@ export function horizontalDistanceFromLngLat(
 ): number {
   const avgLatRad = ((aLat + bLat) * 0.5 * Math.PI) / 180;
   const metersPerDegLon = 111_320 * Math.max(0.2, Math.cos(avgLatRad));
-  const dx = (bLng - aLng) * metersPerDegLon;
+  // The short way round, so a step across the 180th meridian stays short.
+  const dx = (((((bLng - aLng) % 360) + 540) % 360) - 180) * metersPerDegLon;
   const dy = (bLat - aLat) * 111_320;
   return Math.hypot(dx, dy);
 }

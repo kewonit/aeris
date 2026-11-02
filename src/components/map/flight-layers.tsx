@@ -19,10 +19,10 @@ import {
   DEFAULT_ANIM_DURATION_MS,
   MIN_ANIM_DURATION_MS,
   MAX_ANIM_DURATION_MS,
-  TELEPORT_THRESHOLD,
   TRACK_DAMPING,
   AIRCRAFT_PICK_RADIUS_PX,
   SELECTION_FADE_MS,
+  APPEAR_MS,
   GLOBE_FADE_ZOOM_FLOOR,
   GLOBE_FADE_ZOOM_CEIL,
   LOD_3D_ZOOM_IN,
@@ -48,6 +48,8 @@ import {
   FLIGHT_RENDER_STALE_MS,
   getSafeInterpolationProgress,
   isBackwardMove,
+  isDiscontinuity,
+  lerpSnapshot,
   nextMoveDuration,
   normalizeBearing,
   noteReceipt,
@@ -153,6 +155,8 @@ export function FlightLayers({
   const prevSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
   const currSnapshotsRef = useRef<Map<string, Snapshot>>(new Map());
   const dataTimestampRef = useRef(0);
+  /** When traffic was first drawn after a blank map, to fade it in. */
+  const appearStartRef = useRef(0);
   const animDurationRef = useRef(DEFAULT_ANIM_DURATION_MS);
   const animFrameRef = useRef(0);
   // Recent poll intervals for median smoothing - prevents event loop
@@ -304,8 +308,6 @@ export function FlightLayers({
     }
     maxVelocityRef.current = fastest;
     noteReceipt(receiptDelaysRef.current, flights, receivedAt);
-    const reported = (f: FlightState) =>
-      carryForward(f, reportLeadMs(f, receivedAt, receiptDelaysRef.current));
 
     // Each report of the first person aircraft feeds its own path. A stale
     // report is placed when it was true, so it never pulls the view back.
@@ -326,33 +328,23 @@ export function FlightLayers({
       fpvMotionRef.current = null;
     }
 
-    // If data is stale (tab was hidden 15s+), snap directly to new
-    // positions instead of slowly interpolating from outdated ones.
-    const isStale =
-      dataTimestampRef.current > 0 && elapsed > FLIGHT_RENDER_STALE_MS;
+    // After a long gap (a tab hidden for 15s or more) or with nothing drawn
+    // yet, every aircraft starts afresh where its report puts it.
+    const fresh =
+      dataTimestampRef.current === 0 ||
+      elapsed > FLIGHT_RENDER_STALE_MS ||
+      currSnapshotsRef.current.size === 0;
+    if (fresh && flights.length > 0) appearStartRef.current = now;
 
-    if (isStale) {
-      const snap = new Map<string, Snapshot>();
-      for (const f of flights) {
-        const at = reported(f);
-        if (at) {
-          snap.set(f.icao24, {
-            lng: at.lng,
-            lat: at.lat,
-            alt: at.alt ?? 0,
-            track: Number.isFinite(f.trueTrack) ? f.trueTrack! : 0,
-          });
-        }
-      }
-      prevSnapshotsRef.current = snap;
-      currSnapshotsRef.current = new Map(snap);
-      animDurationRef.current = DEFAULT_ANIM_DURATION_MS;
-      dataTimestampRef.current = now;
-      lastFlightsForInterpRef.current = null;
-      dataVersionRef.current++;
-      requestRenderRef.current();
-      return;
-    }
+    // How long the coming move lasts: the usual interval between polls.
+    const timing = fresh
+      ? null
+      : nextMoveDuration(recentIntervalsRef.current, elapsed, {
+          minMs: MIN_ANIM_DURATION_MS,
+          maxMs: MAX_ANIM_DURATION_MS,
+        });
+    const moveMs = timing?.durationMs ?? animDurationRef.current;
+
     // Where each aircraft is drawn now, which may be a little past its last
     // report if this one came late; its next move starts from there.
     const oldLinearT = getSafeInterpolationProgress({
@@ -363,23 +355,19 @@ export function FlightLayers({
     const oldAngleT = smoothStep(Math.min(oldLinearT, 1));
 
     const newPrev = new Map<string, Snapshot>();
-    for (const f of flights) {
-      if (f.longitude == null || f.latitude == null) continue;
-      const id = f.icao24;
-      const oldPrev = prevSnapshotsRef.current.get(id);
-      const oldCurr = currSnapshotsRef.current.get(id);
-
-      if (oldPrev && oldCurr) {
-        const dx = oldCurr.lng - oldPrev.lng;
-        const dy = oldCurr.lat - oldPrev.lat;
-        if (dx * dx + dy * dy <= TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
+    if (!fresh) {
+      for (const f of flights) {
+        if (f.longitude == null || f.latitude == null) continue;
+        const id = f.icao24;
+        const oldPrev = prevSnapshotsRef.current.get(id);
+        const oldCurr = currSnapshotsRef.current.get(id);
+        if (oldPrev && oldCurr) {
           newPrev.set(id, {
-            lng: oldPrev.lng + dx * oldLinearT,
-            lat: oldPrev.lat + dy * oldLinearT,
-            alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldLinearT,
+            ...lerpSnapshot(oldPrev, oldCurr, oldLinearT),
             track: normalizeBearing(
               lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
             ),
+            trackKnown: oldCurr.trackKnown,
             // Where the nose pointed as this report arrived, to turn on from.
             heading: displayHeading(
               oldPrev,
@@ -387,63 +375,86 @@ export function FlightLayers({
               oldLinearT * animDurationRef.current,
             ),
           });
-        } else {
+        } else if (oldCurr) {
           newPrev.set(id, oldCurr);
         }
-      } else if (oldCurr) {
-        newPrev.set(id, oldCurr);
       }
     }
     prevSnapshotsRef.current = newPrev;
 
     const next = new Map<string, Snapshot>();
     for (const f of flights) {
-      const at = reported(f);
-      if (at) {
-        const prev = newPrev.get(f.icao24);
-        const rawTrack = Number.isFinite(f.trueTrack) ? f.trueTrack! : 0;
-        const rawAlt = at.alt ?? 0;
+      const lead = reportLeadMs(f, receivedAt, receiptDelaysRef.current);
+      const at = carryForward(f, lead);
+      if (!at) continue;
+      const id = f.icao24;
+      let prev = newPrev.get(id);
+      const known = Number.isFinite(f.trueTrack);
+      const reportedTrack = known ? normalizeBearing(f.trueTrack!) : 0;
 
-        // MLAT positions (~100m accuracy) jitter visibly compared to
-        // ADS-B (~10m). Apply EMA blending against the previous position
-        // to suppress the noise while tracking real movement.
-        const isMLAT = f.positionSource === "mlat";
-        let lng = at.lng;
-        let lat = at.lat;
-        if (isMLAT && prev) {
-          lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
-          lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
-        }
-
-        // A report carried a little too far, then corrected, would draw
-        // the aircraft flying backwards; it holds where it is instead.
-        if (prev && isBackwardMove(prev, { lng, lat }, f)) {
-          lng = prev.lng;
-          lat = prev.lat;
-        }
-
-        next.set(f.icao24, {
-          lng,
-          lat,
-          alt: rawAlt,
-          track: normalizeBearing(
-            prev != null
-              ? lerpAngle(prev.track, rawTrack, TRACK_DAMPING)
-              : rawTrack,
-          ),
+      // Drawn a poll behind its reports like the rest, a new aircraft, or
+      // one the feed has lost and found again far off, starts a move back
+      // along its track and flies on at its true speed from the first frame.
+      if (
+        !prev ||
+        isDiscontinuity(prev, at, Math.max(moveMs, elapsed), f.velocity)
+      ) {
+        const back = carryForward(f, lead - moveMs) ?? at;
+        prev = {
+          lng: back.lng,
+          lat: back.lat,
+          alt: back.alt ?? at.alt ?? 0,
+          track: reportedTrack,
+          trackKnown: known,
+        };
+        newPrev.set(id, prev);
+        next.set(id, {
+          lng: at.lng,
+          lat: at.lat,
+          alt: at.alt ?? 0,
+          track: reportedTrack,
+          trackKnown: known,
         });
+        continue;
       }
+
+      // MLAT positions (~100m accuracy) jitter visibly compared to
+      // ADS-B (~10m). Apply EMA blending against the previous position
+      // to suppress the noise while tracking real movement.
+      let lng = at.lng;
+      let lat = at.lat;
+      if (f.positionSource === "mlat") {
+        lng = prev.lng + (lng - prev.lng) * MLAT_POSITION_ALPHA;
+        lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
+      }
+
+      // A report carried a little too far, then corrected, would draw
+      // the aircraft flying backwards; it holds where it is instead.
+      if (isBackwardMove(prev, { lng, lat }, f)) {
+        lng = prev.lng;
+        lat = prev.lat;
+      }
+
+      // A report without a track keeps the last one known; until there is
+      // one, the nose follows the way the aircraft moves.
+      const prevKnown = prev.trackKnown !== false;
+      next.set(id, {
+        lng,
+        lat,
+        alt: at.alt ?? 0,
+        track: known
+          ? normalizeBearing(
+              prevKnown
+                ? lerpAngle(prev.track, reportedTrack, TRACK_DAMPING)
+                : reportedTrack,
+            )
+          : prev.track,
+        trackKnown: known || prevKnown,
+      });
     }
     currSnapshotsRef.current = next;
-    if (dataTimestampRef.current > 0) {
-      const timing = nextMoveDuration(
-        recentIntervalsRef.current,
-        now - dataTimestampRef.current,
-        { minMs: MIN_ANIM_DURATION_MS, maxMs: MAX_ANIM_DURATION_MS },
-      );
-      recentIntervalsRef.current = timing.intervals;
-      animDurationRef.current = timing.durationMs;
-    }
+    if (timing) recentIntervalsRef.current = timing.intervals;
+    animDurationRef.current = moveMs;
     dataTimestampRef.current = now;
     // Fresh data arrived - allow dead reckoning again (was blocked during
     // the brief window after tab resume to prevent stale-heading extrapolation).
@@ -799,6 +810,11 @@ export function FlightLayers({
           globeFade = t * t * t;
         }
       }
+      // Traffic fades in when it first appears on a blank map, rather
+      // than popping on all at once.
+      const appearT = (now - appearStartRef.current) / APPEAR_MS;
+      const appearing = appearT < 1;
+      if (appearing) globeFade *= smoothStep(Math.max(0, appearT));
 
       try {
         const elapsed = now - dataTimestampRef.current;
@@ -1276,7 +1292,8 @@ export function FlightLayers({
             currentFlights.length > 0 &&
             progress.moving) ||
             fpvId != null ||
-            selectionAnimating);
+            selectionAnimating ||
+            appearing);
         if (continueAnimating) scheduleFrame();
       } catch (err) {
         continueAnimating = false;
