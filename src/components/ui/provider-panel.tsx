@@ -28,7 +28,7 @@ const PROVIDERS: ProviderInfo[] = [
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Backup · limited",
+    description: "Backup, limited",
   },
 ];
 
@@ -141,12 +141,14 @@ export type ProviderTriggerProps = {
   retryIn?: number;
   /** Aircraft in the feed right now. */
   flightCount: number;
+  /** The place in view, said after the count on a wide screen. */
+  cityName?: string;
   onClick: () => void;
 };
 
 /**
- * "adsb.fi · 203 aircraft", which opens the feed picker. On a phone a
- * healthy feed shows only the count; trouble is always spelled out.
+ * "203 aircraft over London", which opens the feed picker. A healthy feed
+ * is not named; trouble is always spelled out, as "Feed busy".
  */
 export function ProviderTrigger({
   source,
@@ -154,11 +156,12 @@ export function ProviderTrigger({
   rateLimited,
   retryIn = 0,
   flightCount,
+  cityName,
   onClick,
 }: ProviderTriggerProps) {
   const label = rateLimited
     ? retryIn > 0
-      ? `Feed busy · retrying in ${retryIn}s`
+      ? `Feed busy, retrying in ${retryIn}s`
       : "Feed busy"
     : loading && !source
       ? "Connecting…"
@@ -185,15 +188,17 @@ export function ProviderTrigger({
       aria-label={`${label}, ${count}. Choose the flight feed`}
       aria-haspopup="dialog"
     >
-      <span className={`truncate ${tone} ${healthy ? "hidden sm:inline" : ""}`}>
-        {label}
-      </span>
-      <span className="hidden text-subtle sm:inline" aria-hidden="true">
-        ·
-      </span>
-      <span className={`text-muted-foreground ${healthy ? "" : "hidden sm:inline"}`}>
-        {count}
-      </span>
+      {/* The feed is named only when it is in trouble. */}
+      {healthy ? (
+        <span className="truncate text-muted-foreground">
+          {count}
+          {cityName && (
+            <span className="hidden sm:inline"> over {cityName}</span>
+          )}
+        </span>
+      ) : (
+        <span className={`truncate ${tone}`}>{label}</span>
+      )}
     </button>
   );
 }

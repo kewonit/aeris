@@ -114,20 +114,9 @@ export const StatusBar = memo(function StatusBar({
           rateLimited={rateLimited}
           retryIn={retryIn}
           flightCount={flightCount}
+          cityName={cityName}
           onClick={toggleProviderDropdown}
         />
-        {/* The place is on the map already; a phone keeps the line short. */}
-        {cityName ? (
-          <span
-            className="-ml-1 hidden min-w-0 items-center gap-1.5 pr-3 text-subtle sm:flex"
-            title={cityName}
-          >
-            <span aria-hidden="true">·</span>
-            <span className="truncate">{cityName}</span>
-          </span>
-        ) : (
-          <span className="hidden w-0.5 sm:block" aria-hidden="true" />
-        )}
         <AtcTrigger
           hasFeeds={availableFeeds.length > 0}
           isPlaying={isAtcPlaying}

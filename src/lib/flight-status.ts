@@ -7,7 +7,7 @@ import { formatAltitude } from "@/lib/unit-formatters";
 
 /**
  * Says what an aircraft is doing in one line, the way a departures board
- * would: "Descending into BOM · about 14 min out". The line is built only
+ * would: "Descending into BOM, about 14 min out". The line is built only
  * from what ADS-B and the reported route can support, so it never claims a
  * gate, a schedule or a delay.
  */
@@ -94,9 +94,9 @@ const APPROACH_SPEED_MPS = 150 * KNOTS;
 const LANDING_NOW_MIN = 2;
 
 const EMERGENCY_SQUAWKS: Record<string, string> = {
-  "7700": "Squawking 7700 · emergency",
-  "7600": "Squawking 7600 · radio failure",
-  "7500": "Squawking 7500 · unlawful interference",
+  "7700": "Emergency, squawking 7700",
+  "7600": "Radio failure, squawking 7600",
+  "7500": "Unlawful interference, squawking 7500",
 };
 
 const EMERGENCY_STATUS: Record<string, { text: string; tone: StatusTone }> = {
@@ -328,6 +328,6 @@ export function describeFlightStatus(input: FlightStatusInput): FlightStatus {
     cause: causeFor(input),
     progress,
     minutesRemaining,
-    sentence: timing ? `${headline} · ${timing}` : headline,
+    sentence: timing ? `${headline}, ${timing}` : headline,
   };
 }

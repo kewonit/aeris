@@ -125,8 +125,11 @@ export const AircraftCard = memo(function AircraftCard({
         <AirlineMark callsign={flight.callsign} airline={airline} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-title text-foreground">{identity}</h2>
-          <p className="truncate text-small text-muted-foreground">
-            {subtitle}
+          <p className="flex min-w-0 gap-2 text-small text-muted-foreground">
+            <span className="truncate">{subtitle}</span>
+            {isMilitaryAircraft(flight.dbFlags) && (
+              <span className="shrink-0 text-warning">Military</span>
+            )}
           </p>
         </div>
         {onClose && (
@@ -207,19 +210,6 @@ export const AircraftCard = memo(function AircraftCard({
       </div>
 
       <div className="px-5">
-        <p className="truncate text-small text-muted-foreground">
-          {details.airline && aircraftName && <>{aircraftName} · </>}
-          {details.registration && (
-            <>
-              <span className="font-mono">{details.registration}</span> ·{" "}
-            </>
-          )}
-          <span className="font-mono">{flight.icao24.toUpperCase()}</span>
-          {isMilitaryAircraft(flight.dbFlags) && (
-            <span className="text-warning"> · Military</span>
-          )}
-        </p>
-
         <AircraftDetails
           key={flight.icao24}
           rows={buildAircraftDetailRows(
@@ -237,6 +227,10 @@ export const AircraftCard = memo(function AircraftCard({
     </article>
   );
 });
+
+function upperFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** What the aircraft is doing, and why it matters when something does. */
 export function StatusBlock({
@@ -256,10 +250,12 @@ export function StatusBlock({
     <section id={id} aria-label="Status" className="px-5 pt-4">
       <p className="text-value text-foreground text-pretty">
         {status.headline}
-        {status.timing && (
-          <span className="text-muted-foreground"> · {status.timing}</span>
-        )}
       </p>
+      {status.timing && (
+        <p className="text-small text-muted-foreground">
+          {upperFirst(status.timing)}
+        </p>
+      )}
       {status.cause && (
         <p className={`mt-1 text-small ${tone}`} role={status.cause.tone === "danger" ? "status" : undefined}>
           {status.cause.text}

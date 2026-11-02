@@ -2,7 +2,7 @@
 
 A live map of flights, with altitude shown in 3D.
 
-Every aircraft is drawn at its height and coloured by it, from green near the ground to blue at cruise. Pick one and aeris says what it is doing and where it is going, in a sentence: "Descending into BOM · about 14 min out". Follow it, ride along in first person, or share a link that opens on it.
+Every aircraft is drawn at its height and coloured by it, from green near the ground to blue at cruise. Pick one and aeris says what it is doing and where it is going, in a sentence: "Descending into BOM, about 14 min out". Follow it, ride along in first person, or share a link that opens on it.
 
 [Live Demo](https://aeris.edbn.me) | [HN discussion](https://news.ycombinator.com/item?id=47048004)
 

@@ -8,7 +8,7 @@ Contains information from the Mictronics Aircraft Database.
 
 License: Open Data Commons Attribution License.
 
-[Source](https://github.com/Mictronics/aircraft-database) · [License text](https://github.com/Mictronics/aircraft-database/blob/main/LICENSE)
+[Source](https://github.com/Mictronics/aircraft-database), [License text](https://github.com/Mictronics/aircraft-database/blob/main/LICENSE)
 
 ## FAA Aircraft Registry
 

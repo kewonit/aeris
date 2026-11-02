@@ -105,7 +105,7 @@ const ESRI_TOPO_STYLE: Record<string, unknown> = {
       tileSize: 256,
       maxzoom: 19,
       attribution:
-        "&copy; <a href='https://www.esri.com/'>Esri</a> · &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
+        "&copy; <a href='https://www.esri.com/'>Esri</a>, &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
     },
   },
   layers: [{ id: "esri-topo", type: "raster", source: "esri-topo" }],

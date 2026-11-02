@@ -98,13 +98,15 @@ export const HoverCard = memo(function HoverCard({
         <>
           <p className="truncate text-small text-foreground">
             {formatAircraftIdentity(flight, { registration: flight.registration ?? null })}
-            <span className="text-subtle">
-              {[airline, flight.typeCode].filter(Boolean).map((part) => ` · ${part}`)}
-            </span>
+            {(airline || flight.typeCode) && (
+              <span className="ml-2 text-subtle">
+                {[airline, flight.typeCode].filter(Boolean).join(" ")}
+              </span>
+            )}
           </p>
           <p className="truncate text-label text-muted-foreground">
             {status.headline}
-            {speed !== "-" && !flight.onGround && ` · ${speed}`}
+            {speed !== "-" && !flight.onGround && `, ${speed}`}
           </p>
         </>
       )}

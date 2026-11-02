@@ -116,8 +116,7 @@ function ExpandedAttribution({
       <span className="flex flex-wrap items-center gap-x-1.5 text-micro text-subtle">
         <span aria-hidden="true">©</span>
         {[...attributions, ...FEED_CREDITS].map((attr, i) => (
-          <span key={attr.label} className="inline-flex items-center gap-x-1.5">
-            {i > 0 && <span aria-hidden="true">·</span>}
+          <span key={attr.label} className="inline-flex items-center">
             <a
               href={attr.url}
               target="_blank"
@@ -126,6 +125,7 @@ function ExpandedAttribution({
             >
               {attr.label}
             </a>
+            {i < attributions.length + FEED_CREDITS.length - 1 && ","}
           </span>
         ))}
       </span>

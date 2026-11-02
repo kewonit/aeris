@@ -37,7 +37,13 @@ export const FollowChip = memo(function FollowChip({
     units: settings.unitSystem,
   });
   const identity = formatAircraftIdentity(flight, { registration: flight.registration ?? null });
-  const detail = status.timing ?? formatAltitude(flight.baroAltitude, settings.unitSystem);
+  const altitude = formatAltitude(flight.baroAltitude, settings.unitSystem);
+  // "Following BAW123, about 1h 10m to go", or "Following BAW123 at 36,000 ft".
+  const detail = status.timing
+    ? `, ${status.timing}`
+    : altitude !== "-"
+      ? ` at ${altitude}`
+      : null;
 
   return (
     <div
@@ -53,7 +59,7 @@ export const FollowChip = memo(function FollowChip({
         <span className="truncate">
           <span className="text-tint">Following</span>{" "}
           <span className="text-foreground">{identity}</span>
-          {detail !== "-" && <span className="text-subtle"> · {detail}</span>}
+          {detail && <span className="text-subtle">{detail}</span>}
         </span>
       </button>
       <button

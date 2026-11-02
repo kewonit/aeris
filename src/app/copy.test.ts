@@ -13,11 +13,13 @@ const BANNED: { pattern: RegExp; why: string }[] = [
   { pattern: /\bTap (?:to|play)\b/, why: "\"tap\" on a desktop; say what happens" },
 ];
 
-function sourceFiles(directory: string): string[] {
+function sourceFiles(directory: string, extensions = [".tsx"]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(fullPath);
-    return entry.name.endsWith(".tsx") ? [fullPath] : [];
+    if (entry.isDirectory()) return sourceFiles(fullPath, extensions);
+    return extensions.some((extension) => entry.name.endsWith(extension))
+      ? [fullPath]
+      : [];
   });
 }
 
@@ -50,6 +52,27 @@ test("interface copy stays plain", () => {
               violations.push(`${relative}:${index + 1} ${why}: ${text.trim()}`);
             }
           }
+        }
+      });
+  }
+  assert.deepEqual(violations, []);
+});
+
+// A middle dot between words is filler: the words can be joined with a
+// comma, put on lines of their own, or told apart by colour. Screen readers
+// also read it out as "middle dot". None anywhere, changelog included.
+test("no middle dots or bullets between words", () => {
+  const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const violations: string[] = [];
+  for (const file of sourceFiles(sourceRoot, [".ts", ".tsx"])) {
+    if (/\.test\.tsx?$/.test(file)) continue;
+    const relative = path.relative(sourceRoot, file);
+    readFileSync(file, "utf8")
+      .split("\n")
+      .forEach((line, index) => {
+        if (/^\s*(?:\/\/|\/?\*)/.test(line)) return;
+        if (/[\u00B7\u2022]/.test(line)) {
+          violations.push(`${relative}:${index + 1} ${line.trim()}`);
         }
       });
   }

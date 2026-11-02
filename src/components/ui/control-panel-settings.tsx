@@ -683,7 +683,7 @@ export const CHANGELOG: {
     version: "0.9.0",
     date: "Nov 2, 2026",
     entries: [
-      { title: "Every aircraft in a sentence", description: "What it is doing and where it is going, in one line: “Descending into BOM · about 14 min out”." },
+      { title: "Every aircraft in a sentence", description: "What it is doing and where it is going, in one line: “Descending into BOM, about 14 min out”." },
       { title: "One card", description: "Aircraft and airports open in one card: a sheet on phones, a floating panel on desktop." },
       { title: "Follow", description: "Follow an aircraft from its card or with F. First person moved to V." },
       { title: "One search", description: "Flights, airports and places from one field, opened straight from the results." },

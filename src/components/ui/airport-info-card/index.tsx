@@ -105,7 +105,7 @@ export const AirportInfoCard = memo(function AirportInfoCard({
           departures ? `${departures} departing` : null,
         ]
           .filter(Boolean)
-          .join(" · ")
+          .join(", ")
       : "Quiet right now";
 
   return (

@@ -23,28 +23,20 @@ export type AirspacePopupProps = {
 };
 
 export function AirspacePopup(props: AirspacePopupProps) {
-  const title = formatAirspaceTitle({
+  const { kind, name } = formatAirspaceTitle({
     icao_class: props.icao_class,
     type: props.type,
     name: props.name,
   });
   const upper = formatAirspaceLimit(props.upper);
   const lower = formatAirspaceLimit(props.lower);
-  const showTypeLine = props.icao_class && props.icao_class !== "unclassified";
-
   return (
-    <div className="min-w-[180px] max-w-[260px] rounded-sm bg-card/90 p-3 text-label text-foreground shadow-lift">
-      <div className="font-medium text-small leading-tight">{title}</div>
-      <div className="mt-2 font-mono text-caption leading-snug">
-        <div>{upper}</div>
-        <div className="my-0.5 text-muted-foreground">────────</div>
-        <div>{lower}</div>
-      </div>
-      {showTypeLine && (
-        <div className="mt-2 text-micro text-muted-foreground">
-          {props.type}
-        </div>
-      )}
+    <div className="aeris-float max-w-64 min-w-44 rounded-lg px-4 py-3">
+      <p className="text-label text-subtle">{kind}</p>
+      {name && <p className="text-small text-foreground">{name}</p>}
+      <p className="mt-1 font-mono text-label text-muted-foreground">
+        {lower} – {upper}
+      </p>
     </div>
   );
 }

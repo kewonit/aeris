@@ -44,16 +44,21 @@ export function formatAirspaceLimit(
 }
 
 /**
- * Formats the popup title: "<CLASS> - <Name>" or "<TYPE> - <Name>".
- * Omits the em-dash and name if `name` is empty or whitespace.
+ * The popup's two title lines: what kind of airspace it is, "Class C" or
+ * "Restricted", and its name when it has one.
  */
-export function formatAirspaceTitle(input: AirspaceTitleInput): string {
+export function formatAirspaceTitle(input: AirspaceTitleInput): {
+  kind: string;
+  name: string | null;
+} {
   const cls = (input.icao_class ?? "").trim();
   const type = (input.type ?? "").trim();
   const name = (input.name ?? "").trim();
-  const prefix =
+  const kind =
     cls && cls.toLowerCase() !== "unclassified"
-      ? cls.toUpperCase()
-      : type.toUpperCase();
-  return name ? `${prefix} - ${name}` : prefix;
+      ? `Class ${cls.toUpperCase()}`
+      : type.length <= 3
+        ? type.toUpperCase()
+        : type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  return { kind, name: name || null };
 }

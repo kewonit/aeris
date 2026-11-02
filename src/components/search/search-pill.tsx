@@ -238,9 +238,18 @@ export const SearchPill = memo(function SearchPill({
                   ) : (
                     <Search className="size-4 text-subtle" aria-hidden="true" />
                   )}
-                  {lookupState === "missing"
-                    ? `No live flight for ${trimmed.toUpperCase()} · on the ground or out of coverage`
-                    : `Search all flights for “${trimmed}”`}
+                  {lookupState === "missing" ? (
+                    <span className="min-w-0">
+                      <span className="block">
+                        No live flight for {trimmed.toUpperCase()}
+                      </span>
+                      <span className="block text-label text-subtle">
+                        It may be on the ground or out of coverage
+                      </span>
+                    </span>
+                  ) : (
+                    `Search all flights for “${trimmed}”`
+                  )}
                 </Command.Item>
               )}
 
@@ -274,14 +283,13 @@ function FlightRow({
 }) {
   const callsign = flight.callsign?.trim() || flight.icao24.toUpperCase();
   const airline = lookupAirline(flight.callsign);
-  const detail = [
-    airline,
-    flight.typeCode,
-    flight.registration,
-    flight.onGround ? "On the ground" : altitude !== "-" ? altitude : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // "British Airways A320", the registration, and the height in a column.
+  const name = [airline, flight.typeCode].filter(Boolean).join(" ");
+  const height = flight.onGround
+    ? "On the ground"
+    : altitude !== "-"
+      ? altitude
+      : null;
   return (
     <Command.Item
       value={`flight:${flight.icao24}`}
@@ -304,8 +312,20 @@ function FlightRow({
       )}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-small text-foreground">{callsign}</span>
-        <span className="block truncate text-label text-subtle">{detail}</span>
+        {(name || flight.registration) && (
+          <span className="flex min-w-0 gap-2 text-label text-subtle">
+            {name && <span className="truncate">{name}</span>}
+            {flight.registration && (
+              <span className="shrink-0 font-mono">{flight.registration}</span>
+            )}
+          </span>
+        )}
       </span>
+      {height && (
+        <span className="shrink-0 text-right text-label text-subtle tabular-nums">
+          {height}
+        </span>
+      )}
     </Command.Item>
   );
 }
@@ -354,7 +374,9 @@ function LocationRow({
         </span>
         <span className="block truncate text-label text-subtle">
           {location.source === "airport"
-            ? (location.displayName.split(" — ")[1] ?? countryName(location.country))
+            ? [location.city, countryName(location.country)]
+                .filter(Boolean)
+                .join(", ")
             : isAirport
               ? countryName(location.country)
               : location.displayName}

@@ -73,7 +73,7 @@ test("cruising says where to and roughly how long", () => {
   assert.equal(s.headline, "Cruising to BOM");
   assert.match(s.timing ?? "", /^about (\d+ min|\dh( \d+m)?) to go$/);
   assert.ok(s.progress !== null && Math.abs(s.progress - 0.5) < 0.05);
-  assert.equal(s.sentence, `${s.headline} · ${s.timing}`);
+  assert.equal(s.sentence, `${s.headline}, ${s.timing}`);
 });
 
 test("a descent into the destination counts down", () => {
@@ -158,7 +158,7 @@ test("a mismatched route is not trusted and says so", () => {
 
 test("an emergency outranks the weather", () => {
   const s = status({ ...along(0.5), squawk: "7700" }, { weather: "BOM: heavy rain" });
-  assert.deepEqual(s.cause, { text: "Squawking 7700 · emergency", tone: "danger" });
+  assert.deepEqual(s.cause, { text: "Emergency, squawking 7700", tone: "danger" });
 
   const weather = status(along(0.9), { weather: "BOM: heavy rain" });
   assert.deepEqual(weather.cause, { text: "BOM: heavy rain", tone: "warning" });
