@@ -2,6 +2,7 @@ import type { AircraftDetails } from "@/hooks/use-aircraft-photos";
 import type { UnitSystem } from "@/hooks/use-settings";
 import type { FlightState } from "@/lib/opensky";
 import { isFiniteNumber } from "@/lib/opensky-parsing";
+import { formatDuration } from "@/lib/format-duration";
 import { formatAltitude, formatSpeedFromKnots } from "@/lib/unit-formatters";
 
 export type AircraftSidebarViewModel = {
@@ -83,7 +84,7 @@ export function formatAircraftFreshness(
   return `Updated ${ageSeconds} ${unit} ago`;
 }
 
-/** How long ago a take-off was seen, as "Took off 1 h 5 min ago". */
+/** How long ago a take-off was seen, as "Took off 1h 5m ago". */
 export function formatTimeSinceTakeoff(
   takeoffSeconds: number,
   now: number,
@@ -93,12 +94,7 @@ export function formatTimeSinceTakeoff(
     Math.floor((now / 1_000 - takeoffSeconds) / 60),
   );
   if (minutes < 1) return "Took off just now";
-  if (minutes < 60) return `Took off ${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest
-    ? `Took off ${hours} h ${rest} min ago`
-    : `Took off ${hours} h ago`;
+  return `Took off ${formatDuration(minutes)} ago`;
 }
 
 const SOURCE_LABELS: Record<string, string> = {

@@ -123,8 +123,8 @@ test("says how long ago a take-off was seen", () => {
     formatTimeSinceTakeoff(now / 1_000 - seconds, now);
   assert.equal(ago(20), "Took off just now");
   assert.equal(ago(12 * 60 + 30), "Took off 12 min ago");
-  assert.equal(ago(2 * 60 * 60), "Took off 2 h ago");
-  assert.equal(ago(65 * 60), "Took off 1 h 5 min ago");
+  assert.equal(ago(2 * 60 * 60), "Took off 2h ago");
+  assert.equal(ago(65 * 60), "Took off 1h 5m ago");
 });
 
 test("names the aircraft by maker and model", () => {

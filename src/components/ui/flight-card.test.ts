@@ -105,6 +105,6 @@ test("RouteSummary shows a seen departure when no destination is reported", () =
 
   assert.match(html, /SFO/);
   assert.match(html, /Not reported/);
-  assert.match(html, /Took off 1 h 30 min ago/);
+  assert.match(html, /Took off 1h 30m ago/);
   assert.doesNotMatch(html, /JFK/);
 });
