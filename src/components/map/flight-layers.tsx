@@ -47,6 +47,9 @@ import {
   displayHeading,
   FLIGHT_RENDER_STALE_MS,
   getSafeInterpolationProgress,
+  isBackwardMove,
+  nextMoveDuration,
+  normalizeBearing,
   noteReceipt,
   reportLeadMs,
   updateInterpolatedInPlace,
@@ -374,7 +377,9 @@ export function FlightLayers({
             lng: oldPrev.lng + dx * oldLinearT,
             lat: oldPrev.lat + dy * oldLinearT,
             alt: oldPrev.alt + (oldCurr.alt - oldPrev.alt) * oldLinearT,
-            track: lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
+            track: normalizeBearing(
+              lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
+            ),
             // Where the nose pointed as this report arrived, to turn on from.
             heading: displayHeading(
               oldPrev,
@@ -410,38 +415,34 @@ export function FlightLayers({
           lat = prev.lat + (lat - prev.lat) * MLAT_POSITION_ALPHA;
         }
 
+        // A report carried a little too far, then corrected, would draw
+        // the aircraft flying backwards; it holds where it is instead.
+        if (prev && isBackwardMove(prev, { lng, lat }, f)) {
+          lng = prev.lng;
+          lat = prev.lat;
+        }
+
         next.set(f.icao24, {
           lng,
           lat,
           alt: rawAlt,
-          track:
+          track: normalizeBearing(
             prev != null
               ? lerpAngle(prev.track, rawTrack, TRACK_DAMPING)
               : rawTrack,
+          ),
         });
       }
     }
     currSnapshotsRef.current = next;
     if (dataTimestampRef.current > 0) {
-      const observedInterval = now - dataTimestampRef.current;
-      // Use median of recent intervals to filter event-loop stalls.
-      // A single blocked tick (e.g. heavy parse of 5K aircraft) would
-      // inflate observedInterval → animDuration, making aircraft move
-      // too slowly that cycle. Median is robust to such outliers.
-      const intervals = recentIntervalsRef.current;
-      intervals.push(observedInterval);
-      if (intervals.length > 5) intervals.shift();
-      const sorted = [...intervals].sort((a, b) => a - b);
-      const medianInterval = sorted[Math.floor(sorted.length / 2)];
-      animDurationRef.current = Math.max(
-        MIN_ANIM_DURATION_MS,
-        // A move lasts the whole interval, so aircraft glide on until the
-        // next report instead of arriving early and standing still. A poll
-        // that comes early, as the first one does after the view moves to a
-        // new area, covers only its own short stretch of flight, so its move
-        // is as short, or aircraft would crawl through it.
-        Math.min(MAX_ANIM_DURATION_MS, medianInterval, observedInterval),
+      const timing = nextMoveDuration(
+        recentIntervalsRef.current,
+        now - dataTimestampRef.current,
+        { minMs: MIN_ANIM_DURATION_MS, maxMs: MAX_ANIM_DURATION_MS },
       );
+      recentIntervalsRef.current = timing.intervals;
+      animDurationRef.current = timing.durationMs;
     }
     dataTimestampRef.current = now;
     // Fresh data arrived - allow dead reckoning again (was blocked during

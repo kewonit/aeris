@@ -2,9 +2,16 @@ import type { Snapshot } from "./flight-layer-constants";
 
 // ── Interpolation Math ─────────────────────────────────────────────────
 
+/**
+ * The signed turn from `a` to `b` the short way round, -180 to 180, for
+ * any inputs, including angles past 360 or below 0.
+ */
+export function angleDelta(a: number, b: number): number {
+  return ((((b - a) % 360) + 540) % 360) - 180;
+}
+
 export function lerpAngle(a: number, b: number, t: number): number {
-  const delta = ((b - a + 540) % 360) - 180;
-  return a + delta * t;
+  return a + angleDelta(a, b) * t;
 }
 
 export function smoothStep(t: number): number {

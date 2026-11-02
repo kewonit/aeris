@@ -1,7 +1,7 @@
 import type { FlightState } from "@/lib/opensky";
 import type { Snapshot } from "./flight-layer-constants";
 import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
-import { lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
+import { angleDelta, lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
 export const FLIGHT_RENDER_STALE_MS = 15_000;
@@ -97,7 +97,89 @@ export function resolveDisplayTrack(input: {
     return motionTrack;
   }
 
+  // The nose follows the drawn path, so it never crabs across it, but an
+  // aircraft never flies backwards: a move more than a right angle off its
+  // reported track is a correction, and the nose keeps to the track.
+  if (Math.abs(angleDelta(reportedTrack, motionTrack)) > NOSE_FOLLOWS_MOVE_DEG) {
+    return reportedTrack;
+  }
+
   return motionTrack;
+}
+
+/** A move this far off the reported track is a correction, not a course. */
+const NOSE_FOLLOWS_MOVE_DEG = 90;
+/** Airborne and at least this fast, an aircraft cannot move backwards. */
+const BACKWARD_MOVE_MIN_SPEED_MPS = 30;
+/** A move further than this off the reported track counts as backwards. */
+const BACKWARD_MOVE_DEG = 120;
+
+/**
+ * Whether drawing a move from `from` to `to` would show a flying aircraft
+ * going backwards, as a report carried forward too far and then corrected
+ * would. Such a move is held instead, and the aircraft carries on from
+ * where it is when the next report agrees with its track.
+ */
+export function isBackwardMove(
+  from: { lng: number; lat: number },
+  to: { lng: number; lat: number },
+  flight: Pick<FlightState, "onGround" | "velocity" | "trueTrack">,
+): boolean {
+  if (
+    flight.onGround ||
+    flight.velocity == null ||
+    !(flight.velocity >= BACKWARD_MOVE_MIN_SPEED_MPS) ||
+    flight.trueTrack == null ||
+    !Number.isFinite(flight.trueTrack)
+  ) {
+    return false;
+  }
+  const bearing = bearingFromLngLat(from, to);
+  if (bearing == null) return false;
+  return Math.abs(angleDelta(flight.trueTrack, bearing)) > BACKWARD_MOVE_DEG;
+}
+
+// ── Move timing ────────────────────────────────────────────────────────
+
+/** How many recent poll intervals the move length is taken from. */
+const MOVE_INTERVAL_HISTORY = 5;
+/**
+ * A poll this much sooner than usual was forced, by a change of area,
+ * feed or view, or a reconnect. It is not a sign the feed got faster.
+ */
+const FORCED_POLL_SHARE = 0.6;
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * How long the next move lasts, and the intervals to remember.
+ *
+ * Every aircraft is drawn a poll behind its reports, so each move must
+ * last the usual interval between polls. A poll that arrives early, as a
+ * forced one does, still starts a move that long: shortening it to the
+ * early interval would squeeze a whole poll of flight into a second and
+ * send aircraft racing ahead, then gliding back. Forced polls are also
+ * kept out of the history, so a burst of them cannot drag the usual
+ * interval down. The median shrugs off a single slow tick.
+ */
+export function nextMoveDuration(
+  intervals: number[],
+  observedMs: number,
+  limits: { minMs: number; maxMs: number },
+): { durationMs: number; intervals: number[] } {
+  const usual = intervals.length ? median(intervals) : null;
+  const forced = usual !== null && observedMs < usual * FORCED_POLL_SHARE;
+  const next = forced
+    ? intervals
+    : [...intervals, observedMs].slice(-MOVE_INTERVAL_HISTORY);
+  const durationMs = Math.max(
+    limits.minMs,
+    Math.min(limits.maxMs, median(next)),
+  );
+  return { durationMs, intervals: next };
 }
 
 // ── Heading ────────────────────────────────────────────────────────────
