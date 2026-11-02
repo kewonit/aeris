@@ -4,15 +4,21 @@ import { angleDelta, lerpAngle, horizontalDistanceFromLngLat } from "./flight-ma
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
 export const FLIGHT_RENDER_STALE_MS = 15_000;
-export const MAX_FLIGHT_EXTRAPOLATION_MS = 2_000;
+/**
+ * A poll can be late by this much and traffic still flies on along its
+ * last move, so a slow answer never parks aircraft in mid air.
+ */
+export const MAX_FLIGHT_EXTRAPOLATION_MS = 12_000;
+/** Aircraft on the ground turn often, so they glide on only this long. */
+export const GROUND_EXTRAPOLATION_MS = 2_000;
 
 /**
  * How far along its move from the previous snapshot to the current one
  * traffic is drawn, and whether it is still moving.
  *
- * A poll that arrives late leaves aircraft gliding on along their last move
- * for up to `maxExtrapolationMs`, rather than parked at its end until the
- * report lands. Reports are timed to when they arrive (see carryForward),
+ * A poll that arrives late leaves aircraft flying on along their last move,
+ * at the same speed, for up to `maxExtrapolationMs`, rather than parked at
+ * its end until the report lands. Reports are timed to when they arrive (see carryForward),
  * so the drawn traffic trails them by a poll and the next move carries on
  * from there at the same speed. While the page is inactive, traffic holds
  * at the current snapshot.
@@ -218,8 +224,11 @@ export function displayHeading(
 
 // ── Report timing ──────────────────────────────────────────────────────
 
-/** A report is carried forward at most this far. */
-export const MAX_REPORT_LEAD_MS = 10_000;
+/**
+ * A report is carried forward at most this far. Some feeds answer with
+ * positions 20 seconds old or more; flown on, they line up with the rest.
+ */
+export const MAX_REPORT_LEAD_MS = 30_000;
 /** Recent polls kept per provider to find its quickest answer. */
 const RECEIPT_HISTORY = 12;
 const METERS_PER_DEGREE = 111_320;
@@ -389,6 +398,13 @@ export function lerpSnapshot(
   };
 }
 
+/** How far along its move an aircraft is drawn: on the ground, it stops sooner. */
+function moveProgress(f: FlightState, tPos: number, animDuration: number): number {
+  return f.onGround
+    ? Math.min(tPos, 1 + GROUND_EXTRAPOLATION_MS / Math.max(animDuration, 1))
+    : tPos;
+}
+
 export function computeInterpolatedFlights(
   currentFlights: FlightState[],
   prevSnapshots: Map<string, Snapshot>,
@@ -419,7 +435,7 @@ export function computeInterpolatedFlights(
       };
     }
 
-    const at = lerpSnapshot(prev, curr, tPos);
+    const at = lerpSnapshot(prev, curr, moveProgress(f, tPos, animDuration));
     return {
       ...f,
       longitude: at.lng,
@@ -479,7 +495,7 @@ export function updateInterpolatedInPlace(
       continue;
     }
 
-    const at = lerpSnapshot(prev, curr, tPos);
+    const at = lerpSnapshot(prev, curr, moveProgress(f, tPos, animDuration));
     o.longitude = at.lng;
     o.latitude = at.lat;
     o.baroAltitude = at.alt;

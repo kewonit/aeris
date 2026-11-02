@@ -12,6 +12,7 @@ import {
   carryForward,
   computeInterpolatedFlights,
   displayHeading,
+  getSafeInterpolationProgress,
   isBackwardMove,
   isDiscontinuity,
   lerpSnapshot,
@@ -155,4 +156,44 @@ test("a report carried back goes back along its track", () => {
   const back = carryForward(cruising, -10_000)!;
   assert.ok(back.lng < cruising.longitude!);
   assert.equal(back.lat, cruising.latitude);
+});
+
+test("a poll 10 s late leaves traffic flying on at the same speed", () => {
+  const moveMs = 5_000;
+  const back = carryForward(cruising, -moveMs)!;
+  const at = carryForward(cruising, 0)!;
+  const prev: Snapshot = { lng: back.lng, lat: back.lat, alt: back.alt!, track: 90 };
+  const curr: Snapshot = { lng: at.lng, lat: at.lat, alt: at.alt!, track: 90 };
+  const drawnAt = (elapsedMs: number, flight: FlightState) => {
+    const { tPos, moving } = getSafeInterpolationProgress({
+      elapsedMs,
+      animDurationMs: moveMs,
+      pageActive: true,
+    });
+    const [f] = computeInterpolatedFlights(
+      [flight],
+      new Map([["abc123", prev]]),
+      new Map([["abc123", curr]]),
+      tPos,
+      moveMs,
+    );
+    return { f, moving };
+  };
+  const a = drawnAt(14_000, cruising);
+  const b = drawnAt(15_000, cruising);
+  assert.equal(b.moving, true);
+  const meters = horizontalDistanceFromLngLat(
+    a.f.longitude!,
+    a.f.latitude!,
+    b.f.longitude!,
+    b.f.latitude!,
+  );
+  // Still 240 m a second: neither parked nor sped up.
+  assert.ok(Math.abs(meters - 240) < 3, `moved ${meters} m`);
+
+  // On the ground it stops two seconds past its report.
+  const taxiing = { ...cruising, onGround: true } as FlightState;
+  const c = drawnAt(9_000, taxiing).f;
+  const d = drawnAt(12_000, taxiing).f;
+  assert.equal(c.longitude, d.longitude);
 });

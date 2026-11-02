@@ -334,7 +334,10 @@ export function FlightLayers({
       dataTimestampRef.current === 0 ||
       elapsed > FLIGHT_RENDER_STALE_MS ||
       currSnapshotsRef.current.size === 0;
-    if (fresh && flights.length > 0) appearStartRef.current = now;
+    // Traffic fades in on a blank map; after a gap it carries on in view.
+    if (currSnapshotsRef.current.size === 0 && flights.length > 0) {
+      appearStartRef.current = now;
+    }
 
     // How long the coming move lasts: the usual interval between polls.
     const timing = fresh
