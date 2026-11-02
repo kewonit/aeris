@@ -674,7 +674,10 @@ export const CHANGELOG: {
       { title: "Hover", description: "With a mouse, rest on an aircraft to see what it is doing." },
       { title: "Altitude colours", description: "Low traffic reads on light maps, and cruise is no longer the dimmest band on dark ones." },
       { title: "Links", description: "Share a link that opens an aircraft, follows it, or opens an airport." },
-      { title: "Fixes", description: "Airport weather shows cloud heights and flight category correctly, and aircraft passing high overhead are no longer counted as arriving. Next.js 16.4.3." },
+      { title: "Smooth motion", description: "Aircraft no longer race, spin or jump when the map loads, the feed changes or you come back to the tab. New aircraft fly from the moment they appear." },
+      { title: "A real globe", description: "On the globe, aircraft and trails sit on the sphere at every zoom, and the globe stays on from the first frame." },
+      { title: "Traffic trails", description: "Turn trails off from the altitude key or with T. The aircraft you open keeps its trail." },
+      { title: "Fixes", description: "Airport weather shows cloud heights and flight category correctly, and aircraft passing high overhead are no longer counted as arriving. One type scale throughout. Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24." },
     ],
   },
   {
