@@ -676,7 +676,7 @@ export const CHANGELOG: {
       { title: "Links", description: "Share a link that opens an aircraft, follows it, or opens an airport." },
       { title: "Smooth motion", description: "Aircraft no longer race, spin or jump when the map loads, the feed changes or you come back to the tab. New aircraft fly from the moment they appear." },
       { title: "A real globe", description: "On the globe, aircraft and trails sit on the sphere at every zoom, and the globe stays on from the first frame." },
-      { title: "Steady trails", description: "Trails and aircraft have smooth edges, and trails run into their aircraft without jumping when a new position arrives." },
+      { title: "Steady trails", description: "Trails and aircraft have smooth edges, and each trail flows into its aircraft's tail cone in one unbroken curve, without jumping when a new position arrives." },
       { title: "Traffic trails", description: "Turn trails off from the altitude key or with T. The aircraft you open keeps its trail." },
       { title: "Fixes", description: "Airport weather shows cloud heights and flight category correctly, and aircraft passing high overhead are no longer counted as arriving. One type scale throughout. Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24." },
     ],
