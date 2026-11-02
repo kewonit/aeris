@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { FlightState } from "@/lib/opensky";
 import { fetchFlightByHex } from "@/lib/flight-api";
-import { cityFromFlight } from "@/components/flight-tracker-random";
 import {
-  syncFpvToUrl,
   GITHUB_REPO_API,
+  type SelectionLink,
 } from "@/components/flight-tracker-utils";
-import type { City } from "@/lib/cities";
 
 /** Below about 30 kt a landed aircraft is taxiing, and FPV ends. */
 const FPV_TAXI_SPEED_MPS = 15;
@@ -17,8 +15,11 @@ const FPV_MAX_ROLLOUT_MS = 45_000;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+/** A shared link to an aircraft, waiting for the aircraft to be found. */
+export type PendingAircraftLink = Extract<SelectionLink, { icao24: string }>;
+
 export interface UseFlightMonitorsOptions {
-  pendingFpvRef: React.MutableRefObject<string | null>;
+  pendingLinkRef: React.MutableRefObject<SelectionLink | null>;
   fpvIcao24: string | null;
   fpvFlight: FlightState | null;
   followIcao24: string | null;
@@ -26,13 +27,22 @@ export interface UseFlightMonitorsOptions {
   selectedIcao24: string | null;
   selectedFlight: FlightState | null;
   displayFlights: FlightState[];
-  activeCity: City;
   rateLimited: boolean;
-  setSelectedIcao24: (v: string | null) => void;
-  setFpvIcao24: (v: string | null) => void;
-  setFollowIcao24: (v: string | null) => void;
-  setCityOverride: (v: City) => void;
-  setFpvSeedCenter: (v: { lng: number; lat: number } | null) => void;
+  /**
+   * The linked aircraft was found. `remote` is true when it came from a
+   * worldwide lookup, so the map may need to move to it first.
+   */
+  onLinkResolved: (
+    link: PendingAircraftLink,
+    flight: FlightState,
+    remote: boolean,
+  ) => void;
+  /** A shared link named an airport. */
+  onAirportLink: (iata: string) => void;
+  /** The followed aircraft has left the feed. */
+  onFollowLost: () => void;
+  /** The selected aircraft has been missing from the feed for a minute. */
+  onSelectionLost: () => void;
   /** Ends FPV: after a landing, or when the feed has lost the aircraft. */
   endFpv: (how: "landed" | "lost") => void;
 }
@@ -47,7 +57,7 @@ export function useFlightMonitors(
   opts: UseFlightMonitorsOptions,
 ): UseFlightMonitorsResult {
   const {
-    pendingFpvRef,
+    pendingLinkRef,
     fpvIcao24,
     fpvFlight,
     followIcao24,
@@ -55,93 +65,62 @@ export function useFlightMonitors(
     selectedIcao24,
     selectedFlight,
     displayFlights,
-    activeCity,
     rateLimited,
-    setSelectedIcao24,
-    setFpvIcao24,
-    setFollowIcao24,
-    setCityOverride,
-    setFpvSeedCenter,
+    onLinkResolved,
+    onAirportLink,
+    onFollowLost,
+    onSelectionLost,
     endFpv,
   } = opts;
 
   const [repoStars, setRepoStars] = useState<number | null>(null);
 
-  // ── Pending FPV resolution ───────────────────────────────────────
+  // ── Pending link resolution ──────────────────────────────────────
 
-  const fpvLookupDoneRef = useRef(false);
+  const linkLookupDoneRef = useRef(false);
   useEffect(() => {
-    const pending = pendingFpvRef.current;
+    const pending = pendingLinkRef.current;
     if (!pending || fpvIcao24) return;
-
-    const match = displayFlights.find(
-      (f) => f.icao24.toLowerCase() === pending,
-    );
-    if (match && match.longitude != null && match.latitude != null) {
-      if (match.onGround) {
-        pendingFpvRef.current = null;
-        syncFpvToUrl(null, activeCity);
-        setSelectedIcao24(match.icao24);
-        return;
-      }
-      pendingFpvRef.current = null;
-      fpvLookupDoneRef.current = false;
-      setFpvSeedCenter({ lng: match.longitude, lat: match.latitude });
-      setFpvIcao24(pending);
-      setFollowIcao24(null);
+    if (pending.mode === "airport") {
+      pendingLinkRef.current = null;
+      onAirportLink(pending.iata);
       return;
     }
 
-    if (!fpvLookupDoneRef.current && displayFlights.length > 0) {
-      fpvLookupDoneRef.current = true;
+    const match = displayFlights.find(
+      (f) => f.icao24.toLowerCase() === pending.icao24,
+    );
+    if (match && match.longitude != null && match.latitude != null) {
+      pendingLinkRef.current = null;
+      linkLookupDoneRef.current = false;
+      onLinkResolved(pending, match, false);
+      return;
+    }
+
+    if (!linkLookupDoneRef.current && displayFlights.length > 0) {
+      linkLookupDoneRef.current = true;
       const controller = new AbortController();
-      fetchFlightByHex(pending, controller.signal)
+      fetchFlightByHex(pending.icao24, controller.signal)
         .then((result) => {
+          if (pendingLinkRef.current !== pending) return;
+          pendingLinkRef.current = null;
           if (
             result.flight &&
             result.flight.longitude != null &&
-            result.flight.latitude != null &&
-            !result.flight.onGround &&
-            pendingFpvRef.current === pending
+            result.flight.latitude != null
           ) {
-            const focusCity = cityFromFlight(result.flight);
-            if (focusCity) {
-              setCityOverride(focusCity);
-            }
-            setFpvSeedCenter({
-              lng: result.flight.longitude,
-              lat: result.flight.latitude,
-            });
-            pendingFpvRef.current = null;
-            setFpvIcao24(pending);
-            setFollowIcao24(null);
-          } else if (pendingFpvRef.current === pending) {
-            pendingFpvRef.current = null;
-            syncFpvToUrl(null, activeCity);
-            if (result.flight) {
-              setSelectedIcao24(result.flight.icao24);
-            }
+            onLinkResolved(pending, result.flight, true);
           }
         })
         .catch(() => {
           // Flight lookup failed (network error, timeout, or abort) - reset pending state
-          if (pendingFpvRef.current === pending) {
-            pendingFpvRef.current = null;
+          if (pendingLinkRef.current === pending) {
+            pendingLinkRef.current = null;
           }
         });
       return () => controller.abort();
     }
-  }, [
-    displayFlights,
-    fpvIcao24,
-    activeCity,
-    pendingFpvRef,
-    setSelectedIcao24,
-    setFpvIcao24,
-    setFollowIcao24,
-    setCityOverride,
-    setFpvSeedCenter,
-  ]);
+  }, [displayFlights, fpvIcao24, pendingLinkRef, onLinkResolved, onAirportLink]);
 
   // ── FPV landing and miss counting ────────────────────────────────
 
@@ -218,7 +197,7 @@ export function useFlightMonitors(
         followMissCountRef.current += 1;
       }
       if (followMissCountRef.current >= 3) {
-        const timer = setTimeout(() => setFollowIcao24(null), 0);
+        const timer = setTimeout(onFollowLost, 0);
         return () => clearTimeout(timer);
       }
     }
@@ -227,7 +206,7 @@ export function useFlightMonitors(
     followFlight,
     rateLimited,
     displayFlights,
-    setFollowIcao24,
+    onFollowLost,
   ]);
 
   // ── Selected flight missing timeout ──────────────────────────────
@@ -248,11 +227,11 @@ export function useFlightMonitors(
       return;
     }
     if (now - missingSinceRef.current >= 60_000) {
-      const timer = setTimeout(() => setSelectedIcao24(null), 0);
+      const timer = setTimeout(onSelectionLost, 0);
       missingSinceRef.current = null;
       return () => clearTimeout(timer);
     }
-  }, [selectedIcao24, selectedFlight, displayFlights, setSelectedIcao24]);
+  }, [selectedIcao24, selectedFlight, displayFlights, onSelectionLost]);
 
   // ── Repo stars ───────────────────────────────────────────────────
 

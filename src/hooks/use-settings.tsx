@@ -39,6 +39,8 @@ export type Settings = {
   showWeatherRadar: boolean;
   weatherRadarOpacity: number;
   showDebugData: boolean;
+  /** Opaque navigation instead of frosted, for legibility or a slow GPU. */
+  solidPanels: boolean;
 };
 
 export const TRAIL_THICKNESS_MIN = 0.5;
@@ -125,6 +127,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showWeatherRadar: false,
   weatherRadarOpacity: 0.5,
   showDebugData: false,
+  solidPanels: false,
 };
 
 const STORAGE_KEY = "aeris:settings";

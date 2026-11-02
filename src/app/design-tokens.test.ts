@@ -13,8 +13,8 @@ const RULES: { pattern: RegExp; use: string }[] = [
     use: "a text-micro … text-title size",
   },
   {
-    pattern: /\bfont-(?:thin|light|semibold|bold|extrabold|black)\b/,
-    use: "font-normal or font-medium",
+    pattern: /\bfont-(?:thin|light|medium|semibold|bold|extrabold|black)\b/,
+    use: "the one weight, font-normal",
   },
   { pattern: /\b(?:uppercase|tracking-[\w[-]+)/, use: "sentence case" },
   {
@@ -32,6 +32,10 @@ const RULES: { pattern: RegExp; use: string }[] = [
     use: "tint, arrival, departure, warning, or danger",
   },
   { pattern: /\b(?:text|bg|border|ring)-(?:white|black)\/\d/, use: "a solid color token" },
+  { pattern: /\bstiffness:\s*\d/, use: "a spring from @/lib/motion (SNAP or SHEET)" },
+  { pattern: /\bwhileHover=/, use: "a color change on hover, not a scale" },
+  { pattern: /\btext-caption\b/, use: "text-label" },
+  { pattern: /\bleading-[\w[]/, use: "the line height of the text size" },
 ];
 
 // Flight categories keep the conventional VFR, MVFR, IFR, LIFR colors.

@@ -69,6 +69,68 @@ function cityPathname(city: City): string {
   return buildCanonicalCityPath(city);
 }
 
+/** Query parameters that point at an aircraft or an airport. */
+const LINK_PARAMS = ["fpv", "follow", "sel", "airport"] as const;
+const HEX_RE = /^[0-9a-f]{6}$/;
+const IATA_RE = /^[A-Z]{3}$/;
+
+/** What a shared link asks to open. */
+export type SelectionLink =
+  | { mode: "fpv" | "follow" | "select"; icao24: string }
+  | { mode: "airport"; iata: string };
+
+/** The parts of the selection a link can carry. */
+export type LinkableSelection = {
+  selection:
+    | { kind: "none" }
+    | { kind: "aircraft"; icao24: string }
+    | { kind: "airport"; iata: string };
+  follow: string | null;
+  fpv: string | null;
+};
+
+/**
+ * Reads the link from a query string. First person wins over follow, follow
+ * over a plain selection, so older `?fpv=` links keep working.
+ */
+export function parseSelectionLink(search: string): SelectionLink | null {
+  const params = new URLSearchParams(search);
+  const hex = (key: string) => {
+    const raw = params.get(key)?.trim().toLowerCase();
+    return raw && HEX_RE.test(raw) ? raw : null;
+  };
+  const fpv = hex("fpv");
+  if (fpv) return { mode: "fpv", icao24: fpv };
+  const follow = hex("follow");
+  if (follow) return { mode: "follow", icao24: follow };
+  const sel = hex("sel");
+  if (sel) return { mode: "select", icao24: sel };
+  const airport = params.get("airport")?.trim().toUpperCase();
+  if (airport && IATA_RE.test(airport)) return { mode: "airport", iata: airport };
+  return null;
+}
+
+/** Writes the selection into `params`, replacing any earlier link. */
+export function writeSelectionLink(
+  params: URLSearchParams,
+  state: LinkableSelection,
+): void {
+  for (const key of LINK_PARAMS) params.delete(key);
+  if (state.fpv) {
+    params.set("fpv", state.fpv);
+  } else if (state.follow) {
+    params.set("follow", state.follow);
+  } else if (state.selection.kind === "aircraft") {
+    params.set("sel", state.selection.icao24);
+  } else if (state.selection.kind === "airport") {
+    params.set("airport", state.selection.iata);
+  }
+}
+
+function replaceUrl(url: URL): void {
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function syncCityToUrl(city: City): void {
   if (typeof window === "undefined") return;
   try {
@@ -77,49 +139,33 @@ export function syncCityToUrl(city: City): void {
     url.searchParams.delete("city");
     url.searchParams.delete("from");
     url.searchParams.delete("to");
-    url.searchParams.delete("fpv");
+    for (const key of LINK_PARAMS) url.searchParams.delete(key);
     url.pathname = cityPathname(city);
-    window.history.replaceState(
-      null,
-      "",
-      `${url.pathname}${url.search}${url.hash}`,
-    );
+    replaceUrl(url);
   } catch {
     // URL parsing or history API may fail in non-browser environments
   }
 }
 
-export function syncFpvToUrl(icao24: string | null, activeCity?: City): void {
+/** Keeps the address bar pointing at what is open, without adding history. */
+export function syncSelectionToUrl(state: LinkableSelection): void {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete("city");
     url.searchParams.delete("from");
     url.searchParams.delete("to");
-    if (icao24) {
-      url.searchParams.set("fpv", icao24);
-      // Keep the current pathname so the URL still reflects the active city.
-    } else {
-      url.searchParams.delete("fpv");
-      if (activeCity) {
-        url.pathname = cityPathname(activeCity);
-      }
-    }
-    window.history.replaceState(
-      null,
-      "",
-      `${url.pathname}${url.search}${url.hash}`,
-    );
+    const before = url.search;
+    writeSelectionLink(url.searchParams, state);
+    if (url.search !== before) replaceUrl(url);
   } catch {
     // URL parsing or history API may fail in non-browser environments
   }
 }
 
-export function resolveInitialFpv(): string | null {
+export function resolveInitialLink(): SelectionLink | null {
   try {
-    const params = new URLSearchParams(window.location.search);
-    const raw = params.get("fpv")?.trim().toLowerCase();
-    return raw && /^[0-9a-f]{6}$/.test(raw) ? raw : null;
+    return parseSelectionLink(window.location.search);
   } catch {
     // Not in a browser environment (SSR)
     return null;

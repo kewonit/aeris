@@ -7,7 +7,6 @@ import {
   type AircraftLayerParams,
   aircraftOrientation,
   buildAircraftModelLayers,
-  modelTailShareFor,
   normalizeScene,
 } from "./aircraft-model-layers";
 import {
@@ -92,6 +91,7 @@ function narrowbodyParams(
     dataVersion: 0,
     layersVisible: true,
     globeFade: 1,
+    onSphere: false,
     aircraftSizes,
     altitudeDisplayMode: "realistic",
     altColors: false,
@@ -221,10 +221,6 @@ test("normalizing turns a model so its nose points along +X", () => {
   assert.deepEqual(footprint, { x: 1, z: 0.25 });
   assertClose(transformPoint(matrix, [10, 0, 14]), [0.5, 0, 0]);
   assertClose(transformPoint(matrix, [11, 0, 10]), [0, 0, -0.125]);
-});
-
-test("the tail share runs along the normalised fuselage", () => {
-  assert.equal(modelTailShareFor({ x: 1, z: 0.78 }), 0.45);
 });
 
 // Where each model's nose points in its own file, from the mapping notes.

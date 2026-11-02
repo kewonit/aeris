@@ -147,5 +147,5 @@ export function useKeyboardCamera(
       window.removeEventListener("aeris:camera-stop", onStop);
       if (frameId != null) cancelAnimationFrame(frameId);
     };
-  }, [map, isLoaded]);
+  }, [map, isLoaded, isFpvActiveRef, isInteractingRef, idleTimerRef]);
 }

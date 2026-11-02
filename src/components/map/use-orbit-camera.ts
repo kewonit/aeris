@@ -15,7 +15,7 @@ export function useOrbitCamera(
   map: maplibregl.Map | null,
   isLoaded: boolean,
   city: City,
-  followFlight: FlightState | null | undefined,
+  following: boolean,
   fpvFlight: FlightState | null | undefined,
   settings: Settings,
   suspended: boolean,
@@ -37,7 +37,7 @@ export function useOrbitCamera(
       !city ||
       !settings.autoOrbit ||
       suspended ||
-      followFlight ||
+      following ||
       fpvFlight
     ) {
       if (orbitFrameRef.current != null) {
@@ -201,7 +201,7 @@ export function useOrbitCamera(
     map,
     isLoaded,
     city,
-    followFlight,
+    following,
     fpvFlight,
     settings.autoOrbit,
     suspended,

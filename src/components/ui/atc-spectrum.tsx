@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   AudioWaveform,
   Blend,
@@ -85,7 +86,7 @@ function SegmentedControl({
         className="absolute top-0.5 bottom-0.5 rounded-sm bg-background ring-1 ring-border"
         style={{ width: `calc(${segW}% - 4px)` }}
         animate={{ left: `calc(${activeIndex * segW}% + 2px)` }}
-        transition={{ type: "spring", stiffness: 420, damping: 28 }}
+        transition={SNAP}
       />
       {MODES.map((m) => (
         <button
@@ -413,7 +414,7 @@ export function AtcSpectrum({
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, scale: 0.98 }}
-      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+      transition={SNAP}
       className="overflow-hidden rounded-lg border border-border bg-background shadow-lift"
     >
       {/* Header */}

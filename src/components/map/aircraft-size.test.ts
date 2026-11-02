@@ -7,12 +7,12 @@ import type { FlightState } from "@/lib/opensky";
 
 import {
   aircraftFootprintPixels,
-  aircraftTailShare,
+  aircraftTail,
   aircraftWingspanMeters,
   altitudeMagnification,
   metersPerPixel,
-  recordModelTailShare,
 } from "./aircraft-size";
+import { MODEL_TAIL_POINTS } from "./model-tail-points";
 
 test("big jets stay in proportion with light aircraft at city zoom", () => {
   const lightAircraft = aircraftFootprintPixels(11, 10, 37.6);
@@ -106,17 +106,17 @@ test("in a tilted, turned view the enlargement is the depth ratio", () => {
   assert.ok(Math.abs(magnification - across(8_000) / across(0)) < 0.01);
 });
 
-test("a loaded model's tail share replaces the default", () => {
+test("a model's trail meets its measured tail cone, an icon's its tail", () => {
   const flight = {
     icao24: "tail1",
     typeCode: "B738",
     category: 3,
   } as FlightState;
 
-  assert.equal(aircraftTailShare(flight, false), 0.4);
-  recordModelTailShare("b737", 0.43);
-  assert.equal(aircraftTailShare(flight, true), 0.43);
-  assert.equal(aircraftTailShare(flight, false), 0.4);
+  assert.deepEqual(aircraftTail(flight, false), { share: 0.4, rise: 0 });
+  const tail = aircraftTail(flight, true);
+  assert.equal(tail.share, MODEL_TAIL_POINTS.b737.back);
+  assert.equal(tail.rise, MODEL_TAIL_POINTS.b737.up);
 });
 
 test("magnification can be measured against the map's centre instead of the ground below", () => {

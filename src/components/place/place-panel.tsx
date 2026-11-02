@@ -5,16 +5,15 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import dynamic from "next/dynamic";
-import { X } from "lucide-react";
 import type { FlightState } from "@/lib/opensky";
 import type { AirportBoardData } from "@/hooks/use-airport-board";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-const FlightCard = dynamic(() =>
-  import("@/components/ui/flight-card").then((mod) => mod.FlightCard),
+const AircraftCard = dynamic(() =>
+  import("@/components/place/aircraft-card").then((mod) => mod.AircraftCard),
 );
 
 const AirportInfoCard = dynamic(() =>
@@ -23,15 +22,16 @@ const AirportInfoCard = dynamic(() =>
   ),
 );
 
-export type AerisLeftPanel =
+export type PlacePanelKind =
   | { kind: "flight" }
   | { kind: "airport" };
 
-export const AERIS_LEFT_SIDEBAR_WIDTH = "clamp(22rem, 30vw, 28rem)";
-/** How far the sidebar tucks under the rounded map edge. */
-export const AERIS_LEFT_SIDEBAR_OVERLAP_PX = 4;
+/** The desktop panel's width, beside the map rather than over its middle. */
+export const PLACE_PANEL_WIDTH = "clamp(22rem, 28vw, 25rem)";
+/** Clear space between the panel and what the camera centres beside it. */
+const PANEL_GAP_PX = 12;
 
-type AerisLeftPanelSnapshot =
+type PlacePanelSnapshot =
   | { kind: "flight"; flight: FlightState }
   | {
       kind: "airport";
@@ -39,12 +39,13 @@ type AerisLeftPanelSnapshot =
       selectedIcao24: string | null;
     };
 
-type AerisLeftSidebarProps = {
-  leftPanel: AerisLeftPanel | null;
-  onClose: () => void;
+type PlacePanelProps = {
+  leftPanel: PlacePanelKind | null;
   displayFlight: FlightState | null;
   onCloseFlight: () => void;
   onToggleFpv: (icao24: string) => void;
+  followIcao24: string | null;
+  onToggleFollow?: (icao24: string) => void;
   airportBoard: AirportBoardData;
   onSelectAirportFlight: (icao24: string) => void;
   selectedIcao24: string | null;
@@ -54,12 +55,18 @@ type AerisLeftSidebarProps = {
   onRestoreFocus: () => void;
 };
 
-export function AerisLeftSidebar({
+/**
+ * The desktop's place card: a panel that floats inset over the map, under
+ * the search field, rather than pushing the map aside. The camera keeps
+ * what is selected in the clear space beside it.
+ */
+export function PlacePanel({
   leftPanel,
-  onClose,
   displayFlight,
   onCloseFlight,
   onToggleFpv,
+  followIcao24,
+  onToggleFollow,
   airportBoard,
   onSelectAirportFlight,
   selectedIcao24,
@@ -67,10 +74,10 @@ export function AerisLeftSidebar({
   atc,
   onInsetChange,
   onRestoreFocus,
-}: AerisLeftSidebarProps) {
+}: PlacePanelProps) {
   const isOpen = leftPanel !== null;
   const asideRef = useRef<HTMLElement>(null);
-  const currentSnapshot = useMemo<AerisLeftPanelSnapshot | null>(
+  const currentSnapshot = useMemo<PlacePanelSnapshot | null>(
     () =>
       leftPanel?.kind === "flight" && displayFlight
         ? { kind: "flight", flight: displayFlight }
@@ -86,8 +93,8 @@ export function AerisLeftSidebar({
     [airportBoard, displayFlight, leftPanel, selectedIcao24],
   );
   const [snapshotMemory, setSnapshotMemory] = useState<{
-    observed: AerisLeftPanelSnapshot | null;
-    retained: AerisLeftPanelSnapshot | null;
+    observed: PlacePanelSnapshot | null;
+    retained: PlacePanelSnapshot | null;
   }>({ observed: currentSnapshot, retained: currentSnapshot });
   if (currentSnapshot !== snapshotMemory.observed) {
     setSnapshotMemory({
@@ -101,9 +108,7 @@ export function AerisLeftSidebar({
     if (!aside) return;
 
     const reportInset = () => {
-      onInsetChange(
-        Math.max(0, aside.offsetWidth - AERIS_LEFT_SIDEBAR_OVERLAP_PX),
-      );
+      onInsetChange(Math.max(0, aside.offsetLeft + aside.offsetWidth + PANEL_GAP_PX));
     };
 
     reportInset();
@@ -122,17 +127,6 @@ export function AerisLeftSidebar({
   const label =
     snapshot?.kind === "airport" ? "Airport details" : "Aircraft details";
 
-  const handleCloseButton = () => {
-    if (leftPanel?.kind === "flight") {
-      onCloseFlight();
-    } else if (leftPanel?.kind === "airport") {
-      onCloseAirport();
-    } else {
-      onClose();
-    }
-    onRestoreFocus();
-  };
-
   return (
     <aside
       ref={asideRef}
@@ -145,34 +139,35 @@ export function AerisLeftSidebar({
           setSnapshotMemory({ observed: null, retained: null });
         }
       }}
-      className="pointer-events-auto fixed inset-y-0 left-0 z-40 hidden w-(--aeris-sidebar-width) flex-col border-r border-border bg-background text-foreground transition-transform duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-full sm:flex"
-      style={
-        { "--aeris-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH } as CSSProperties
-      }
+      className="aeris-float pointer-events-auto fixed top-17 bottom-4 left-4 z-30 hidden w-(--place-width) flex-col overflow-hidden rounded-xl text-foreground transition-[translate,opacity] duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-4 data-[open=false]:opacity-0 sm:flex"
     >
-      <button
-        type="button"
-        onClick={handleCloseButton}
-        className="absolute top-2 right-2 z-10 grid size-11 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
-        aria-label={`Close ${label.toLowerCase()}`}
-      >
-        <span className="grid size-8 place-items-center rounded-full bg-background shadow-lift">
-          <X className="size-4" aria-hidden="true" />
-        </span>
-      </button>
-
       <div className="min-h-0 flex-1">
         {snapshot?.kind === "flight" ? (
-          <FlightCard flight={snapshot.flight} onToggleFpv={onToggleFpv} />
+          <ScrollArea className="h-full">
+            <AircraftCard
+              flight={snapshot.flight}
+              following={followIcao24 === snapshot.flight.icao24}
+              onToggleFollow={onToggleFollow}
+              onToggleFpv={onToggleFpv}
+              onClose={() => {
+                onCloseFlight();
+                onRestoreFocus();
+              }}
+            />
+          </ScrollArea>
         ) : snapshot?.kind === "airport" ? (
-          <AirportInfoCard
-            board={snapshot.board}
-            onSelectFlight={onSelectAirportFlight}
-            selectedIcao24={snapshot.selectedIcao24}
-            onClose={onCloseAirport}
-            atc={atc}
-            variant="sidebar"
-          />
+          <ScrollArea className="h-full">
+            <AirportInfoCard
+              board={snapshot.board}
+              onSelectFlight={onSelectAirportFlight}
+              selectedIcao24={snapshot.selectedIcao24}
+              onClose={() => {
+                onCloseAirport();
+                onRestoreFocus();
+              }}
+              atc={atc}
+            />
+          </ScrollArea>
         ) : null}
       </div>
     </aside>

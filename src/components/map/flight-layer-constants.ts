@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import { type MapboxOverlay } from "@deck.gl/mapbox";
+import { type MapLibreOverlay } from "@deck.gl/maplibre";
 import { type PickingInfo } from "@deck.gl/core";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
@@ -7,7 +7,7 @@ import type { TrailTrack } from "@/lib/trails/types";
 
 // ── Overlay type augmentation ──────────────────────────────────────────
 
-export type DeckGLOverlay = MapboxOverlay & {
+export type DeckGLOverlay = MapLibreOverlay & {
   pickObject?(opts: {
     x: number;
     y: number;
@@ -20,16 +20,21 @@ export type DeckGLOverlay = MapboxOverlay & {
 export const DEFAULT_ANIM_DURATION_MS = 4_500;
 export const MIN_ANIM_DURATION_MS = 1_000;
 export const MAX_ANIM_DURATION_MS = 30_000;
-export const TELEPORT_THRESHOLD = 0.3;
 export const TRACK_DAMPING = 0.18;
 export const AIRCRAFT_PICK_RADIUS_PX = 14;
 export const SELECTION_FADE_MS = 600;
+/** Traffic fades in over this long when it first appears. */
+export const APPEAR_MS = 500;
+/** Leaving first person, its aircraft eases back onto the map over this long. */
+export const FPV_EXIT_MS = 12_000;
 
-// Globe/Mercator hard-switch: dots below this zoom, flights above.
-export const GLOBE_SWITCH_ZOOM = 5.8;
-export const GLOBE_FADE_ZOOM_FLOOR = GLOBE_SWITCH_ZOOM - 0.05;
-export const GLOBE_FADE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM + 0.05;
-export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM;
+// On the globe, the whole earth in view is drawn as light dots by the map
+// itself; from about zoom 3.5, with a region in view, deck draws aircraft
+// and trails on the sphere. The two cross-fade over half a zoom level.
+export const GLOBE_SWITCH_ZOOM = 3.5;
+export const GLOBE_FADE_ZOOM_FLOOR = GLOBE_SWITCH_ZOOM - 0.25;
+export const GLOBE_FADE_ZOOM_CEIL = GLOBE_SWITCH_ZOOM + 0.25;
+export const GLOBE_NATIVE_ZOOM_CEIL = GLOBE_FADE_ZOOM_CEIL;
 
 // LOD: switch between 3D ScenegraphLayers and 2D IconLayer.
 // Uses hysteresis to avoid flickering when hovering near the boundary.
@@ -53,6 +58,11 @@ export type Snapshot = {
    * nose turns on from there; unset for a fresh or teleported aircraft.
    */
   heading?: number;
+  /**
+   * False when no track has been reported yet, so `track` is a placeholder
+   * and the nose takes the direction of travel instead of pointing north.
+   */
+  trackKnown?: boolean;
 };
 
 export type FlightLayerProps = {
@@ -75,6 +85,11 @@ export type FlightLayerProps = {
    * the camera can follow it exactly; null while it is not drawn.
    */
   fpvDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
+  /** The followed aircraft, whose drawn position is shared like FPV's. */
+  followIcao24?: string | null;
+  followDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
+  /** Whether the map is dark, for the colour of lines drawn on it. */
+  isDark?: boolean;
 };
 
 /** Where the first person aircraft is drawn this frame. */

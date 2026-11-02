@@ -22,9 +22,13 @@ export function RunwaysList({ runways, metric }: Props) {
             <dt className="font-mono text-small text-foreground">
               {runway.le_ident}/{runway.he_ident}
             </dt>
-            <dd className="text-label text-subtle">
-              {formatRunwayLength(runway.length_ft, metric)} ·{" "}
-              {surfaceLabel(runway.surface)}
+            <dd className="flex gap-4 text-label text-subtle">
+              <span className="tabular-nums">
+                {formatRunwayLength(runway.length_ft, metric)}
+              </span>
+              <span className="w-16 text-right">
+                {surfaceLabel(runway.surface)}
+              </span>
             </dd>
           </div>
         ))}

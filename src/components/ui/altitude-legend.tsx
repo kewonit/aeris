@@ -1,42 +1,94 @@
 "use client";
 
-import { motion } from "motion/react";
+import { memo, useMemo, useState } from "react";
+import { Route } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
+import {
+  ALTITUDE_RAMP_TOP_METERS,
+  altitudeRamp,
+  altitudeRampPosition,
+} from "@/lib/flight-utils";
 import { formatAltitude } from "@/lib/unit-formatters";
 
-export function AltitudeLegend() {
-  const { settings } = useSettings();
-  const ticks = [13000, 6096, 3048, 1524, 610, 152, 0];
+const TICKS = [ALTITUDE_RAMP_TOP_METERS, 6096, 3048, 1524, 610, 152, 0];
+const SCALE_PX = 128;
+const GRADIENT_STOPS = 12;
+
+/**
+ * The traffic trails switch and the key to the altitude colours, in one
+ * chip. The key is drawn from the same ramp the aircraft are; pressing it
+ * opens the full scale above, with each height where its colour is.
+ */
+export const AltitudeLegend = memo(function AltitudeLegend({
+  dark,
+}: {
+  dark: boolean;
+}) {
+  const { settings, update } = useSettings();
+  const trails = settings.showTrails;
+  const [open, setOpen] = useState(false);
+  const low = formatAltitude(0, settings.unitSystem);
+  const high = formatAltitude(ALTITUDE_RAMP_TOP_METERS, settings.unitSystem);
+
+  const ramp = useMemo(() => {
+    const colors = altitudeRamp(dark ? "dark" : "light");
+    return Array.from({ length: GRADIENT_STOPS }, (_, i) => {
+      const [r, g, b] = colors[Math.round((i / (GRADIENT_STOPS - 1)) * (colors.length - 1))];
+      return `rgb(${r},${g},${b})`;
+    }).join(", ");
+  }, [dark]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.6 }}
-      className="flex flex-col gap-2 rounded-lg border p-3 border-border bg-background"
-      role="img"
-      aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}
-    >
-      <p className="aeris-eyebrow text-subtle">Altitude</p>
-      <div className="flex items-center gap-2">
-        <div
-          className="h-32 w-1.5 rounded-full"
-          style={{
-            background:
-              "linear-gradient(to top, rgb(72,210,160), rgb(160,195,80), rgb(235,150,60), rgb(240,110,80), rgb(220,85,130), rgb(180,90,190), rgb(120,110,220), rgb(100,170,240))",
-          }}
+    <div className="aeris-float relative flex h-11 items-center rounded-full">
+      <button
+        type="button"
+        onClick={() => update("showTrails", !trails)}
+        aria-pressed={trails}
+        aria-label="Traffic trails"
+        title="Trails for all traffic (T)"
+        className={`flex h-11 items-center rounded-l-full pr-3 pl-3.5 transition-colors hover:text-foreground sm:pl-4 ${
+          trails ? "text-foreground" : "text-subtle"
+        }`}
+      >
+        <Route className="size-4" aria-hidden="true" />
+      </button>
+      <span className="h-5 w-px bg-border" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-label={`Altitude colours, ${low} to ${high}`}
+        className="flex h-11 items-center gap-2 rounded-r-full pr-3.5 pl-3 text-muted-foreground transition-colors hover:text-foreground sm:pr-4"
+      >
+        <span className="hidden text-label sm:inline">Altitude</span>
+        <span
+          className="h-1.5 w-12 rounded-full"
+          style={{ background: `linear-gradient(to right, ${ramp})` }}
+          aria-hidden="true"
         />
-        <div className="flex h-32 flex-col justify-between">
-          {ticks.map((tick) => (
+      </button>
+      {open && (
+        <div className="aeris-float absolute right-0 bottom-full mb-2 flex flex-col gap-2 rounded-lg p-3 text-muted-foreground">
+          <span className="text-label">Altitude</span>
+          <span className="flex gap-2">
             <span
-              key={tick}
-              className="text-micro font-medium text-muted-foreground"
-            >
-              {formatAltitude(tick, settings.unitSystem)}
+              className="w-1.5 rounded-full"
+              style={{ height: SCALE_PX, background: `linear-gradient(to top, ${ramp})` }}
+            />
+            <span className="relative w-16" style={{ height: SCALE_PX }}>
+              {TICKS.map((tick) => (
+                <span
+                  key={tick}
+                  className="absolute left-0 -translate-y-1/2 text-micro whitespace-nowrap text-muted-foreground"
+                  style={{ top: `${(1 - altitudeRampPosition(tick)) * 100}%` }}
+                >
+                  {formatAltitude(tick, settings.unitSystem)}
+                </span>
+              ))}
             </span>
-          ))}
+          </span>
         </div>
-      </div>
-    </motion.div>
+      )}
+    </div>
   );
-}
+});

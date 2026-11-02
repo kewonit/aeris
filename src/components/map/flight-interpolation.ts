@@ -1,19 +1,24 @@
 import type { FlightState } from "@/lib/opensky";
 import type { Snapshot } from "./flight-layer-constants";
-import { TELEPORT_THRESHOLD } from "./flight-layer-constants";
-import { lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
+import { angleDelta, lerpAngle, horizontalDistanceFromLngLat } from "./flight-math";
 
 const MIN_DISPLAY_TRACK_DISTANCE_METERS = 15;
 export const FLIGHT_RENDER_STALE_MS = 15_000;
-export const MAX_FLIGHT_EXTRAPOLATION_MS = 2_000;
+/**
+ * A poll can be late by this much and traffic still flies on along its
+ * last move, so a slow answer never parks aircraft in mid air.
+ */
+export const MAX_FLIGHT_EXTRAPOLATION_MS = 12_000;
+/** Aircraft on the ground turn often, so they glide on only this long. */
+export const GROUND_EXTRAPOLATION_MS = 2_000;
 
 /**
  * How far along its move from the previous snapshot to the current one
  * traffic is drawn, and whether it is still moving.
  *
- * A poll that arrives late leaves aircraft gliding on along their last move
- * for up to `maxExtrapolationMs`, rather than parked at its end until the
- * report lands. Reports are timed to when they arrive (see carryForward),
+ * A poll that arrives late leaves aircraft flying on along their last move,
+ * at the same speed, for up to `maxExtrapolationMs`, rather than parked at
+ * its end until the report lands. Reports are timed to when they arrive (see carryForward),
  * so the drawn traffic trails them by a poll and the next move carries on
  * from there at the same speed. While the page is inactive, traffic holds
  * at the current snapshot.
@@ -97,7 +102,89 @@ export function resolveDisplayTrack(input: {
     return motionTrack;
   }
 
+  // The nose follows the drawn path, so it never crabs across it, but an
+  // aircraft never flies backwards: a move more than a right angle off its
+  // reported track is a correction, and the nose keeps to the track.
+  if (Math.abs(angleDelta(reportedTrack, motionTrack)) > NOSE_FOLLOWS_MOVE_DEG) {
+    return reportedTrack;
+  }
+
   return motionTrack;
+}
+
+/** A move this far off the reported track is a correction, not a course. */
+const NOSE_FOLLOWS_MOVE_DEG = 90;
+/** Airborne and at least this fast, an aircraft cannot move backwards. */
+const BACKWARD_MOVE_MIN_SPEED_MPS = 30;
+/** A move further than this off the reported track counts as backwards. */
+const BACKWARD_MOVE_DEG = 120;
+
+/**
+ * Whether drawing a move from `from` to `to` would show a flying aircraft
+ * going backwards, as a report carried forward too far and then corrected
+ * would. Such a move is held instead, and the aircraft carries on from
+ * where it is when the next report agrees with its track.
+ */
+export function isBackwardMove(
+  from: { lng: number; lat: number },
+  to: { lng: number; lat: number },
+  flight: Pick<FlightState, "onGround" | "velocity" | "trueTrack">,
+): boolean {
+  if (
+    flight.onGround ||
+    flight.velocity == null ||
+    !(flight.velocity >= BACKWARD_MOVE_MIN_SPEED_MPS) ||
+    flight.trueTrack == null ||
+    !Number.isFinite(flight.trueTrack)
+  ) {
+    return false;
+  }
+  const bearing = bearingFromLngLat(from, to);
+  if (bearing == null) return false;
+  return Math.abs(angleDelta(flight.trueTrack, bearing)) > BACKWARD_MOVE_DEG;
+}
+
+// ── Move timing ────────────────────────────────────────────────────────
+
+/** How many recent poll intervals the move length is taken from. */
+const MOVE_INTERVAL_HISTORY = 5;
+/**
+ * A poll this much sooner than usual was forced, by a change of area,
+ * feed or view, or a reconnect. It is not a sign the feed got faster.
+ */
+const FORCED_POLL_SHARE = 0.6;
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * How long the next move lasts, and the intervals to remember.
+ *
+ * Every aircraft is drawn a poll behind its reports, so each move must
+ * last the usual interval between polls. A poll that arrives early, as a
+ * forced one does, still starts a move that long: shortening it to the
+ * early interval would squeeze a whole poll of flight into a second and
+ * send aircraft racing ahead, then gliding back. Forced polls are also
+ * kept out of the history, so a burst of them cannot drag the usual
+ * interval down. The median shrugs off a single slow tick.
+ */
+export function nextMoveDuration(
+  intervals: number[],
+  observedMs: number,
+  limits: { minMs: number; maxMs: number },
+): { durationMs: number; intervals: number[] } {
+  const usual = intervals.length ? median(intervals) : null;
+  const forced = usual !== null && observedMs < usual * FORCED_POLL_SHARE;
+  const next = forced
+    ? intervals
+    : [...intervals, observedMs].slice(-MOVE_INTERVAL_HISTORY);
+  const durationMs = Math.max(
+    limits.minMs,
+    Math.min(limits.maxMs, median(next)),
+  );
+  return { durationMs, intervals: next };
 }
 
 // ── Heading ────────────────────────────────────────────────────────────
@@ -125,7 +212,7 @@ export function displayHeading(
   elapsedMs: number,
 ): number {
   const course = resolveDisplayTrack({
-    reportedTrack: curr.track,
+    reportedTrack: curr.trackKnown === false ? null : curr.track,
     previousPosition: prev,
     currentPosition: curr,
   });
@@ -137,8 +224,11 @@ export function displayHeading(
 
 // ── Report timing ──────────────────────────────────────────────────────
 
-/** A report is carried forward at most this far. */
-export const MAX_REPORT_LEAD_MS = 10_000;
+/**
+ * A report is carried forward at most this far. Some feeds answer with
+ * positions 20 seconds old or more; flown on, they line up with the rest.
+ */
+export const MAX_REPORT_LEAD_MS = 30_000;
 /** Recent polls kept per provider to find its quickest answer. */
 const RECEIPT_HISTORY = 12;
 const METERS_PER_DEGREE = 111_320;
@@ -201,7 +291,8 @@ export function reportLeadMs(
 
 /**
  * Where an aircraft is `leadMs` after its reported position, flying on
- * straight at its reported speed and climb.
+ * straight at its reported speed and climb; a negative lead gives where it
+ * was that long before.
  *
  * Providers answer from caches and report positions of differing ages, so
  * two reports a poll apart can be 4 or 6 seconds of flight apart. Carried
@@ -220,7 +311,8 @@ export function carryForward(
   const track = flight.trueTrack;
   if (
     flight.onGround ||
-    !(seconds > 0) ||
+    seconds === 0 ||
+    !Number.isFinite(seconds) ||
     speed == null ||
     !Number.isFinite(speed) ||
     speed <= 0 ||
@@ -244,7 +336,74 @@ export function carryForward(
   };
 }
 
+// ── Discontinuities ────────────────────────────────────────────────────
+
+/** A jump shorter than this is never treated as one. */
+const JUMP_MIN_METERS = 3_000;
+/** Speeds below this are rounded up when judging a jump. */
+const JUMP_FLOOR_SPEED_MPS = 100;
+/** How much faster than its speed a move must be to count as a jump. */
+const JUMP_SPEED_FACTOR = 2.2;
+
+/**
+ * Whether getting from `from` to `to` in one move of `moveMs` is a jump no
+ * aircraft could fly, as when a feed loses an aircraft and finds it again
+ * kilometres on, or two feeds disagree. Such a move is not animated: the
+ * aircraft starts again where it now is, rather than racing there.
+ */
+export function isDiscontinuity(
+  from: { lng: number; lat: number },
+  to: { lng: number; lat: number },
+  moveMs: number,
+  speedMps: number | null | undefined,
+): boolean {
+  const meters = horizontalDistanceFromLngLat(from.lng, from.lat, to.lng, to.lat);
+  const seconds = Math.max(moveMs, 1_000) / 1_000;
+  const speed =
+    speedMps != null && Number.isFinite(speedMps) ? speedMps : 0;
+  return (
+    meters >
+    Math.max(
+      JUMP_MIN_METERS,
+      JUMP_SPEED_FACTOR * Math.max(speed, JUMP_FLOOR_SPEED_MPS) * seconds,
+    )
+  );
+}
+
 // ── Flight Interpolation ───────────────────────────────────────────────
+
+/** The signed change in longitude from `a` to `b`, the short way round. */
+function lngDelta(a: number, b: number): number {
+  return ((((b - a) % 360) + 540) % 360) - 180;
+}
+
+/** A longitude brought back between -180 and 180. */
+function wrapLng(lng: number): number {
+  return lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * The point `t` of the way from `prev` to `curr`, crossing the 180th
+ * meridian the short way rather than all the way round the world.
+ */
+export function lerpSnapshot(
+  prev: Snapshot,
+  curr: Snapshot,
+  t: number,
+): { lng: number; lat: number; alt: number } {
+  return {
+    lng: wrapLng(prev.lng + lngDelta(prev.lng, curr.lng) * t),
+    lat: prev.lat + (curr.lat - prev.lat) * t,
+    alt: prev.alt + (curr.alt - prev.alt) * t,
+  };
+}
+
+/** How far along its move an aircraft is drawn: on the ground, it stops sooner. */
+function moveProgress(f: FlightState, tPos: number, animDuration: number): number {
+  return f.onGround
+    ? Math.min(tPos, 1 + GROUND_EXTRAPOLATION_MS / Math.max(animDuration, 1))
+    : tPos;
+}
 
 export function computeInterpolatedFlights(
   currentFlights: FlightState[],
@@ -269,22 +428,19 @@ export function computeInterpolatedFlights(
         trueTrack: resolveDisplayTrack({
           reportedTrack: Number.isFinite(f.trueTrack)
             ? f.trueTrack!
-            : curr.track,
+            : curr.trackKnown === false
+              ? null
+              : curr.track,
         }),
       };
     }
 
-    const dx = curr.lng - prev.lng;
-    const dy = curr.lat - prev.lat;
-    if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) {
-      return f;
-    }
-
+    const at = lerpSnapshot(prev, curr, moveProgress(f, tPos, animDuration));
     return {
       ...f,
-      longitude: prev.lng + dx * tPos,
-      latitude: prev.lat + dy * tPos,
-      baroAltitude: prev.alt + (curr.alt - prev.alt) * tPos,
+      longitude: at.lng,
+      latitude: at.lat,
+      baroAltitude: at.alt,
       trueTrack: displayHeading(prev, curr, tPos * animDuration),
     };
   });
@@ -330,18 +486,19 @@ export function updateInterpolatedInPlace(
       o.latitude = curr.lat;
       o.baroAltitude = curr.alt;
       o.trueTrack = resolveDisplayTrack({
-        reportedTrack: Number.isFinite(f.trueTrack) ? f.trueTrack! : curr.track,
+        reportedTrack: Number.isFinite(f.trueTrack)
+          ? f.trueTrack!
+          : curr.trackKnown === false
+            ? null
+            : curr.track,
       });
       continue;
     }
 
-    const dx = curr.lng - prev.lng;
-    const dy = curr.lat - prev.lat;
-    if (dx * dx + dy * dy > TELEPORT_THRESHOLD * TELEPORT_THRESHOLD) continue;
-
-    o.longitude = prev.lng + dx * tPos;
-    o.latitude = prev.lat + dy * tPos;
-    o.baroAltitude = prev.alt + (curr.alt - prev.alt) * tPos;
+    const at = lerpSnapshot(prev, curr, moveProgress(f, tPos, animDuration));
+    o.longitude = at.lng;
+    o.latitude = at.lat;
+    o.baroAltitude = at.alt;
     o.trueTrack = displayHeading(prev, curr, tPos * animDuration);
   }
 }

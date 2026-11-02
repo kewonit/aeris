@@ -9,6 +9,7 @@ import {
   DEFAULT_ZOOM,
   FPV_EXIT_DURATION_MS,
   fpvExitCamera,
+  framingZoom,
   isWellBelowCamera,
   projectLngLatElevationPixelDelta,
   smoothstep,
@@ -25,6 +26,7 @@ import type { FpvDrawnPosition } from "./flight-layer-constants";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
+import { useFollowCamera } from "./use-follow-camera";
 import {
   coordinatesMatch,
   mapPanelMotionOptions,
@@ -35,12 +37,14 @@ import {
   type MapPanelCameraState,
 } from "./panel-camera";
 
-const FOLLOW_ZOOM = 10.5;
-const FOLLOW_PITCH = 55;
-const FOLLOW_EASE_MS = 2000;
+// Camera moves are never `essential`, so MapLibre jumps instead of flying
+// when the system asks for reduced motion.
 const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
+/** Zoomed out further than this, opening a card also zooms in to it. */
+const FAR_ZOOM = 7.5;
+const FAR_ZOOM_IN_MS = 1_600;
 
 
 /**
@@ -81,14 +85,21 @@ function drawnAircraftCenter(
 
 export function CameraController({
   city,
-  followFlight = null,
+  followIcao24 = null,
+  followDrawnRef,
+  onFollowEnd,
   fpvIcao24 = null,
   fpvFlight = null,
   fpvDrawnRef,
   panelCamera,
 }: {
   city: City;
-  followFlight?: FlightState | null;
+  /** The aircraft the camera keeps centred, if any. */
+  followIcao24?: string | null;
+  /** Where the followed aircraft is drawn each frame, from the flight layers. */
+  followDrawnRef: MutableRefObject<FpvDrawnPosition | null>;
+  /** Called when the user pans away from a followed aircraft. */
+  onFollowEnd: () => void;
   /** The FPV selection. Stays set while a poll misses the aircraft. */
   fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
@@ -99,19 +110,16 @@ export function CameraController({
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
   const prevCityRef = useRef<string | null>(null);
-  const prevFollowRef = useRef<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbitFrameRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
-  const isFollowingRef = useRef(false);
-  const followFlyToActiveRef = useRef(false);
-  const followFlyToTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const isFpvActiveRef = useRef(false);
   const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
   const previousPanelInsetRef = useRef(0);
+  const previousPanelBottomRef = useRef(0);
+  /** Until when a zoom in to a far selection is under way. */
+  const farZoomUntilRef = useRef(0);
   const cityTransitionTargetRef = useRef<[number, number] | null>(null);
   const panelCameraRef = useRef(panelCamera);
   const hasPanelCoordinates = panelCamera.coordinates !== null;
@@ -143,7 +151,7 @@ export function CameraController({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const transitionOptions = isAirportPanelNavigation
       ? mapPanelMotionOptions(reducePanelMotion)
-      : { duration: CITY_FLY_MS, essential: true as const };
+      : { duration: CITY_FLY_MS, essential: false as const };
     const clearTargetTimer = window.setTimeout(() => {
       if (coordinatesMatch(cityTransitionTargetRef.current, city.coordinates)) {
         cityTransitionTargetRef.current = null;
@@ -179,14 +187,17 @@ export function CameraController({
       return [lng, lat];
     };
     const insetChanged =
-      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5;
+      Math.abs(activePanel.leftInsetPx - previousPanelInsetRef.current) > 0.5 ||
+      Math.abs(activePanel.bottomInsetPx - previousPanelBottomRef.current) > 0.5;
 
     if (!activePanel.open) {
       const shouldResetPadding =
         previousPanelFocusRef.current !== null ||
-        previousPanelInsetRef.current > 0;
+        previousPanelInsetRef.current > 0 ||
+        previousPanelBottomRef.current > 0;
       previousPanelFocusRef.current = null;
       previousPanelInsetRef.current = 0;
+      previousPanelBottomRef.current = 0;
 
       // Leaving the cockpit always pulls out to the aircraft, whatever is
       // pending: the camera would otherwise stay in the cockpit's pose.
@@ -222,11 +233,13 @@ export function CameraController({
     if (followsCityTransition) {
       previousPanelFocusRef.current = focusKey ?? null;
       previousPanelInsetRef.current = activePanel.leftInsetPx;
+      previousPanelBottomRef.current = activePanel.bottomInsetPx;
       return;
     }
 
     if (!shouldCenter && !insetChanged && !isExitingFpv) return;
 
+    let zoomingIn = false;
     if (isExitingFpv) {
       cityTransitionTargetRef.current = null;
       map.easeTo(
@@ -238,15 +251,45 @@ export function CameraController({
         }),
       );
     } else {
+      // A card opened from a link or a far search can find the map zoomed
+      // out to the world; centring alone would leave the aircraft a dot.
+      // The phone's sheet reports its height a moment after it opens, and
+      // that second move must not cut the zoom short or leave the
+      // selection where the old padding put it.
+      const zoomPending = performance.now() < farZoomUntilRef.current;
+      zoomingIn = Boolean(
+        coordinates &&
+          ((shouldCenter && map.getZoom() < FAR_ZOOM) || (insetChanged && zoomPending)),
+      );
+      if (zoomingIn && !zoomPending) {
+        farZoomUntilRef.current = performance.now() + FAR_ZOOM_IN_MS;
+      }
+      const recenter = Boolean(coordinates) && (shouldCenter || insetChanged);
       map.easeTo({
-        ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+        ...(recenter && coordinates ? { center: coordinates } : {}),
         padding,
         ...panelMotion,
+        ...(zoomingIn && coordinates
+          ? {
+              zoom: framingZoom(
+                map,
+                coordinates[1],
+                aircraftElevationMeters(
+                  activePanel.altitudeMeters,
+                  settings.altitudeDisplayMode,
+                ),
+                DEFAULT_PITCH,
+              ),
+              pitch: DEFAULT_PITCH,
+              duration: reduceMotion ? 0 : FAR_ZOOM_IN_MS,
+            }
+          : {}),
       });
     }
 
     if (shouldCenter || isExitingFpv) previousPanelFocusRef.current = focusKey;
     previousPanelInsetRef.current = activePanel.leftInsetPx;
+    previousPanelBottomRef.current = activePanel.bottomInsetPx;
 
     const shouldCorrectFlightAltitude =
       activePanel.kind === "flight" &&
@@ -276,7 +319,9 @@ export function CameraController({
     // takes longer to do.
     const firstEaseMs = isExitingFpv
       ? FPV_EXIT_DURATION_MS
-      : MAP_PANEL_TRANSITION_MS;
+      : zoomingIn
+        ? FAR_ZOOM_IN_MS
+        : MAP_PANEL_TRANSITION_MS;
     let refinementTimer: number | null = null;
     const correctionTimer = window.setTimeout(() => {
       if (!easeToDrawnAircraft(PANEL_VISUAL_EASE_MS)) return;
@@ -298,6 +343,7 @@ export function CameraController({
     panelCamera.focusKey,
     panelCamera.kind,
     panelCamera.leftInsetPx,
+    panelCamera.bottomInsetPx,
     hasPanelCoordinates,
     fpvKey,
     settings.altitudeDisplayMode,
@@ -308,75 +354,7 @@ export function CameraController({
     previousFpvKeyRef.current = fpvKey;
   }, [fpvKey]);
 
-  // Follow flight init
-  useEffect(() => {
-    if (!map || !isLoaded) return;
-
-    const followKey = followFlight?.icao24 ?? null;
-    if (followKey === prevFollowRef.current) return;
-    prevFollowRef.current = followKey;
-
-    if (followFlyToTimerRef.current) {
-      clearTimeout(followFlyToTimerRef.current);
-      followFlyToTimerRef.current = null;
-    }
-    followFlyToActiveRef.current = false;
-
-    if (
-      !followFlight ||
-      followFlight.longitude == null ||
-      followFlight.latitude == null
-    ) {
-      isFollowingRef.current = false;
-      return;
-    }
-
-    isFollowingRef.current = true;
-    followFlyToActiveRef.current = true;
-    const bearing = Number.isFinite(followFlight.trueTrack)
-      ? followFlight.trueTrack!
-      : map.getBearing();
-
-    const FOLLOW_FLYTO_MS = 2200;
-    map.flyTo({
-      center: [followFlight.longitude, followFlight.latitude],
-      zoom: FOLLOW_ZOOM,
-      pitch: FOLLOW_PITCH,
-      bearing,
-      duration: FOLLOW_FLYTO_MS,
-      essential: true,
-    });
-
-    followFlyToTimerRef.current = setTimeout(() => {
-      followFlyToActiveRef.current = false;
-      followFlyToTimerRef.current = null;
-    }, FOLLOW_FLYTO_MS);
-  }, [map, isLoaded, followFlight]);
-
-  // Follow flight continuous update
-  useEffect(() => {
-    if (!map || !isLoaded || !followFlight) return;
-    if (followFlight.longitude == null || followFlight.latitude == null) return;
-
-    if (!isFollowingRef.current) return;
-    if (followFlyToActiveRef.current) return;
-
-    map.easeTo({
-      center: [followFlight.longitude, followFlight.latitude],
-      bearing: Number.isFinite(followFlight.trueTrack)
-        ? followFlight.trueTrack!
-        : map.getBearing(),
-      duration: FOLLOW_EASE_MS,
-      essential: true,
-    });
-  }, [
-    map,
-    isLoaded,
-    followFlight,
-    followFlight?.longitude,
-    followFlight?.latitude,
-    followFlight?.trueTrack,
-  ]);
+  useFollowCamera(map, isLoaded, followIcao24, followDrawnRef, onFollowEnd);
 
   useFpvCamera(
     map,
@@ -434,7 +412,7 @@ export function CameraController({
         pitch: DEFAULT_PITCH,
         bearing: DEFAULT_BEARING,
         duration: 1200,
-        essential: true,
+        essential: false,
       });
     };
 
@@ -462,7 +440,7 @@ export function CameraController({
     map,
     isLoaded,
     city,
-    followFlight,
+    followIcao24 !== null,
     fpvFlight,
     settings,
     panelCamera.open,

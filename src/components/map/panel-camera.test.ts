@@ -28,6 +28,7 @@ test("panel camera creates a valid aircraft focus", () => {
     coordinates: [-122.4, 37.8],
     altitudeMeters: 9_000,
     leftInsetPx: 444,
+    bottomInsetPx: 0,
   });
   assert.equal(shouldCenterMapPanel(null, state), true);
 });
@@ -93,9 +94,11 @@ test("panel visual offset reverses and bounds the elevation delta", () => {
     400,
   ]);
   assert.deepEqual(panelVisualOffset({ dx: 900, dy: -900 }, 1_000, 800), [
-    -680,
+    -850,
     680,
   ]);
+  // A phone held upright can be lifted further than it is wide.
+  assert.deepEqual(panelVisualOffset({ dx: 0, dy: -500 }, 390, 844), [-0, 500]);
 });
 
 test("panel padding uses the normalized inset only while open", () => {
@@ -145,4 +148,18 @@ test("panel motion uses the shared cubic easing and respects reduced motion", ()
   assert.equal(standard.easing(1), 1);
   assert.equal(reduced.duration, 0);
   assert.equal(reduced.essential, false);
+});
+
+test("the phone's sheet pads the bottom of the map", () => {
+  const open = createMapPanelCameraState({
+    kind: "flight",
+    focusKey: "flight:abc123",
+    longitude: -122.4,
+    latitude: 37.8,
+    leftInsetPx: 0,
+    bottomInsetPx: 260,
+  });
+
+  assert.deepEqual(mapPanelPadding(open), { top: 0, right: 0, bottom: 260, left: 0 });
+  assert.equal(mapPanelPadding(CLOSED_MAP_PANEL_CAMERA_STATE).bottom, 0);
 });

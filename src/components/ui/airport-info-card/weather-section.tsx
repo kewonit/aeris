@@ -31,9 +31,9 @@ export function WeatherSection({ metar, loading, hasIcao, unitSystem }: Props) {
   const clouds = metar.clouds
     ?.map(
       (layer) =>
-        `${cloudCoverLabel(layer.cover)}${formatCloudBaseHundredsFeet(layer.base, unitSystem)}`,
-    )
-    .join(" · ");
+        // NOAA gives cloud bases in feet; the formatter takes hundreds.
+        `${cloudCoverLabel(layer.cover)}${formatCloudBaseHundredsFeet(layer.base != null ? layer.base / 100 : null, unitSystem)}`,
+    );
 
   return (
     <section aria-label="Current weather">
@@ -52,7 +52,9 @@ export function WeatherSection({ metar, loading, hasIcao, unitSystem }: Props) {
           }
         />
         <Reading label="QNH" value={formatPressureHpa(metar.altim, unitSystem)} />
-        {clouds && <Reading label="Clouds" value={clouds} wide />}
+        {clouds && clouds.length > 0 && (
+          <Reading label="Clouds" value={clouds} wide />
+        )}
       </dl>
       {metar.rawOb && (
         <p className="mt-4 font-mono text-micro break-all text-subtle select-all">
@@ -69,13 +71,22 @@ function Reading({
   wide = false,
 }: {
   label: string;
-  value: string;
+  /** One line, or one line for each part, as for cloud layers. */
+  value: string | string[];
   wide?: boolean;
 }) {
   return (
     <div className={wide ? "col-span-2 min-w-0" : "min-w-0"}>
       <dt className="text-label text-subtle">{label}</dt>
-      <dd className="mt-0.5 text-small text-foreground">{value}</dd>
+      <dd className="mt-0.5 text-small text-foreground">
+        {Array.isArray(value)
+          ? value.map((line, i) => (
+              <span key={i} className="block">
+                {line}
+              </span>
+            ))
+          : value}
+      </dd>
     </div>
   );
 }

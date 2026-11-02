@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   ArrowUpToLine,
   RotateCw,
@@ -36,6 +37,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { formatAltitude } from "@/lib/unit-formatters";
+import { SwitchTrack } from "@/components/ui/switch";
+import { Kbd } from "@/components/ui/kbd";
 
 const SHORTCUTS = [
   { key: "N", description: "North up" },
@@ -43,9 +46,11 @@ const SHORTCUTS = [
   { key: "O", description: "Toggle orbit" },
   { key: "/", description: "Open search" },
   { key: "⌘K", description: "Open search (anywhere)" },
-  { key: "F", description: "First person view" },
+  { key: "F", description: "Follow the open aircraft" },
+  { key: "V", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
-  { key: "A", description: "Toggle ATC panel" },
+  { key: "A", description: "Air traffic control" },
+  { key: "T", description: "Traffic trails" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 
@@ -94,7 +99,7 @@ export function SettingsContent({
         <SettingRow
           icon={<RotateCw className="h-4 w-4" />}
           title="Auto-orbit"
-          description="Camera rotation with higher battery and GPU usage"
+          description="Uses more battery"
           checked={settings.autoOrbit}
           onChange={(v) => update("autoOrbit", v)}
         />
@@ -120,26 +125,25 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Route className="h-4 w-4" />}
-          title="Flight trails"
-          description="Altitude-colored trails behind aircraft"
+          title="Traffic trails"
+          description="When off, only the aircraft you open shows its trail"
           checked={settings.showTrails}
           onChange={(v) => update("showTrails", v)}
         />
+        <TrailThicknessSlider
+          value={settings.trailThickness}
+          onChange={(v) => update("trailThickness", v)}
+        />
+        <TrailLengthSlider
+          value={settings.trailMinutes}
+          onChange={(v) => update("trailMinutes", v)}
+        />
         {settings.showTrails && (
           <>
-            <TrailThicknessSlider
-              value={settings.trailThickness}
-              onChange={(v) => update("trailThickness", v)}
-            />
-            <TrailLengthSlider
-              value={settings.trailMinutes}
-              onChange={(v) => update("trailMinutes", v)}
-            />
             <SettingRow
               icon={<ArrowUpToLine className="h-4 w-4" />}
               title="Hide high trails"
-              description="No trails for aircraft above a set height"
-              checked={settings.hideHighTrails}
+                  checked={settings.hideHighTrails}
               onChange={(v) => update("hideHighTrails", v)}
             />
             {settings.hideHighTrails && (
@@ -154,16 +158,21 @@ export function SettingsContent({
         <SettingRow
           icon={<Layers className="h-4 w-4" />}
           title="Ground shadows"
-          description="Shadow projections on the map surface"
           checked={settings.showShadows}
           onChange={(v) => update("showShadows", v)}
         />
         <SettingRow
           icon={<Palette className="h-4 w-4" />}
           title="Altitude colors"
-          description="Color aircraft and trails by altitude"
           checked={settings.showAltitudeColors}
           onChange={(v) => update("showAltitudeColors", v)}
+        />
+        <SettingRow
+          icon={<Layers className="h-4 w-4" />}
+          title="Solid panels"
+          description="No see-through behind the search field and map buttons"
+          checked={settings.solidPanels}
+          onChange={(v) => update("solidPanels", v)}
         />
         <SegmentRow
           icon={<Eye className="h-4 w-4" />}
@@ -187,19 +196,17 @@ export function SettingsContent({
         {/* ── Airspace ── */}
         <SectionHeader title="Airspace" />
 
-        <SettingRow
-          icon={<Shield className="h-4 w-4" />}
-          title="Airspace overlay"
-          description={
-            airspaceAvailable
-              ? "Show classified airspace boundaries (OpenAIP)"
-              : "Unavailable on this deployment until OPENAIP_API_KEY is configured"
-          }
-          checked={showAirspace}
-          onChange={(v) => update("showAirspace", v)}
-          disabled={!airspaceAvailable}
-          badge={airspaceAvailable ? undefined : "SETUP"}
-        />
+        {/* Without an OpenAIP key there is no airspace to offer, so the
+            row is left out rather than shown switched off. */}
+        {airspaceAvailable && (
+          <SettingRow
+            icon={<Shield className="h-4 w-4" />}
+            title="Airspace"
+            description="Classes and boundaries, from OpenAIP"
+            checked={showAirspace}
+            onChange={(v) => update("showAirspace", v)}
+          />
+        )}
 
         {showAirspace && (
           <AirspaceOpacitySlider
@@ -214,7 +221,7 @@ export function SettingsContent({
         <SettingRow
           icon={<CloudRain className="h-4 w-4" />}
           title="Weather radar"
-          description="Live precipitation radar overlay (RainViewer)"
+          description="From RainViewer"
           checked={settings.showWeatherRadar}
           onChange={(v) => update("showWeatherRadar", v)}
         />
@@ -231,11 +238,11 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Globe className="h-4 w-4" />}
-          title="Globe mode"
-          description="Display earth as a 3D sphere when zoomed out"
+          title="Globe"
+          description="The earth as a sphere when zoomed out"
           checked={settings.globeMode}
           onChange={(v) => update("globeMode", v)}
-          badge="BETA"
+          badge="Beta"
         />
 
         {/* ── Advanced ── */}
@@ -243,8 +250,8 @@ export function SettingsContent({
 
         <SettingRow
           icon={<Cpu className="h-4 w-4" />}
-          title="Show debug data"
-          description="Display raw receiver metrics and route source"
+          title="Signal details"
+          description="NACp, NIC and ADS-B version in an aircraft's details"
           checked={settings.showDebugData}
           onChange={(v) => update("showDebugData", v)}
         />
@@ -277,12 +284,10 @@ export function ShortcutsContent() {
               key={key}
               className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-card"
             >
-              <span className="text-small font-medium text-muted-foreground">
+              <span className="text-small text-muted-foreground">
                 {description}
               </span>
-              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-sm bg-card px-2 font-mono text-caption text-foreground ring-1 ring-border">
-                {key}
-              </kbd>
+              <Kbd>{key}</Kbd>
             </div>
           ))}
         </div>
@@ -321,10 +326,10 @@ function OrbitSpeedSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Orbit speed
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {activeLabel}
           </span>
         </div>
@@ -376,10 +381,10 @@ function TrailThicknessSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Trail thickness
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {value.toFixed(1)} px
           </span>
         </div>
@@ -410,10 +415,10 @@ function TrailLengthSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Trail length
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {value} min
           </span>
         </div>
@@ -446,8 +451,8 @@ function TrailCeilingSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">Hide above</p>
-          <span className="text-caption text-muted-foreground">
+          <p className="text-small text-foreground">Hide above</p>
+          <span className="text-label text-muted-foreground">
             {formatAltitude(value * 0.3048, unitSystem)}
           </span>
         </div>
@@ -478,10 +483,10 @@ function AirspaceOpacitySlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Airspace opacity
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -512,10 +517,10 @@ function WeatherRadarOpacitySlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Radar opacity
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -554,7 +559,7 @@ function SettingRow({
 }: {
   icon: ReactNode;
   title: string;
-  description: string;
+  description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
@@ -580,16 +585,18 @@ function SettingRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-small font-medium text-foreground">{title}</p>
+          <p className="text-small text-foreground">{title}</p>
           {badge && (
             <span className="text-label text-tint">{badge}</span>
           )}
         </div>
-        <p className="mt-0.5 text-caption leading-relaxed text-subtle">
-          {description}
-        </p>
+        {description && (
+          <p className="mt-0.5 text-label text-subtle">
+            {description}
+          </p>
+        )}
       </div>
-      <Toggle checked={checked} />
+      <SwitchTrack checked={checked} />
     </button>
   );
 }
@@ -612,7 +619,7 @@ function SegmentRow<T extends string | number>({
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         {icon}
       </div>
-      <p className="flex-1 min-w-0 text-small font-medium text-foreground">
+      <p className="flex-1 min-w-0 text-small text-foreground">
         {title}
       </p>
       <div
@@ -628,7 +635,7 @@ function SegmentRow<T extends string | number>({
               role="radio"
               aria-checked={isActive}
               onClick={() => onChange(opt.value)}
-              className={`relative rounded-sm px-2 py-1 text-caption font-medium transition-colors ${
+              className={`relative rounded-sm px-2 py-1 text-label transition-colors ${
                 isActive
                   ? "text-foreground"
                   : "text-subtle hover:text-muted-foreground"
@@ -638,11 +645,7 @@ function SegmentRow<T extends string | number>({
                 <motion.div
                   layoutId={`seg-${title}`}
                   className="absolute inset-0 rounded-sm bg-accent"
-                  transition={{
-                    type: "spring",
-                    stiffness: 500,
-                    damping: 35,
-                  }}
+                  transition={SNAP}
                 />
               )}
               <span className="relative">{opt.label}</span>
@@ -654,421 +657,187 @@ function SegmentRow<T extends string | number>({
   );
 }
 
-function Toggle({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        checked ? "bg-tint" : "bg-border"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-lift transition-transform ${
-          checked ? "translate-x-4" : ""
-        }`}
-      />
-    </span>
-  );
-}
-
 export const CHANGELOG: {
   version: string;
   date: string;
   entries: { title: string; description: string }[];
 }[] = [
   {
+    version: "0.9.0",
+    date: "Nov 2, 2026",
+    entries: [
+      { title: "Every aircraft in a sentence", description: "What it is doing and where it is going, in one line: “Descending into BOM, about 14 min out”." },
+      { title: "One card", description: "Aircraft and airports open in one card: a sheet on phones, a floating panel on desktop." },
+      { title: "Follow", description: "Follow an aircraft from its card or with F. First person moved to V." },
+      { title: "One search", description: "Flights, airports and places from one field, opened straight from the results." },
+      { title: "A quieter map", description: "Search, a map menu, locate, a compass, one status line and the altitude key. Nothing else at rest." },
+      { title: "Hover", description: "With a mouse, rest on an aircraft to see what it is doing." },
+      { title: "Altitude colours", description: "Low traffic reads on light maps, and cruise is no longer the dimmest band on dark ones." },
+      { title: "Links", description: "Share a link that opens an aircraft, follows it, or opens an airport." },
+      { title: "Smooth motion", description: "Aircraft no longer race, spin or jump when the map loads, the feed changes or you come back to the tab. New aircraft fly from the moment they appear." },
+      { title: "A real globe", description: "On the globe, aircraft and trails sit on the sphere at every zoom, and the globe stays on from the first frame." },
+      { title: "Steady trails", description: "Trails and aircraft have smooth edges, and each trail flows into its aircraft's tail cone in one unbroken curve, without jumping when a new position arrives." },
+      { title: "Traffic trails", description: "Turn trails off from the altitude key or with T. The aircraft you open keeps its trail." },
+      { title: "Fixes", description: "Airport weather shows cloud heights and flight category correctly, and aircraft passing high overhead are no longer counted as arriving. One type scale throughout. Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24." },
+    ],
+  },
+  {
     version: "0.8.9",
     date: "Oct 18, 2026",
     entries: [
-      {
-        title: "More accurate routes",
-        description:
-          "Routes now come first from Virtual Radar Server's community route data, updated daily, and a flight with stops shows the leg it is flying. When the aircraft's history shows its take-off, the card says when it took off and shows only a route from that airport, or the departure on its own when no source reports one. When sources disagree, it shows the route the aircraft is actually flying, never one it is flying backwards, has overflown or is too high to land at. Airports are named by the city travellers know.",
-      },
-      {
-        title: "Realistic flight",
-        description:
-          "Aircraft pitch and bank as real ones do, so an ordinary approach no longer looks like a nose dive, and every model faces and banks the right way. Traffic glides at a steady speed between reports instead of surging and slowing, and turns onto each new course rather than snapping.",
-      },
-      {
-        title: "First person view rebuilt",
-        description:
-          "The camera follows close behind the aircraft, looking along its track with the aircraft always in view: nearer on an approach, further back at cruise. It moves smoothly on the aircraft's own path between reports, and when reports drop out it flies on and says the signal is lost. You can drag, zoom and turn the map, and it eases back to following when you stop. Runways stand out on the approach, and however it ends, the view pulls back out to the aircraft.",
-      },
-      {
-        title: "Steadier flight trails",
-        description:
-          "Trails follow each aircraft's reported positions in time order, run cleanly into the aircraft's tail in its own colour, and keep their shape as new positions arrive. A selected flight's history no longer folds back on itself or steps where it meets the live trail. Trail length is set in minutes, three by default, and high trails can be hidden.",
-      },
-      {
-        title: "Better-proportioned aircraft",
-        description:
-          "Aircraft are centred on their position and sized from their wingspan on one gentle scale, so large jets no longer dwarf the map or grow as they climb. Zoomed out, they keep shrinking, so busy skies no longer turn into a carpet of aircraft. Zoomed in to an airport, they appear at their real size, and their heights stay the same as you zoom.",
-      },
-      {
-        title: "Quicker receivers",
-        description:
-          "The map asks whichever receiver has been answering fastest first, and when one is slow it asks the next after about a second and takes the first answer, so a slow receiver never holds the map up. It remembers which was fast across reloads and checks the others about once a minute, so a receiver that recovers is picked up again on its own.",
-      },
-      {
-        title: "Quick toolbar",
-        description:
-          "A toolbar on the left switches trails, high trails, altitude colours and exaggerated heights. Every toolbar button has a tooltip, and the sidebars scroll without shifting their content.",
-      },
-      {
-        title: "One design system",
-        description:
-          "Sidebars, panels and cards share one type scale, palette and set of surfaces in light and dark, and the aircraft and airport panels follow one flight-card layout. The phone's aircraft card shows the same route and details as the sidebar.",
-      },
-      {
-        title: "Simpler aircraft details",
-        description:
-          "Restored the aircraft photo header and flight summary. The sidebar names the aircraft, such as Boeing 767-332, and hides unsupported labels. The map keeps the selected aircraft centred while panels open and close.",
-      },
-      {
-        title: "Airport cards",
-        description:
-          "Airport cards show how many runways the airport has, in place of the viewer's own clock, which was labelled as local time.",
-      },
-      {
-        title: "Aircraft data trust",
-        description:
-          "Added aircraft provenance, selected-aircraft fusion and local registry metadata, so the details shown for an aircraft say where they came from.",
-      },
-      {
-        title: "Open aviation data updates",
-        description:
-          "Added deterministic refresh and validation commands for open aircraft and registration data. Scheduled source checks can open a weekly review PR when generated data changes.",
-      },
-      {
-        title: "Map style previews",
-        description:
-          "The map style picker shows a still of each style instead of CARTO's API key notice, and no longer loads preview tiles from other sites.",
-      },
-      {
-        title: "Fixes",
-        description:
-          "The rotate buttons turn the map the way their labels say. The map keeps animating when the window loses focus, and polling recovers when every provider times out. The app name, GitHub star count and altitude key are back.",
-      },
+      { title: "More accurate routes", description: "Routes come from community route data first, and only ones the aircraft could be flying are shown." },
+      { title: "Realistic flight", description: "Aircraft pitch, bank and turn as real ones do, at a steady speed between reports." },
+      { title: "First person view rebuilt", description: "The camera rides close behind the aircraft and flies on when reports drop out." },
+      { title: "Steadier trails", description: "Trails keep their shape and meet the aircraft cleanly. Their length is set in minutes." },
+      { title: "Better-proportioned aircraft", description: "Aircraft are sized from their wingspan and stay in proportion at every zoom." },
+      { title: "Quicker receivers", description: "The fastest receiver is asked first, and a slow one never holds the map up." },
+      { title: "One design system", description: "One type scale, palette and set of surfaces in light and dark." },
+      { title: "Aircraft details", description: "Each aircraft is named, like Boeing 767-332, and says where its details came from." },
+      { title: "Fixes", description: "Rotate buttons turn the right way, and polling recovers when every provider times out." },
     ],
   },
   {
     version: "0.8.8",
     date: "Aug 23, 2026",
     entries: [
-      {
-        title: "airplanes.live API 2.0.0 compatibility",
-        description:
-          "Updated readsb response handling for the airplanes.live 2.0.0 contract, including optional timing and aircraft fields, stricter validation, stale-position filtering, and support for point-query distance and direction values.",
-      },
-      {
-        title: "Consistent provider fallback",
-        description:
-          "Map polling, flight lookup, FPV monitoring, and global search now share the adsb.lol, adsb.fi, airplanes.live, and OpenSky fallback order. Provider-specific search caching and point-only sticky selection prevent one-off lookups from changing the live map source.",
-      },
-      {
-        title: "Production provider controls",
-        description:
-          "airplanes.live and adsb.fi are now selectable in production through the server proxy. Access denials open the provider circuit immediately, failed requests preserve last-known aircraft, and unavailable providers are reported clearly.",
-      },
-      {
-        title: "adsb.fi public fallback",
-        description:
-          "Added the adsb.fi open-data API with its v3 point-query format, one-request-per-second pacing, shared readsb parsing, provider controls, and required linked attribution for personal, non-commercial use.",
-      },
-      {
-        title: "Immediate provider switching",
-        description:
-          "Changing providers now cancels the previous request and refreshes the map immediately instead of waiting for the next polling cycle. Last-known aircraft remain visible while the selected provider responds.",
-      },
+      { title: "More feeds", description: "adsb.fi and Airplanes.live join adsb.lol and OpenSky, with one fallback order everywhere." },
+      { title: "Instant switching", description: "Changing feeds refreshes the map at once and keeps the last aircraft on screen." },
     ],
   },
   {
     version: "0.8.7",
     date: "Jul 18, 2026",
     entries: [
-      {
-        title: "Web app identity and discovery",
-        description:
-          "Added complete favicon and install-icon sets, expanded manifest metadata, and improved canonical city pages, structured data, sitemap output, and social previews.",
-      },
+      { title: "Install and share", description: "Full icon sets for installing the app, and better city pages and link previews." },
     ],
   },
   {
     version: "0.8.6",
     date: "Jul 11, 2026",
     entries: [
-      {
-        title: "Rendering performance",
-        description:
-          "Removed per-frame map state updates, capped animation work at 20–30 FPS, paused inactive render loops, and made auto-orbit opt-in. In the JFK production profile, renderer CPU fell from ~173% to ~24% and the shared GPU process from ~71% to ~18%.",
-      },
+      { title: "Faster rendering", description: "Renderer CPU fell from about 173% to 24% at JFK. Auto-orbit is now opt-in." },
     ],
   },
   {
     version: "0.8.5",
     date: "Jun 24, 2026",
     entries: [
-      {
-        title: "React script warning cleanup",
-        description:
-          "Removed inline script injection from the settings panel text renderer so opening Settings, About, or Changelog no longer triggers React's client-side script tag warning.",
-      },
+      { title: "Fix", description: "Opening Settings, About or the changelog no longer logs a React warning." },
     ],
   },
   {
     version: "0.8.4",
     date: "May 12, 2026",
     entries: [
-      {
-        title: "Global flight & location search",
-        description:
-          "New client-side search modules: `searchFlightsGlobal` searches live flights by callsign or ICAO24 hex with caching and AbortController support; `searchLocationClient` unifies local airport, featured city, and Nominatim geocode searches into a single interface. IATA↔ICAO flight query translation with lazy-loaded full-database fallback for over 8,000 airports.",
-      },
-      {
-        title: "Route lookup & resolver with caching",
-        description:
-          "Server-side route resolver fetches origin/destination from flight-plan databases with caching and transient-failure handling. Legacy city query proxy for backward-compatible deep links. Security headers tests ensure proper cache-control directives.",
-      },
-      {
-        title: "Trail settings migration & aircraft model interpolation",
-        description:
-          "Enhanced trail settings with new defaults and migration logic. Improved aircraft model handling and interpolation for more stable rendering across frame updates.",
-      },
-      {
-        title: "Light Annotated map style",
-        description:
-          "Added new 'Light Annotated' basemap using CARTO Voyager with full label layers — a light-themed alternative to the label-less Voyager style. Perfect for users who want readable place names on a clean, bright background.",
-      },
-      {
-        title: "Control panel contrast & readability",
-        description:
-          "Systematically increased text contrast ratios across all control panel tabs. Sidebar now has a subtle `bg-card/60` shade to differentiate it from the main content area. Dark mode popover background lightened from oklch(0.055) to oklch(0.07) for improved readability.",
-      },
+      { title: "Worldwide search", description: "Find any live flight by callsign, flight number or address, and any airport or place." },
+      { title: "Route lookup", description: "Origin and destination come from flight-plan data, cached." },
+      { title: "Light Annotated", description: "A light map style with place names." },
+      { title: "Readability", description: "Higher contrast throughout the control panel." },
     ],
   },
   {
     version: "0.8.3",
     date: "Apr 21, 2026",
     entries: [
-      {
-        title: "Scoped airspace overlay + FPV follow",
-        description:
-          "OpenAIP airspace tiles now load only within ~2× the flight fetch radius of the active city instead of the entire globe, cutting tile bandwidth sharply. In FPV mode the bounding box follows the tracked aircraft with 0.5° grid-snap hysteresis so the source only rebuilds every ~30 NM of travel. Fixed two console errors in the airspace renderer: opacity expressions no longer break when composed with zoom interpolations, and tile URLs are now absolute so MapLibre's worker can construct requests.",
-      },
-      {
-        title: "Weather radar: crisper tiles & scoped fetches",
-        description:
-          "RainViewer radar now uses nearest-neighbour sampling instead of bilinear, preserving the discrete precipitation bins and getting rid of the blurry over-zoomed smear at higher zoom levels. Tile fetches are now scoped to the same active-city / FPV bounding box as airspace (no more pulling global radar when looking at one airport), and the tile URL is absolute so MapLibre's worker no longer fails to parse it.",
-      },
-      {
-        title: "Map overlays no longer randomly disappear",
-        description:
-          "Reworked the airspace and weather radar lifecycle so layers no longer get eagerly torn down on every dependency change. Adds are now atomic (remove + add inside one tick instead of straddling a React boundary), stale async sprite-load and fetch promises are cancelled with a token, and a fallback to MapLibre's `idle` event guarantees the layer comes back even when the style is briefly busy after a city tap. End result: tapping airports rapidly, swapping basemaps mid-flight, or panning during FPV mode no longer leaves the overlays stuck invisible.",
-      },
-      {
-        title: "Airport info card with arrivals, departures, weather & photos",
-        description:
-          "Unified tabbed airport card replaces the separate board/info panes on both desktop and mobile. Arrivals and departures tiles, current METAR plus TAF forecast via a new NOAA proxy, runway layout, ATC frequencies, and a Wikipedia photo banner via a new Wikimedia-compliant proxy. Full-database IATA↔ICAO fallback for airports that aren't in the curated LiveATC list, with lazy-loaded and cached lookup tables. 3D building extrusions added to the map on style load.",
-      },
-      {
-        title: "Configurable unit system",
-        description:
-          "New Unit system setting with Aviation (ft, kts, fpm, NM, °C, hPa), Metric (m, km/h, m/s, km, °C, hPa), and Imperial (ft, mph, fpm, mi, °F, inHg) modes, persisted across sessions. Unit conversions and formatting centralised in shared helpers; flight card, mobile toast, search chips, airport board, FPV HUD, altitude legend, weather card, and vertical profile all respect the selected system. Internal thresholds unchanged - this is a display-layer toggle only.",
-      },
+      { title: "Airport cards", description: "Arrivals, departures, weather, runways, frequencies and a photo for each airport." },
+      { title: "Units", description: "Aviation, metric or imperial units, everywhere." },
+      { title: "Lighter overlays", description: "Airspace and weather radar load only around where you are looking, and stay put." },
     ],
   },
   {
     version: "0.8.2",
     date: "Apr 12, 2026",
     entries: [
-      {
-        title: "Route accuracy & React 19 fixes",
-        description:
-          "Origin/destination now prioritises flight-plan database lookups over heuristic trace matching, fixing incorrect airport assignments. Eliminated fallback airports at 0°/0° when hexdb lookups fail. Replaced next-themes with @wrksz/themes to resolve React 19 script-tag rendering warning. Fixed fullscreen button hydration mismatch. Updated Next.js to 16.2.3.",
-      },
+      { title: "Fixes", description: "More accurate origins and destinations, and no more airports at 0°, 0°. Next.js 16.2.3." },
     ],
   },
   {
     version: "0.8.1",
     date: "Apr 13, 2026",
     entries: [
-      {
-        title: "Geolocation & fullscreen controls",
-        description:
-          "New 'Fly to Me' button uses browser geolocation to center the map on your current location. Fullscreen toggle button for distraction-free viewing. Both controls added to the camera control panel.",
-      },
-      {
-        title: "Aircraft type & registration display",
-        description:
-          "Flight cards now show the specific aircraft type description (e.g. 'AIRBUS A-320') when available from ADS-B data, instead of the generic category hint. Registration numbers displayed with ICAO type codes on both desktop and mobile views.",
-      },
+      { title: "Locate and full screen", description: "Fly to where you are, or go full screen." },
+      { title: "Aircraft type", description: "Cards show the aircraft type and registration." },
     ],
   },
   {
     version: "0.8.0",
     date: "Apr 12, 2026",
     entries: [
-      {
-        title: "Trail system v2 - rendering, geometry & data pipeline",
-        description:
-          "Complete trail overhaul: server trace service with multi-provider fallback, sealed-segment display geometry that keeps the fixed trail body stable across live appends, cusp and backtrack removal, needle-kink filtering, and holding-pattern preservation. Connector rendering follows the recent tail arc. Live trail retention raised beyond 120 points. Altitude-aware color caching, opacity fading, and zoom-linked elevation smoothing.",
-      },
-      {
-        title: "Route detection, aircraft photos & metadata",
-        description:
-          "New route detection system identifies departure airports from trail data. hexdb API integration provides aircraft metadata (type, registration, owner). Aircraft photo fetching with negative-cache backoff. Improved flight card and mobile toast UI.",
-      },
-      {
-        title: "Altitude calibration and trace fallback hardening",
-        description:
-          "Refined altitude presentation so realistic mode recovers to full height sooner at operational zoom levels, while presentation mode maintains a clearer vertical lift. Reduced 3D aircraft model size with zoom-compensated scaling for more balanced on-map proportions. Browser-direct readsb trace fetching now treats malformed JSON responses as provider failures and falls back to the next candidate URL instead of aborting the request.",
-      },
+      { title: "Trails rebuilt", description: "Steadier, cleaner trails from a server trace service with fallbacks." },
+      { title: "Routes and photos", description: "Departure airports from each trail, aircraft details and photos." },
     ],
   },
   {
     version: "0.7.0",
     date: "Mar 29, 2026",
     entries: [
-      {
-        title: "Weather radar & airspace overlays",
-        description:
-          "Live precipitation radar from RainViewer with adjustable opacity. Classified airspace boundaries from OpenAIP with thermal hotspot indicators for glider and paraglider activity. ATC audio spectrum visualizer and airport board hook for departure/arrival data.",
-      },
-      {
-        title: "UI theming overhaul",
-        description:
-          "Refactored color schemes across FPV HUD, hero banner, keyboard shortcuts, mobile toast, provider panel, scroll area, and slider to use foreground/background theme variables for consistent dark mode support. Improved readability and accessibility throughout.",
-      },
-      {
-        title: "Flight data parsing & trail quality",
-        description:
-          "Extended FlightState with avionics data (IAS, TAS, Mach, roll, track rate, magnetic heading) and navigation intent fields. Improved GPS outlier filtering and loop cleaning in trail history. Last-leg trimming and nearest airport search for better route context.",
-      },
+      { title: "Weather and airspace", description: "Live precipitation radar and classified airspace overlays." },
+      { title: "Dark mode", description: "Consistent colours across every panel in dark mode." },
     ],
   },
   {
     version: "0.6.2",
     date: "Mar 25, 2026",
     entries: [
-      {
-        title: "SEO & discoverability",
-        description:
-          "Added robots.txt, XML sitemap, and web app manifest. OpenGraph and Twitter card images generated server-side. Custom 404 page. Enhanced metadata across all routes for better search engine indexing.",
-      },
+      { title: "Discoverability", description: "Sitemap, link previews and a 404 page." },
     ],
   },
   {
     version: "0.6.1",
     date: "Mar 24, 2026",
     entries: [
-      {
-        title: "635 ATC feeds worldwide",
-        description:
-          "Expanded the static ATC feed database from a handful of airports to 635 across all continents with verified LiveATC mount points. Coverage now spans North America, Europe, Asia-Pacific, South America, Africa, and the Middle East.",
-      },
+      { title: "635 ATC feeds", description: "Live air traffic control from airports on every continent." },
     ],
   },
   {
     version: "0.6.0",
     date: "Mar 22, 2026",
     entries: [
-      {
-        title: "3D aircraft models & smoother trails",
-        description:
-          "14 distinct 3D aircraft silhouettes assigned by ADS-B category and ICAO type code - from wide-bodies to helicopters. Models hosted on Cloudinary CDN with lazy loading and prefetch. Trail smoothing overhauled: 5-pass kernel filter, tighter corner rounding (15\u00B0), denser Catmull\u2013Rom splines, and wider junction blending between historical and live data. Aircraft rendered 12% smaller for better proportions.",
-      },
-      {
-        title: "Multi-source flight data & circuit breaker",
-        description:
-          "Switched from OpenSky-only to a 2-tier fallback: adsb.lol \u2192 OpenSky (airplanes.live available via override). Each provider has its own parser normalising into a shared FlightState format. Circuit breaker tracks failures per provider and temporarily disables broken ones. Empty-response guard prevents data wipe-outs during transient failures, and an immediate re-fetch fires on network reconnect.",
-      },
-      {
-        title: "ATC feed lookup & GPU memory monitor",
-        description:
-          "New ATC lookup module \u2014 converts IATA to ICAO codes, finds nearby feeds by geographic proximity, and looks up feeds by airport or centre code. GPU memory monitor tracks WebGL resource allocations (textures, buffers, framebuffers) for debugging resource leaks.",
-      },
-      {
-        title: "Reliability & polish",
-        description:
-          "Serialised rate limiting in the flight API client. Logo cache with size limits and eviction. Registration country lookup via pre-built O(1) maps. Keyboard shortcuts focus trapping fix. SessionStorage guard for incognito mode. Airspace display toggle in map attribution.",
-      },
-      {
-        title: "Flight API client refactor",
-        description:
-          "New flight-api-client, flight-api-parsing, and flight-api-types modules. useFlights refactored to use the multi-source client \u2014 removed legacy credit management. useFlightMonitors switched to hex-based lookups.",
-      },
-      {
-        title: "Code review fixes",
-        description:
-          "Fixed GPU memory monitor (duplicate WebGL enum cases, wrong byte sizes). Selection pulse halos now match aircraft height at all zoom levels. ATC stream properly cancels upstream on timeout. Airspace tile rate-limiter enforces spacing for queued requests. Photo fetch errors now surface to the UI. Spline cache clearing moved from useMemo to useEffect for React strict mode safety.",
-      },
+      { title: "3D aircraft", description: "Fourteen aircraft models, matched to each aircraft's type." },
+      { title: "More reliable data", description: "Falls back to another feed when one fails, without wiping the map." },
+      { title: "Live ATC", description: "Listen to nearby air traffic control." },
     ],
   },
   {
     version: "0.5.0",
     date: "Mar 10, 2026",
     entries: [
-      {
-        title: "Globe mode & aircraft photos",
-        description:
-          "Zoom out to see the entire earth as a 3D sphere with altitude-colored dots for every flight. Trails are now interpolated with centripetal Catmull\u2013Rom splines \u2014 a C\u00B9-continuous piecewise cubic that passes through every waypoint without overshooting, using \u03B1\u2009=\u20090.5 parameterization for natural curvature. Dark terrain, aircraft photo banners in flight cards, and a hard dot-to-flight cutover with zero overlap. Globe mode is in beta \u2014 find it in Settings.",
-      },
+      { title: "Globe", description: "Zoom out to the whole earth, with every flight as a dot. Aircraft photos in cards." },
     ],
   },
   {
     version: "0.4.1",
     date: "Feb 22, 2026",
     entries: [
-      {
-        title: "Flight history tracking",
-        description:
-          "Full trail rendering for every tracked flight. Airline logo caching so they actually load.",
-      },
+      { title: "Flight history", description: "Full trails for every tracked flight." },
     ],
   },
   {
     version: "0.4.0",
     date: "Feb 21, 2026",
     entries: [
-      {
-        title: "First person view",
-        description:
-          "FPV mode \u2014 pick any plane and ride along with a HUD. Also added flight search by callsign.",
-      },
+      { title: "First person view", description: "Ride along with any aircraft. Search by callsign." },
     ],
   },
   {
     version: "0.3.0",
     date: "Feb 17, 2026",
     entries: [
-      {
-        title: "Airline logos & attribution",
-        description:
-          "Proper logos for airlines, and attribution for OSM, OpenSky, CARTO, Esri, and everyone whose data makes this work.",
-      },
+      { title: "Airline logos", description: "Logos for airlines, and credits for every data source." },
     ],
   },
   {
     version: "0.2.0",
     date: "Feb 15, 2026",
     entries: [
-      {
-        title: "9,000+ airports",
-        description:
-          "Went from a handful of cities to every airport we could find. Copilot helped build the dataset. Added keyboard shortcuts and click-to-select.",
-      },
+      { title: "9,000+ airports", description: "Every airport, keyboard shortcuts, and click to select." },
     ],
   },
   {
     version: "0.1.0",
     date: "Feb 14, 2026",
     entries: [
-      {
-        title: "Day one",
-        description:
-          "Basic map, flight cards, trail rendering, orbit camera. Spent most of the day fighting Vercel timeouts and OpenSky IP blocks before realizing the API just supports CORS.",
-      },
+      { title: "Day one", description: "A live map, flight cards, trails and an orbiting camera." },
     ],
   },
 ];
@@ -1077,11 +846,11 @@ export function AboutContent() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-5 p-5 pt-3">
-        <h3 className="text-value font-medium text-foreground">
+        <h3 className="text-value text-foreground">
           Aeris
         </h3>
 
-        <div className="space-y-3 text-small leading-relaxed text-muted-foreground">
+        <div className="space-y-3 text-small text-muted-foreground">
           <p>
             Live flight tracking in 3D. The planes you see are real. Position
             data comes from adsb.lol, adsb.fi, airplanes.live, and OpenSky
@@ -1098,7 +867,7 @@ export function AboutContent() {
 
         <div className="h-px w-full bg-accent" />
 
-        <p className="text-label leading-relaxed text-subtle">
+        <p className="text-label text-subtle">
           Built by a human, not just LLMs.{" "}
           <a
             href="https://github.com/kewonit"
@@ -1116,7 +885,7 @@ export function AboutContent() {
             kew@edbn.me
           </a>
         </p>
-        <p className="text-label leading-relaxed text-subtle">
+        <p className="text-label text-subtle">
           Source is on{" "}
           <a
             href="https://github.com/kewonit/aeris"
@@ -1147,20 +916,20 @@ export function ChangelogContent() {
           <div key={release.version}>
             {i > 0 && <div className="mb-5 h-px w-full bg-accent" />}
             <div className="mb-3 flex items-baseline gap-2">
-              <span className="text-small font-medium text-foreground">
+              <span className="text-small text-foreground">
                 v{release.version}
               </span>
-              <span className="text-caption text-subtle">
+              <span className="text-label text-subtle">
                 {release.date}
               </span>
             </div>
             <div className="flex flex-col gap-3 pl-0.5">
               {release.entries.map((entry, j) => (
                 <div key={j} className="min-w-0">
-                  <p className="text-small font-medium text-foreground">
+                  <p className="text-small text-foreground">
                     {entry.title}
                   </p>
-                  <p className="mt-0.5 text-label leading-relaxed text-muted-foreground text-justify">
+                  <p className="mt-0.5 text-label text-muted-foreground">
                     {entry.description}
                   </p>
                 </div>

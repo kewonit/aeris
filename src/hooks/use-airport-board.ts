@@ -182,12 +182,16 @@ function classifyFlight(
   const isClimbing = vRate !== null && vRate > VRATE_THRESHOLD;
   const isLowAlt = alt !== null && alt < LOW_ALTITUDE_M;
   const isCloseRange = dist < 15; // within 15nm
+  // An aircraft too high to get down in the distance left, at no steeper
+  // than 1,000 ft every 1.5 nm, is passing over, not arriving.
+  const canDescendToLand =
+    alt === null || alt / 0.3048 <= (dist / 1.5) * 1_000 + 2_000;
 
   // ── Arrival classification ──
   // Strong: heading toward + descending
   // Medium: heading toward + low altitude + close
   // Weak: heading toward + close (regardless of vrate)
-  if (headingToward && isDescending) {
+  if (headingToward && isDescending && canDescendToLand) {
     const status = isCloseRange ? "Final" : dist < 25 ? "Approach" : "Inbound";
     return {
       direction: "arrival",
@@ -198,7 +202,7 @@ function classifyFlight(
       status,
     };
   }
-  if (headingToward && isLowAlt && isCloseRange) {
+  if (headingToward && isLowAlt && isCloseRange && canDescendToLand) {
     return {
       direction: "arrival",
       dist,
@@ -208,7 +212,7 @@ function classifyFlight(
       status: "Approach",
     };
   }
-  if (headingToward && !isClimbing && isCloseRange) {
+  if (headingToward && !isClimbing && isCloseRange && canDescendToLand) {
     return {
       direction: "arrival",
       dist,

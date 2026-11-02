@@ -2,7 +2,8 @@
 
 import { useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Satellite, X, ChevronUp, Circle } from "lucide-react";
+import { SNAP } from "@/lib/motion";
+import { Satellite, Circle } from "lucide-react";
 import {
   getCircuitState,
   getProviderOverride,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/flight-api-client";
 import type { ProviderName } from "@/lib/flight-api";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
+import { CloseButton } from "@/components/ui/close-button";
 
 // ── Provider definitions ───────────────────────────────────────────────
 
@@ -21,13 +23,13 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "adsb", label: "adsb.lol", description: "Server proxy" },
-  { id: "adsbfi", label: "adsb.fi", description: "Server proxy" },
-  { id: "airplanes", label: "Airplanes.live", description: "Server proxy" },
+  { id: "adsb", label: "adsb.lol", description: "" },
+  { id: "adsbfi", label: "adsb.fi", description: "" },
+  { id: "airplanes", label: "Airplanes.live", description: "" },
   {
     id: "opensky",
     label: "OpenSky",
-    description: "Last resort - limited credits",
+    description: "Backup, limited",
   },
 ];
 
@@ -82,30 +84,23 @@ export function ProviderDropdown({
           initial={{ opacity: 0, y: 8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
+          transition={SNAP}
+          className="aeris-float absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+          <div className="flex items-center justify-between border-b border-border pr-1 pl-4">
             <div className="flex items-center gap-2 text-label text-subtle">
               <Satellite className="size-3" aria-hidden="true" />
-              Data provider
+              Flight feed
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
-              aria-label="Close provider selector"
-            >
-              <X className="size-3.5" />
-            </button>
+            <CloseButton label="Close provider selector" onClick={onClose} />
           </div>
 
           {/* Provider list */}
           <div className="py-1">
             <ProviderOption
               label="Auto"
-              description="Fastest provider first, switches on its own"
+              description="The fastest feed, switching when one falters"
               selected={isAutoMode}
               onSelect={() => handleSelect("auto")}
             />
@@ -136,40 +131,68 @@ export type ProviderTriggerProps = {
   source: string | null;
   loading: boolean;
   rateLimited: boolean;
+  /** Seconds until the feed is asked again, while it is busy. */
+  retryIn?: number;
+  /** Aircraft in the feed right now. */
+  flightCount: number;
+  /** The place in view, said after the count on a wide screen. */
+  cityName?: string;
   onClick: () => void;
 };
 
+/**
+ * "203 aircraft over London", which opens the feed picker. A healthy feed
+ * is not named; trouble is always spelled out, as "Feed busy".
+ */
 export function ProviderTrigger({
   source,
   loading,
   rateLimited,
+  retryIn = 0,
+  flightCount,
+  cityName,
   onClick,
 }: ProviderTriggerProps) {
   const label = rateLimited
-    ? "Paused"
+    ? retryIn > 0
+      ? `Feed busy, retrying in ${retryIn}s`
+      : "Feed busy"
     : loading && !source
       ? "Connecting…"
-      : source
-        ? (SOURCE_LABELS[source] ?? source)
-        : "Connecting…";
-
-  const tone =
-    rateLimited || source === "opensky"
-      ? "text-warning"
       : source === "none"
-        ? "text-danger"
+        ? "No feed"
+        : source
+          ? (SOURCE_LABELS[source] ?? source)
+          : "Connecting…";
+  const healthy = !rateLimited && Boolean(source) && source !== "none" && source !== "opensky";
+  const tone = healthy
+    ? "text-muted-foreground"
+    : source === "none"
+      ? "text-danger"
+      : rateLimited || source === "opensky"
+        ? "text-warning"
         : "text-subtle";
+  const count = `${flightCount.toLocaleString()} aircraft`;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 text-label text-muted-foreground transition-colors hover:text-foreground"
-      aria-label="Select ADS-B provider"
+      className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 rounded-full px-2.5 transition-colors hover:bg-card"
+      aria-label={`${label}, ${count}. Choose the flight feed`}
+      aria-haspopup="dialog"
     >
-      <Satellite className={`size-3 ${tone}`} aria-hidden="true" />
-      {label}
-      <ChevronUp className="size-3 text-subtle" aria-hidden="true" />
+      {/* The feed is named only when it is in trouble. */}
+      {healthy ? (
+        <span className="truncate text-muted-foreground">
+          {count}
+          {cityName && (
+            <span className="hidden sm:inline"> over {cityName}</span>
+          )}
+        </span>
+      ) : (
+        <span className={`truncate ${tone}`}>{label}</span>
+      )}
     </button>
   );
 }
@@ -207,9 +230,11 @@ function ProviderOption({
           {label}
           {live && <span className="ml-1.5 text-label text-tint">Live</span>}
         </span>
-        <span className="block truncate text-label text-subtle">
-          {description}
-        </span>
+        {description && (
+          <span className="block truncate text-label text-subtle">
+            {description}
+          </span>
+        )}
       </span>
       {status && (
         <span className="shrink-0 font-mono text-micro text-warning">

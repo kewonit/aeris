@@ -90,26 +90,25 @@
  */
 @theme {
   --text-*: initial;
+  /* Whole-pixel line heights, so stacked lines land on the pixel grid. */
   --text-micro: 10px;
-  --text-micro--line-height: 1.4;
-  --text-caption: 11px;
-  --text-caption--line-height: 1.4;
+  --text-micro--line-height: 14px;
   --text-label: 12px;
-  --text-label--line-height: 1.4;
+  --text-label--line-height: 16px;
   --text-small: 13px;
-  --text-small--line-height: 1.45;
+  --text-small--line-height: 18px;
   --text-body: 15px;
-  --text-body--line-height: 1.55;
+  --text-body--line-height: 22px;
   --text-value: 20px;
-  --text-value--line-height: 1.3;
+  --text-value--line-height: 26px;
   --text-value--letter-spacing: -0.025em;
   --text-title: 23px;
-  --text-title--line-height: 1.2;
+  --text-title--line-height: 28px;
   --text-title--letter-spacing: -0.035em;
 
   --font-weight-*: initial;
+  /* One weight everywhere; size and colour carry the hierarchy. */
   --font-weight-normal: 480;
-  --font-weight-medium: 540;
 
   --tracking-*: initial;
 
@@ -151,7 +150,7 @@
     font-family: var(--font-sans);
     font-size: var(--text-body);
     font-weight: var(--font-weight-normal);
-    line-height: 1.55;
+    line-height: var(--text-body--line-height);
     font-variant-numeric: tabular-nums;
   }
 
@@ -177,47 +176,26 @@
 }
 
 @layer components {
-  /* The map slides aside for the desktop sidebar on the camera's curve.
+  /* The desktop panel floats over the map, so the map stays whole and the
+     chrome beside the panel moves along on the camera's curve.
      flight-tracker.tsx sets --panel-duration and --panel-ease from
      map/panel-camera.ts so both stay in step. */
-  .aeris-map-surface {
-    clip-path: inset(0 0 0 0 round 0);
-    transition: clip-path var(--panel-duration) var(--panel-ease);
-    will-change: clip-path;
-    contain: layout paint style;
-    isolation: isolate;
-  }
-
   .aeris-left-chrome {
-    transform: translate3d(0, 0, 0);
-    transition: transform var(--panel-duration) var(--panel-ease);
-    will-change: transform;
+    transition: translate var(--panel-duration) var(--panel-ease);
   }
 
   .aeris-map-centered-chrome {
-    transform: translate3d(-50%, 0, 0);
-    transition: transform var(--panel-duration) var(--panel-ease);
-    will-change: transform;
+    translate: -50% 0;
+    transition: translate var(--panel-duration) var(--panel-ease);
   }
 
   @media (min-width: 640px) {
-    .aeris-map-surface[data-panel-open="true"] {
-      clip-path: inset(
-        0 0 0 var(--aeris-left-sidebar-inset) round var(--radius-xl) 0 0
-          var(--radius-xl)
-      );
-    }
-
     .aeris-left-chrome[data-panel-open="true"] {
-      transform: translate3d(var(--aeris-left-chrome-shift), 0, 0);
+      translate: var(--aeris-left-chrome-shift) 0;
     }
 
     .aeris-map-centered-chrome[data-panel-open="true"] {
-      transform: translate3d(
-        calc(-50% + var(--aeris-map-center-shift)),
-        0,
-        0
-      );
+      translate: calc(-50% + var(--aeris-map-center-shift)) 0;
     }
   }
 
@@ -289,7 +267,7 @@
   border-radius: var(--radius-sm);
   background: var(--background);
   color: var(--foreground);
-  font: var(--font-weight-normal) var(--text-label) / 1.4 var(--font-sans);
+  font: var(--font-weight-normal) var(--text-label) / var(--text-label--line-height) var(--font-sans);
   box-shadow: var(--lift);
 }
 
@@ -297,22 +275,20 @@
   border-top-color: var(--background);
 }
 
-/* The app's name, set as it always has been: a little larger and wider
-   than the text around it. */
+/* iOS zooms into a field set below 16px when it takes focus. */
+@media (pointer: coarse) {
+  .aeris-search-input {
+    font-size: 16px;
+  }
+}
+
+/* The app's name: a little larger and wider than the text around it, in
+   the one weight the interface uses. */
 .aeris-wordmark {
   font-size: 14px;
   line-height: 20px;
-  font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-normal);
   letter-spacing: 0.025em;
-}
-
-/* A small spaced capital heading over a scale, such as the altitude key. */
-.aeris-eyebrow {
-  font-size: var(--text-micro);
-  line-height: var(--text-micro--line-height);
-  font-weight: var(--font-weight-semibold, 600);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 /* Tooltips ease in from the control they describe. */
@@ -337,6 +313,64 @@
   from {
     opacity: 0;
     transform: translate(var(--tooltip-from));
+  }
+}
+
+/* Everything that floats over the map shares one surface: the page colour,
+   the one shadow, and a hairline so it keeps its edge on a dark map. */
+.aeris-float {
+  background-color: var(--background);
+  box-shadow:
+    var(--lift),
+    inset 0 0 0 1px var(--border);
+}
+
+/* Navigation over the map is frosted: the search field, the round map
+   buttons and the status line. The fill alone is opaque enough to read
+   on any map, so the blur is only a finish, and it goes wherever it could
+   cost frames or legibility: on touch screens until a phone has been
+   measured, when the system asks for less transparency or more contrast,
+   without backdrop-filter, and with the Solid panels setting. Cards stay
+   solid, so numbers never sit over moving aircraft. */
+.aeris-glass {
+  background-color: color-mix(in oklab, var(--background) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+}
+
+@media (pointer: coarse), (prefers-reduced-transparency: reduce),
+  (prefers-contrast: more) {
+  .aeris-glass {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .aeris-glass {
+    background-color: var(--background);
+  }
+}
+
+:root[data-solid-panels] .aeris-glass {
+  background-color: var(--background);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Things that appear on their own, such as a chip or a menu, arrive the
+   way dialogs do on kew.edbn.me: a short pop from just smaller. */
+.aeris-pop {
+  transition:
+    opacity 160ms var(--ease-pop),
+    transform 160ms var(--ease-pop);
+}
+
+@starting-style {
+  .aeris-pop {
+    opacity: 0;
+    transform: scale(0.96);
   }
 }
 

@@ -202,7 +202,9 @@ export function useAtcStream(): UseAtcStreamReturn {
 
       navigator.mediaSession.metadata = new MediaMetadata({
         title: activeFeed.name,
-        artist: `${activeFeed.icao} · ${activeFeed.frequency}`,
+        artist: activeFeed.frequency
+          ? `${activeFeed.icao} ${activeFeed.frequency}`
+          : activeFeed.icao,
         album: "Aeris ATC",
       });
 
@@ -349,7 +351,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         // If direct playback failed, try proxy fallback
         if (!useProxy && !proxyAttemptedRef.current) {
           proxyAttemptedRef.current = true;
-          setError("Direct stream blocked. Trying proxy...");
+          setError("Reconnecting…");
           startPlaybackRef.current(targetFeed, true);
           return;
         }
@@ -359,7 +361,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         setStatus("error");
 
         if (proxyAttemptedRef.current) {
-          setError("Stream unavailable - try another frequency.");
+          setError("Stream unavailable. Try another frequency.");
         } else {
           setError("Stream connection failed.");
         }
@@ -390,7 +392,7 @@ export function useAtcStream(): UseAtcStreamReturn {
         // Autoplay blocked - user must interact first
         if (audioRef.current !== audio) return;
         setStatus("blocked");
-        setError("Tap to listen - browser requires interaction.");
+        setError("Press play to listen");
       });
     },
     [cleanupAudio, scheduleReconnectAttempt, updateMediaSession],
@@ -442,7 +444,7 @@ export function useAtcStream(): UseAtcStreamReturn {
     setError(null);
     audio.play().catch(() => {
       setStatus("blocked");
-      setError("Tap to listen - browser requires interaction.");
+      setError("Press play to listen. The browser needs a click to start sound.");
     });
   }, []);
 

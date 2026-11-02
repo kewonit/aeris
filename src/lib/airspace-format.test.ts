@@ -40,28 +40,28 @@ test("formatAirspaceLimit falls back to '-' on null/undefined inputs", () => {
   );
 });
 
-test("formatAirspaceTitle uppercases icao_class when classified", () => {
-  assert.equal(
+test("formatAirspaceTitle names the class when classified", () => {
+  assert.deepEqual(
     formatAirspaceTitle({ icao_class: "c", type: "other", name: "LHR TMA" }),
-    "C - LHR TMA",
+    { kind: "Class C", name: "LHR TMA" },
   );
 });
 
-test("formatAirspaceTitle falls back to uppercase type when unclassified", () => {
-  assert.equal(
+test("formatAirspaceTitle falls back to the type when unclassified", () => {
+  assert.deepEqual(
     formatAirspaceTitle({
       icao_class: "unclassified",
       type: "restricted",
       name: "R-2508",
     }),
-    "RESTRICTED - R-2508",
+    { kind: "Restricted", name: "R-2508" },
   );
 });
 
-test("formatAirspaceTitle omits dash when no name", () => {
-  assert.equal(
+test("formatAirspaceTitle has no name line without a name", () => {
+  assert.deepEqual(
     formatAirspaceTitle({ icao_class: "unclassified", type: "tfr", name: "" }),
-    "TFR",
+    { kind: "TFR", name: null },
   );
 });
 
@@ -103,31 +103,31 @@ test("formatAirspaceLimit returns '-' when unit or datum missing (non-STD)", () 
 });
 
 test("formatAirspaceTitle handles whitespace-only name and mixed-case unclassified", () => {
-  assert.equal(
+  assert.deepEqual(
     formatAirspaceTitle({
       icao_class: "UNCLASSIFIED",
       type: "tfr",
       name: "   ",
     }),
-    "TFR",
+    { kind: "TFR", name: null },
   );
-  assert.equal(
+  assert.deepEqual(
     formatAirspaceTitle({
       icao_class: "  c  ",
       type: "other",
       name: "  LHR TMA  ",
     }),
-    "C - LHR TMA",
+    { kind: "Class C", name: "LHR TMA" },
   );
 });
 
 test("formatAirspaceTitle handles missing/nullish icao_class gracefully", () => {
-  assert.equal(
+  assert.deepEqual(
     formatAirspaceTitle({
       icao_class: "",
       type: "restricted",
       name: "R-2508",
     }),
-    "RESTRICTED - R-2508",
+    { kind: "Restricted", name: "R-2508" },
   );
 });

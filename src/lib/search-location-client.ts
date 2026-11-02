@@ -28,6 +28,8 @@ export interface SearchLocation {
   code: string;
   /** Full display name with context (e.g. "Paris, Île-de-France, France") */
   displayName: string;
+  /** The city an airport serves, kept apart from its name. */
+  city?: string;
   /** Optional: OSM class/type for place results */
   placeType?: string;
 }
@@ -74,7 +76,8 @@ function airportToLocation(airport: Airport): SearchLocation {
     coordinates: [airport.lng, airport.lat],
     source: "airport",
     code: airport.iata,
-    displayName: `${airport.name} — ${airport.city}, ${airport.country}`,
+    displayName: `${airport.name} (${airport.iata})`,
+    city: airport.city,
   };
 }
 

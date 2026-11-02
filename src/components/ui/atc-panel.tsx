@@ -3,6 +3,7 @@
 import { useMemo, useCallback, useRef, useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "motion/react";
+import { SNAP } from "@/lib/motion";
 import {
   Radio,
   Play,
@@ -10,8 +11,6 @@ import {
   Loader2,
   X,
   AlertTriangle,
-  Server,
-  ChevronUp,
   AudioLines,
 } from "lucide-react";
 import type { AtcFeed, AtcFeedType } from "@/lib/atc-types";
@@ -21,6 +20,7 @@ import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CloseButton } from "@/components/ui/close-button";
 
 const AtcSpectrum = dynamic(
   () =>
@@ -120,23 +120,16 @@ export function AtcFeedDropdown({
           initial={{ opacity: 0, y: 8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
+          transition={SNAP}
+          className="aeris-float absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+          <div className="flex items-center justify-between border-b border-border pr-1 pl-4">
             <div className="flex items-center gap-2 text-label text-subtle">
               <Radio className="size-3" aria-hidden="true" />
               Frequencies
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
-              aria-label="Close feed selector"
-            >
-              <X className="size-3.5" />
-            </button>
+            <CloseButton label="Close feed selector" onClick={onClose} />
           </div>
 
           {/* Feed list */}
@@ -264,7 +257,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -12 }}
-        transition={{ type: "spring", stiffness: 400, damping: 28 }}
+        transition={SNAP}
         className="flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lift sm:w-auto sm:max-w-none"
       >
         {/* Waveform or blocked play icon (left) */}
@@ -273,7 +266,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             type="button"
             onClick={() => atc.resume()}
             className="flex h-7 w-13 shrink-0 items-center justify-center rounded-sm text-tint transition-colors hover:bg-card"
-            aria-label="Tap to start"
+            aria-label="Start listening"
           >
             <Play className="size-4" />
           </button>
@@ -306,7 +299,7 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
               }`}
             >
               {isBlocked
-                ? "Tap to listen"
+                ? "Press play to listen"
                 : isError && atc.error
                   ? atc.error
                   : atc.feed.name}
@@ -316,12 +309,6 @@ export function AtcPlayerBar({ atc, onOpenFeedSelector }: AtcPlayerBarProps) {
             <span className="font-mono text-micro text-subtle">
               {atc.feed.frequency}
             </span>
-            {atc.usingProxy && atc.status === "playing" && (
-              <span className="flex items-center gap-0.5 text-micro text-subtle">
-                <Server className="size-2" aria-hidden="true" />
-                proxy
-              </span>
-            )}
           </div>
         </button>
 
@@ -373,12 +360,14 @@ export function AtcTrigger({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center rounded-sm p-1 transition-colors hover:bg-card ${
-        isPlaying ? "text-tint" : isError ? "text-warning" : "text-subtle"
+      className={`ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-card px-3 transition-colors hover:bg-accent ${
+        isPlaying ? "text-tint" : isError ? "text-warning" : "text-foreground"
       }`}
-      aria-label="Live ATC (A)"
+      aria-label={isPlaying ? "Live air traffic control, playing" : "Listen to air traffic control"}
+      aria-keyshortcuts="A"
     >
-      <ChevronUp className="size-3" />
+      <AudioLines className="size-3.5" aria-hidden="true" />
+      {isPlaying ? "Live" : "Listen"}
     </button>
   );
 }

@@ -216,7 +216,7 @@ export function AirportLayer({
         if (!iata) return;
         popup
           .setLngLat(e.lngLat)
-          .setText(city ? `${iata} · ${city}` : iata)
+          .setText(city ? `${city} (${iata})` : iata)
           .addTo(m);
       }
     }
