@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { SNAP } from "@/lib/motion";
-import { Satellite, X, ChevronUp, Circle } from "lucide-react";
+import { Satellite, X, Circle } from "lucide-react";
 import {
   getCircuitState,
   getProviderOverride,
@@ -137,6 +137,8 @@ export type ProviderTriggerProps = {
   source: string | null;
   loading: boolean;
   rateLimited: boolean;
+  /** Seconds until the feed is asked again, while it is busy. */
+  retryIn?: number;
   onClick: () => void;
 };
 
@@ -144,33 +146,42 @@ export function ProviderTrigger({
   source,
   loading,
   rateLimited,
+  retryIn = 0,
   onClick,
 }: ProviderTriggerProps) {
   const label = rateLimited
-    ? "Paused"
+    ? retryIn > 0
+      ? `Feed busy · retrying in ${retryIn}s`
+      : "Feed busy"
     : loading && !source
       ? "Connecting…"
       : source
         ? (SOURCE_LABELS[source] ?? source)
         : "Connecting…";
 
+  const healthy = !rateLimited && Boolean(source) && source !== "none";
   const tone =
     rateLimited || source === "opensky"
-      ? "text-warning"
+      ? "bg-warning"
       : source === "none"
-        ? "text-danger"
-        : "text-subtle";
+        ? "bg-danger"
+        : loading && !source
+          ? "bg-subtle"
+          : "bg-arrival";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 text-label text-muted-foreground transition-colors hover:text-foreground"
-      aria-label="Select ADS-B provider"
+      className={`flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 transition-colors hover:bg-card hover:text-foreground ${
+        rateLimited ? "text-warning" : "text-muted-foreground"
+      }`}
+      aria-label={`Data source: ${label}`}
+      aria-haspopup="dialog"
     >
-      <Satellite className={`size-3 ${tone}`} aria-hidden="true" />
-      {label}
-      <ChevronUp className="size-3 text-subtle" aria-hidden="true" />
+      <span className={`size-1.5 rounded-full ${tone}`} aria-hidden="true" />
+      {/* On a phone a healthy feed is just its dot; trouble is spelled out. */}
+      <span className={healthy ? "hidden sm:inline" : undefined}>{label}</span>
     </button>
   );
 }

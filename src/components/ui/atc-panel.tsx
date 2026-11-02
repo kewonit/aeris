@@ -12,7 +12,6 @@ import {
   X,
   AlertTriangle,
   Server,
-  ChevronUp,
   AudioLines,
 } from "lucide-react";
 import type { AtcFeed, AtcFeedType } from "@/lib/atc-types";
@@ -374,12 +373,14 @@ export function AtcTrigger({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center rounded-sm p-1 transition-colors hover:bg-card ${
-        isPlaying ? "text-tint" : isError ? "text-warning" : "text-subtle"
+      className={`ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-card px-3 transition-colors hover:bg-accent ${
+        isPlaying ? "text-tint" : isError ? "text-warning" : "text-foreground"
       }`}
-      aria-label="Live ATC (A)"
+      aria-label={isPlaying ? "Live air traffic control, playing" : "Listen to air traffic control"}
+      aria-keyshortcuts="A"
     >
-      <ChevronUp className="size-3" />
+      <AudioLines className="size-3.5" aria-hidden="true" />
+      {isPlaying ? "Live" : "Listen"}
     </button>
   );
 }

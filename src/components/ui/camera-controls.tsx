@@ -16,11 +16,12 @@ import {
   ChevronsDown,
   RotateCw,
   RotateCcw,
-  Locate,
-  Maximize,
-  Minimize,
 } from "lucide-react";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
+import { useIdle } from "@/hooks/use-idle";
+
+/** The camera buttons fade after the pointer has rested this long. */
+const IDLE_HIDE_MS = 3_000;
 
 type CameraActionType = "zoom" | "pitch" | "bearing";
 
@@ -58,7 +59,33 @@ function useCameraAction(type: CameraActionType, direction: number) {
     [type],
   );
 
-  return { onPointerDown: start, onPointerUp: stop, onPointerLeave: stop };
+  // Held keys move the camera the way a held button does: Enter or Space
+  // down starts the move, up ends it.
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      start();
+    },
+    [start],
+  );
+  const onKeyUp = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      stop();
+    },
+    [stop],
+  );
+
+  return {
+    onPointerDown: start,
+    onPointerUp: stop,
+    onPointerLeave: stop,
+    onKeyDown,
+    onKeyUp,
+    onBlur: stop,
+  };
 }
 
 function ControlButton({
@@ -80,12 +107,15 @@ function ControlButton({
     <Tooltip label={label} hint={hint} side="left">
       <motion.button
         type="button"
-        className="flex h-8 w-8 items-center justify-center select-none text-subtle"
+        className="grid size-9 place-items-center rounded-full select-none text-subtle transition-colors hover:text-foreground"
         whileTap={{ scale: PRESS_SCALE }}
         aria-label={label}
         onPointerDown={handlers.onPointerDown}
         onPointerUp={handlers.onPointerUp}
         onPointerLeave={handlers.onPointerLeave}
+        onKeyDown={handlers.onKeyDown}
+        onKeyUp={handlers.onKeyUp}
+        onBlur={handlers.onBlur}
         onContextMenu={(e) => e.preventDefault()}
       >
         {children}
@@ -97,7 +127,7 @@ function ControlButton({
 function Divider() {
   return (
     <div
-      className="mx-auto h-px w-4 bg-card"
+      className="mx-auto my-1 h-px w-5 bg-border"
     />
   );
 }
@@ -135,35 +165,7 @@ function getFullscreenSupportedSnapshot() {
   return typeof document !== "undefined" && !!document.fullscreenEnabled;
 }
 
-/** One-off action button (no continuous press). */
-function ActionButton({
-  label,
-  hint,
-  onClick,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label} hint={hint} side="left">
-      <motion.button
-        type="button"
-        className="flex h-8 w-8 items-center justify-center select-none text-subtle"
-        whileTap={{ scale: PRESS_SCALE }}
-        aria-label={label}
-        onClick={onClick}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        {children}
-      </motion.button>
-    </Tooltip>
-  );
-}
-
-function useGeolocation() {
+export function useGeolocation() {
   const [locating, setLocating] = useState(false);
 
   const flyToMe = useCallback(() => {
@@ -193,7 +195,7 @@ function useGeolocation() {
   return { flyToMe, locating };
 }
 
-function useFullscreen() {
+export function useFullscreen() {
   const mounted = useSyncExternalStore(
     subscribeNoop,
     getClientMountedSnapshot,
@@ -221,103 +223,44 @@ function useFullscreen() {
   return { isFullscreen, toggle, supported, mounted };
 }
 
-export function CameraControls() {
-  const { flyToMe, locating } = useGeolocation();
-  const {
-    isFullscreen,
-    toggle: toggleFullscreen,
-    supported: fsSupported,
-    mounted,
-  } = useFullscreen();
+/**
+ * Zoom, tilt and turn, for a mouse. They fade away while the pointer rests
+ * and are not shown on touch screens, where fingers do all three.
+ */
+export function CameraControls({ autoHide = false }: { autoHide?: boolean }) {
+  const idle = useIdle(IDLE_HIDE_MS);
+  const hidden = autoHide && idle;
   return (
-    <motion.div
-      className="flex flex-col items-center rounded-lg border border-border bg-background"
+    <div
+      className={`flex flex-col items-center aeris-float rounded-full py-1 transition-opacity duration-300 pointer-coarse:hidden ${
+        hidden ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
       role="toolbar"
-      aria-label="Camera controls"
+      aria-label="Camera"
+      aria-hidden={hidden || undefined}
     >
       <TooltipProvider>
         <ControlButton type="zoom" direction={1} label="Zoom in">
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="size-4" />
+        </ControlButton>
+        <ControlButton type="zoom" direction={-1} label="Zoom out">
+          <Minus className="size-4" />
         </ControlButton>
         <Divider />
-        <ControlButton
-          type="zoom"
-          direction={-1}
-          label="Zoom out"
-        >
-          <Minus className="h-3.5 w-3.5" />
+        <ControlButton type="pitch" direction={-1} label="Tilt up" hint="Flatter view">
+          <ChevronsUp className="size-4" />
         </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
-        <ControlButton
-          type="pitch"
-          direction={-1}
-          label="Tilt up"
-          hint="Flatter view"
-        >
-          <ChevronsUp className="h-3.5 w-3.5" />
+        <ControlButton type="pitch" direction={1} label="Tilt down" hint="More 3D">
+          <ChevronsDown className="size-4" />
         </ControlButton>
         <Divider />
-        <ControlButton
-          type="pitch"
-          direction={1}
-          label="Tilt down"
-          hint="More 3D"
-        >
-          <ChevronsDown className="h-3.5 w-3.5" />
+        <ControlButton type="bearing" direction={-1} label="Turn right">
+          <RotateCw className="size-4" />
         </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
-        <ControlButton
-          type="bearing"
-          direction={-1}
-          label="Rotate clockwise"
-        >
-          <RotateCw className="h-3.5 w-3.5" />
+        <ControlButton type="bearing" direction={1} label="Turn left">
+          <RotateCcw className="size-4" />
         </ControlButton>
-        <Divider />
-        <ControlButton
-          type="bearing"
-          direction={1}
-          label="Rotate counter-clockwise"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </ControlButton>
-
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
-
-        <ActionButton
-          label="Fly to my location"
-          hint={locating ? "Finding you…" : undefined}
-          onClick={flyToMe}
-        >
-          <Locate className={`h-3.5 w-3.5 ${locating ? "animate-pulse" : ""}`} />
-        </ActionButton>
-
-        {shouldRenderFullscreenToggle(mounted, fsSupported) && (
-          <>
-            <Divider />
-            <ActionButton
-              label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-              onClick={toggleFullscreen}
-            >
-              {isFullscreen ? (
-                <Minimize className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize className="h-3.5 w-3.5" />
-              )}
-            </ActionButton>
-          </>
-        )}
       </TooltipProvider>
-    </motion.div>
+    </div>
   );
 }

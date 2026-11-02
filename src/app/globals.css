@@ -340,6 +340,15 @@
   }
 }
 
+/* Everything that floats over the map shares one surface: the page colour,
+   the one shadow, and a hairline so it keeps its edge on a dark map. */
+.aeris-float {
+  background-color: var(--background);
+  box-shadow:
+    var(--lift),
+    inset 0 0 0 1px var(--border);
+}
+
 /* Things that appear on their own, such as a chip or a menu, arrive the
    way dialogs do on kew.edbn.me: a short pop from just smaller. */
 .aeris-pop {

@@ -42,7 +42,7 @@ export const FollowChip = memo(function FollowChip({
   return (
     <div
       role="status"
-      className="aeris-pop flex h-11 items-center rounded-full bg-background pl-1 shadow-lift"
+      className="aeris-pop flex h-11 items-center aeris-float rounded-full pl-1"
     >
       <button
         type="button"

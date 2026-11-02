@@ -148,7 +148,7 @@ export const SearchPill = memo(function SearchPill({
         label="Search flights, airports and places"
         className="aeris-cmdk"
       >
-        <div className="flex h-11 items-center gap-2 rounded-full bg-background pr-1 pl-4 shadow-lift">
+        <div className="flex h-11 items-center gap-2 aeris-float rounded-full pr-1 pl-4">
           <Search className="size-4 shrink-0 text-subtle" aria-hidden="true" />
           <Command.Input
             ref={inputRef}
@@ -199,7 +199,7 @@ export const SearchPill = memo(function SearchPill({
         </div>
 
         {open && (
-          <div className="aeris-pop absolute inset-x-0 top-full z-10 mt-2 overflow-hidden rounded-xl bg-background shadow-lift">
+          <div className="aeris-pop absolute inset-x-0 top-full z-10 mt-2 overflow-hidden aeris-float rounded-xl">
             <Command.List className="max-h-[min(60dvh,30rem)] overflow-y-auto py-1.5">
               {results.airportFirst ? (
                 <>

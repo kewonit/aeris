@@ -47,7 +47,6 @@ import {
 } from "@/components/ui/aeris-left-sidebar";
 import { AltitudeLegend } from "@/components/ui/altitude-legend";
 import { CameraControls } from "@/components/ui/camera-controls";
-import { MapToggles } from "@/components/ui/map-toggles";
 import { StatusBar } from "@/components/ui/status-bar";
 import { MapAttribution } from "@/components/ui/map-attribution";
 import { AtcPlayerBar } from "@/components/ui/atc-panel";
@@ -56,7 +55,10 @@ const AirportInfoCard = dynamic(() =>
     (mod) => mod.AirportInfoCard,
   ),
 );
-import { Brand, GitHubBadge } from "@/components/flight-tracker-brand";
+import { Brand } from "@/components/flight-tracker-brand";
+import { MapMenu } from "@/components/chrome/map-menu";
+import { LocateButton } from "@/components/chrome/locate-button";
+import { Compass, CompassBridge } from "@/components/chrome/compass";
 import {
   SettingsProvider,
   trailCeilingMeters,
@@ -538,6 +540,10 @@ function FlightTrackerInner({
     update("autoOrbit", !settings.autoOrbit);
   }, [settings.autoOrbit, update]);
 
+  const handleToggleMenu = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("aeris:toggle-menu"));
+  }, []);
+
   const handleOpenSearch = useCallback(() => {
     window.dispatchEvent(new CustomEvent("aeris:open-search"));
   }, []);
@@ -726,6 +732,7 @@ function FlightTrackerInner({
     onDeselect: handleShortcutDeselect,
     onToggleFpv: handleToggleFpvKey,
     onToggleFollow: handleToggleFollowKey,
+    onToggleMenu: handleToggleMenu,
     onToggleAtc: handleToggleAtc,
     isFpv: fpvIcao24 !== null,
   });
@@ -801,6 +808,7 @@ function FlightTrackerInner({
           isDark={mapStyle.dark}
           globeMode={settings.globeMode}
         >
+          <CompassBridge />
           <CameraController
             city={activeCity}
             followIcao24={fpvIcao24 ? null : followIcao24}
@@ -853,15 +861,17 @@ function FlightTrackerInner({
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
+        {/* Top left: the name and the one search field. On a phone the
+            field spans the top, with the map menu inside it. */}
         {!fpvIcao24 && (
           <div
-            className="aeris-left-chrome pointer-events-auto absolute left-3 top-3 flex items-center gap-3 sm:left-4 sm:top-4"
+            className="aeris-left-chrome pointer-events-auto absolute z-20 top-3 right-3 left-3 flex items-center gap-3 sm:top-4 sm:right-auto sm:left-4"
             data-panel-open={desktopLeftPanelOpen}
           >
             <span className="hidden sm:block">
               <Brand />
             </span>
-            <div className="w-[calc(100vw-9.5rem)] sm:w-88">
+            <div className="min-w-0 flex-1 sm:w-88 sm:flex-none">
               <SearchPill
                 flights={displayFlights}
                 center={activeCity.coordinates}
@@ -869,6 +879,19 @@ function FlightTrackerInner({
                 onSelectAirport={handleSearchAirport}
                 onSelectPlace={handleSearchPlace}
                 onLookupFlight={handleLookupFlight}
+                trailing={
+                  isMobile ? (
+                    <MapMenu
+                      inline
+                      activeStyle={mapStyle}
+                      onSelectStyle={setMapStyle}
+                      airspaceAvailable={airspaceAvailable}
+                      onRandomAirport={handleRandomAirport}
+                      onResetView={handleResetView}
+                      repoStars={repoStars}
+                    />
+                  ) : undefined
+                }
               />
             </div>
           </div>
@@ -896,49 +919,51 @@ function FlightTrackerInner({
           />
         )}
 
+        {/* Top right: the map menu, your location, and north when the
+            map is turned. */}
         {!fpvIcao24 && (
-          <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4 sm:gap-2">
-            <GitHubBadge stars={repoStars} />
-            <ControlPanel
-              airspaceAvailable={airspaceAvailable}
-              activeStyle={mapStyle}
-              onSelectStyle={setMapStyle}
-            />
+          <div className="pointer-events-auto absolute z-20 top-17 right-3 flex flex-col items-end gap-2 sm:top-4 sm:right-4">
+            {!isMobile && (
+              <MapMenu
+                activeStyle={mapStyle}
+                onSelectStyle={setMapStyle}
+                airspaceAvailable={airspaceAvailable}
+                onRandomAirport={handleRandomAirport}
+                onResetView={handleResetView}
+                repoStars={repoStars}
+              />
+            )}
+            <LocateButton />
+            <Compass />
           </div>
         )}
+        <ControlPanel airspaceAvailable={airspaceAvailable} />
 
+        {/* Bottom left: one line about the feed and the place. */}
         {!fpvIcao24 && (
           <div
-            className="aeris-left-chrome pointer-events-none absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 flex flex-col items-start gap-2 sm:bottom-4 sm:left-4 sm:mb-0"
+            className="aeris-left-chrome pointer-events-auto absolute bottom-[env(safe-area-inset-bottom,0px)] left-3 mb-3 sm:bottom-4 sm:left-4 sm:mb-0"
             data-panel-open={desktopLeftPanelOpen}
           >
-            <div className="pointer-events-auto">
-              <MapToggles />
-            </div>
-            <div className="pointer-events-auto">
-              <StatusBar
-                flightCount={flights.length}
-                cityName={activeCity.name}
-                cityIata={activeCity.iata}
-                cityCoordinates={activeCity.coordinates}
-                loading={loading}
-                rateLimited={rateLimited}
-                retryIn={retryIn}
-                onNorthUp={handleNorthUp}
-                onResetView={handleResetView}
-                onRandomAirport={handleRandomAirport}
-                atc={atc}
-                atcToggle={atcToggle}
-                source={source}
-              />
-            </div>
+            <StatusBar
+              flightCount={flights.length}
+              cityName={activeCity.name}
+              cityIata={activeCity.iata}
+              cityCoordinates={activeCity.coordinates}
+              loading={loading}
+              rateLimited={rateLimited}
+              retryIn={retryIn}
+              atc={atc}
+              atcToggle={atcToggle}
+              source={source}
+            />
           </div>
         )}
 
         {/* While following with the card closed, a chip says so. */}
         {!fpvIcao24 && followFlight && selectedIcao24 !== followIcao24 && (
           <div
-            className="aeris-map-centered-chrome pointer-events-auto absolute left-1/2 top-16 max-w-[calc(100vw-1.5rem)] sm:top-4"
+            className="aeris-map-centered-chrome pointer-events-auto absolute top-17 left-1/2 max-w-[calc(100vw-8rem)] sm:top-4 sm:max-w-none"
             data-panel-open={desktopLeftPanelOpen}
           >
             <FollowChip
@@ -949,12 +974,12 @@ function FlightTrackerInner({
           </div>
         )}
 
-        {/* ATC Player Bar - top-center on mobile, bottom-center on desktop */}
+        {/* ATC Player Bar - under the top row on a phone, bottom-center on desktop */}
         {!fpvIcao24 && (
           <AnimatePresence>
             {atc.feed && (
               <div
-                className="aeris-map-centered-chrome pointer-events-auto absolute left-1/2 top-14 sm:top-auto sm:bottom-18"
+                className="aeris-map-centered-chrome pointer-events-auto absolute top-30 left-1/2 sm:top-auto sm:bottom-18"
                 data-panel-open={desktopLeftPanelOpen}
               >
                 <AtcPlayerBar atc={atc} onOpenFeedSelector={handleToggleAtc} />
@@ -963,10 +988,11 @@ function FlightTrackerInner({
           </AnimatePresence>
         )}
 
+        {/* Bottom right: the camera for a mouse, the altitude key, credits. */}
         {!fpvIcao24 && (
-          <div className="pointer-events-none absolute bottom-[env(safe-area-inset-bottom,0px)] right-3 mb-3 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:mb-0">
+          <div className="pointer-events-none absolute right-3 bottom-[env(safe-area-inset-bottom,0px)] mb-3 flex flex-col items-end gap-2 sm:right-4 sm:bottom-4 sm:mb-0">
             <div className="pointer-events-auto">
-              <CameraControls />
+              <CameraControls autoHide />
             </div>
             <div className="pointer-events-auto">
               <AltitudeLegend />

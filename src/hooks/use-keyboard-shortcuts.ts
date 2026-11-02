@@ -11,6 +11,7 @@ type ShortcutActions = {
   onDeselect: () => void;
   onToggleFpv: () => void;
   onToggleFollow: () => void;
+  onToggleMenu?: () => void;
   onToggleAtc?: () => void;
   isFpv?: boolean;
 };
@@ -96,6 +97,11 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         case "V":
           e.preventDefault();
           a.onToggleFpv();
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          a.onToggleMenu?.();
           break;
         case "?":
           e.preventDefault();
