@@ -340,6 +340,21 @@
   }
 }
 
+/* Things that appear on their own, such as a chip or a menu, arrive the
+   way dialogs do on kew.edbn.me: a short pop from just smaller. */
+.aeris-pop {
+  transition:
+    opacity 160ms var(--ease-pop),
+    transform 160ms var(--ease-pop);
+}
+
+@starting-style {
+  .aeris-pop {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
 /* The custom attribution component replaces MapLibre's controls. */
 .maplibregl-ctrl-attrib,
 .maplibregl-ctrl-logo {

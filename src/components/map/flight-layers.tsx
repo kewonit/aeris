@@ -131,6 +131,8 @@ export function FlightLayers({
   globeMode = false,
   fpvIcao24 = null,
   fpvDrawnRef,
+  followIcao24 = null,
+  followDrawnRef,
 }: FlightLayerProps) {
   const { map, isLoaded } = useMap();
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -214,6 +216,8 @@ export function FlightLayers({
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
   const fpvDrawnRefRef = useRef(fpvDrawnRef);
+  const followIcao24Ref = useRef(followIcao24);
+  const followDrawnRefRef = useRef(followDrawnRef);
   const prevSelectedRef = useRef<string | null>(null);
   const selectionChangeTimeRef = useRef(0);
 
@@ -245,6 +249,8 @@ export function FlightLayers({
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
     fpvDrawnRefRef.current = fpvDrawnRef;
+    followIcao24Ref.current = followIcao24;
+    followDrawnRefRef.current = followDrawnRef;
     onClickRef.current = onClick;
     globeModeRef.current = globeMode;
     if (selectedIcao24 !== selectedIcao24Ref.current) {
@@ -269,6 +275,8 @@ export function FlightLayers({
     selectedIcao24,
     fpvIcao24,
     fpvDrawnRef,
+    followIcao24,
+    followDrawnRef,
   ]);
 
   // ── Snapshot interpolation on new data ─────────────────────────────
@@ -885,6 +893,31 @@ export function FlightLayers({
                   ),
                   track: Number.isFinite(drawn.trueTrack)
                     ? drawn.trueTrack
+                    : null,
+                }
+              : null;
+        }
+
+        // The followed aircraft, where it is drawn this frame, for the
+        // camera that keeps it centred.
+        const followOut = followDrawnRefRef.current;
+        if (followOut) {
+          const followId = followIcao24Ref.current?.toLowerCase() ?? null;
+          const followed =
+            followId && followId !== fpvId
+              ? interpolatedMapRef.current.get(followId)
+              : null;
+          followOut.current =
+            followed && followed.longitude != null && followed.latitude != null
+              ? {
+                  lng: followed.longitude,
+                  lat: followed.latitude,
+                  elevation: aircraftElevationMeters(
+                    followed.baroAltitude,
+                    altitudeMode,
+                  ),
+                  track: Number.isFinite(followed.trueTrack)
+                    ? followed.trueTrack
                     : null,
                 }
               : null;

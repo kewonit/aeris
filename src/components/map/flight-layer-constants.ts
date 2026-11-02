@@ -75,6 +75,9 @@ export type FlightLayerProps = {
    * the camera can follow it exactly; null while it is not drawn.
    */
   fpvDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
+  /** The followed aircraft, whose drawn position is shared like FPV's. */
+  followIcao24?: string | null;
+  followDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
 };
 
 /** Where the first person aircraft is drawn this frame. */

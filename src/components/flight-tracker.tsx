@@ -71,6 +71,7 @@ import { useAtcStream } from "@/hooks/use-atc-stream";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAirportBoard } from "@/hooks/use-airport-board";
 import { AircraftCard } from "@/components/place/aircraft-card";
+import { FollowChip } from "@/components/chrome/follow-chip";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
@@ -85,7 +86,6 @@ import {
   selectedAircraftIcao24,
   selectedAirportIata as selectedAirportOf,
   useSelection,
-  type SelectionState,
 } from "@/hooks/use-selection";
 import type { PendingAircraftLink } from "@/hooks/use-flight-monitors";
 import {
@@ -147,6 +147,8 @@ function FlightTrackerInner({
   // Where the first person aircraft is drawn, shared from the flight
   // layers to the camera that follows it.
   const fpvDrawnRef = useRef<FpvDrawnPosition | null>(null);
+  // Where the followed aircraft is drawn, for the camera that centres it.
+  const followDrawnRef = useRef<FpvDrawnPosition | null>(null);
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
   // A shared link is read once. An airport opens at once; an aircraft waits
   // in pendingLinkRef until the feed or a lookup finds it.
@@ -280,10 +282,13 @@ function FlightTrackerInner({
   }, [fpvIcao24, flights, fpvSeedCenter, activeCity]);
 
   const displayFlights = flights;
+  // The aircraft whose whole path is drawn: the open one, else the one
+  // being followed.
+  const trackedIcao24 = selectedIcao24 ?? followIcao24;
   const trailState = useTrailSystem({
     flights: displayFlights,
-    selectedIcao24,
-    historyEnabled: !!selectedIcao24 && !fpvIcao24,
+    selectedIcao24: trackedIcao24,
+    historyEnabled: !!trackedIcao24 && !fpvIcao24,
   });
 
   // Single Map for O(1) flight lookups - replaces 4× O(n) find() calls per poll
@@ -536,6 +541,40 @@ function FlightTrackerInner({
     window.dispatchEvent(new CustomEvent("aeris:open-shortcuts"));
   }, []);
 
+  const toggleFollow = useCallback(
+    (icao24: string) => {
+      const target = icao24.toLowerCase();
+      if (selectionState.follow === target) {
+        dispatch({ type: "unfollow" });
+        return;
+      }
+      const flight = displayFlightMap.get(target) ?? null;
+      if (flight && (flight.longitude == null || flight.latitude == null)) return;
+      if (selectionState.fpv) setFpvSeedCenter(null);
+      dispatch({ type: "follow", icao24: target, seed: flight });
+    },
+    [dispatch, displayFlightMap, selectionState.follow, selectionState.fpv],
+  );
+
+  // F follows whatever is open, or leaves first person to follow it.
+  const handleToggleFollowKey = useCallback(() => {
+    const current = selectionState;
+    const target =
+      current.fpv ??
+      (current.selection.kind === "aircraft" ? current.selection.icao24 : null);
+    if (target) toggleFollow(target);
+    else if (current.follow) dispatch({ type: "unfollow" });
+  }, [dispatch, selectionState, toggleFollow]);
+
+  const handleOpenFollowed = useCallback(() => {
+    if (!followIcao24) return;
+    dispatch({
+      type: "selectAircraft",
+      icao24: followIcao24,
+      seed: displayFlightMap.get(followIcao24) ?? null,
+    });
+  }, [dispatch, displayFlightMap, followIcao24]);
+
   const handleToggleFpvKey = useCallback(() => {
     if (fpvIcao24) handleExitFpv();
     else if (selectedIcao24) enterFpv(selectedIcao24);
@@ -543,12 +582,8 @@ function FlightTrackerInner({
 
   // Escape backs out one step at a time: first person, then the open card,
   // then following.
-  const selectionRef = useRef<SelectionState>(selectionState);
-  useEffect(() => {
-    selectionRef.current = selectionState;
-  }, [selectionState]);
   const handleShortcutDeselect = useCallback(() => {
-    const current = selectionRef.current;
+    const current = selectionState;
     if (current.fpv) {
       handleExitFpv();
     } else if (current.selection.kind !== "none") {
@@ -557,7 +592,7 @@ function FlightTrackerInner({
     } else if (current.follow) {
       dispatch({ type: "unfollow" });
     }
-  }, [dispatch, handleExitFpv, restoreMapFocus]);
+  }, [dispatch, handleExitFpv, restoreMapFocus, selectionState]);
 
   // Helper: select flight and optionally enter FPV
   const selectFlight = useCallback(
@@ -676,6 +711,7 @@ function FlightTrackerInner({
     onToggleHelp: handleToggleHelp,
     onDeselect: handleShortcutDeselect,
     onToggleFpv: handleToggleFpvKey,
+    onToggleFollow: handleToggleFollowKey,
     onToggleAtc: handleToggleAtc,
     isFpv: fpvIcao24 !== null,
   });
@@ -753,7 +789,9 @@ function FlightTrackerInner({
         >
           <CameraController
             city={activeCity}
-            followFlight={followFlight}
+            followIcao24={fpvIcao24 ? null : followIcao24}
+            followDrawnRef={followDrawnRef}
+            onFollowEnd={handleFollowLost}
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
             fpvDrawnRef={fpvDrawnRef}
@@ -783,7 +821,7 @@ function FlightTrackerInner({
             flights={displayFlights}
             trails={trailState.trails}
             onClick={handleClick}
-            selectedIcao24={fpvIcao24 ?? selectedIcao24}
+            selectedIcao24={fpvIcao24 ?? trackedIcao24}
             showTrails={settings.showTrails}
             trailThickness={settings.trailThickness}
             trailMinutes={settings.trailMinutes}
@@ -794,6 +832,8 @@ function FlightTrackerInner({
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
             fpvDrawnRef={fpvDrawnRef}
+            followIcao24={followIcao24}
+            followDrawnRef={followDrawnRef}
           />
         </MapView>
       </div>
@@ -819,6 +859,7 @@ function FlightTrackerInner({
             onCloseFlight={handleDeselectFlight}
             onToggleFpv={handleToggleFpv}
             followIcao24={followIcao24}
+            onToggleFollow={toggleFollow}
             airportBoard={airportBoard}
             onSelectAirportFlight={handleAirportBoardSelect}
             selectedIcao24={selectedIcao24}
@@ -871,6 +912,20 @@ function FlightTrackerInner({
                 source={source}
               />
             </div>
+          </div>
+        )}
+
+        {/* While following with the card closed, a chip says so. */}
+        {!fpvIcao24 && followFlight && selectedIcao24 !== followIcao24 && (
+          <div
+            className="aeris-map-centered-chrome pointer-events-auto absolute left-1/2 top-16 max-w-[calc(100vw-1.5rem)] sm:top-4"
+            data-panel-open={desktopLeftPanelOpen}
+          >
+            <FollowChip
+              flight={followFlight}
+              onOpen={handleOpenFollowed}
+              onStop={handleFollowLost}
+            />
           </div>
         )}
 
@@ -938,6 +993,7 @@ function FlightTrackerInner({
                   flight={displayFlight}
                   following={followIcao24 === displayFlight.icao24}
                   onToggleFpv={handleToggleFpv}
+                  onToggleFollow={toggleFollow}
                   onClose={handleDeselectFlight}
                   onGrab={(event) => flightSheetDrag.start(event)}
                 />
