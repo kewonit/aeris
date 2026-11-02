@@ -34,6 +34,11 @@ const cspHeader = `
 `;
 
 const nextConfig: NextConfig = {
+  // Every corner of the map holds controls, so the floating dev badge would
+  // always cover one. Errors still open the full overlay.
+  devIndicators: false,
+  // Don't write an AGENTS.md into the repo when an AI agent runs `next dev`.
+  agentRules: false,
   transpilePackages: [
     "@deck.gl/core",
     "@deck.gl/layers",
