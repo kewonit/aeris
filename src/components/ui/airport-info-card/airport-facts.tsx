@@ -39,7 +39,7 @@ function Fact({
     <div className="min-w-0">
       <dt className="text-label text-subtle">{label}</dt>
       <dd
-        className={`mt-1 truncate text-foreground ${mono ? "font-mono text-small leading-7" : "text-value"}`}
+        className={`mt-1 truncate text-foreground ${mono ? "flex h-6.5 items-center font-mono text-small" : "text-value"}`}
       >
         {value}
       </dd>

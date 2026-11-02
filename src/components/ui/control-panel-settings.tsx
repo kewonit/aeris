@@ -37,6 +37,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { formatAltitude } from "@/lib/unit-formatters";
+import { SwitchTrack } from "@/components/ui/switch";
+import { Kbd } from "@/components/ui/kbd";
 
 const SHORTCUTS = [
   { key: "N", description: "North up" },
@@ -282,12 +284,10 @@ export function ShortcutsContent() {
               key={key}
               className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-card"
             >
-              <span className="text-small font-medium text-muted-foreground">
+              <span className="text-small text-muted-foreground">
                 {description}
               </span>
-              <kbd className="flex h-7 min-w-7 items-center justify-center rounded-sm bg-card px-2 font-mono text-caption text-foreground ring-1 ring-border">
-                {key}
-              </kbd>
+              <Kbd>{key}</Kbd>
             </div>
           ))}
         </div>
@@ -326,10 +326,10 @@ function OrbitSpeedSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Orbit speed
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {activeLabel}
           </span>
         </div>
@@ -381,10 +381,10 @@ function TrailThicknessSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Trail thickness
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {value.toFixed(1)} px
           </span>
         </div>
@@ -415,10 +415,10 @@ function TrailLengthSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Trail length
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {value} min
           </span>
         </div>
@@ -451,8 +451,8 @@ function TrailCeilingSlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">Hide above</p>
-          <span className="text-caption text-muted-foreground">
+          <p className="text-small text-foreground">Hide above</p>
+          <span className="text-label text-muted-foreground">
             {formatAltitude(value * 0.3048, unitSystem)}
           </span>
         </div>
@@ -483,10 +483,10 @@ function AirspaceOpacitySlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Airspace opacity
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -517,10 +517,10 @@ function WeatherRadarOpacitySlider({
       </div>
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-small font-medium text-foreground">
+          <p className="text-small text-foreground">
             Radar opacity
           </p>
-          <span className="text-caption text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {Math.round(value * 100)}%
           </span>
         </div>
@@ -585,18 +585,18 @@ function SettingRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-small font-medium text-foreground">{title}</p>
+          <p className="text-small text-foreground">{title}</p>
           {badge && (
             <span className="text-label text-tint">{badge}</span>
           )}
         </div>
         {description && (
-          <p className="mt-0.5 text-caption leading-relaxed text-subtle">
+          <p className="mt-0.5 text-label text-subtle">
             {description}
           </p>
         )}
       </div>
-      <Toggle checked={checked} />
+      <SwitchTrack checked={checked} />
     </button>
   );
 }
@@ -619,7 +619,7 @@ function SegmentRow<T extends string | number>({
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground ring-1 ring-border">
         {icon}
       </div>
-      <p className="flex-1 min-w-0 text-small font-medium text-foreground">
+      <p className="flex-1 min-w-0 text-small text-foreground">
         {title}
       </p>
       <div
@@ -635,7 +635,7 @@ function SegmentRow<T extends string | number>({
               role="radio"
               aria-checked={isActive}
               onClick={() => onChange(opt.value)}
-              className={`relative rounded-sm px-2 py-1 text-caption font-medium transition-colors ${
+              className={`relative rounded-sm px-2 py-1 text-label transition-colors ${
                 isActive
                   ? "text-foreground"
                   : "text-subtle hover:text-muted-foreground"
@@ -654,23 +654,6 @@ function SegmentRow<T extends string | number>({
         })}
       </div>
     </div>
-  );
-}
-
-function Toggle({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        checked ? "bg-tint" : "bg-accent ring-1 ring-subtle ring-inset"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-lift transition-transform ${
-          checked ? "translate-x-4" : ""
-        }`}
-      />
-    </span>
   );
 }
 
@@ -859,11 +842,11 @@ export function AboutContent() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-5 p-5 pt-3">
-        <h3 className="text-value font-medium text-foreground">
+        <h3 className="text-value text-foreground">
           Aeris
         </h3>
 
-        <div className="space-y-3 text-small leading-relaxed text-muted-foreground">
+        <div className="space-y-3 text-small text-muted-foreground">
           <p>
             Live flight tracking in 3D. The planes you see are real. Position
             data comes from adsb.lol, adsb.fi, airplanes.live, and OpenSky
@@ -880,7 +863,7 @@ export function AboutContent() {
 
         <div className="h-px w-full bg-accent" />
 
-        <p className="text-label leading-relaxed text-subtle">
+        <p className="text-label text-subtle">
           Built by a human, not just LLMs.{" "}
           <a
             href="https://github.com/kewonit"
@@ -898,7 +881,7 @@ export function AboutContent() {
             kew@edbn.me
           </a>
         </p>
-        <p className="text-label leading-relaxed text-subtle">
+        <p className="text-label text-subtle">
           Source is on{" "}
           <a
             href="https://github.com/kewonit/aeris"
@@ -929,17 +912,17 @@ export function ChangelogContent() {
           <div key={release.version}>
             {i > 0 && <div className="mb-5 h-px w-full bg-accent" />}
             <div className="mb-3 flex items-baseline gap-2">
-              <span className="text-small font-medium text-foreground">
+              <span className="text-small text-foreground">
                 v{release.version}
               </span>
-              <span className="text-caption text-subtle">
+              <span className="text-label text-subtle">
                 {release.date}
               </span>
             </div>
             <div className="flex flex-col gap-3 pl-0.5">
               {release.entries.map((entry, j) => (
                 <div key={j} className="min-w-0">
-                  <p className="text-small font-medium text-foreground">
+                  <p className="text-small text-foreground">
                     {entry.title}
                   </p>
                   <p className="mt-0.5 text-label text-muted-foreground">

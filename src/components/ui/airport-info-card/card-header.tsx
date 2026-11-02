@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { CloseButton } from "@/components/ui/close-button";
 import type { Airport } from "@/lib/airports";
 import { decodeFltCat } from "./formatters";
 import type { MetarData } from "./types";
@@ -50,16 +50,11 @@ export function CardHeader({ airport, icao, metar, onClose }: Props) {
       </div>
 
       {onClose && (
-        <button
-          type="button"
+        <CloseButton
+          label={`Close ${airport.iata}`}
           onClick={onClose}
-          aria-label={`Close ${airport.iata}`}
-          className="-mt-1 -mr-2 grid size-11 shrink-0 place-items-center rounded-full text-subtle transition-colors hover:text-foreground"
-        >
-          <span className="grid size-8 place-items-center rounded-full bg-card">
-            <X className="size-4" aria-hidden="true" />
-          </span>
-        </button>
+          className="-mt-1 -mr-2"
+        />
       )}
     </header>
   );

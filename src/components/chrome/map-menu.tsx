@@ -18,6 +18,8 @@ import {
 } from "@/components/flight-tracker-utils";
 import { useFullscreen } from "@/components/ui/camera-controls";
 import { MapButton, FLOATING_SURFACE } from "./map-button";
+import { SwitchTrack } from "@/components/ui/switch";
+import { Kbd } from "@/components/ui/kbd";
 
 export type PanelTab = "settings" | "shortcuts" | "changelog" | "about";
 
@@ -292,18 +294,7 @@ function Switch({
       className="flex min-h-11 w-full items-center justify-between gap-3 px-4 text-left text-small text-foreground transition-colors hover:bg-card"
     >
       {label}
-      <span
-        className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-tint" : "bg-accent ring-1 ring-subtle ring-inset"
-        }`}
-        aria-hidden="true"
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-lift transition-transform ${
-            checked ? "translate-x-4" : ""
-          }`}
-        />
-      </span>
+      <SwitchTrack checked={checked} />
     </button>
   );
 }
@@ -333,9 +324,7 @@ function Row({
       )}
       <span className="flex-1">{children}</span>
       {shortcut && (
-        <kbd className="hidden font-mono text-label text-subtle pointer-fine:inline">
-          {shortcut}
-        </kbd>
+        <Kbd>{shortcut}</Kbd>
       )}
     </button>
   );

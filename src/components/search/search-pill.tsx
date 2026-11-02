@@ -17,6 +17,7 @@ import type { FlightState } from "@/lib/opensky";
 import type { SearchLocation } from "@/lib/search-location-client";
 import { formatAltitude } from "@/lib/unit-formatters";
 import { AirlineLogo } from "@/components/ui/airline-logo";
+import { Kbd } from "@/components/ui/kbd";
 
 type SearchPillProps = {
   flights: FlightState[];
@@ -174,7 +175,7 @@ export const SearchPill = memo(function SearchPill({
             }}
             placeholder="Flights, airports, places"
             aria-keyshortcuts="/ Meta+K"
-            className="h-full min-w-0 flex-1 bg-transparent text-body text-foreground placeholder:text-subtle"
+            className="aeris-search-input h-full min-w-0 flex-1 bg-transparent text-body text-foreground placeholder:text-subtle"
           />
           {query ? (
             <button
@@ -190,9 +191,7 @@ export const SearchPill = memo(function SearchPill({
             </button>
           ) : (
             !open && (
-              <kbd className="mr-2 hidden rounded-sm border border-border px-1.5 font-mono text-label text-subtle pointer-fine:block">
-                /
-              </kbd>
+              <Kbd className="mr-3">/</Kbd>
             )
           )}
           {trailing}

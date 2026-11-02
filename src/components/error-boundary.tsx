@@ -25,13 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
           role="alert"
           className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-background text-foreground"
         >
-          <p className="text-value font-medium">Something went wrong</p>
+          <p className="text-value">Something went wrong</p>
           <p className="max-w-md text-center text-small text-muted-foreground">
             {this.state.error.message}
           </p>
           <button
             onClick={() => this.setState({ error: null })}
-            className="rounded-md bg-accent px-4 py-2 text-small font-medium transition-colors hover:bg-border"
+            className="rounded-md bg-accent px-4 py-2 text-small transition-colors hover:bg-border"
           >
             Try again
           </button>

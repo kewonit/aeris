@@ -401,7 +401,7 @@ function FpvInstruments({
                 ALT
               </span>
             </div>
-            <p className="text-small font-medium text-foreground">
+            <p className="text-small text-foreground">
                {altDisplay !== null ? altDisplay.toLocaleString() : "-"}
              </p>
             <p className="text-micro text-subtle">{altitudeUnitLabel(settings.unitSystem)}</p>
@@ -414,7 +414,7 @@ function FpvInstruments({
                 SPD
               </span>
             </div>
-            <p className="text-small font-medium text-foreground">
+            <p className="text-small text-foreground">
                {speedDisplay ?? "-"}
              </p>
             <p className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</p>
@@ -428,7 +428,7 @@ function FpvInstruments({
               </span>
             </div>
             <p
-              className="text-small font-medium text-foreground"
+              className="text-small text-foreground"
             >
                {vsDisplay.text ?? "-"}
              </p>
@@ -453,7 +453,7 @@ function FpvInstruments({
                 <span className="text-micro text-subtle">
                   IAS
                 </span>
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {iasDisplay}
                 </span>
                 <span className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</span>
@@ -464,7 +464,7 @@ function FpvInstruments({
                 <span className="text-micro text-subtle">
                   M
                 </span>
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {machNum.toFixed(2)}
                 </span>
               </span>
@@ -472,11 +472,11 @@ function FpvInstruments({
             {windDir !== null && windSpd !== null && (
               <span className="flex items-center gap-1 text-micro text-muted-foreground">
                 <Wind className="h-2.5 w-2.5 text-subtle" />
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {Math.round(windDir)}°
                 </span>
                 <span className="text-muted-foreground">/</span>
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {Math.round(windSpd)}
                 </span>
                 <span className="text-micro text-subtle">{speedUnitLabel(settings.unitSystem)}</span>
@@ -485,7 +485,7 @@ function FpvInstruments({
             {oatC !== null && (
               <span className="flex items-center gap-0.5 text-micro text-muted-foreground">
                 <Thermometer className="h-2.5 w-2.5 text-subtle" />
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {formatTemperatureC(oatC, settings.unitSystem)}
                 </span>
               </span>
@@ -496,7 +496,7 @@ function FpvInstruments({
                 <span className="text-micro text-subtle">
                   BANK
                 </span>
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {rollDeg !== null && Math.abs(rollDeg) > 1
                     ? `${rollDeg > 0 ? "R" : "L"}${Math.round(Math.abs(rollDeg))}°`
                     : "-"}
@@ -515,7 +515,7 @@ function FpvInstruments({
                 <span className="text-micro text-subtle">
                   QNH
                 </span>
-                <span className="font-medium text-muted-foreground">
+                <span className="text-muted-foreground">
                   {formatPressureHpa(qnhValue, settings.unitSystem)}
                 </span>
               </span>

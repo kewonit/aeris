@@ -14,7 +14,6 @@ import {
   Crosshair,
   Link2,
   Plane,
-  X,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { PRESS_SCALE } from "@/lib/motion";
@@ -50,6 +49,7 @@ import { writeSelectionLink } from "@/components/flight-tracker-utils";
 import { AirlineLogo } from "@/components/ui/airline-logo";
 import { HeroBanner } from "@/components/ui/hero-banner";
 import { FreshnessLine } from "./freshness-line";
+import { CloseButton } from "@/components/ui/close-button";
 
 export type AircraftCardProps = {
   flight: FlightState;
@@ -133,16 +133,11 @@ export const AircraftCard = memo(function AircraftCard({
           </p>
         </div>
         {onClose && (
-          <button
-            type="button"
+          <CloseButton
+            label={`Close ${identity}`}
             onClick={onClose}
-            className="-mr-2 grid size-11 shrink-0 place-items-center rounded-full text-subtle transition-colors hover:text-foreground"
-            aria-label={`Close ${identity}`}
-          >
-            <span className="grid size-8 place-items-center rounded-full bg-card">
-              <X className="size-4" aria-hidden="true" />
-            </span>
-          </button>
+            className="-mr-2"
+          />
         )}
       </header>
 

@@ -20,6 +20,7 @@ import { AtcWaveform } from "@/components/ui/atc-waveform";
 import type { UseAtcStreamReturn } from "@/hooks/use-atc-stream";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CloseButton } from "@/components/ui/close-button";
 
 const AtcSpectrum = dynamic(
   () =>
@@ -120,22 +121,15 @@ export function AtcFeedDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={SNAP}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
+          className="aeris-float absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+          <div className="flex items-center justify-between border-b border-border pr-1 pl-4">
             <div className="flex items-center gap-2 text-label text-subtle">
               <Radio className="size-3" aria-hidden="true" />
               Frequencies
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
-              aria-label="Close feed selector"
-            >
-              <X className="size-3.5" />
-            </button>
+            <CloseButton label="Close feed selector" onClick={onClose} />
           </div>
 
           {/* Feed list */}

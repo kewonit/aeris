@@ -90,26 +90,25 @@
  */
 @theme {
   --text-*: initial;
+  /* Whole-pixel line heights, so stacked lines land on the pixel grid. */
   --text-micro: 10px;
-  --text-micro--line-height: 1.4;
-  --text-caption: 11px;
-  --text-caption--line-height: 1.4;
+  --text-micro--line-height: 14px;
   --text-label: 12px;
-  --text-label--line-height: 1.4;
+  --text-label--line-height: 16px;
   --text-small: 13px;
-  --text-small--line-height: 1.45;
+  --text-small--line-height: 18px;
   --text-body: 15px;
-  --text-body--line-height: 1.55;
+  --text-body--line-height: 22px;
   --text-value: 20px;
-  --text-value--line-height: 1.3;
+  --text-value--line-height: 26px;
   --text-value--letter-spacing: -0.025em;
   --text-title: 23px;
-  --text-title--line-height: 1.2;
+  --text-title--line-height: 28px;
   --text-title--letter-spacing: -0.035em;
 
   --font-weight-*: initial;
+  /* One weight everywhere; size and colour carry the hierarchy. */
   --font-weight-normal: 480;
-  --font-weight-medium: 540;
 
   --tracking-*: initial;
 
@@ -151,7 +150,7 @@
     font-family: var(--font-sans);
     font-size: var(--text-body);
     font-weight: var(--font-weight-normal);
-    line-height: 1.55;
+    line-height: var(--text-body--line-height);
     font-variant-numeric: tabular-nums;
   }
 
@@ -268,7 +267,7 @@
   border-radius: var(--radius-sm);
   background: var(--background);
   color: var(--foreground);
-  font: var(--font-weight-normal) var(--text-label) / 1.4 var(--font-sans);
+  font: var(--font-weight-normal) var(--text-label) / var(--text-label--line-height) var(--font-sans);
   box-shadow: var(--lift);
 }
 
@@ -276,22 +275,20 @@
   border-top-color: var(--background);
 }
 
-/* The app's name, set as it always has been: a little larger and wider
-   than the text around it. */
+/* iOS zooms into a field set below 16px when it takes focus. */
+@media (pointer: coarse) {
+  .aeris-search-input {
+    font-size: 16px;
+  }
+}
+
+/* The app's name: a little larger and wider than the text around it, in
+   the one weight the interface uses. */
 .aeris-wordmark {
   font-size: 14px;
   line-height: 20px;
-  font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-normal);
   letter-spacing: 0.025em;
-}
-
-/* A small spaced capital heading over a scale, such as the altitude key. */
-.aeris-eyebrow {
-  font-size: var(--text-micro);
-  line-height: var(--text-micro--line-height);
-  font-weight: var(--font-weight-semibold, 600);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 /* Tooltips ease in from the control they describe. */

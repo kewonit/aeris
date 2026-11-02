@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { SNAP } from "@/lib/motion";
-import { Satellite, X, Circle } from "lucide-react";
+import { Satellite, Circle } from "lucide-react";
 import {
   getCircuitState,
   getProviderOverride,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/flight-api-client";
 import type { ProviderName } from "@/lib/flight-api";
 import { useDropdownDismiss } from "@/hooks/use-dropdown-dismiss";
+import { CloseButton } from "@/components/ui/close-button";
 
 // ── Provider definitions ───────────────────────────────────────────────
 
@@ -84,22 +85,15 @@ export function ProviderDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={SNAP}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
+          className="aeris-float absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-xl sm:w-70 sm:max-w-none"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">
+          <div className="flex items-center justify-between border-b border-border pr-1 pl-4">
             <div className="flex items-center gap-2 text-label text-subtle">
               <Satellite className="size-3" aria-hidden="true" />
               Flight feed
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid size-9 place-items-center rounded-full text-subtle transition-colors hover:bg-card hover:text-foreground"
-              aria-label="Close provider selector"
-            >
-              <X className="size-3.5" />
-            </button>
+            <CloseButton label="Close provider selector" onClick={onClose} />
           </div>
 
           {/* Provider list */}

@@ -10,11 +10,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { SNAP, PRESS_SCALE } from "@/lib/motion";
+import { SNAP } from "@/lib/motion";
 import {
   Settings,
   Keyboard,
-  X,
   Info,
   Clock,
 } from "lucide-react";
@@ -24,6 +23,7 @@ import {
   AboutContent,
   ChangelogContent,
 } from "@/components/ui/control-panel-settings";
+import { CloseButton } from "@/components/ui/close-button";
 
 /** The round buttons that sit on the map. */
 export const MAP_BUTTON_CLASS =
@@ -207,7 +207,7 @@ function PanelDialog({
                       />
                     )}
                     <Icon className="relative h-4 w-4 shrink-0" />
-                    <span className="relative text-small font-medium">
+                    <span className="relative text-small">
                       {label}
                     </span>
                   </button>
@@ -220,7 +220,7 @@ function PanelDialog({
             {/* Mobile header */}
             <div className="flex sm:hidden items-center justify-between px-4 pt-4 pb-2">
               <h2
-                className="text-small font-medium text-foreground"
+                className="text-small text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
@@ -228,18 +228,11 @@ function PanelDialog({
             {/* Desktop header */}
             <div className="hidden sm:flex items-center justify-between px-5 pt-5 pb-2">
               <h2
-                className="text-body font-medium text-foreground"
+                className="text-body text-foreground"
               >
                 {CONTROL_PANEL_TABS.find((t) => t.id === activeTab)?.label}
               </h2>
-              <motion.button
-                onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-card transition-colors hover:bg-accent"
-                whileTap={{ scale: PRESS_SCALE }}
-                aria-label="Close"
-              >
-                <X className="h-3.5 w-3.5 text-subtle" />
-              </motion.button>
+              <CloseButton label="Close" onClick={onClose} className="-mr-2" />
             </div>
 
             <div className="relative flex-1 overflow-hidden">
@@ -296,14 +289,7 @@ function PanelDialog({
                 );
               })}
             </nav>
-            <motion.button
-              onClick={onClose}
-              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card transition-colors active:bg-accent"
-              whileTap={{ scale: PRESS_SCALE }}
-              aria-label="Close"
-            >
-              <X className="h-3.5 w-3.5 text-subtle" />
-            </motion.button>
+            <CloseButton label="Close" onClick={onClose} />
           </div>
         </div>
       </motion.div>
