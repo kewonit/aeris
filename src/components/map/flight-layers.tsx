@@ -1390,7 +1390,7 @@ export function FlightLayers({
             }),
           );
           frameLayers.push(
-            buildFollowedAircraftLayer(followed, {
+            ...buildFollowedAircraftLayer(followed, {
               ...modelParams,
               frameCounter: frame,
             }),

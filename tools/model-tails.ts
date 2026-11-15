@@ -11,6 +11,9 @@
  * - the tail cone's end is the rearmost fuselage point near the centre
  *   plane, ignoring the fin, which rises above the fuselage's top.
  *
+ * Each model is measured on its detailed version, which first person shows
+ * close up; the light version the map draws must agree within a pixel.
+ *
  * Run with `npm run data:model-tails`; pass --plot to print each model's
  * side view with the point marked.
  */
@@ -258,6 +261,30 @@ function plot(vertices: Vec3[], tail: TailPoint): string {
   return rows.map((row) => row.join("")).join("\n");
 }
 
+/**
+ * Both levels of detail share one tail point, measured on the detailed
+ * model, which first person shows a few hundred pixels across. The light
+ * one, at most about 30 px on the map, must sit within this of it: 2% is
+ * under a pixel there.
+ */
+const MAP_TAIL_TOLERANCE = 0.02;
+
+async function readVertices(file: string, noseTurn: number): Promise<Vec3[]> {
+  const buffer = readFileSync(path.join(MODELS, `${file}.glb`));
+  // A small file's Buffer can sit part way into a shared ArrayBuffer;
+  // hand over exactly its own bytes.
+  const bytes = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  );
+  const gltf = postProcessGLTF(
+    await parse(bytes, GLTFLoader, {
+      gltf: { loadImages: false },
+    }),
+  ) as unknown as Gltf;
+  return normalisedVertices(primitives(gltf), noseTurn);
+}
+
 async function main(): Promise<void> {
 const files = new Map<string, TailPoint>();
 const table: [AircraftModelKey, TailPoint][] = [];
@@ -267,19 +294,7 @@ for (const key of ALL_MODEL_KEYS) {
   const cacheKey = `${file}@${noseTurn}`;
   let tail = files.get(cacheKey);
   if (!tail) {
-    const buffer = readFileSync(path.join(MODELS, `${file}.glb`));
-    // A small file's Buffer can sit part way into a shared ArrayBuffer;
-    // hand over exactly its own bytes.
-    const bytes = buffer.buffer.slice(
-      buffer.byteOffset,
-      buffer.byteOffset + buffer.byteLength,
-    );
-    const gltf = postProcessGLTF(
-      await parse(bytes, GLTFLoader, {
-        gltf: { loadImages: false },
-      }),
-    ) as unknown as Gltf;
-    const vertices = normalisedVertices(primitives(gltf), noseTurn);
+    const vertices = await readVertices(`${file}-detail`, noseTurn);
     const measured = measure(vertices);
     const xs = vertices.map(([x]) => x);
     const before = (0.9 * (Math.max(...xs) - Math.min(...xs))) / 2;
@@ -294,6 +309,17 @@ for (const key of ALL_MODEL_KEYS) {
       ].join(" "),
     );
     if (process.argv.includes("--plot")) console.log(plot(vertices, tail));
+
+    const light = measure(await readVertices(file, noseTurn));
+    const apart = Math.max(
+      Math.abs(light.back - tail.back),
+      Math.abs(light.up - tail.up),
+    );
+    if (apart > MAP_TAIL_TOLERANCE) {
+      throw new Error(
+        `${file}: its tail point is ${apart.toFixed(3)} from the detailed model's`,
+      );
+    }
   }
   table.push([key, tail]);
 }

@@ -100,8 +100,17 @@ export function resolveModelFileKey(
 /** Where models load from instead of Cloudinary, while checking a build. */
 const LOCAL_MODEL_BASE = process.env.NEXT_PUBLIC_AERIS_MODEL_BASE;
 
-export function modelUrl(key: AircraftModelKey): string {
-  const file = resolveModelFileKey(key);
+/**
+ * Each model comes at two levels of detail: light, for the hundred and more
+ * aircraft on the map, and detailed, for the one flown in first person.
+ */
+export type ModelDetail = "map" | "detail";
+
+export function modelUrl(
+  key: AircraftModelKey,
+  detail: ModelDetail = "map",
+): string {
+  const file = `${resolveModelFileKey(key)}${detail === "detail" ? "-detail" : ""}`;
   if (LOCAL_MODEL_BASE) return `${LOCAL_MODEL_BASE}/${file}.glb`;
   const version = MODEL_CDN_VERSIONS[file] ?? 1;
   return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/v${version}/${CLOUDINARY_FOLDER}/${file}.glb`;

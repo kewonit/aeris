@@ -28,6 +28,7 @@ import {
   type AircraftModelKey,
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
+  type ModelDetail,
   modelNoseTurn,
   modelUrl,
   resolveModelKeyCached,
@@ -138,11 +139,18 @@ export function aircraftOrientation(
 
 type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
 
-const sceneLoaders = new Map<AircraftModelKey, GetScene>();
+const sceneLoaders = new Map<string, GetScene>();
+
+/** Models whose detailed version has loaded, so first person can show it. */
+const detailLoaded = new Set<AircraftModelKey>();
 
 /** deck's default scene choice, normalised. */
-function sceneLoaderFor(key: AircraftModelKey): GetScene {
-  let loader = sceneLoaders.get(key);
+function sceneLoaderFor(
+  key: AircraftModelKey,
+  detail: ModelDetail = "map",
+): GetScene {
+  const id = `${key}:${detail}`;
+  let loader = sceneLoaders.get(id);
   if (!loader) {
     loader = (scenegraph) => {
       // While the model is still loading deck passes null, and expects it
@@ -152,10 +160,13 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
         typeof scenegraph.scene === "object"
           ? scenegraph.scene
           : scenegraph.scenes[scenegraph.scene || 0];
-      if (scene) normalizeScene(scene, modelNoseTurn(key));
+      if (scene) {
+        normalizeScene(scene, modelNoseTurn(key));
+        if (detail === "detail") detailLoaded.add(key);
+      }
       return scene;
     };
-    sceneLoaders.set(key, loader);
+    sceneLoaders.set(id, loader);
   }
   return loader;
 }
@@ -239,18 +250,29 @@ export function buildAircraftModelLayers(
 /**
  * The first person aircraft's own layer, rebuilt every frame so that it
  * moves with the camera, while the rest of the traffic is rebuilt at the
- * overview's rate.
+ * overview's rate. It draws the detailed model, seen a few hundred pixels
+ * across. Until that has loaded, the light model stands in, so the
+ * aircraft never vanishes; the detailed layer loads meanwhile, hidden.
  */
 export function buildFollowedAircraftLayer(
   flight: FlightState,
   params: Omit<AircraftLayerParams, "rawFlights">,
-): ScenegraphLayer<FlightState> {
-  return modelLayer(
-    "flight-aircraft-followed",
-    resolveModelKeyCached(flight),
+): ScenegraphLayer<FlightState>[] {
+  const key = resolveModelKeyCached(flight);
+  const ready = detailLoaded.has(key);
+  const detailed = modelLayer(
+    "flight-aircraft-followed-detail",
+    key,
     [flight],
     params,
+    "detail",
+    ready,
   );
+  if (ready) return [detailed];
+  return [
+    detailed,
+    modelLayer("flight-aircraft-followed", key, [flight], params),
+  ];
 }
 
 function modelLayer(
@@ -258,6 +280,8 @@ function modelLayer(
   modelKey: AircraftModelKey,
   flights: FlightState[],
   params: Omit<AircraftLayerParams, "rawFlights">,
+  detail: ModelDetail = "map",
+  shown = true,
 ): ScenegraphLayer<FlightState> {
   const {
     interpolatedMap,
@@ -279,7 +303,7 @@ function modelLayer(
 
   return new ScenegraphLayer<FlightState>({
       id,
-      visible: hasData && layersVisible,
+      visible: hasData && layersVisible && shown,
       data: flights,
       opacity: globeFade,
       getPosition: (d) => {
@@ -303,8 +327,8 @@ function modelLayer(
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
         return aircraftColor(base, d);
       },
-      scenegraph: modelUrl(modelKey),
-      getScene: sceneLoaderFor(modelKey),
+      scenegraph: modelUrl(modelKey, detail),
+      getScene: sceneLoaderFor(modelKey, detail),
       // The normalised model is one unit wide and one unit is one pixel, so
       // the scale is the drawn width, less any perspective enlargement.
       getScale: (d) => {
