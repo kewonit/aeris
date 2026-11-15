@@ -679,6 +679,47 @@ export const CHANGELOG: {
   entries: { title: string; description: string }[];
 }[] = [
   {
+    version: "0.9.0",
+    date: "Nov 16, 2026",
+    entries: [
+      {
+        title: "Smooth motion",
+        description:
+          "Aircraft glide from one reported position to the next over the time between reports, so they no longer race, spin or jump when the map loads, the feed changes or you come back to the tab. New aircraft move from the moment they appear, an aircraft never flies or points backwards, and when a report is late it flies on at the same speed instead of stopping.",
+      },
+      {
+        title: "A real globe",
+        description:
+          "With the globe on, aircraft and trails sit on the sphere at every zoom, point along their track and stay drawn when you zoom all the way out. The globe is on from the first frame, and there is no backwards step where the map hands over from the globe to the flat map.",
+      },
+      {
+        title: "Steady trails",
+        description:
+          "Trails and aircraft have smooth edges, and each trail flows into its aircraft's tail in one unbroken curve. The join slides along with the aircraft instead of jumping when a new position arrives, and trails no longer flicker where they meet.",
+      },
+      {
+        title: "Altitude colours for light maps",
+        description:
+          "Altitude colours were rebuilt so every height reads clearly on light maps as well as dark ones, and the altitude key shows exactly the colours the map draws.",
+      },
+      {
+        title: "Your aircraft keeps its trail",
+        description:
+          "With flight trails off, the aircraft you open still shows where it has been. T turns trails on and off.",
+      },
+      {
+        title: "Follow",
+        description:
+          "Follow aircraft, on the card or with F, keeps the aircraft in the middle of the map as it flies. Zooming and turning the map stay yours; drag the map or close the card to stop. First person view moves to V, and F in first person leaves the cockpit to follow the same aircraft.",
+      },
+      {
+        title: "Fixes",
+        description:
+          "The airport board no longer lists aircraft passing high overhead as arrivals. Aeris now runs on Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24.",
+      },
+    ],
+  },
+  {
     version: "0.8.9",
     date: "Oct 18, 2026",
     entries: [
