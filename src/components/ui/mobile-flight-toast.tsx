@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Globe,
   Info,
+  LocateFixed,
   Navigation,
   Camera,
   ImageOff,
@@ -66,6 +67,9 @@ type MobileFlightToastProps = {
   flight: FlightState;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
+  /** Whether the camera is following this aircraft. */
+  following?: boolean;
+  onToggleFollow?: (icao24: string) => void;
   /** Called when a press lands on the photo or header, to drag the card. */
   onGrab?: (event: React.PointerEvent) => void;
 };
@@ -247,6 +251,8 @@ export function MobileFlightToast({
   flight,
   onClose,
   onToggleFpv,
+  following = false,
+  onToggleFollow,
   onGrab,
 }: MobileFlightToastProps) {
   const { settings } = useSettings();
@@ -287,8 +293,8 @@ export function MobileFlightToast({
     settings.unitSystem,
     settings.showDebugData,
   ).filter((row) => !SHOWN_ABOVE_DETAILS.has(row.key));
-  const canEnterFpv =
-    flight.longitude != null && flight.latitude != null && !flight.onGround;
+  const canFollow = flight.longitude != null && flight.latitude != null;
+  const canEnterFpv = canFollow && !flight.onGround;
 
   // Airline logo fallback chain.
   const logoCandidates = airlineLogoCandidates(airline, flight.callsign);
@@ -555,22 +561,43 @@ export function MobileFlightToast({
           <MobileDetails key={flight.icao24} rows={detailRows} />
         )}
 
-        {/* FPV button */}
-        {onToggleFpv && (
+        {/* Follow and FPV buttons */}
+        {(onToggleFollow || onToggleFpv) && (
           <div className="mx-4 mb-4 overflow-hidden rounded-lg border border-border bg-card">
-            <button
-              type="button"
-              onClick={() => onToggleFpv(flight.icao24)}
-              disabled={!canEnterFpv}
-              className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <MobileIconCell>
-                <Eye className="h-3.5 w-3.5" />
-              </MobileIconCell>
-              <span className="min-w-0 flex-1 text-small font-medium text-muted-foreground">
-                First person view
-              </span>
-            </button>
+            {onToggleFollow && (
+              <button
+                type="button"
+                onClick={() => onToggleFollow(flight.icao24)}
+                disabled={!canFollow}
+                aria-pressed={following}
+                className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <MobileIconCell>
+                  <LocateFixed className="h-3.5 w-3.5" />
+                </MobileIconCell>
+                <span className="min-w-0 flex-1 text-small font-medium text-muted-foreground">
+                  {following ? "Stop following" : "Follow aircraft"}
+                </span>
+              </button>
+            )}
+            {onToggleFpv && (
+              <button
+                type="button"
+                onClick={() => onToggleFpv(flight.icao24)}
+                disabled={!canEnterFpv}
+                className={cn(
+                  "flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-30",
+                  onToggleFollow && "border-t border-border",
+                )}
+              >
+                <MobileIconCell>
+                  <Eye className="h-3.5 w-3.5" />
+                </MobileIconCell>
+                <span className="min-w-0 flex-1 text-small font-medium text-muted-foreground">
+                  First person view
+                </span>
+              </button>
+            )}
           </div>
         )}
 

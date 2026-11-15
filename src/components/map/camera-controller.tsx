@@ -25,6 +25,7 @@ import type { FpvDrawnPosition } from "./flight-layer-constants";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
+import { useFollowCamera } from "./use-follow-camera";
 import {
   coordinatesMatch,
   mapPanelMotionOptions,
@@ -35,9 +36,6 @@ import {
   type MapPanelCameraState,
 } from "./panel-camera";
 
-const FOLLOW_ZOOM = 10.5;
-const FOLLOW_PITCH = 55;
-const FOLLOW_EASE_MS = 2000;
 const CITY_FLY_MS = 2800;
 const PANEL_VISUAL_EASE_MS = 320;
 const PANEL_VISUAL_REFINEMENT_MS = 220;
@@ -81,14 +79,21 @@ function drawnAircraftCenter(
 
 export function CameraController({
   city,
-  followFlight = null,
+  followIcao24 = null,
+  followDrawnRef,
+  onFollowEnd,
   fpvIcao24 = null,
   fpvFlight = null,
   fpvDrawnRef,
   panelCamera,
 }: {
   city: City;
-  followFlight?: FlightState | null;
+  /** The aircraft the camera keeps centred, if any. */
+  followIcao24?: string | null;
+  /** Where the followed aircraft is drawn each frame, from the flight layers. */
+  followDrawnRef: MutableRefObject<FpvDrawnPosition | null>;
+  /** Called when the user pans away from a followed aircraft. */
+  onFollowEnd: () => void;
   /** The FPV selection. Stays set while a poll misses the aircraft. */
   fpvIcao24?: string | null;
   fpvFlight?: FlightState | null;
@@ -99,15 +104,9 @@ export function CameraController({
   const { map, isLoaded } = useMap();
   const { settings } = useSettings();
   const prevCityRef = useRef<string | null>(null);
-  const prevFollowRef = useRef<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbitFrameRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
-  const isFollowingRef = useRef(false);
-  const followFlyToActiveRef = useRef(false);
-  const followFlyToTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const isFpvActiveRef = useRef(false);
   const previousFpvKeyRef = useRef<string | null>(null);
   const previousPanelFocusRef = useRef<string | null>(null);
@@ -308,75 +307,7 @@ export function CameraController({
     previousFpvKeyRef.current = fpvKey;
   }, [fpvKey]);
 
-  // Follow flight init
-  useEffect(() => {
-    if (!map || !isLoaded) return;
-
-    const followKey = followFlight?.icao24 ?? null;
-    if (followKey === prevFollowRef.current) return;
-    prevFollowRef.current = followKey;
-
-    if (followFlyToTimerRef.current) {
-      clearTimeout(followFlyToTimerRef.current);
-      followFlyToTimerRef.current = null;
-    }
-    followFlyToActiveRef.current = false;
-
-    if (
-      !followFlight ||
-      followFlight.longitude == null ||
-      followFlight.latitude == null
-    ) {
-      isFollowingRef.current = false;
-      return;
-    }
-
-    isFollowingRef.current = true;
-    followFlyToActiveRef.current = true;
-    const bearing = Number.isFinite(followFlight.trueTrack)
-      ? followFlight.trueTrack!
-      : map.getBearing();
-
-    const FOLLOW_FLYTO_MS = 2200;
-    map.flyTo({
-      center: [followFlight.longitude, followFlight.latitude],
-      zoom: FOLLOW_ZOOM,
-      pitch: FOLLOW_PITCH,
-      bearing,
-      duration: FOLLOW_FLYTO_MS,
-      essential: true,
-    });
-
-    followFlyToTimerRef.current = setTimeout(() => {
-      followFlyToActiveRef.current = false;
-      followFlyToTimerRef.current = null;
-    }, FOLLOW_FLYTO_MS);
-  }, [map, isLoaded, followFlight]);
-
-  // Follow flight continuous update
-  useEffect(() => {
-    if (!map || !isLoaded || !followFlight) return;
-    if (followFlight.longitude == null || followFlight.latitude == null) return;
-
-    if (!isFollowingRef.current) return;
-    if (followFlyToActiveRef.current) return;
-
-    map.easeTo({
-      center: [followFlight.longitude, followFlight.latitude],
-      bearing: Number.isFinite(followFlight.trueTrack)
-        ? followFlight.trueTrack!
-        : map.getBearing(),
-      duration: FOLLOW_EASE_MS,
-      essential: true,
-    });
-  }, [
-    map,
-    isLoaded,
-    followFlight,
-    followFlight?.longitude,
-    followFlight?.latitude,
-    followFlight?.trueTrack,
-  ]);
+  useFollowCamera(map, isLoaded, followIcao24, followDrawnRef, onFollowEnd);
 
   useFpvCamera(
     map,
@@ -462,7 +393,7 @@ export function CameraController({
     map,
     isLoaded,
     city,
-    followFlight,
+    followIcao24 !== null,
     fpvFlight,
     settings,
     panelCamera.open,

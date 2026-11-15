@@ -45,6 +45,9 @@ type AerisLeftSidebarProps = {
   displayFlight: FlightState | null;
   onCloseFlight: () => void;
   onToggleFpv: (icao24: string) => void;
+  /** The aircraft the camera is following, if any. */
+  followingIcao24: string | null;
+  onToggleFollow: (icao24: string) => void;
   airportBoard: AirportBoardData;
   onSelectAirportFlight: (icao24: string) => void;
   selectedIcao24: string | null;
@@ -60,6 +63,8 @@ export function AerisLeftSidebar({
   displayFlight,
   onCloseFlight,
   onToggleFpv,
+  followingIcao24,
+  onToggleFollow,
   airportBoard,
   onSelectAirportFlight,
   selectedIcao24,
@@ -163,7 +168,12 @@ export function AerisLeftSidebar({
 
       <div className="min-h-0 flex-1">
         {snapshot?.kind === "flight" ? (
-          <FlightCard flight={snapshot.flight} onToggleFpv={onToggleFpv} />
+          <FlightCard
+            flight={snapshot.flight}
+            onToggleFpv={onToggleFpv}
+            following={followingIcao24 === snapshot.flight.icao24}
+            onToggleFollow={onToggleFollow}
+          />
         ) : snapshot?.kind === "airport" ? (
           <AirportInfoCard
             board={snapshot.board}
