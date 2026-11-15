@@ -146,6 +146,7 @@ export function FlightLayers({
   globeMode = false,
   fpvIcao24 = null,
   fpvDrawnRef,
+  fpvCameraRef,
   followIcao24 = null,
   followDrawnRef,
   isDark = true,
@@ -247,6 +248,7 @@ export function FlightLayers({
   const selectedIcao24Ref = useRef(selectedIcao24);
   const fpvIcao24Ref = useRef(fpvIcao24);
   const fpvDrawnRefRef = useRef(fpvDrawnRef);
+  const fpvCameraRefRef = useRef(fpvCameraRef);
   const followIcao24Ref = useRef(followIcao24);
   const followDrawnRefRef = useRef(followDrawnRef);
   const prevSelectedRef = useRef<string | null>(null);
@@ -281,6 +283,7 @@ export function FlightLayers({
     altitudeDisplayModeRef.current = altitudeDisplayMode;
     fpvIcao24Ref.current = fpvIcao24;
     fpvDrawnRefRef.current = fpvDrawnRef;
+    fpvCameraRefRef.current = fpvCameraRef;
     followIcao24Ref.current = followIcao24;
     followDrawnRefRef.current = followDrawnRef;
     setAltitudeTheme(isDark ? "dark" : "light");
@@ -308,6 +311,7 @@ export function FlightLayers({
     selectedIcao24,
     fpvIcao24,
     fpvDrawnRef,
+    fpvCameraRef,
     followIcao24,
     followDrawnRef,
     isDark,
@@ -780,7 +784,12 @@ export function FlightLayers({
     // once, before that render, or aircraft would face backwards for a
     // frame.
     let drawnOnSphere: boolean | null = null;
+    // Set while the layers move the first person camera themselves, in the
+    // middle of a redraw that then measures everything against the moved
+    // camera; that move needs no redraw of its own.
+    let movingFpvCamera = false;
     function onCameraMove() {
+      if (movingFpvCamera) return;
       cameraMoving = true;
       if (
         map &&
@@ -865,9 +874,9 @@ export function FlightLayers({
 
       visualFrameRef.current++;
 
-      const currentZoom = map?.getZoom() ?? 10;
+      let currentZoom = map?.getZoom() ?? 10;
       const isGlobe = globeModeRef.current;
-      const onSphere = map ? deckDrawsOnSphere(map, currentZoom) : false;
+      let onSphere = map ? deckDrawsOnSphere(map, currentZoom) : false;
       drawnOnSphere = onSphere;
 
       let globeFade = 1;
@@ -1049,6 +1058,27 @@ export function FlightLayers({
                     : null,
                 }
               : null;
+        }
+
+        // The first person camera moves to where the aircraft is now drawn,
+        // before anything is measured against the camera, and the map and
+        // deck are drawn together at the end. Left to the camera's own
+        // frame, the aircraft would be drawn moved with the camera still
+        // behind it every other frame, and flicker between the two places.
+        let fpvCameraMoved = false;
+        const moveFpvCamera = fpvId ? fpvCameraRefRef.current?.current : null;
+        if (moveFpvCamera && map) {
+          movingFpvCamera = true;
+          try {
+            fpvCameraMoved = moveFpvCamera(now);
+          } finally {
+            movingFpvCamera = false;
+          }
+          if (fpvCameraMoved) {
+            currentZoom = map.getZoom();
+            onSphere = deckDrawsOnSphere(map, currentZoom);
+            drawnOnSphere = onSphere;
+          }
         }
 
         // ── LOD: 3D models vs 2D icons ────────────────────────────────
@@ -1398,6 +1428,10 @@ export function FlightLayers({
         }
 
         overlay.setProps({ layers: frameLayers });
+        // deck takes its camera from the map's render, so after a camera
+        // move the map renders now, and deck with it, rather than on the
+        // map's next frame with deck drawn here against the old camera.
+        if (fpvCameraMoved) map?.redraw();
         drawDeckFrame(overlay);
 
         const selectionAnimating =

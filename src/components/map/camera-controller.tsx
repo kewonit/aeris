@@ -22,7 +22,7 @@ import { useSettings } from "@/hooks/use-settings";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import type { FpvDrawnPosition } from "./flight-layer-constants";
+import type { FpvDrawnPosition, MoveCamera } from "./flight-layer-constants";
 import { useFpvCamera } from "./use-fpv-camera";
 import { useKeyboardCamera } from "./use-keyboard-camera";
 import { useOrbitCamera } from "./use-orbit-camera";
@@ -119,6 +119,7 @@ export function CameraController({
   fpvIcao24 = null,
   fpvFlight = null,
   fpvDrawnRef,
+  fpvCameraRef,
   panelCamera,
 }: {
   city: City;
@@ -133,6 +134,8 @@ export function CameraController({
   fpvFlight?: FlightState | null;
   /** Where the FPV aircraft is drawn each frame, from the flight layers. */
   fpvDrawnRef: MutableRefObject<FpvDrawnPosition | null>;
+  /** Filled in with the FPV camera's move, which the flight layers call. */
+  fpvCameraRef: MutableRefObject<MoveCamera | null>;
   panelCamera: MapPanelCameraState;
 }) {
   const { map, isLoaded } = useMap();
@@ -369,6 +372,7 @@ export function CameraController({
     isLoaded,
     fpvIcao24,
     fpvDrawnRef,
+    fpvCameraRef,
     isFpvActiveRef,
   );
 

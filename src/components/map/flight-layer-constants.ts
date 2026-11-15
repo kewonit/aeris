@@ -85,12 +85,24 @@ export type FlightLayerProps = {
    * the camera can follow it exactly; null while it is not drawn.
    */
   fpvDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
+  /**
+   * Set by the first person camera. The layers call it each time they
+   * place the aircraft, before they draw, so the aircraft and the camera
+   * reach the screen together.
+   */
+  fpvCameraRef?: MutableRefObject<MoveCamera | null>;
   /** The followed aircraft, whose drawn position is shared like FPV's. */
   followIcao24?: string | null;
   followDrawnRef?: MutableRefObject<FpvDrawnPosition | null>;
   /** Whether the map is dark, for the colour of lines drawn on it. */
   isDark?: boolean;
 };
+
+/**
+ * Moves a camera to where its aircraft is drawn now, at this frame time,
+ * and says whether it moved.
+ */
+export type MoveCamera = (frameTime: number) => boolean;
 
 /** Where the first person aircraft is drawn this frame. */
 export type FpvDrawnPosition = {

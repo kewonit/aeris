@@ -67,7 +67,10 @@ import { MobileFlightToast } from "@/components/ui/mobile-flight-toast";
 import type { MapStyle } from "@/lib/map-styles";
 import type { City } from "@/lib/cities";
 import type { FlightState } from "@/lib/opensky";
-import type { FpvDrawnPosition } from "@/components/map/flight-layer-constants";
+import type {
+  FpvDrawnPosition,
+  MoveCamera,
+} from "@/components/map/flight-layer-constants";
 
 import { fetchFlightByHex, fetchFlightByCallsign } from "@/lib/flight-api";
 import { expandFlightQuery, flightQueryMatches } from "@/lib/airlines";
@@ -131,6 +134,9 @@ function FlightTrackerInner({
   // Where the first person aircraft is drawn, shared from the flight
   // layers to the camera that follows it.
   const fpvDrawnRef = useRef<FpvDrawnPosition | null>(null);
+  // The first person camera's move, which the flight layers make each time
+  // they place the aircraft, so the two change in the same frame.
+  const fpvCameraRef = useRef<MoveCamera | null>(null);
   // Where the followed aircraft is drawn, for the camera that centres it.
   const followDrawnRef = useRef<FpvDrawnPosition | null>(null);
   const [styleOverride, setStyleOverride] = useState<MapStyle | undefined>();
@@ -807,6 +813,7 @@ function FlightTrackerInner({
             fpvIcao24={fpvIcao24}
             fpvFlight={fpvFlight}
             fpvDrawnRef={fpvDrawnRef}
+            fpvCameraRef={fpvCameraRef}
             panelCamera={panelCamera}
           />
           {!fpvIcao24 && (
@@ -844,6 +851,7 @@ function FlightTrackerInner({
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
             fpvDrawnRef={fpvDrawnRef}
+            fpvCameraRef={fpvCameraRef}
             followIcao24={followingIcao24}
             followDrawnRef={followDrawnRef}
             isDark={mapStyle.dark}
