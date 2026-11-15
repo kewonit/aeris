@@ -24,6 +24,12 @@ const TURN_FADE_S = 8;
  * few percent rather than kicking it. Polls are five seconds apart.
  */
 const CORRECTION_TIME_MS = 4_000;
+/**
+ * The map draws traffic a poll behind its reports; first person flies it
+ * where it is now. Taking over from the map, the view closes that gap over
+ * this long, a little faster than true speed, rather than jumping ahead.
+ */
+export const HANDOVER_TIME_MS = 20_000;
 /** Further apart than this, a report is a new position, not a correction. */
 const TELEPORT_METERS = 5_000;
 const TELEPORT_ALTITUDE_METERS = 1_500;
@@ -59,6 +65,8 @@ type Offset = {
   alt: number;
   track: number;
   at: number;
+  /** How long the offset takes to fade away. */
+  durationMs: number;
 };
 
 function finite(value: number | null | undefined): value is number {
@@ -158,26 +166,56 @@ function offsetMeters(from: FpvState, to: FpvState): [number, number] {
 export function createFpvMotion() {
   let last: Observation | null = null;
   let lastKey: string | null = null;
+  /** The fading difference between a report and where it was shown. */
   let offset: Offset | null = null;
+  /** The fading difference from where the map drew the aircraft. */
+  let handover: Offset | null = null;
+  /** Where the map drew the aircraft as first person began. */
+  let seeded: FpvState | null = null;
 
   function predicted(now: number): FpvState | null {
     return last ? flyOn(last, (now - last.at) / 1_000) : null;
   }
 
-  function stateAt(now: number): FpvState | null {
-    const base = predicted(now);
-    if (!base || !offset) return base;
-    const share = correctionShare((now - offset.at) / CORRECTION_TIME_MS);
+  function withOffsets(
+    base: FpvState,
+    offsets: (Offset | null)[],
+    now: number,
+  ): FpvState {
+    let east = 0;
+    let north = 0;
+    let alt = 0;
+    let track = 0;
+    for (const o of offsets) {
+      if (!o) continue;
+      const share = correctionShare((now - o.at) / o.durationMs);
+      east += o.east * share;
+      north += o.north * share;
+      alt += o.alt * share;
+      track += o.track * share;
+    }
     const cosLat = Math.cos((base.lat * Math.PI) / 180);
     return {
-      lng:
-        base.lng +
-        (offset.east * share) / (METERS_PER_DEGREE * Math.max(cosLat, 1e-6)),
-      lat: base.lat + (offset.north * share) / METERS_PER_DEGREE,
-      alt: base.alt === null ? null : Math.max(0, base.alt + offset.alt * share),
-      track:
-        base.track === null ? null : wrapDegrees(base.track + offset.track * share),
+      lng: base.lng + east / (METERS_PER_DEGREE * Math.max(cosLat, 1e-6)),
+      lat: base.lat + north / METERS_PER_DEGREE,
+      alt: base.alt === null ? null : Math.max(0, base.alt + alt),
+      track: base.track === null ? null : wrapDegrees(base.track + track),
     };
+  }
+
+  function stateAt(now: number): FpvState | null {
+    const base = predicted(now);
+    if (!base) return null;
+    if (!offset && !handover) return base;
+    return withOffsets(base, [offset, handover], now);
+  }
+
+  /**
+   * Starts first person from where the map draws the aircraft, so the view
+   * picks it up there rather than a poll ahead. Call before the first report.
+   */
+  function seed(state: FpvState): void {
+    if (!last) seeded = state;
   }
 
   /**
@@ -224,7 +262,9 @@ export function createFpvMotion() {
           )
         : 0;
 
-    const shown = stateAt(receivedAt);
+    const shown = stateAt(receivedAt) ?? seeded;
+    const taking = !last && seeded !== null;
+    seeded = null;
     last = {
       at,
       lng: flight.longitude,
@@ -244,7 +284,9 @@ export function createFpvMotion() {
       turnRate: flight.onGround ? 0 : turnRate,
     };
 
-    const next = predicted(receivedAt)!;
+    // Where the report puts the aircraft, still carrying any hand-over.
+    const flown = predicted(receivedAt)!;
+    const next = handover ? withOffsets(flown, [handover], receivedAt) : flown;
     if (!shown) {
       offset = null;
       return;
@@ -255,7 +297,7 @@ export function createFpvMotion() {
     const teleported =
       Math.hypot(east, north) > TELEPORT_METERS ||
       Math.abs(altGap) > TELEPORT_ALTITUDE_METERS;
-    offset = teleported
+    const gap: Offset | null = teleported
       ? null
       : {
           east,
@@ -266,10 +308,18 @@ export function createFpvMotion() {
               ? turnBetween(next.track, shown.track)
               : 0,
           at: receivedAt,
+          durationMs: taking ? HANDOVER_TIME_MS : CORRECTION_TIME_MS,
         };
+    if (teleported) handover = null;
+    if (taking) {
+      handover = gap;
+      offset = null;
+    } else {
+      offset = gap;
+    }
   }
 
-  return { observe, stateAt };
+  return { observe, seed, stateAt };
 }
 
 export type FpvMotion = ReturnType<typeof createFpvMotion>;

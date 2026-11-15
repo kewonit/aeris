@@ -223,3 +223,36 @@ test("a repeated or older report changes nothing", () => {
   );
   assert.deepEqual(motion.stateAt(3_000), before);
 });
+
+test("first person takes over where the map drew the aircraft, then catches up", () => {
+  const motion = createFpvMotion();
+  // The map draws traffic a poll behind: 1 km back along the track.
+  const drawn: FpvState = {
+    lng: -73.8 - 1_000 / (METERS_PER_DEGREE * COS_LAT),
+    lat: 40,
+    alt: 3_000,
+    track: 90,
+  };
+  motion.seed(drawn);
+  motion.observe(flight(), 0);
+  const [east0] = fromStart(motion.stateAt(0));
+  assert.ok(Math.abs(east0 - -1_000) < 1, `starts at ${east0} m`);
+
+  // Later reports leave the hand-over closing at its own pace.
+  let previous = east0;
+  let fastest = 0;
+  for (let t = 100; t <= 25_000; t += 100) {
+    if (t % 5_000 === 0) {
+      motion.observe(
+        flight({ longitude: -73.8 + (200 * t) / 1_000 / (METERS_PER_DEGREE * COS_LAT), provenance: { ...flight().provenance!, observationTime: t } }),
+        t,
+      );
+    }
+    const [east] = fromStart(motion.stateAt(t));
+    fastest = Math.max(fastest, (east - previous) / 0.1);
+    previous = east;
+  }
+  // Never more than about half again its true speed, and caught up by the end.
+  assert.ok(fastest < 200 * 1.5, `peaked at ${fastest} m/s`);
+  assert.ok(Math.abs(previous - 200 * 25) < 5, `ended at ${previous} m`);
+});

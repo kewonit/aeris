@@ -769,6 +769,7 @@ function FlightTrackerInner({
             globeMode={settings.globeMode}
             fpvIcao24={fpvIcao24}
             fpvDrawnRef={fpvDrawnRef}
+            isDark={mapStyle.dark}
           />
         </MapView>
       </div>
@@ -868,7 +869,7 @@ function FlightTrackerInner({
               <CameraControls />
             </div>
             <div className="pointer-events-auto">
-              <AltitudeLegend />
+              <AltitudeLegend dark={mapStyle.dark} />
             </div>
             <div className="pointer-events-auto">
               <MapAttribution

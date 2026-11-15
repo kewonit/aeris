@@ -62,7 +62,7 @@ test("a new sample leaves every earlier vertex of the trail where it was", () =>
   assert.ok(after.bodies[0].path.length > oldPath.length);
 });
 
-test("the newest 20 s are left to the head, which runs to the second-newest sample", () => {
+test("the head redraws from 20 s before the second-newest sample to the newest", () => {
   const samples = Array.from({ length: 10 }, (_, index) => turning(index));
   const geometry = getTrailGeometry(new Map(), track([samples]), OPTIONS);
   const lead = geometry.lead!;
@@ -70,7 +70,7 @@ test("the newest 20 s are left to the head, which runs to the second-newest samp
   const end = geometry.bodies[0].path.at(-1)!;
   assert.deepEqual(end.slice(0, 2), [samples[4].lng, samples[4].lat]);
   assert.deepEqual(lead.path[0], end);
-  assert.deepEqual(lead.path.at(-1)!.slice(0, 2), [samples[8].lng, samples[8].lat]);
+  assert.deepEqual(lead.path.at(-1)!.slice(0, 2), [samples[9].lng, samples[9].lat]);
   assert.equal(lead.path.length, lead.tangents.length);
   assert.ok(lead.tangents.every((tangent) => tangent !== null));
 });
@@ -131,7 +131,7 @@ test("colors follow the aircraft altitude palette and fade toward the oldest end
   );
   assert.deepEqual(
     geometry.lead?.colors.at(-1)!.slice(0, 3),
-    altitudeToColor(samples[38].alt).slice(0, 3),
+    altitudeToColor(samples[39].alt).slice(0, 3),
   );
 });
 

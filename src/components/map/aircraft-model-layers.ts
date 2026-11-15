@@ -21,7 +21,7 @@ import {
 } from "@deck.gl/mesh-layers";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToColor } from "@/lib/flight-utils";
+import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { aircraftColor } from "./aircraft-appearance";
 import { type PickingInfo } from "@deck.gl/core";
 import {
@@ -32,11 +32,9 @@ import {
   modelUrl,
   resolveModelKeyCached,
 } from "./aircraft-model-mapping";
-import {
-  type AircraftScreenSize,
-  recordModelTailShare,
-} from "./aircraft-size";
+import type { AircraftScreenSize } from "./aircraft-size";
 import { aircraftElevationMeters } from "./altitude-projection";
+import { sphereTurn } from "./globe-frame";
 
 // Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
@@ -118,33 +116,31 @@ export function normalizeScene(
 }
 
 /**
- * How far behind its centre a model's tail sits, as a share of its
- * footprint. Every normalised model has its fuselage along X. Aiming just
- * inside the tail keeps the trail's end under the model.
- */
-export function modelTailShareFor(footprint: ModelFootprint): number {
-  return (0.9 * footprint.x) / 2;
-}
-
-/**
  * deck's [pitch, yaw, roll] for a normalised model. deck turns by roll,
  * then pitch, then yaw, each about a fixed axis; with the nose along +X
  * that is heading, then pitch, then bank in the aircraft's own frame.
  * Negative pitch raises the nose and positive bank lowers the right wing.
+ * On the sphere, deck turns every model a further half turn, which the
+ * yaw turns back.
  */
 export function aircraftOrientation(
   track: number,
   pitch: number,
   bank: number,
+  onSphere = false,
 ): [number, number, number] {
-  return [pitch, NORTH_YAW - track, BASE_MODEL_ROLL + bank];
+  return [
+    pitch,
+    NORTH_YAW - track + sphereTurn(onSphere),
+    BASE_MODEL_ROLL + bank,
+  ];
 }
 
 type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
 
 const sceneLoaders = new Map<AircraftModelKey, GetScene>();
 
-/** deck's default scene choice, normalised, recording where its tail is. */
+/** deck's default scene choice, normalised. */
 function sceneLoaderFor(key: AircraftModelKey): GetScene {
   let loader = sceneLoaders.get(key);
   if (!loader) {
@@ -156,12 +152,7 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
         typeof scenegraph.scene === "object"
           ? scenegraph.scene
           : scenegraph.scenes[scenegraph.scene || 0];
-      const footprint = scene
-        ? normalizeScene(scene, modelNoseTurn(key))
-        : null;
-      if (footprint) {
-        recordModelTailShare(key, modelTailShareFor(footprint));
-      }
+      if (scene) normalizeScene(scene, modelNoseTurn(key));
       return scene;
     };
     sceneLoaders.set(key, loader);
@@ -182,6 +173,8 @@ export interface AircraftLayerParams {
   dataVersion: number;
   layersVisible: boolean;
   globeFade: number;
+  /** Whether deck draws this frame on the globe as a sphere. */
+  onSphere: boolean;
   /** Each aircraft's drawn size this frame, keyed by icao24. */
   aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -272,6 +265,7 @@ function modelLayer(
     dataVersion,
     layersVisible,
     globeFade,
+    onSphere,
     aircraftSizes,
     altitudeDisplayMode,
     altColors,
@@ -302,6 +296,7 @@ function modelLayer(
           Number.isFinite(src.trueTrack) ? src.trueTrack! : 0,
           pitchByIcao.get(d.icao24) ?? 0,
           bankByIcao.get(d.icao24) ?? 0,
+          onSphere,
         );
       },
       getColor: (d) => {
@@ -324,9 +319,9 @@ function modelLayer(
       sizeMaxPixels: 1,
       updateTriggers: {
         getPosition: [frameCounter, altitudeDisplayMode],
-        getOrientation: frameCounter,
+        getOrientation: [frameCounter, onSphere],
         getScale: frameCounter,
-        getColor: [dataVersion, altColors],
+        getColor: [dataVersion, altColors, altitudeThemeKey()],
       },
       _lighting: "pbr",
       pickable: hasData,
