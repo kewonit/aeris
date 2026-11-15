@@ -190,8 +190,8 @@ function AirlineMark({
       <AirlineLogo
         callsign={callsign}
         airlineName={airline}
-        size={40}
-        className="rounded-none bg-transparent"
+        size={38}
+        className="rounded-sm bg-transparent"
       />
     </span>
   );

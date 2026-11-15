@@ -351,7 +351,7 @@ export function MobileFlightToast({
                     alt={airline ? `${airline} logo` : "Airline logo"}
                     width={40}
                     height={40}
-                    className={`relative h-9 w-9 object-contain transition-opacity duration-200 ${
+                    className={`relative h-9 w-9 rounded-sm object-contain transition-opacity duration-200 ${
                       logoLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     unoptimized

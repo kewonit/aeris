@@ -34,7 +34,6 @@ const ControlPanel = dynamic(() =>
   import("@/components/ui/control-panel").then((mod) => mod.ControlPanel),
 );
 import {
-  AERIS_LEFT_SIDEBAR_OVERLAP_PX,
   AERIS_LEFT_SIDEBAR_WIDTH,
   AerisLeftSidebar,
   type AerisLeftPanel,
@@ -775,7 +774,7 @@ function FlightTrackerInner({
   const leftPanelInset =
     leftPanelInsetPx > 0
       ? `${leftPanelInsetPx}px`
-      : `calc(${AERIS_LEFT_SIDEBAR_WIDTH} - ${AERIS_LEFT_SIDEBAR_OVERLAP_PX}px)`;
+      : AERIS_LEFT_SIDEBAR_WIDTH;
   const desktopPanelStyle = {
     "--panel-duration": `${MAP_PANEL_TRANSITION_MS}ms`,
     "--panel-ease": MAP_PANEL_EASE_CSS,
