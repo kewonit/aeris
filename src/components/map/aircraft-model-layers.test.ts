@@ -75,7 +75,8 @@ function makeNarrowbodyFlight(): FlightState {
     trueTrack: 90,
     velocity: 220,
     category: 4,
-    typeCode: "A320",
+    // A Boeing 717 draws the generic narrowbody model.
+    typeCode: "B712",
     onGround: false,
   } as FlightState;
 }
@@ -112,6 +113,15 @@ function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
   assert.ok(layer);
   return { flight, props: layer.props };
 }
+
+test("only models some aircraft uses get a layer, and so a download", () => {
+  const ids = buildAircraftModelLayers(narrowbodyParams(new Map())).map(
+    (layer) => layer.props.id,
+  );
+  assert.ok(ids.includes("flight-aircraft-narrowbody"));
+  // No test flies a glider; its model must not load just because the page did.
+  assert.ok(!ids.includes("flight-aircraft-glider"));
+});
 
 test("a model sits on its reported position", () => {
   const { flight, props } = narrowbodyLayer(new Map());

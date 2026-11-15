@@ -236,7 +236,11 @@ export function buildAircraftModelLayers(
       modelLastUsed.set(key, now);
       return true;
     }
-    return now - (modelLastUsed.get(key) ?? 0) < MODEL_DEACTIVATE_MS;
+    // A model never used has no layer: counting it as last used at time
+    // zero kept every model's layer, and so its download, for the first
+    // fifteen seconds after the page loaded.
+    const lastUsed = modelLastUsed.get(key);
+    return lastUsed !== undefined && now - lastUsed < MODEL_DEACTIVATE_MS;
   }).map((modelKey) =>
     modelLayer(
       `flight-aircraft-${modelKey}`,
