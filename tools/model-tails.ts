@@ -268,8 +268,14 @@ for (const key of ALL_MODEL_KEYS) {
   let tail = files.get(cacheKey);
   if (!tail) {
     const buffer = readFileSync(path.join(MODELS, `${file}.glb`));
+    // A small file's Buffer can sit part way into a shared ArrayBuffer;
+    // hand over exactly its own bytes.
+    const bytes = buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength,
+    );
     const gltf = postProcessGLTF(
-      await parse(buffer.buffer, GLTFLoader, {
+      await parse(bytes, GLTFLoader, {
         gltf: { loadImages: false },
       }),
     ) as unknown as Gltf;

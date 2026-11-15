@@ -1,8 +1,10 @@
 // ── Aircraft Model Mapping ─────────────────────────────────────────────
 //
 // Maps ADS-B category + ICAO typeCode → 3D model silhouette.
-// Models are Draco-compressed GLB files served from Cloudinary CDN.
-// Local backups remain in public/models/aircraft/.
+// Models are GLB files served from Cloudinary CDN, built from the sources in
+// tools/models/source by `npm run data:models` into public/models/aircraft/,
+// then uploaded. Set NEXT_PUBLIC_AERIS_MODEL_BASE=/models/aircraft to load
+// the local build instead, to check models before uploading them.
 //
 // Category-based fallback assigns generic silhouettes (narrowbody, etc.).
 // TypeCode-based matching routes iconic types (A380, B737) to dedicated models.
@@ -95,8 +97,12 @@ export function resolveModelFileKey(
   return MODEL_FILE_OVERRIDES[key] ?? (key as AircraftModelFileKey);
 }
 
+/** Where models load from instead of Cloudinary, while checking a build. */
+const LOCAL_MODEL_BASE = process.env.NEXT_PUBLIC_AERIS_MODEL_BASE;
+
 export function modelUrl(key: AircraftModelKey): string {
   const file = resolveModelFileKey(key);
+  if (LOCAL_MODEL_BASE) return `${LOCAL_MODEL_BASE}/${file}.glb`;
   const version = MODEL_CDN_VERSIONS[file] ?? 1;
   return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/v${version}/${CLOUDINARY_FOLDER}/${file}.glb`;
 }
