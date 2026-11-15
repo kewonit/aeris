@@ -405,6 +405,12 @@ function FlightTrackerInner({
       lookupAbortRef.current?.abort();
       lookupAbortRef.current = null;
       setFollowIcao24(null);
+      // While following, a tap on the map or on the followed aircraft only
+      // stops the follow, and its card comes back; another aircraft opens.
+      if (followingIcao24) {
+        const tapped = info?.object?.icao24.toLowerCase() ?? null;
+        if (tapped === null || tapped === followingIcao24) return;
+      }
       if (info?.object) {
         const icao24 = info.object.icao24.toLowerCase();
         const nextIcao24 = selectedIcao24 === icao24 ? null : icao24;
@@ -419,7 +425,7 @@ function FlightTrackerInner({
         setLeftPanel(null);
       }
     },
-    [fpvIcao24, isMobile, selectedIcao24],
+    [followingIcao24, fpvIcao24, isMobile, selectedIcao24],
   );
 
   const handleDeselectFlight = useCallback(() => {
@@ -465,7 +471,7 @@ function FlightTrackerInner({
         return;
       }
       const flight = displayFlightMap.get(target);
-      if (!flight || flight.longitude == null || flight.latitude == null) {
+      if (flight && (flight.longitude == null || flight.latitude == null)) {
         return;
       }
       if (fpvIcao24) endFpv("exited");
@@ -489,6 +495,7 @@ function FlightTrackerInner({
   }, []);
 
   const handleResetView = useCallback(() => {
+    setFollowIcao24(null);
     window.dispatchEvent(
       new CustomEvent("aeris:reset-view", {
         detail: { center: activeCity.coordinates },
@@ -503,6 +510,7 @@ function FlightTrackerInner({
         e as CustomEvent<{ coordinates: [number, number] }>
       ).detail;
       setUserLocation(coordinates);
+      setFollowIcao24(null);
       const [lng, lat] = coordinates;
       const nearest = findNearestAirport(lat, lng, 250);
       if (nearest) {
@@ -546,11 +554,27 @@ function FlightTrackerInner({
     else if (selectedIcao24) enterFpv(selectedIcao24);
   }, [enterFpv, fpvIcao24, handleExitFpv, selectedIcao24]);
 
-  // F follows the open aircraft, or leaves first person to follow it.
+  // F follows the aircraft whose card is showing, stops a follow, or leaves
+  // first person to follow the same aircraft.
   const handleToggleFollowKey = useCallback(() => {
-    const target = fpvIcao24 ?? selectedIcao24;
-    if (target) toggleFollow(target);
-  }, [fpvIcao24, selectedIcao24, toggleFollow]);
+    if (fpvIcao24) {
+      toggleFollow(fpvIcao24);
+      return;
+    }
+    if (followingIcao24) {
+      setFollowIcao24(null);
+      return;
+    }
+    const cardShowing = isMobile || leftPanel?.kind === "flight";
+    if (selectedIcao24 && cardShowing) toggleFollow(selectedIcao24);
+  }, [
+    followingIcao24,
+    fpvIcao24,
+    isMobile,
+    leftPanel,
+    selectedIcao24,
+    toggleFollow,
+  ]);
 
   const handleShortcutDeselect = useCallback(() => {
     if (fpvIcao24) {
@@ -703,7 +727,10 @@ function FlightTrackerInner({
   });
 
   // Whether to show the mobile bottom sheet flight card
-  const showMobileFlightCard = isMobile && !fpvIcao24 && !!displayFlight;
+  // The phone card covers most of the map, so it steps aside while
+  // following and comes back when the follow ends.
+  const showMobileFlightCard =
+    isMobile && !fpvIcao24 && !followingIcao24 && !!displayFlight;
   // Whether to show the mobile airport bottom sheet
   const showMobileAirportCard =
     isMobile && !fpvIcao24 && !displayFlight && airportBoard.isActive;
@@ -964,7 +991,6 @@ function FlightTrackerInner({
                 flight={displayFlight}
                 onClose={handleDeselectFlight}
                 onToggleFpv={handleToggleFpv}
-                following={followingIcao24 === displayFlight.icao24}
                 onToggleFollow={toggleFollow}
                 onGrab={(event) => flightSheetDrag.start(event)}
               />

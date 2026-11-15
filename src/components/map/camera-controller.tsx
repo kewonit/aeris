@@ -120,6 +120,13 @@ export function CameraController({
     panelCameraRef.current = panelCamera;
   }, [panelCamera]);
 
+  // Read by the panel camera below, which must not re-run when a follow
+  // starts or ends; declared first so it is current when that runs.
+  const followIcao24Ref = useRef(followIcao24);
+  useEffect(() => {
+    followIcao24Ref.current = followIcao24;
+  }, [followIcao24]);
+
   // City flyTo
   useEffect(() => {
     if (!map || !isLoaded || !city) return;
@@ -237,8 +244,13 @@ export function CameraController({
         }),
       );
     } else {
+      // While following, the follow camera keeps the aircraft centred, so
+      // the panel only makes room for itself.
+      const following = followIcao24Ref.current !== null;
       map.easeTo({
-        ...(shouldCenter && coordinates ? { center: coordinates } : {}),
+        ...(shouldCenter && coordinates && !following
+          ? { center: coordinates }
+          : {}),
         padding,
         ...panelMotion,
       });
@@ -259,6 +271,7 @@ export function CameraController({
     const easeToDrawnAircraft = (duration: number): boolean => {
       const panel = panelCameraRef.current;
       if (!panel.open || panel.focusKey !== focusKey) return false;
+      if (followIcao24Ref.current !== null) return false;
       const center = drawnAircraftCenter(map, panel, altitudeMode);
       if (!center) return false;
       map.easeTo({

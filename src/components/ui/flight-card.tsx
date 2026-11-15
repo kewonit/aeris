@@ -142,7 +142,6 @@ export function FlightCard({
             type="button"
             onClick={() => onToggleFollow(flight.icao24)}
             disabled={!canFollow}
-            aria-pressed={following}
             className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-border text-small text-tint transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-subtle"
           >
             {following ? "Stop following" : "Follow aircraft"}

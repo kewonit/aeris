@@ -67,8 +67,7 @@ type MobileFlightToastProps = {
   flight: FlightState;
   onClose: () => void;
   onToggleFpv?: (icao24: string) => void;
-  /** Whether the camera is following this aircraft. */
-  following?: boolean;
+  /** Follows the aircraft; the card steps aside while it does. */
   onToggleFollow?: (icao24: string) => void;
   /** Called when a press lands on the photo or header, to drag the card. */
   onGrab?: (event: React.PointerEvent) => void;
@@ -251,7 +250,6 @@ export function MobileFlightToast({
   flight,
   onClose,
   onToggleFpv,
-  following = false,
   onToggleFollow,
   onGrab,
 }: MobileFlightToastProps) {
@@ -569,14 +567,13 @@ export function MobileFlightToast({
                 type="button"
                 onClick={() => onToggleFollow(flight.icao24)}
                 disabled={!canFollow}
-                aria-pressed={following}
                 className="flex min-h-11 w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <MobileIconCell>
                   <LocateFixed className="h-3.5 w-3.5" />
                 </MobileIconCell>
                 <span className="min-w-0 flex-1 text-small font-medium text-muted-foreground">
-                  {following ? "Stop following" : "Follow aircraft"}
+                  Follow aircraft
                 </span>
               </button>
             )}

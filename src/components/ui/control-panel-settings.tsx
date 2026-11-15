@@ -710,7 +710,7 @@ export const CHANGELOG: {
       {
         title: "Follow",
         description:
-          "Follow aircraft, on the card or with F, keeps the aircraft in the middle of the map as it flies. Zooming and turning the map stay yours; drag the map or close the card to stop. First person view moves to V, and F in first person leaves the cockpit to follow the same aircraft.",
+          "Follow aircraft, on the card or with F, keeps the aircraft in the middle of the map as it flies. Zooming and turning the map stay yours; drag or tap the map, press F again or close the card to stop. On a phone the card steps aside while you follow and comes back when you stop. First person view moves to V, and F in first person leaves the cockpit to follow the same aircraft.",
       },
       {
         title: "Fixes",

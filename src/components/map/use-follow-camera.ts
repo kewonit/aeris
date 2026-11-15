@@ -13,6 +13,12 @@ const FOLLOW_MIN_ZOOM = 7.5;
 const FOLLOW_ENTRY_MS = 900;
 /** Below this, a move is too small to be worth a camera update. */
 const MOVE_EPSILON_DEG = 1e-7;
+/**
+ * After something else has moved the camera, the follow glides back onto
+ * the aircraft over this long, closing most of the gap every GLIDE_TAU_MS.
+ */
+const GLIDE_MS = 700;
+const GLIDE_TAU_MS = 120;
 
 /** Gestures that take the camera back from the follow. */
 const PAN_EVENTS = ["dragstart"] as const;
@@ -75,9 +81,34 @@ export function useFollowCamera(
     map.touchZoomRotate.enable({ around: "center" });
 
     const onPan = (event: { originalEvent?: Event }) => {
-      if (event.originalEvent) onEndRef.current();
+      const original = event.originalEvent;
+      if (!original) return;
+      // A pinch moves its midpoint too, which MapLibre reports as a drag;
+      // only a one-finger drag pans away.
+      if (
+        typeof TouchEvent !== "undefined" &&
+        original instanceof TouchEvent &&
+        original.touches.length > 1
+      ) {
+        return;
+      }
+      onEndRef.current();
     };
     for (const type of PAN_EVENTS) map.on(type, onPan);
+
+    // The arrow keys pan the map too; with Shift they turn and tilt it,
+    // which the follow keeps.
+    const onMoveStart = (event: { originalEvent?: Event }) => {
+      const original = event.originalEvent;
+      if (
+        original instanceof KeyboardEvent &&
+        original.key.startsWith("Arrow") &&
+        !original.shiftKey
+      ) {
+        onEndRef.current();
+      }
+    };
+    map.on("movestart", onMoveStart);
 
     // Moving the camera stops MapLibre's gesture handlers, so while a finger
     // or the mouse is down the camera holds still; otherwise no drag could
@@ -97,28 +128,58 @@ export function useFollowCamera(
     let frame: number | null = null;
     let last: [number, number] | null = null;
     let entered = false;
+    // Set while something else holds the camera; the follow then glides
+    // back from wherever that left it instead of jumping.
+    let held = true;
+    let glideStart = 0;
+    let lastTime = performance.now();
 
-    const tick = () => {
+    const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
+      const dt = Math.min(Math.max(now - lastTime, 0), 100);
+      lastTime = now;
       const drawn = drawnRef.current;
       if (!drawn) return;
       // Let a card's own camera move, the way in, or a gesture finish first.
-      if (pointerDown || map.isMoving()) return;
+      if (pointerDown || map.isMoving()) {
+        held = true;
+        return;
+      }
 
       if (!entered) {
         entered = true;
-        const target = framingZoom(map, drawn.lat, drawn.elevation);
+        const framing = framingZoom(map, drawn.lat, drawn.elevation);
         const zoom = map.getZoom();
-        if (zoom > target + 0.25 || zoom < Math.min(target, FOLLOW_MIN_ZOOM)) {
+        if (zoom > framing + 0.25 || zoom < Math.min(framing, FOLLOW_MIN_ZOOM)) {
           map.easeTo({
             center: [drawn.lng, drawn.lat],
-            zoom: target,
+            zoom: framing,
             duration: reduceMotion ? 0 : FOLLOW_ENTRY_MS,
             essential: false,
           });
           return;
         }
       }
+      if (held) {
+        held = false;
+        glideStart = now;
+        last = null;
+      }
+
+      const target = centerForDrawn(map, drawn);
+      if (!reduceMotion && now - glideStart < GLIDE_MS) {
+        const current = map.getCenter();
+        const k = 1 - Math.exp(-dt / GLIDE_TAU_MS);
+        const dLng = ((target[0] - current.lng + 540) % 360) - 180;
+        map.jumpTo({
+          center: [
+            current.lng + dLng * k,
+            current.lat + (target[1] - current.lat) * k,
+          ],
+        });
+        return;
+      }
+
       if (
         last &&
         Math.abs(last[0] - drawn.lng) < MOVE_EPSILON_DEG &&
@@ -127,13 +188,14 @@ export function useFollowCamera(
         return;
       }
       last = [drawn.lng, drawn.lat];
-      map.jumpTo({ center: centerForDrawn(map, drawn) });
+      map.jumpTo({ center: target });
     };
     frame = requestAnimationFrame(tick);
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
       for (const type of PAN_EVENTS) map.off(type, onPan);
+      map.off("movestart", onMoveStart);
       container.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
