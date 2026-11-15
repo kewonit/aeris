@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ALL_MODEL_KEYS,
   MODEL_KEY_WINGSPAN,
+  modelUrl,
   resolveModelFileKey,
   typeCodeToModelKey,
 } from "./aircraft-model-mapping";
@@ -74,4 +76,26 @@ test("types without a model of their own keep the generic ones", () => {
 test("an ATR 72 draws the ATR 42's model at its own wingspan", () => {
   assert.equal(resolveModelFileKey("atr72"), "atr42");
   assert.ok(MODEL_KEY_WINGSPAN.atr72 > MODEL_KEY_WINGSPAN.atr42);
+});
+
+test("every model loads its own uploaded file at both levels of detail", () => {
+  const urls = new Set<string>();
+  for (const key of ALL_MODEL_KEYS) {
+    const file = resolveModelFileKey(key);
+    for (const detail of ["map", "detail"] as const) {
+      const url = modelUrl(key, detail);
+      const name = detail === "detail" ? `${file}-detail` : file;
+      assert.match(
+        url,
+        new RegExp(
+          `^https://res\\.cloudinary\\.com/dfyrk32ua/image/upload/v\\d+/aeris/models/aircraft/${name}_[a-z0-9]{6}\\.glb$`,
+        ),
+        `${key} ${detail}`,
+      );
+      urls.add(url);
+    }
+  }
+  // Two keys share a file only through the overrides.
+  const files = new Set(ALL_MODEL_KEYS.map(resolveModelFileKey));
+  assert.equal(urls.size, files.size * 2);
 });
