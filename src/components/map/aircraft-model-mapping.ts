@@ -28,7 +28,42 @@ export type AircraftModelKey =
   | "glider"
   | "fighter"
   | "drone"
-  | "generic";
+  | "generic"
+  // Type-specific models, from Flightradar24.
+  | "a318"
+  | "a319"
+  | "a320"
+  | "a321"
+  | "a332"
+  | "a333"
+  | "a343"
+  | "a346"
+  | "a359"
+  | "b738"
+  | "b739"
+  | "b744"
+  | "b748"
+  | "b752"
+  | "b753"
+  | "b762"
+  | "b763"
+  | "b764"
+  | "b772"
+  | "b773"
+  | "b788"
+  | "b789"
+  | "e170"
+  | "e190"
+  | "crj700"
+  | "crj900"
+  | "cs100"
+  | "cs300"
+  | "q400"
+  | "atr42"
+  | "atr72"
+  | "bae146"
+  | "citation"
+  | "pa28";
 
 export const ALL_MODEL_KEYS: readonly AircraftModelKey[] = [
   "a380",
@@ -45,6 +80,40 @@ export const ALL_MODEL_KEYS: readonly AircraftModelKey[] = [
   "fighter",
   "drone",
   "generic",
+  "a318",
+  "a319",
+  "a320",
+  "a321",
+  "a332",
+  "a333",
+  "a343",
+  "a346",
+  "a359",
+  "b738",
+  "b739",
+  "b744",
+  "b748",
+  "b752",
+  "b753",
+  "b762",
+  "b763",
+  "b764",
+  "b772",
+  "b773",
+  "b788",
+  "b789",
+  "e170",
+  "e190",
+  "crj700",
+  "crj900",
+  "cs100",
+  "cs300",
+  "q400",
+  "atr42",
+  "atr72",
+  "bae146",
+  "citation",
+  "pa28",
 ] as const;
 
 // ── URL Resolution ─────────────────────────────────────────────────────
@@ -79,16 +148,51 @@ type AircraftModelFileKey =
   | "regional-jet"
   | "turboprop"
   | "widebody-2eng"
-  | "widebody-4eng";
+  | "widebody-4eng"
+  | "a318"
+  | "a319"
+  | "a320"
+  | "a321"
+  | "a332"
+  | "a333"
+  | "a343"
+  | "a346"
+  | "a359"
+  | "b738"
+  | "b739"
+  | "b744"
+  | "b748"
+  | "b752"
+  | "b753"
+  | "b762"
+  | "b763"
+  | "b764"
+  | "b772"
+  | "b773"
+  | "b788"
+  | "b789"
+  | "e170"
+  | "e190"
+  | "crj700"
+  | "crj900"
+  | "cs100"
+  | "cs300"
+  | "q400"
+  | "atr42"
+  | "bae146"
+  | "citation"
+  | "pa28"
+  | "a380";
 
-// A380 reuses the widebody-4eng mesh (it IS the A380 from FlightAirMap).
-// generic.glb and narrowbody.glb are identical files; drone.glb and light-prop.glb likewise.
+// Keys that draw another key's model: the generic and drone models were
+// copies of the narrowbody and light-prop ones, and the ATR 72 is the
+// ATR 42's model drawn at its own wingspan.
 const MODEL_FILE_OVERRIDES: Partial<
   Record<AircraftModelKey, AircraftModelFileKey>
 > = {
-  a380: "widebody-4eng",
   generic: "narrowbody",
   drone: "light-prop",
+  atr72: "atr42",
 };
 
 export function resolveModelFileKey(
@@ -133,6 +237,40 @@ export const MODEL_KEY_WINGSPAN: Readonly<Record<AircraftModelKey, number>> = {
   glider: 18,
   drone: 5,
   generic: 30,
+  a318: 34.1,
+  a319: 35.8,
+  a320: 35.8,
+  a321: 35.8,
+  a332: 60.3,
+  a333: 60.3,
+  a343: 60.3,
+  a346: 63.5,
+  a359: 64.8,
+  b738: 35.8,
+  b739: 35.8,
+  b744: 64.4,
+  b748: 68.4,
+  b752: 38.1,
+  b753: 38.1,
+  b762: 47.6,
+  b763: 47.6,
+  b764: 51.9,
+  b772: 60.9,
+  b773: 60.9,
+  b788: 60.1,
+  b789: 60.1,
+  e170: 26.0,
+  e190: 28.7,
+  crj700: 23.2,
+  crj900: 24.9,
+  cs100: 35.1,
+  cs300: 35.1,
+  q400: 28.4,
+  atr42: 24.6,
+  atr72: 27.1,
+  bae146: 26.3,
+  citation: 15.9,
+  pa28: 10.7,
 };
 
 // ── Per-Model Yaw Offset ───────────────────────────────────────────────
@@ -150,7 +288,7 @@ const MODEL_YAW_OFFSET: Readonly<Record<AircraftModelKey, number>> = {
   generic: 90, // identical mesh to narrowbody
   "widebody-2eng": 180, // 90° Y rotation, nose raw +Z → model -X → South
   "widebody-4eng": 180, // same rotation family
-  a380: 180, // uses widebody-4eng mesh
+  a380: 0, // Flightradar24 model
   "regional-jet": 180, // 90° Y rotation, nose indicators at +Z
   bizjet: 180, // 90° Y rotation, Glass.inside near +Z
   helicopter: 180, // 90° Y rotation, body extends +Z
@@ -159,6 +297,42 @@ const MODEL_YAW_OFFSET: Readonly<Record<AircraftModelKey, number>> = {
   turboprop: 180, // 120° diagonal rotation, cylinder at +Z
   "light-prop": 180, // 120° diagonal rotation
   drone: 180, // identical mesh to light-prop
+  // Flightradar24's models stand Y up with the nose along -Z, which
+  // tools/optimize-models.ts checks.
+  a318: 0,
+  a319: 0,
+  a320: 0,
+  a321: 0,
+  a332: 0,
+  a333: 0,
+  a343: 0,
+  a346: 0,
+  a359: 0,
+  b738: 0,
+  b739: 0,
+  b744: 0,
+  b748: 0,
+  b752: 0,
+  b753: 0,
+  b762: 0,
+  b763: 0,
+  b764: 0,
+  b772: 0,
+  b773: 0,
+  b788: 0,
+  b789: 0,
+  e170: 0,
+  e190: 0,
+  crj700: 0,
+  crj900: 0,
+  cs100: 0,
+  cs300: 0,
+  q400: 0,
+  atr42: 0,
+  atr72: 0,
+  bae146: 0,
+  citation: 0,
+  pa28: 0,
 };
 
 /**
@@ -169,6 +343,119 @@ const MODEL_YAW_OFFSET: Readonly<Record<AircraftModelKey, number>> = {
 export function modelNoseTurn(key: AircraftModelKey): number {
   return MODEL_YAW_OFFSET[key] - 90;
 }
+
+// ── Type designator → type-specific model ─────────────────────────────
+//
+// ICAO designators with a model of their own (from Flightradar24). A close
+// sibling borrows one where it has none: the neo and MAX families take their
+// predecessors', the A350-1000 the A350-900's, and the 777-300ER the 777-300's.
+// Anything not listed falls through to the generic families below.
+
+const TYPE_SPECIFIC_MODEL: Readonly<Record<string, AircraftModelKey>> = {
+  // Airbus narrowbodies and the A220
+  A318: "a318",
+  A319: "a319",
+  A19N: "a319",
+  A320: "a320",
+  A20N: "a320",
+  A321: "a321",
+  A21N: "a321",
+  BCS1: "cs100",
+  BCS3: "cs300",
+  // Airbus widebodies
+  A332: "a332",
+  A338: "a332",
+  A333: "a333",
+  A339: "a333",
+  A342: "a343",
+  A343: "a343",
+  A345: "a346",
+  A346: "a346",
+  A359: "a359",
+  A35K: "a359",
+  A388: "a380",
+  // Boeing 737
+  B736: "b737",
+  B737: "b737",
+  B37M: "b737",
+  B738: "b738",
+  B38M: "b738",
+  B739: "b739",
+  B39M: "b739",
+  B3XM: "b739",
+  // Boeing widebodies and the 757
+  B741: "b744",
+  B742: "b744",
+  B743: "b744",
+  B744: "b744",
+  B74R: "b744",
+  B74S: "b744",
+  B748: "b748",
+  B752: "b752",
+  B753: "b753",
+  B762: "b762",
+  B763: "b763",
+  B764: "b764",
+  B772: "b772",
+  B77L: "b772",
+  B773: "b773",
+  B77W: "b773",
+  B778: "b773",
+  B779: "b773",
+  B788: "b788",
+  B789: "b789",
+  B78X: "b789",
+  // Regional jets and turboprops
+  E170: "e170",
+  E175: "e170",
+  E75L: "e170",
+  E75S: "e170",
+  E190: "e190",
+  E195: "e190",
+  E290: "e190",
+  E295: "e190",
+  CRJ7: "crj700",
+  CRJ9: "crj900",
+  CRJX: "crj900",
+  DH8D: "q400",
+  AT43: "atr42",
+  AT44: "atr42",
+  AT45: "atr42",
+  AT46: "atr42",
+  AT72: "atr72",
+  AT73: "atr72",
+  AT75: "atr72",
+  AT76: "atr72",
+  B461: "bae146",
+  B462: "bae146",
+  B463: "bae146",
+  RJ70: "bae146",
+  RJ85: "bae146",
+  RJ1H: "bae146",
+  // Cessna Citations and the Piper Cherokee
+  C500: "citation",
+  C501: "citation",
+  C510: "citation",
+  C525: "citation",
+  C25A: "citation",
+  C25B: "citation",
+  C25C: "citation",
+  C25M: "citation",
+  C550: "citation",
+  C551: "citation",
+  C55B: "citation",
+  C560: "citation",
+  C56X: "citation",
+  C650: "citation",
+  C680: "citation",
+  C68A: "citation",
+  C700: "citation",
+  C750: "citation",
+  P28A: "pa28",
+  P28B: "pa28",
+  P28R: "pa28",
+  P28T: "pa28",
+};
 
 // ── Category → Model Key (DO-260B emitter categories) ──────────────────
 export function categoryToModelKey(category: number | null): AircraftModelKey {
@@ -214,6 +501,10 @@ export function typeCodeToModelKey(
 ): AircraftModelKey | null {
   if (!typeCode) return null;
   const tc = typeCode.toUpperCase();
+
+  // ── Type-specific models ─────────────────────────────────────────
+  const specific = TYPE_SPECIFIC_MODEL[tc];
+  if (specific) return specific;
 
   // ── Narrowbody airliners ─────────────────────────────────────────
   // Airbus A318/A319/A320/A321, neo variants (A19N/A20N/A21N),
@@ -397,11 +688,9 @@ export function bucketFlightsByModel(
 
 let preloaded = false;
 
-const PREFETCH_KEYS: AircraftModelKey[] = [
-  "narrowbody",
-  "b737",
-  "widebody-2eng",
-];
+// The types most often in the sky, fetched early so the first aircraft
+// drawn as models don't wait for theirs.
+const PREFETCH_KEYS: AircraftModelKey[] = ["a320", "b738", "a321"];
 
 export function preloadAllModels(): void {
   if (preloaded || typeof document === "undefined") return;

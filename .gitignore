@@ -69,3 +69,6 @@ scripts/heap-analysis/
 .vscode/
 .idea/
 
+
+# Flightradar24 model sources, fetched by tools/optimize-models.ts
+tools/models/.cache/

@@ -8,11 +8,11 @@
  *   npx tsx tools/model-sheet.ts <out.png> <dir>[=label] [<dir>[=label] …]
  *     [--suffix=-detail] [--only=b737,narrowbody]
  *
- * Each directory is read for `<file>.glb` for every model the map loads.
+ * Models are listed from the first directory; each is read from every one.
  * Software rasterised: flat shading from one light, no dependencies beyond
  * pngjs.
  */
-import { createWriteStream, existsSync } from "node:fs";
+import { createWriteStream, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { NodeIO, type Node, Primitive } from "@gltf-transform/core";
@@ -23,19 +23,7 @@ import { modelNoseTurn, type AircraftModelKey } from "../src/components/map/airc
 type Vec3 = [number, number, number];
 type Triangle = [Vec3, Vec3, Vec3];
 
-const FILES = [
-  "b737",
-  "narrowbody",
-  "widebody-2eng",
-  "widebody-4eng",
-  "regional-jet",
-  "turboprop",
-  "bizjet",
-  "light-prop",
-  "helicopter",
-  "glider",
-  "fighter",
-];
+
 
 const BIG = 220;
 const SMALL = 44;
@@ -171,7 +159,11 @@ async function main(): Promise<void> {
   const onlyArg = rest.find((a) => a.startsWith("--only="));
   const only = onlyArg ? onlyArg.slice("--only=".length).split(",") : null;
   const io = new NodeIO();
-  const files = FILES.filter((f) => !only || only.includes(f)).filter((f) => sources.every((s) => existsSync(path.join(s.dir, `${f}${s.suffix || globalSuffix}.glb`))));
+  const files = readdirSync(sources[0].dir)
+    .filter((f) => f.endsWith(".glb") && !f.endsWith("-detail.glb"))
+    .map((f) => f.slice(0, -".glb".length))
+    .sort()
+    .filter((f) => !only || only.includes(f)).filter((f) => sources.every((s) => existsSync(path.join(s.dir, `${f}${s.suffix || globalSuffix}.glb`))));
   // Columns per source: top big, side big, top small, side small.
   const colWidth = BIG * 2 + SMALL * 2 + GAP * 4;
   const width = colWidth * sources.length + GAP;

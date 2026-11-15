@@ -1,6 +1,14 @@
 /**
- * Builds the aircraft models the map draws from the sources in
- * tools/models/source, into public/models/aircraft:
+ * Builds the aircraft models the map draws, into public/models/aircraft,
+ * from two sets of sources:
+ *
+ * - the generic models in tools/models/source (FlightAirMap, GPL v2);
+ * - Flightradar24's type-specific models (GPL v2), fetched from their
+ *   repository at a pinned commit into tools/models/.cache/fr24 and
+ *   upgraded from glTF 1.0. Each is checked to stand Y up with its nose
+ *   along -Z, and to measure within 15% of the real aircraft.
+ *
+ * Each is built at two levels of detail:
  *
  * - `<name>.glb`, light enough to draw a hundred and more at once at city
  *   zoom, where an aircraft is 16 to 30 px wide;
@@ -15,7 +23,8 @@
  *
  * Run with `npm run data:models`, then `npm run data:model-tails`.
  */
-import { mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,10 +47,59 @@ import { MeshoptSimplifier } from "meshoptimizer";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "tools/models/source");
+const FR24_CACHE = path.join(ROOT, "tools/models/.cache/fr24");
 const OUT = path.join(ROOT, "public/models/aircraft");
 
-/** The models the map loads, by file name. */
-export const MODEL_FILES = [
+/** github.com/Flightradar24/fr24-3d-models, the commit the models come from. */
+const FR24_COMMIT = "dd53267690c6a4ecbb290a3acf0284333a5d68a9";
+
+/**
+ * Flightradar24's models, by file name, with the real aircraft's wingspan
+ * and length in metres to check them against. b736 is left out: its model
+ * is 5 m too long. b737 is already among the generic sources.
+ */
+const FR24_MODELS: Readonly<Record<string, readonly [number, number]>> = {
+  a318: [34.1, 31.4],
+  a319: [35.8, 33.8],
+  a320: [35.8, 37.6],
+  a321: [35.8, 44.5],
+  a332: [60.3, 58.8],
+  a333: [60.3, 63.7],
+  a343: [60.3, 63.6],
+  a346: [63.5, 75.4],
+  a359: [64.8, 66.8],
+  a380: [79.8, 72.7],
+  b738: [35.8, 39.5],
+  b739: [35.8, 42.1],
+  b744: [64.4, 70.6],
+  b748: [68.4, 76.3],
+  b752: [38.1, 47.3],
+  b753: [38.1, 54.4],
+  b762: [47.6, 48.5],
+  b763: [47.6, 54.9],
+  b764: [51.9, 61.4],
+  b772: [60.9, 63.7],
+  b773: [60.9, 73.9],
+  b788: [60.1, 56.7],
+  b789: [60.1, 62.8],
+  e170: [26.0, 29.9],
+  e190: [28.7, 36.2],
+  crj700: [23.2, 32.3],
+  crj900: [24.9, 36.2],
+  cs100: [35.1, 35.0],
+  cs300: [35.1, 38.7],
+  q400: [28.4, 32.8],
+  // The model's wings are 2.6 m wider than the real ATR 42's.
+  atr42: [24.6, 22.7],
+  bae146: [26.3, 28.6],
+  citation: [15.9, 15.6],
+  pa28: [10.7, 7.3],
+};
+/** How far a model may measure from the real aircraft. */
+const REAL_SIZE_TOLERANCE = 0.15;
+
+/** The generic models, by file name. */
+const GENERIC_FILES = [
   "b737",
   "bizjet",
   "fighter",
@@ -54,6 +112,12 @@ export const MODEL_FILES = [
   "widebody-2eng",
   "widebody-4eng",
 ] as const;
+
+/** Every model the map loads, by file name. */
+export const MODEL_FILES: readonly string[] = [
+  ...GENERIC_FILES,
+  ...Object.keys(FR24_MODELS),
+];
 
 /** Triangle budgets for the two levels of detail. */
 const MAP_TRIANGLES = 1_200;
@@ -74,6 +138,11 @@ const MAP_SETTINGS: Record<string, MapSettings> = {
   // fuselage and engines with them, and the panels stop it near 10,000
   // triangles whatever the error, so it is kept close to the source.
   "widebody-4eng": { error: 0.005, dropSmallParts: false },
+  // Flightradar24's A380 likewise: its upper deck goes with small parts.
+  a380: { error: 0.005, dropSmallParts: false },
+  // The ATR 42's engine nacelles are small parts of their own, and narrow
+  // enough that a looser error flattens them away.
+  atr42: { error: 0.004, dropSmallParts: false },
   ...JSON.parse(process.env.MODEL_MAP_SETTINGS ?? "{}"),
 };
 
@@ -198,6 +267,118 @@ function simplifyKeepingExtent(
   compactPrimitive(prim);
 }
 
+const require = createRequire(import.meta.url);
+
+/**
+ * A Flightradar24 model as glTF 2.0: fetched once into the cache, upgraded
+ * from glTF 1.0 with gltf-pipeline, and cleared of the materials,
+ * techniques and skins gltf-transform cannot read and the build drops.
+ */
+async function readFr24(io: NodeIO, name: string): Promise<Document> {
+  const cached = path.join(FR24_CACHE, `${name}.glb`);
+  if (!existsSync(cached)) {
+    mkdirSync(FR24_CACHE, { recursive: true });
+    const url = `https://raw.githubusercontent.com/Flightradar24/fr24-3d-models/${FR24_COMMIT}/models/${name}.glb`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${name}: ${response.status} from ${url}`);
+    writeFileSync(cached, Buffer.from(await response.arrayBuffer()));
+  }
+  const pipeline = require("gltf-pipeline");
+  const { gltf: version1 } = await pipeline.glbToGltf(readFileSync(cached));
+  const { gltf } = await pipeline.processGltf(version1, {});
+  delete gltf.extensionsUsed;
+  delete gltf.extensionsRequired;
+  delete gltf.extensions;
+  for (const key of ["materials", "textures", "images", "samplers", "skins", "animations", "techniques"]) {
+    delete gltf[key];
+  }
+  for (const mesh of gltf.meshes ?? []) {
+    for (const prim of mesh.primitives) {
+      delete prim.material;
+      delete prim.extensions;
+    }
+  }
+  for (const node of gltf.nodes ?? []) {
+    delete node.skin;
+    delete node.extensions;
+  }
+  const { glb } = await pipeline.gltfToGlb(gltf, {});
+  return io.readBinary(new Uint8Array(glb));
+}
+
+async function readSource(io: NodeIO, name: string): Promise<Document> {
+  return name in FR24_MODELS
+    ? readFr24(io, name)
+    : io.read(path.join(SOURCE, `${name}.glb`));
+}
+
+/**
+ * A Flightradar24 model must stand Y up with its nose along -Z, like the
+ * b737 the map already draws with no turn, and measure like the aircraft
+ * it is: its tail, the top of its fin, sits towards +Z.
+ */
+function checkFr24(doc: Document, name: string): void {
+  const [span, length] = FR24_MODELS[name];
+  const bounds = sceneBounds(doc);
+  const extent = bounds.max.map((max, i) => max - bounds.min[i]);
+  const off = (got: number, want: number) => Math.abs(got / want - 1);
+  if (off(extent[0], span) > REAL_SIZE_TOLERANCE || off(extent[2], length) > REAL_SIZE_TOLERANCE) {
+    throw new Error(
+      `${name}: measures ${extent[0].toFixed(1)} m across X and ${extent[2].toFixed(1)} m along Z, not ${span} by ${length}`,
+    );
+  }
+  // The highest tenth of a percent of vertices is the fin's top.
+  const points: number[][] = [];
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const position = prim.getAttribute("POSITION")!;
+      for (let i = 0; i < position.getCount(); i += 1) points.push(position.getElement(i, [0, 0, 0]));
+    }
+  }
+  points.sort((a, b) => b[1] - a[1]);
+  const top = points.slice(0, Math.max(3, Math.floor(points.length / 1000)));
+  const finZ = top.reduce((sum, p) => sum + p[2], 0) / top.length;
+  const centreZ = (bounds.min[2] + bounds.max[2]) / 2;
+  if (finZ - centreZ < 0.2 * extent[2]) {
+    throw new Error(`${name}: its fin is not towards +Z, so its nose is not along -Z`);
+  }
+}
+
+/**
+ * Drops triangles with no area: wires and probes drawn as slivers (the
+ * a343 source has one 3 m past its nose). They draw nothing, but they
+ * stretch the bounds the map sizes the model by, and the simplifier drops
+ * them anyway, locked or not.
+ */
+function dropFlatTriangles(prim: Primitive): void {
+  const indices = prim.getIndices();
+  const position = prim.getAttribute("POSITION");
+  if (!indices || !position) return;
+  const p = position.getArray()!;
+  const source = indices.getArray()!;
+  let size = 0;
+  for (let i = 0; i < p.length; i += 1) size = Math.max(size, Math.abs(p[i]));
+  const flat = (size * 1e-6) ** 2;
+  const kept: number[] = [];
+  for (let t = 0; t < source.length; t += 3) {
+    const [a, b, c] = [source[t] * 3, source[t + 1] * 3, source[t + 2] * 3];
+    const u = [p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]];
+    const v = [p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]];
+    const cross = [
+      u[1] * v[2] - u[2] * v[1],
+      u[2] * v[0] - u[0] * v[2],
+      u[0] * v[1] - u[1] * v[0],
+    ];
+    if (cross[0] ** 2 + cross[1] ** 2 + cross[2] ** 2 > flat) {
+      kept.push(source[t], source[t + 1], source[t + 2]);
+    }
+  }
+  if (kept.length < source.length) {
+    indices.setArray(Uint32Array.from(kept));
+    compactPrimitive(prim);
+  }
+}
+
 /** Textures, skins and animations go; every surface gets one material. */
 function strip(doc: Document): void {
   const root = doc.getRoot();
@@ -219,11 +400,13 @@ function strip(doc: Document): void {
         continue;
       }
       prim.setMaterial(neutral);
+      // Positions alone: deck lights the models without normals, and flat
+      // normals would split every face from its neighbours, so nothing
+      // could be welded or simplified.
       for (const semantic of prim.listSemantics()) {
-        if (semantic !== "POSITION" && semantic !== "NORMAL") {
-          prim.setAttribute(semantic, null);
-        }
+        if (semantic !== "POSITION") prim.setAttribute(semantic, null);
       }
+      dropFlatTriangles(prim);
     }
   }
   for (const material of root.listMaterials()) {
@@ -240,7 +423,7 @@ async function build(
   limits: Limits,
   dropSmallParts: boolean,
 ): Promise<string> {
-  const doc = await io.read(path.join(SOURCE, `${name}.glb`));
+  const doc = await readSource(io, name);
   const sourceTriangles = triangles(doc);
 
   // Bounds are compared on surfaces alone: a source can carry stray lines
@@ -248,17 +431,25 @@ async function build(
   // the model is centred and how big it is drawn.
   strip(doc);
   const sourceBounds = sceneBounds(doc);
-  await doc.transform(
-    prune(),
-    dedup(),
-    flatten(),
-    join({ keepNamed: false }),
-  );
+  const trace = (stage: string) => {
+    if (process.env.MODEL_TRACE) {
+      const b = sceneBounds(doc);
+      console.log(`  ${stage}: ${b.max.map((max, i) => (max - b.min[i]).toFixed(2)).join(" x ")}`);
+    }
+  };
+  trace("stripped");
+  await doc.transform(prune(), dedup());
+  trace("pruned");
+  await doc.transform(flatten(), join({ keepNamed: false }));
+  trace("joined");
   // Vertices in world space, so the extremes found are the scene's.
   for (const node of doc.getRoot().listNodes()) {
     if (node.getMesh()) clearNodeTransform(node);
   }
+  trace("baked");
+  if (name in FR24_MODELS) checkFr24(doc, name);
   await doc.transform(weld());
+  trace("welded");
   const welded = triangles(doc);
   const ratio = Math.min(1, budget / welded);
   if (ratio < 1) {
@@ -268,7 +459,9 @@ async function build(
       }
     }
   }
+  trace("simplified");
   await doc.transform(prune(), dedup());
+  trace("final");
 
   const shift = normalisationShift(sourceBounds, sceneBounds(doc));
   const file = path.join(OUT, `${name}${suffix}.glb`);
@@ -280,6 +473,24 @@ async function build(
   return line;
 }
 
+/**
+ * Builds the map model, dropping small parts unless that takes a piece the
+ * model's extent rests on (a wingtip or winglet built as its own part),
+ * in which case it builds again keeping them.
+ */
+async function buildMap(io: NodeIO, name: string): Promise<string> {
+  const settings = MAP_SETTINGS[name] ?? {};
+  const error = settings.error ?? MAP_ERROR;
+  const dropSmallParts = settings.dropSmallParts ?? true;
+  try {
+    return await build(io, name, MAP_TRIANGLES, error, "", MAP_LIMITS, dropSmallParts);
+  } catch (failure) {
+    if (!dropSmallParts) throw failure;
+    const line = await build(io, name, MAP_TRIANGLES, error, "", MAP_LIMITS, false);
+    return `${line}  (small parts kept)`;
+  }
+}
+
 async function main(): Promise<void> {
   await MeshoptSimplifier.ready;
   mkdirSync(OUT, { recursive: true });
@@ -287,18 +498,7 @@ async function main(): Promise<void> {
   const only = process.argv.slice(2).filter((arg) => !arg.startsWith("-"));
   const names = only.length ? only : MODEL_FILES;
   for (const name of names) {
-    const settings = MAP_SETTINGS[name] ?? {};
-    console.log(
-      await build(
-        io,
-        name,
-        MAP_TRIANGLES,
-        settings.error ?? MAP_ERROR,
-        "",
-        MAP_LIMITS,
-        settings.dropSmallParts ?? true,
-      ),
-    );
+    console.log(await buildMap(io, name));
     console.log(
       await build(io, name, DETAIL_TRIANGLES, DETAIL_ERROR, "-detail", DETAIL_LIMITS, false),
     );

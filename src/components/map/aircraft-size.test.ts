@@ -115,8 +115,8 @@ test("a model's trail meets its measured tail cone, an icon's its tail", () => {
 
   assert.deepEqual(aircraftTail(flight, false), { share: 0.4, rise: 0 });
   const tail = aircraftTail(flight, true);
-  assert.equal(tail.share, MODEL_TAIL_POINTS.b737.back);
-  assert.equal(tail.rise, MODEL_TAIL_POINTS.b737.up);
+  assert.equal(tail.share, MODEL_TAIL_POINTS.b738.back);
+  assert.equal(tail.rise, MODEL_TAIL_POINTS.b738.up);
 });
 
 test("magnification can be measured against the map's centre instead of the ground below", () => {

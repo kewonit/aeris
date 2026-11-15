@@ -233,14 +233,15 @@ test("normalizing turns a model so its nose points along +X", () => {
   assertClose(transformPoint(matrix, [11, 0, 10]), [0, 0, -0.125]);
 });
 
-// Where each model's nose points in its own file, from the mapping notes.
+// Where each model's nose points in its own file, from the mapping notes;
+// tools/optimize-models.ts checks the Flightradar24 ones point along -Z.
 const NOSE_IN_FILE: Record<AircraftModelKey, Vec3> = {
   b737: [0, 0, -1],
   narrowbody: [1, 0, 0],
   generic: [1, 0, 0],
   "widebody-2eng": [0, 0, 1],
   "widebody-4eng": [0, 0, 1],
-  a380: [0, 0, 1],
+  a380: [0, 0, -1],
   "regional-jet": [0, 0, 1],
   bizjet: [0, 0, 1],
   helicopter: [0, 0, 1],
@@ -249,6 +250,40 @@ const NOSE_IN_FILE: Record<AircraftModelKey, Vec3> = {
   turboprop: [0, 0, 1],
   "light-prop": [0, 0, 1],
   drone: [0, 0, 1],
+  a318: [0, 0, -1],
+  a319: [0, 0, -1],
+  a320: [0, 0, -1],
+  a321: [0, 0, -1],
+  a332: [0, 0, -1],
+  a333: [0, 0, -1],
+  a343: [0, 0, -1],
+  a346: [0, 0, -1],
+  a359: [0, 0, -1],
+  b738: [0, 0, -1],
+  b739: [0, 0, -1],
+  b744: [0, 0, -1],
+  b748: [0, 0, -1],
+  b752: [0, 0, -1],
+  b753: [0, 0, -1],
+  b762: [0, 0, -1],
+  b763: [0, 0, -1],
+  b764: [0, 0, -1],
+  b772: [0, 0, -1],
+  b773: [0, 0, -1],
+  b788: [0, 0, -1],
+  b789: [0, 0, -1],
+  e170: [0, 0, -1],
+  e190: [0, 0, -1],
+  crj700: [0, 0, -1],
+  crj900: [0, 0, -1],
+  cs100: [0, 0, -1],
+  cs300: [0, 0, -1],
+  q400: [0, 0, -1],
+  atr42: [0, 0, -1],
+  atr72: [0, 0, -1],
+  bae146: [0, 0, -1],
+  citation: [0, 0, -1],
+  pa28: [0, 0, -1],
 };
 
 test("every model climbs nose up and banks wing down along its track", () => {
