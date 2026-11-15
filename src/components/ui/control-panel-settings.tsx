@@ -47,6 +47,7 @@ const SHORTCUTS = [
   { key: "V", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
   { key: "A", description: "Toggle ATC panel" },
+  { key: "T", description: "Toggle trails" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 

@@ -529,6 +529,10 @@ function FlightTrackerInner({
     update("autoOrbit", !settings.autoOrbit);
   }, [settings.autoOrbit, update]);
 
+  const handleToggleTrails = useCallback(() => {
+    update("showTrails", !settings.showTrails);
+  }, [settings.showTrails, update]);
+
   const handleOpenSearch = useCallback(() => {
     window.dispatchEvent(new CustomEvent("aeris:open-search"));
   }, []);
@@ -694,6 +698,7 @@ function FlightTrackerInner({
     onToggleFpv: handleToggleFpvKey,
     onToggleFollow: handleToggleFollowKey,
     onToggleAtc: handleToggleAtc,
+    onToggleTrails: handleToggleTrails,
     isFpv: fpvIcao24 !== null,
   });
 
