@@ -955,6 +955,8 @@ function FlightTrackerInner({
               <MapAttribution
                 styleId={mapStyle.id}
                 showAirspace={showAirspace}
+                showWeatherRadar={settings.showWeatherRadar}
+                flightSource={source}
               />
             </div>
           </div>

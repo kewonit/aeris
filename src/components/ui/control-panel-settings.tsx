@@ -1142,6 +1142,21 @@ export function AboutContent() {
         <div className="h-px w-full bg-accent" />
 
         <p className="text-label leading-relaxed text-subtle">
+          OpenSky Network data: Matthias Schäfer, Martin Strohmeier, Vincent
+          Lenders, Ivan Martinovic and Matthias Wilhelm,{" "}
+          <a
+            href="https://doi.org/10.1109/IPSN.2014.6846743"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
+          >
+            “Bringing up OpenSky: A large-scale ADS-B sensor network for
+            research”
+          </a>
+          , ACM/IEEE IPSN, April 2014.
+        </p>
+
+        <p className="text-label leading-relaxed text-subtle">
           Built by a human, not just LLMs.{" "}
           <a
             href="https://github.com/kewonit"
