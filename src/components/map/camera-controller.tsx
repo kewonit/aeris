@@ -3,6 +3,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useMap } from "./map";
 import {
+  centerForDrawnPoint,
   centerLngLatForScreenOffset,
   DEFAULT_BEARING,
   DEFAULT_PITCH,
@@ -75,6 +76,39 @@ function drawnAircraftCenter(
   );
   if (Math.abs(offset[0]) < 0.5 && Math.abs(offset[1]) < 0.5) return null;
   return centerLngLatForScreenOffset(map, lng, lat, offset);
+}
+
+/**
+ * Where a flight's panel centres the map in one move: on the aircraft as
+ * drawn, lifted by its altitude, with the panel's padding applied. Null
+ * when the aircraft is drawn too near the camera's height to frame, or for
+ * an airport, which sits on the ground.
+ */
+function drawnPanelTarget(
+  map: maplibregl.Map,
+  panel: MapPanelCameraState,
+  altitudeMode: AltitudeDisplayMode,
+  padding: maplibregl.PaddingOptions,
+): [number, number] | null {
+  const { coordinates, altitudeMeters } = panel;
+  if (panel.kind !== "flight" || !coordinates || altitudeMeters == null) {
+    return null;
+  }
+  const elevationMeters = aircraftElevationMeters(altitudeMeters, altitudeMode);
+  const cameraHeight = cameraHeightMeters(
+    map.getZoom(),
+    coordinates[1],
+    map.getCanvas().clientHeight,
+    map.getPitch(),
+  );
+  if (!isWellBelowCamera(elevationMeters, cameraHeight)) return null;
+  return centerForDrawnPoint(
+    map,
+    coordinates[0],
+    coordinates[1],
+    elevationMeters,
+    padding,
+  );
 }
 
 export function CameraController({
@@ -245,12 +279,20 @@ export function CameraController({
       );
     } else {
       // While following, the follow camera keeps the aircraft centred, so
-      // the panel only makes room for itself.
+      // the panel only makes room for itself. Otherwise the camera goes
+      // straight to the aircraft as drawn above its ground position.
       const following = followIcao24Ref.current !== null;
+      const target =
+        shouldCenter && coordinates && !following
+          ? (drawnPanelTarget(
+              map,
+              activePanel,
+              settings.altitudeDisplayMode,
+              padding,
+            ) ?? coordinates)
+          : null;
       map.easeTo({
-        ...(shouldCenter && coordinates && !following
-          ? { center: coordinates }
-          : {}),
+        ...(target ? { center: target } : {}),
         padding,
         ...panelMotion,
       });
