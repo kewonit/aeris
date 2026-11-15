@@ -182,10 +182,13 @@ function classifyFlight(
   const isClimbing = vRate !== null && vRate > VRATE_THRESHOLD;
   const isLowAlt = alt !== null && alt < LOW_ALTITUDE_M;
   const isCloseRange = dist < 15; // within 15nm
-  // An aircraft too high to get down in the distance left, at no steeper
-  // than 1,000 ft every 1.5 nm, is passing over, not arriving.
+  // An aircraft too high above the field to get down in the distance left,
+  // at no steeper than 1,000 ft every 1.5 nm, is passing over, not arriving.
+  const heightAboveFieldFt =
+    alt === null ? null : alt / 0.3048 - (airport.elevation_ft ?? 0);
   const canDescendToLand =
-    alt === null || alt / 0.3048 <= (dist / 1.5) * 1_000 + 2_000;
+    heightAboveFieldFt === null ||
+    heightAboveFieldFt <= (dist / 1.5) * 1_000 + 2_000;
 
   // ── Arrival classification ──
   // Strong: heading toward + descending
