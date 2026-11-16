@@ -713,9 +713,19 @@ export const CHANGELOG: {
           "Follow aircraft, on the card or with F, keeps the aircraft in the middle of the map as it flies. Zooming and turning the map stay yours; drag or tap the map, press F again or close the card to stop. On a phone the card steps aside while you follow and comes back when you stop. First person view moves to V, and F in first person leaves the cockpit to follow the same aircraft.",
       },
       {
+        title: "Every airliner its own shape",
+        description:
+          "Airliners are drawn as their own type: an A320, a 737-800, a 787, a 777 or an A380 each has its own model, from Flightradar24's open models, instead of one shape for every narrowbody or widebody. The models are a tenth of their old weight and only the ones in view download, so the map draws and loads faster.",
+      },
+      {
+        title: "First person in detail",
+        description:
+          "In first person view the aircraft you fly is drawn in finer detail, and it holds still in front of the camera instead of flickering.",
+      },
+      {
         title: "Fixes",
         description:
-          "The airport board no longer lists aircraft passing high overhead as arrivals. Aeris now runs on Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24.",
+          "The airport board no longer lists aircraft passing high overhead as arrivals. Opening an aircraft moves the camera straight to it. The map's credits name the map and the flight feed in use, and the map meets the sidebar cleanly at its corners. Analytics loads after the map, so flights appear sooner. Aeris now runs on Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24.",
       },
     ],
   },
