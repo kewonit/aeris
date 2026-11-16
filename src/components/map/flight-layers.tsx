@@ -119,7 +119,11 @@ type DeckFrameLoop = { stop(): void; redraw(): void };
 function deckOf(overlay: MapLibreOverlay) {
   return (
     overlay as unknown as {
-      _deck?: { isInitialized: boolean; animationLoop: DeckFrameLoop | null };
+      _deck?: {
+        isInitialized: boolean;
+        animationLoop: DeckFrameLoop | null;
+        layerManager: { updateLayers(): void } | null;
+      };
     }
   )._deck;
 }
@@ -1417,6 +1421,14 @@ export function FlightLayers({
               flights: [followed],
               cache: followedTrailCacheRef.current,
               idSuffix: "followed",
+              // On the flat map the trail is drawn from the aircraft, as
+              // the aircraft itself is (buildFollowedAircraftLayer).
+              origin:
+                !onSphere &&
+                followed.longitude != null &&
+                followed.latitude != null
+                  ? [followed.longitude, followed.latitude]
+                  : null,
             }),
           );
           frameLayers.push(
@@ -1431,7 +1443,12 @@ export function FlightLayers({
         // deck takes its camera from the map's render, so after a camera
         // move the map renders now, and deck with it, rather than on the
         // map's next frame with deck drawn here against the old camera.
-        if (fpvCameraMoved) map?.redraw();
+        // deck only takes new layers in its own frame, so they are applied
+        // first: the map's render then draws them, once.
+        if (fpvCameraMoved && map) {
+          deckOf(overlay)?.layerManager?.updateLayers();
+          map.redraw();
+        }
         drawDeckFrame(overlay);
 
         const selectionAnimating =

@@ -15,6 +15,7 @@ import {
   buildTrailLayers,
   createTrailRenderCache,
   easeHead,
+  offsetPath,
   type TrailHead,
   type TrailLayerParams,
   type TrailRenderCache,
@@ -856,4 +857,49 @@ test("a followed aircraft above the height limit keeps its trail", () => {
     ).length;
   assert.equal(drawn({}), 0);
   assert.equal(drawn({ followIcao24: "abc123" }), 1);
+});
+
+test("a trail drawn from an origin is placed in degrees from it", () => {
+  const params = layerParams();
+  const plain = buildTrailLayers(params);
+  const origin: [number, number] = [eastbound(9).lng, 37.5];
+  const placed = buildTrailLayers(layerParams({ origin }));
+
+  for (const layer of placed) {
+    assert.equal(layer.props.coordinateSystem, "lnglat-offsets", layer.props.id);
+    assert.deepEqual(layer.props.coordinateOrigin, [origin[0], origin[1], 0]);
+  }
+  for (const id of ["flight-trails", "flight-trail-heads"]) {
+    const before = plain.find((layer) => layer.props.id === id)!;
+    const after = placed.find((layer) => layer.props.id === id)!;
+    const datum = (after.props.data as unknown[])[0];
+    const getPath = (layer: typeof after) =>
+      (layer.props.getPath as unknown as (d: unknown) => number[][])(datum);
+    getPath(before).forEach(([lng, lat, z], index) => {
+      const [dLng, dLat, dz] = getPath(after)[index];
+      assert.ok(Math.abs(dLng - (lng - origin[0])) < 1e-12, id);
+      assert.ok(Math.abs(dLat - (lat - origin[1])) < 1e-12, id);
+      assert.equal(dz, z);
+    });
+  }
+  // Without one, trails stay in plain degrees.
+  for (const layer of plain) {
+    assert.notEqual(layer.props.coordinateSystem, "lnglat-offsets");
+  }
+});
+
+test("offsets from an origin go the short way across the date line", () => {
+  assert.deepEqual(
+    offsetPath(
+      [
+        [179.9, 10, 100],
+        [-179.9, 10.1, 200],
+      ],
+      [179.95, 10],
+    ).map(([lng, lat, z]) => [+lng.toFixed(6), +lat.toFixed(6), z]),
+    [
+      [-0.05, 0, 100],
+      [0.15, 0.1, 200],
+    ],
+  );
 });

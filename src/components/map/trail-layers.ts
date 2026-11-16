@@ -1,4 +1,4 @@
-import { LayerExtension } from "@deck.gl/core";
+import { COORDINATE_SYSTEM, LayerExtension } from "@deck.gl/core";
 import { PathLayer } from "@deck.gl/layers";
 
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
@@ -618,7 +618,22 @@ export type TrailLayerParams = HeadOptions & {
   idSuffix?: string;
   /** The frame's time in milliseconds, which paces the join's easing. */
   now: number;
+  /**
+   * Draw the trails in degrees from this longitude and latitude rather
+   * than from the map's origin. The first person trail passes close under
+   * the camera, where deck's 32-bit placement, zoomed out past 12, would
+   * shift it a pixel or so each frame; measured from the aircraft, it holds.
+   */
+  origin?: [number, number] | null;
 };
+
+/** A path in degrees from `origin`, the short way round in longitude. */
+export function offsetPath(
+  path: TrailVertex[],
+  [lng, lat]: [number, number],
+): TrailVertex[] {
+  return path.map(([x, y, z]) => [((x - lng + 540) % 360) - 180, y - lat, z]);
+}
 
 /** Whether an aircraft is open or followed, and so always keeps its trail. */
 function isTracked(icao24: string, params: TrailLayerParams): boolean {
@@ -848,33 +863,48 @@ export function buildTrailLayers(params: TrailLayerParams) {
 
   const id = (name: string) =>
     params.idSuffix ? `${name}-${params.idSuffix}` : name;
+  const origin = params.origin ?? null;
+  const placed = origin
+    ? {
+        coordinateSystem: COORDINATE_SYSTEM.LNGLAT_OFFSETS,
+        coordinateOrigin: [origin[0], origin[1], 0] as [number, number, number],
+        updateTriggers: { getPath: origin },
+      }
+    : {};
+  const pathOf = origin
+    ? (path: TrailVertex[]) => offsetPath(path, origin)
+    : (path: TrailVertex[]) => path;
   return [
     new PathLayer<TrailBody>({
       ...glow,
+      ...placed,
       id: id("flight-trail-glow"),
       data: params.cache.bodies,
-      getPath: (body) => body.path,
+      getPath: (body) => pathOf(body.path),
       getColor: (body) => body.colors,
     }),
     new PathLayer<TrailHead>({
       ...glow,
+      ...placed,
       id: id("flight-trail-head-glow"),
       data: heads,
-      getPath: (head) => head.path,
+      getPath: (head) => pathOf(head.path),
       getColor: (head) => head.colors,
     }),
     new PathLayer<TrailBody>({
       ...line,
+      ...placed,
       id: id("flight-trails"),
       data: params.cache.bodies,
-      getPath: (body) => body.path,
+      getPath: (body) => pathOf(body.path),
       getColor: (body) => body.colors,
     }),
     new PathLayer<TrailHead>({
       ...line,
+      ...placed,
       id: id("flight-trail-heads"),
       data: heads,
-      getPath: (head) => head.path,
+      getPath: (head) => pathOf(head.path),
       getColor: (head) => head.colors,
     }),
   ];

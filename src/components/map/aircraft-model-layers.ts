@@ -23,7 +23,7 @@ import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
 import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { aircraftColor } from "./aircraft-appearance";
-import { type PickingInfo } from "@deck.gl/core";
+import { COORDINATE_SYSTEM, type PickingInfo } from "@deck.gl/core";
 import {
   type AircraftModelKey,
   ALL_MODEL_KEYS,
@@ -257,6 +257,11 @@ export function buildAircraftModelLayers(
  * overview's rate. It draws the detailed model, seen a few hundred pixels
  * across. Until that has loaded, the light model stands in, so the
  * aircraft never vanishes; the detailed layer loads meanwhile, hidden.
+ *
+ * It is drawn solid, and on the flat map in metres around its own
+ * position. Zoomed out past 12, deck places degrees with 32-bit floats,
+ * and so close to the camera that rounding moved the aircraft half a
+ * pixel or so each frame, a different way each time: it shimmered.
  */
 export function buildFollowedAircraftLayer(
   flight: FlightState,
@@ -264,28 +269,45 @@ export function buildFollowedAircraftLayer(
 ): ScenegraphLayer<FlightState>[] {
   const key = resolveModelKeyCached(flight);
   const ready = detailLoaded.has(key);
+  const anchor: [number, number] | null =
+    !params.onSphere && flight.longitude != null && flight.latitude != null
+      ? [flight.longitude, flight.latitude]
+      : null;
   const detailed = modelLayer(
     "flight-aircraft-followed-detail",
     key,
     [flight],
     params,
-    "detail",
-    ready,
+    { detail: "detail", shown: ready, anchor, opaque: true },
   );
   if (ready) return [detailed];
   return [
     detailed,
-    modelLayer("flight-aircraft-followed", key, [flight], params),
+    modelLayer("flight-aircraft-followed", key, [flight], params, {
+      anchor,
+      opaque: true,
+    }),
   ];
 }
+
+type ModelLayerOptions = {
+  detail?: ModelDetail;
+  shown?: boolean;
+  /**
+   * Draw the aircraft in metres around this longitude and latitude, where
+   * it is, rather than in degrees.
+   */
+  anchor?: [number, number] | null;
+  /** Drawn solid rather than see-through like the traffic. */
+  opaque?: boolean;
+};
 
 function modelLayer(
   id: string,
   modelKey: AircraftModelKey,
   flights: FlightState[],
   params: Omit<AircraftLayerParams, "rawFlights">,
-  detail: ModelDetail = "map",
-  shown = true,
+  { detail = "map", shown = true, anchor = null, opaque = false }: ModelLayerOptions = {},
 ): ScenegraphLayer<FlightState> {
   const {
     interpolatedMap,
@@ -310,13 +332,18 @@ function modelLayer(
       visible: hasData && layersVisible && shown,
       data: flights,
       opacity: globeFade,
+      ...(anchor && {
+        coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+        coordinateOrigin: [anchor[0], anchor[1], 0],
+      }),
       getPosition: (d) => {
         const src = interpolatedMap.get(d.icao24) ?? d;
-        return [
-          src.longitude ?? 0,
-          src.latitude ?? 0,
-          aircraftElevationMeters(src.baroAltitude, altitudeDisplayMode),
-        ];
+        const elevation = aircraftElevationMeters(
+          src.baroAltitude,
+          altitudeDisplayMode,
+        );
+        if (anchor) return [0, 0, elevation];
+        return [src.longitude ?? 0, src.latitude ?? 0, elevation];
       },
       getOrientation: (d) => {
         const src = interpolatedMap.get(d.icao24) ?? d;
@@ -329,7 +356,8 @@ function modelLayer(
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
-        return aircraftColor(base, d);
+        const color = aircraftColor(base, d);
+        return opaque ? [color[0], color[1], color[2], 255] : color;
       },
       scenegraph: modelUrl(modelKey, detail),
       getScene: sceneLoaderFor(modelKey, detail),

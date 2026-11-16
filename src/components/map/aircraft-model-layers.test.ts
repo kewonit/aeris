@@ -7,6 +7,7 @@ import {
   type AircraftLayerParams,
   aircraftOrientation,
   buildAircraftModelLayers,
+  buildFollowedAircraftLayer,
   normalizeScene,
 } from "./aircraft-model-layers";
 import {
@@ -322,4 +323,52 @@ test("every model climbs nose up and banks wing down along its track", () => {
     assert.ok(place(rightWing, turningRight)[2] < -0.34, `${key} banks`);
     assert.ok(Math.abs(place(nose, turningRight)[2]) < 1e-9, `${key} nose`);
   }
+});
+
+test("the first person aircraft is drawn solid, in metres around itself", () => {
+  const flight = makeNarrowbodyFlight();
+  const params = narrowbodyParams(new Map());
+  const [layer] = buildFollowedAircraftLayer(flight, params);
+  const getPosition = layer.props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
+  const getColor = layer.props.getColor as unknown as (
+    d: FlightState,
+  ) => number[];
+
+  assert.equal(layer.props.coordinateSystem, "meter-offsets");
+  assert.deepEqual(layer.props.coordinateOrigin, [8.1, 50.0, 0]);
+  assert.deepEqual(getPosition(flight), [0, 0, 1040]);
+  assert.equal(getColor(flight)[3], 255);
+
+  // On the sphere deck has no such offsets, so it is placed in degrees.
+  const [onSphere] = buildFollowedAircraftLayer(flight, {
+    ...params,
+    onSphere: true,
+  });
+  const sphereLayerPosition = onSphere.props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
+  assert.notEqual(onSphere.props.coordinateSystem, "meter-offsets");
+  assert.deepEqual(sphereLayerPosition(flight), [8.1, 50.0, 1040]);
+});
+
+test("the traffic keeps its see-through colour, placed in degrees", () => {
+  const flight = makeNarrowbodyFlight();
+  const params: AircraftLayerParams = {
+    ...narrowbodyParams(new Map()),
+    defaultColor: [255, 255, 255, 200],
+  };
+  const traffic = buildAircraftModelLayers(params).find(
+    (layer) => layer.props.id === "flight-aircraft-narrowbody",
+  )!;
+  const [followed] = buildFollowedAircraftLayer(flight, params);
+  const alpha = (layer: typeof traffic) =>
+    (layer.props.getColor as unknown as (d: FlightState) => number[])(
+      flight,
+    )[3];
+
+  assert.equal(alpha(traffic), 200);
+  assert.equal(alpha(followed), 255);
+  assert.notEqual(traffic.props.coordinateSystem, "meter-offsets");
 });
