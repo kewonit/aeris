@@ -40,7 +40,14 @@ import {
 
 import { angleDelta, lerpAngle, smoothStep } from "./flight-math";
 
-import { createAttitudeState, updateAttitudes } from "./aircraft-attitude";
+import {
+  attitudeFor,
+  type AttitudeFollower,
+  createAttitudeFollower,
+  createAttitudeState,
+  stepAttitude,
+  updateAttitudes,
+} from "./aircraft-attitude";
 import {
   carryForward,
   computeInterpolatedFlights,
@@ -211,6 +218,13 @@ export function FlightLayers({
   const aircraftSizesRef = useRef(new Map<string, AircraftScreenSize>());
   // Every aircraft's shown pitch and bank, eased from frame to frame.
   const attitudeRef = useRef(createAttitudeState());
+  // The first person aircraft's attitude, which follows the motion it is
+  // drawn with, every frame, at an airliner's roll and pitch rates.
+  const fpvAttitudeRef = useRef<{
+    icao24: string;
+    follower: AttitudeFollower;
+    at: number;
+  } | null>(null);
   // Cached trail-by-icao24 Map - rebuilt only when trailsRef changes, not every frame
   const trailMapRef = useRef(new Map<string, TrailTrack>());
   const lastTrailsForMapRef = useRef<TrailTrack[] | null>(null);
@@ -1139,6 +1153,45 @@ export function FlightLayers({
         }
         const pitchByIcao = attitudeRef.current.pitch;
         const bankByIcao = attitudeRef.current.bank;
+
+        // The first person aircraft banks in the turns it is drawn making
+        // and pitches with its drawn climb, rather than with each report's
+        // track; it rolls and pitches smoothly, at an airliner's rates. It
+        // picks up from the attitude the map showed it at.
+        const fpvRates = fpvId && drawn ? fpvMotion?.motionAt(Date.now()) : null;
+        if (fpvId && drawn && fpvRates) {
+          let held = fpvAttitudeRef.current;
+          if (!held || held.icao24 !== fpvId) {
+            held = {
+              icao24: fpvId,
+              follower: createAttitudeFollower({
+                pitch: pitchByIcao.get(fpvId) ?? 0,
+                bank: bankByIcao.get(fpvId) ?? 0,
+              }),
+              at: now,
+            };
+            fpvAttitudeRef.current = held;
+          }
+          stepAttitude(
+            held.follower,
+            attitudeFor(
+              {
+                onGround: drawn.onGround,
+                velocity: fpvRates.speed,
+                verticalRate: fpvRates.climb,
+                geomRate: null,
+                roll: drawn.roll,
+              },
+              fpvRates.turnRate,
+            ),
+            now - held.at,
+          );
+          held.at = now;
+          pitchByIcao.set(fpvId, held.follower.pitch);
+          bankByIcao.set(fpvId, held.follower.bank);
+        } else if (!fpvId) {
+          fpvAttitudeRef.current = null;
+        }
 
         const frameLayers: Layer[] = [];
 

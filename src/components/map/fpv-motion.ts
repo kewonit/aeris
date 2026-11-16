@@ -34,6 +34,23 @@ export const HANDOVER_TIME_MS = 20_000;
 const TELEPORT_METERS = 5_000;
 const TELEPORT_ALTITUDE_METERS = 1_500;
 
+/**
+ * The drawn path's motion is measured over the next stretch of it, this
+ * long: ahead, where the path is always defined, as a report's position
+ * is behind the view.
+ */
+const MOTION_WINDOW_MS = 500;
+
+/** How the first person aircraft is moving where it is drawn. */
+export type FpvMotionRates = {
+  /** Ground speed in metres per second. */
+  speed: number;
+  /** Climb rate in metres per second. */
+  climb: number;
+  /** Degrees per second, positive turning right. */
+  turnRate: number;
+};
+
 /** Where the first person aircraft is, and which way it points. */
 export type FpvState = {
   lng: number;
@@ -211,6 +228,30 @@ export function createFpvMotion() {
   }
 
   /**
+   * How the aircraft moves along the path it is drawn on, from `now`: its
+   * attitude follows this, so it banks in the turns it is seen to make and
+   * pitches with its climbs, rather than with each report's track.
+   */
+  function motionAt(now: number): FpvMotionRates | null {
+    const current = stateAt(now);
+    const next = stateAt(now + MOTION_WINDOW_MS);
+    if (!current || !next) return null;
+    const seconds = MOTION_WINDOW_MS / 1_000;
+    const [east, north] = offsetMeters(current, next);
+    return {
+      speed: Math.hypot(east, north) / seconds,
+      climb:
+        current.alt !== null && next.alt !== null
+          ? (next.alt - current.alt) / seconds
+          : 0,
+      turnRate:
+        current.track !== null && next.track !== null
+          ? turnBetween(current.track, next.track) / seconds
+          : 0,
+    };
+  }
+
+  /**
    * Starts first person from where the map draws the aircraft, so the view
    * picks it up there rather than a poll ahead. Call before the first report.
    */
@@ -319,7 +360,7 @@ export function createFpvMotion() {
     }
   }
 
-  return { observe, seed, stateAt };
+  return { observe, seed, stateAt, motionAt };
 }
 
 export type FpvMotion = ReturnType<typeof createFpvMotion>;

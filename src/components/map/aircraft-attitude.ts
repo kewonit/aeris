@@ -3,17 +3,22 @@ import type { FlightState } from "@/lib/opensky";
 
 const GRAVITY = 9.81;
 /**
- * Wings fly at a small angle to the air, so an airliner holding altitude
- * sits a few degrees nose up, and one descending at 3° sits about level.
+ * Wings meet the air at an angle that grows as the aircraft slows: about
+ * 6° at approach speed, so an airliner on a 3° glide path sits about 3°
+ * nose up, falling to about 2.5° at cruise.
  */
-const ANGLE_OF_ATTACK_DEG = 3;
+const SLOW_ANGLE_OF_ATTACK_DEG = 6;
+const FAST_ANGLE_OF_ATTACK_DEG = 2.5;
+const SLOW_SPEED_MPS = 70;
+const FAST_SPEED_MPS = 230;
 /** Airliners rarely pitch further than this, even descending steeply... */
 const MAX_NOSE_DOWN_DEG = 5;
 /** ...or climbing hard just after take-off. */
-const MAX_NOSE_UP_DEG = 15;
+const MAX_NOSE_UP_DEG = 18;
 /** Below this ground speed the climb angle means nothing; hold level. */
 const MIN_PATH_SPEED_MPS = 20;
-const MAX_BANK_DEG = 30;
+/** Airliners turn at no more than about this bank. */
+const MAX_BANK_DEG = 25;
 /** A turn implied by two tracks faster than this is noise, not a turn. */
 const MAX_TURN_RATE_DEG_S = 6;
 /** Pitch and bank ease towards each report over about this long. */
@@ -52,6 +57,19 @@ function clamp(value: number, min: number, max: number): number {
  * @param turnRate Degrees per second, positive turning right, when the
  *   aircraft reports no roll of its own.
  */
+/** The wing's angle to the air at a ground speed, in degrees. */
+export function angleOfAttack(speed: number): number {
+  const share = clamp(
+    (speed - SLOW_SPEED_MPS) / (FAST_SPEED_MPS - SLOW_SPEED_MPS),
+    0,
+    1,
+  );
+  return (
+    SLOW_ANGLE_OF_ATTACK_DEG +
+    (FAST_ANGLE_OF_ATTACK_DEG - SLOW_ANGLE_OF_ATTACK_DEG) * share
+  );
+}
+
 export function attitudeFor(
   flight: Pick<
     FlightState,
@@ -63,15 +81,14 @@ export function attitudeFor(
 
   const speed = Number.isFinite(flight.velocity) ? flight.velocity! : 0;
   const climb = aircraftVerticalRate(flight);
+  const flying = speed >= MIN_PATH_SPEED_MPS;
   const pathDeg =
-    speed >= MIN_PATH_SPEED_MPS && climb !== null && Number.isFinite(climb)
+    flying && climb !== null && Number.isFinite(climb)
       ? (Math.atan2(climb, speed) * 180) / Math.PI
       : 0;
-  const noseUp = clamp(
-    pathDeg + ANGLE_OF_ATTACK_DEG,
-    -MAX_NOSE_DOWN_DEG,
-    MAX_NOSE_UP_DEG,
-  );
+  const noseUp = flying
+    ? clamp(pathDeg + angleOfAttack(speed), -MAX_NOSE_DOWN_DEG, MAX_NOSE_UP_DEG)
+    : 0;
 
   let bank = 0;
   if (flight.roll != null && Number.isFinite(flight.roll)) {
@@ -155,5 +172,75 @@ export function updateAttitudes(
     for (const icao24 of map.keys()) {
       if (!seen.has(icao24)) map.delete(icao24);
     }
+  }
+}
+
+/** An airliner rolls into and out of a turn at about this rate... */
+const MAX_ROLL_RATE_DEG_S = 5;
+/** ...and pitches more gently still. */
+const MAX_PITCH_RATE_DEG_S = 2;
+/**
+ * How quickly the attitude closes on its target, critically damped: it
+ * starts and stops moving smoothly, and settles without overshooting.
+ */
+const FOLLOW_RATE_PER_S = 2.5;
+/** The follower moves in steps no longer than this, at any frame rate. */
+const FOLLOW_STEP_S = 1 / 120;
+/** After a long pause, as with a hidden tab, it picks up from here. */
+const MAX_FOLLOW_GAP_S = 1;
+
+/** A shown attitude that rolls and pitches like an airliner. */
+export type AttitudeFollower = Attitude & {
+  /** Degrees a second. */
+  pitchRate: number;
+  bankRate: number;
+};
+
+export function createAttitudeFollower(start: Attitude): AttitudeFollower {
+  return { pitch: start.pitch, bank: start.bank, pitchRate: 0, bankRate: 0 };
+}
+
+function follow(
+  value: number,
+  rate: number,
+  target: number,
+  seconds: number,
+  maxRate: number,
+): [number, number] {
+  const k = FOLLOW_RATE_PER_S;
+  const acceleration = k * k * (target - value) - 2 * k * rate;
+  const nextRate = clamp(rate + acceleration * seconds, -maxRate, maxRate);
+  return [value + nextRate * seconds, nextRate];
+}
+
+/**
+ * Moves a follower `dtMs` towards a target attitude: it rolls no faster
+ * than 5°/s and pitches no faster than 2°/s, gathering and losing speed
+ * smoothly, so a new target never kicks the aircraft and it holds its
+ * bank through a turn.
+ */
+export function stepAttitude(
+  follower: AttitudeFollower,
+  target: Attitude,
+  dtMs: number,
+): void {
+  let remaining = Math.min(Math.max(dtMs, 0) / 1_000, MAX_FOLLOW_GAP_S);
+  while (remaining > 1e-9) {
+    const seconds = Math.min(FOLLOW_STEP_S, remaining);
+    remaining -= seconds;
+    [follower.pitch, follower.pitchRate] = follow(
+      follower.pitch,
+      follower.pitchRate,
+      target.pitch,
+      seconds,
+      MAX_PITCH_RATE_DEG_S,
+    );
+    [follower.bank, follower.bankRate] = follow(
+      follower.bank,
+      follower.bankRate,
+      target.bank,
+      seconds,
+      MAX_ROLL_RATE_DEG_S,
+    );
   }
 }
