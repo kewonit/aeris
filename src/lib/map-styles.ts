@@ -199,17 +199,14 @@ const TERRAIN: AttributionEntry = {
   label: "Terrain sources",
   url: "https://github.com/tilezen/joerd/blob/master/docs/attribution.md",
 };
-/** Esri asks for "Powered by Esri" and each service's own source list. */
+/**
+ * The Esri maps are credited "Powered by Esri" and OpenStreetMap, by the
+ * project's choice (November 2026), without the services' own source
+ * lists, which Esri's attribution rules ask for.
+ */
 const POWERED_BY_ESRI: AttributionEntry = {
   label: "Powered by Esri",
   url: "https://www.esri.com/",
-};
-const ESRI_IMAGERY_SOURCES: AttributionEntry = {
-  label: "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
-};
-const ESRI_TOPO_SOURCES: AttributionEntry = {
-  label:
-    "Sources: Esri, HERE, Garmin, Intermap, increment P Corp., GEBCO, USGS, FAO, NPS, NRCAN, GeoBase, IGN, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), (c) OpenStreetMap contributors, and the GIS User Community",
 };
 
 /**
@@ -256,10 +253,8 @@ export function getAttributions(
       credits.push(OSM, CARTO, TERRAIN);
       break;
     case "satellite":
-      credits.push(POWERED_BY_ESRI, ESRI_IMAGERY_SOURCES);
-      break;
     case "topo":
-      credits.push(POWERED_BY_ESRI, ESRI_TOPO_SOURCES);
+      credits.push(POWERED_BY_ESRI, OSM);
       break;
     default:
       credits.push(OSM);

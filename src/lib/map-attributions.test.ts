@@ -21,13 +21,13 @@ test("the terrain map adds a link to the terrain sources", () => {
   ]);
 });
 
-test("Esri maps say Powered by Esri and list the service's sources", () => {
-  const satellite = labels("satellite");
-  assert.equal(satellite[0], "Powered by Esri");
-  assert.match(satellite[1], /^Source: Esri, Vantor, Earthstar Geographics/);
-  const topo = labels("topo");
-  assert.equal(topo[0], "Powered by Esri");
-  assert.match(topo[1], /OpenStreetMap contributors/);
+test("Esri maps say Powered by Esri and credit OpenStreetMap", () => {
+  for (const style of ["satellite", "topo"]) {
+    assert.deepEqual(labels(style), [
+      "Powered by Esri",
+      "© OpenStreetMap contributors",
+    ]);
+  }
 });
 
 test("MapLibre is never credited on the map", () => {
