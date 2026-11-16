@@ -36,9 +36,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 type FlightCardProps = {
   flight: FlightState;
   onToggleFpv?: (icao24: string) => void;
+  /** Whether the camera is following this aircraft. */
+  following?: boolean;
+  onToggleFollow?: (icao24: string) => void;
 };
 
-export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
+export function FlightCard({
+  flight,
+  onToggleFpv,
+  following = false,
+  onToggleFollow,
+}: FlightCardProps) {
   const { settings } = useSettings();
   const units = settings.unitSystem;
   const routeInfo = useRouteInfo(flight);
@@ -62,10 +70,9 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
       .join(" · ") || `ICAO ${flight.icao24.toUpperCase()}`;
   const heading = isFiniteNumber(flight.trueTrack) ? flight.trueTrack : null;
   const verticalRate = aircraftVerticalRate(flight);
-  const canEnterFpv =
-    isFiniteNumber(flight.longitude) &&
-    isFiniteNumber(flight.latitude) &&
-    !flight.onGround;
+  const canFollow =
+    isFiniteNumber(flight.longitude) && isFiniteNumber(flight.latitude);
+  const canEnterFpv = canFollow && !flight.onGround;
 
   return (
     <ScrollArea className="h-full" viewportClassName="pb-6">
@@ -130,6 +137,20 @@ export function FlightCard({ flight, onToggleFpv }: FlightCardProps) {
           )}
         />
 
+        {onToggleFollow && (
+          <button
+            type="button"
+            onClick={() => onToggleFollow(flight.icao24)}
+            disabled={!canFollow}
+            className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-border text-small text-tint transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-subtle"
+          >
+            {following ? "Stop following" : "Follow aircraft"}
+            {!following && (
+              <ChevronRight className="size-4" aria-hidden="true" />
+            )}
+          </button>
+        )}
+
         {onToggleFpv && (
           <button
             type="button"
@@ -169,8 +190,8 @@ function AirlineMark({
       <AirlineLogo
         callsign={callsign}
         airlineName={airline}
-        size={40}
-        className="rounded-none bg-transparent"
+        size={38}
+        className="rounded-sm bg-transparent"
       />
     </span>
   );

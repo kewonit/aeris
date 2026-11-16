@@ -7,7 +7,7 @@ import {
   type AircraftLayerParams,
   aircraftOrientation,
   buildAircraftModelLayers,
-  modelTailShareFor,
+  buildFollowedAircraftLayer,
   normalizeScene,
 } from "./aircraft-model-layers";
 import {
@@ -76,7 +76,8 @@ function makeNarrowbodyFlight(): FlightState {
     trueTrack: 90,
     velocity: 220,
     category: 4,
-    typeCode: "A320",
+    // A Boeing 717 draws the generic narrowbody model.
+    typeCode: "B712",
     onGround: false,
   } as FlightState;
 }
@@ -92,6 +93,7 @@ function narrowbodyParams(
     dataVersion: 0,
     layersVisible: true,
     globeFade: 1,
+    onSphere: false,
     aircraftSizes,
     altitudeDisplayMode: "realistic",
     altColors: false,
@@ -112,6 +114,15 @@ function narrowbodyLayer(aircraftSizes: Map<string, AircraftScreenSize>) {
   assert.ok(layer);
   return { flight, props: layer.props };
 }
+
+test("only models some aircraft uses get a layer, and so a download", () => {
+  const ids = buildAircraftModelLayers(narrowbodyParams(new Map())).map(
+    (layer) => layer.props.id,
+  );
+  assert.ok(ids.includes("flight-aircraft-narrowbody"));
+  // No test flies a glider; its model must not load just because the page did.
+  assert.ok(!ids.includes("flight-aircraft-glider"));
+});
 
 test("a model sits on its reported position", () => {
   const { flight, props } = narrowbodyLayer(new Map());
@@ -223,18 +234,15 @@ test("normalizing turns a model so its nose points along +X", () => {
   assertClose(transformPoint(matrix, [11, 0, 10]), [0, 0, -0.125]);
 });
 
-test("the tail share runs along the normalised fuselage", () => {
-  assert.equal(modelTailShareFor({ x: 1, z: 0.78 }), 0.45);
-});
-
-// Where each model's nose points in its own file, from the mapping notes.
+// Where each model's nose points in its own file, from the mapping notes;
+// tools/optimize-models.ts checks the Flightradar24 ones point along -Z.
 const NOSE_IN_FILE: Record<AircraftModelKey, Vec3> = {
   b737: [0, 0, -1],
   narrowbody: [1, 0, 0],
   generic: [1, 0, 0],
   "widebody-2eng": [0, 0, 1],
   "widebody-4eng": [0, 0, 1],
-  a380: [0, 0, 1],
+  a380: [0, 0, -1],
   "regional-jet": [0, 0, 1],
   bizjet: [0, 0, 1],
   helicopter: [0, 0, 1],
@@ -243,6 +251,40 @@ const NOSE_IN_FILE: Record<AircraftModelKey, Vec3> = {
   turboprop: [0, 0, 1],
   "light-prop": [0, 0, 1],
   drone: [0, 0, 1],
+  a318: [0, 0, -1],
+  a319: [0, 0, -1],
+  a320: [0, 0, -1],
+  a321: [0, 0, -1],
+  a332: [0, 0, -1],
+  a333: [0, 0, -1],
+  a343: [0, 0, -1],
+  a346: [0, 0, -1],
+  a359: [0, 0, -1],
+  b738: [0, 0, -1],
+  b739: [0, 0, -1],
+  b744: [0, 0, -1],
+  b748: [0, 0, -1],
+  b752: [0, 0, -1],
+  b753: [0, 0, -1],
+  b762: [0, 0, -1],
+  b763: [0, 0, -1],
+  b764: [0, 0, -1],
+  b772: [0, 0, -1],
+  b773: [0, 0, -1],
+  b788: [0, 0, -1],
+  b789: [0, 0, -1],
+  e170: [0, 0, -1],
+  e190: [0, 0, -1],
+  crj700: [0, 0, -1],
+  crj900: [0, 0, -1],
+  cs100: [0, 0, -1],
+  cs300: [0, 0, -1],
+  q400: [0, 0, -1],
+  atr42: [0, 0, -1],
+  atr72: [0, 0, -1],
+  bae146: [0, 0, -1],
+  citation: [0, 0, -1],
+  pa28: [0, 0, -1],
 };
 
 test("every model climbs nose up and banks wing down along its track", () => {
@@ -281,4 +323,52 @@ test("every model climbs nose up and banks wing down along its track", () => {
     assert.ok(place(rightWing, turningRight)[2] < -0.34, `${key} banks`);
     assert.ok(Math.abs(place(nose, turningRight)[2]) < 1e-9, `${key} nose`);
   }
+});
+
+test("the first person aircraft is drawn solid, in metres around itself", () => {
+  const flight = makeNarrowbodyFlight();
+  const params = narrowbodyParams(new Map());
+  const [layer] = buildFollowedAircraftLayer(flight, params);
+  const getPosition = layer.props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
+  const getColor = layer.props.getColor as unknown as (
+    d: FlightState,
+  ) => number[];
+
+  assert.equal(layer.props.coordinateSystem, "meter-offsets");
+  assert.deepEqual(layer.props.coordinateOrigin, [8.1, 50.0, 0]);
+  assert.deepEqual(getPosition(flight), [0, 0, 1040]);
+  assert.equal(getColor(flight)[3], 255);
+
+  // On the sphere deck has no such offsets, so it is placed in degrees.
+  const [onSphere] = buildFollowedAircraftLayer(flight, {
+    ...params,
+    onSphere: true,
+  });
+  const sphereLayerPosition = onSphere.props.getPosition as unknown as (
+    d: FlightState,
+  ) => number[];
+  assert.notEqual(onSphere.props.coordinateSystem, "meter-offsets");
+  assert.deepEqual(sphereLayerPosition(flight), [8.1, 50.0, 1040]);
+});
+
+test("the traffic keeps its see-through colour, placed in degrees", () => {
+  const flight = makeNarrowbodyFlight();
+  const params: AircraftLayerParams = {
+    ...narrowbodyParams(new Map()),
+    defaultColor: [255, 255, 255, 200],
+  };
+  const traffic = buildAircraftModelLayers(params).find(
+    (layer) => layer.props.id === "flight-aircraft-narrowbody",
+  )!;
+  const [followed] = buildFollowedAircraftLayer(flight, params);
+  const alpha = (layer: typeof traffic) =>
+    (layer.props.getColor as unknown as (d: FlightState) => number[])(
+      flight,
+    )[3];
+
+  assert.equal(alpha(traffic), 200);
+  assert.equal(alpha(followed), 255);
+  assert.notEqual(traffic.props.coordinateSystem, "meter-offsets");
 });

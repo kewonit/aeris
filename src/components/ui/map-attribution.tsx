@@ -8,13 +8,25 @@ import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
 type MapAttributionProps = {
   styleId: string;
   showAirspace?: boolean;
+  showWeatherRadar?: boolean;
+  /** The provider the live map's aircraft currently come from. */
+  flightSource?: string | null;
 };
 
 const SM_BREAKPOINT = 640;
 
-export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
+export function MapAttribution({
+  styleId,
+  showAirspace,
+  showWeatherRadar,
+  flightSource,
+}: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
-  const attributions = getAttributions(styleId, { showAirspace });
+  const attributions = getAttributions(styleId, {
+    showAirspace,
+    showWeatherRadar,
+    flightSource,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
@@ -95,7 +107,7 @@ function ExpandedAttribution({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 4 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
+      className="flex max-w-[min(24rem,calc(100vw-2rem))] items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
     >
       <button
         onClick={onCollapse}
@@ -104,57 +116,26 @@ function ExpandedAttribution({
       >
         <Info className="h-2.5 w-2.5" />
       </button>
-      <span
-        className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle"
-      >
-        <span
-          className="font-medium text-subtle"
-        >
-          ©
-        </span>
+      <span className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle">
         {attributions.map((attr, i) => (
-          <span key={attr.label} className="inline-flex items-center">
-            <a
-              href={attr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:underline text-subtle"
-            >
-              {attr.label}
-            </a>
-            {i < attributions.length - 1 && (
-              <span
-                className="ml-1 text-subtle"
+          <span key={attr.label} className="inline-flex min-w-0 items-center">
+            {attr.url ? (
+              <a
+                href={attr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors hover:underline text-subtle"
               >
-                ·
-              </span>
+                {attr.label}
+              </a>
+            ) : (
+              <span>{attr.label}</span>
+            )}
+            {i < attributions.length - 1 && (
+              <span className="ml-1 text-subtle">·</span>
             )}
           </span>
         ))}
-        <span
-          className="ml-0.5 text-subtle"
-        >
-          ·
-        </span>
-        <a
-          href="https://opensky-network.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          OpenSky Network
-        </a>
-        <span className="ml-0.5 text-subtle">
-          ·
-        </span>
-        <a
-          href="https://adsb.fi/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          adsb.fi
-        </a>
       </span>
     </motion.div>
   );

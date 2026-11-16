@@ -63,7 +63,7 @@ function restoreWindow(descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) {
     Object.defineProperty(globalThis, "window", descriptor);
   } else {
-    delete (globalThis as typeof globalThis & { window?: unknown }).window;
+    Reflect.deleteProperty(globalThis, "window");
   }
 }
 

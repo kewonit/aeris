@@ -10,7 +10,9 @@ type ShortcutActions = {
   onToggleHelp: () => void;
   onDeselect: () => void;
   onToggleFpv: () => void;
+  onToggleFollow: () => void;
   onToggleAtc?: () => void;
+  onToggleTrails?: () => void;
   isFpv?: boolean;
 };
 
@@ -54,10 +56,14 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       if (dialogOpen) return;
 
+      // In first person, V leaves it and F leaves it to follow instead.
       if (a.isFpv) {
-        if (e.key === "f" || e.key === "F") {
+        if (e.key === "v" || e.key === "V") {
           e.preventDefault();
           a.onToggleFpv();
+        } else if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          a.onToggleFollow();
         }
         return;
       }
@@ -85,6 +91,11 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         case "f":
         case "F":
           e.preventDefault();
+          a.onToggleFollow();
+          break;
+        case "v":
+        case "V":
+          e.preventDefault();
           a.onToggleFpv();
           break;
         case "?":
@@ -95,6 +106,11 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         case "A":
           e.preventDefault();
           a.onToggleAtc?.();
+          break;
+        case "t":
+        case "T":
+          e.preventDefault();
+          a.onToggleTrails?.();
           break;
       }
     }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import maplibregl from "maplibre-gl";
 import { fpvFollowCamera, normalizeLng } from "./camera-controller-utils";
-import type { FpvDrawnPosition } from "./flight-layer-constants";
+import type { FpvDrawnPosition, MoveCamera } from "./flight-layer-constants";
 import { createFollowPause, FOLLOW_RETURN_MS } from "./fpv-follow";
 import { highlightAeroways } from "./fpv-scenery";
 import { normalizeBearing } from "./flight-interpolation";
@@ -104,8 +104,12 @@ function blendCamera(
  *
  * The camera follows the aircraft exactly where the flight layers draw it,
  * which glides smoothly between reports, so the aircraft never leaves the
- * frame. Entry waits for the first frame it is drawn, which also covers
- * deep links that open before the first poll.
+ * frame. The layers move it themselves, through `moveCameraRef`, each time
+ * they place the aircraft and before they draw: moved on a frame of its
+ * own, the camera would trail the aircraft every other frame, and the
+ * aircraft would flicker between two places. Entry waits for the first
+ * frame it is drawn, which also covers deep links that open before the
+ * first poll.
  *
  * The map can still be dragged, zoomed and turned: following pauses while
  * it is, and eases back shortly after it stops.
@@ -115,6 +119,7 @@ export function useFpvCamera(
   isLoaded: boolean,
   fpvIcao24: string | null,
   drawnRef: MutableRefObject<FpvDrawnPosition | null>,
+  moveCameraRef: MutableRefObject<MoveCamera | null>,
   isFpvActiveRef: MutableRefObject<boolean>,
 ) {
   // The sky to restore after FPV. It is captured once per FPV session, so
@@ -183,20 +188,19 @@ export function useFpvCamera(
     // only make the map render again for the same picture.
     let lastDrawn: FpvDrawnPosition | null = null;
 
-    const onFrame = (frameTime: number) => {
-      frameId = requestAnimationFrame(onFrame);
+    const step: MoveCamera = (frameTime) => {
       const drawn = drawnRef.current;
-      if (!drawn) return;
-      if (drawn === lastDrawn && !transition) return;
+      if (!drawn) return false;
+      if (drawn === lastDrawn && !transition) return false;
       lastDrawn = drawn;
       const target = fpvFollowCamera(map, drawn, lastBearing);
-      if (!target) return;
+      if (!target) return false;
       lastBearing = target.bearing ?? lastBearing;
 
       if (pause.paused(frameTime)) {
         wasPaused = true;
         transition = null;
-        return;
+        return false;
       }
       if (wasPaused) {
         wasPaused = false;
@@ -224,16 +228,26 @@ export function useFpvCamera(
             ...blendCamera(transition.from, target, easeInOut(Math.max(0, t))),
             padding: EMPTY_PADDING,
           });
-          return;
+          return true;
         }
         transition = null;
       }
       map.jumpTo({ ...target, padding: EMPTY_PADDING });
+      return true;
+    };
+    moveCameraRef.current = step;
+
+    // The way in and the way back also move on the display's frames between
+    // the layers' redraws, which can be fewer, so that they glide.
+    const onFrame = (frameTime: number) => {
+      frameId = requestAnimationFrame(onFrame);
+      if (transition) step(frameTime);
     };
     frameId = requestAnimationFrame(onFrame);
 
     return () => {
       if (frameId !== null) cancelAnimationFrame(frameId);
+      if (moveCameraRef.current === step) moveCameraRef.current = null;
       map.off("style.load", onStyleLoad);
       for (const type of INTERACTION_EVENTS) map.off(type, onInteraction);
       map.stop();
@@ -255,5 +269,5 @@ export function useFpvCamera(
         }
       }, FPV_SKY_RESTORE_MS);
     };
-  }, [map, isLoaded, fpvIcao24, drawnRef, isFpvActiveRef]);
+  }, [map, isLoaded, fpvIcao24, drawnRef, moveCameraRef, isFpvActiveRef]);
 }

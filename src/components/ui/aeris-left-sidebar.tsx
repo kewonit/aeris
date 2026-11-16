@@ -28,8 +28,6 @@ export type AerisLeftPanel =
   | { kind: "airport" };
 
 export const AERIS_LEFT_SIDEBAR_WIDTH = "clamp(22rem, 30vw, 28rem)";
-/** How far the sidebar tucks under the rounded map edge. */
-export const AERIS_LEFT_SIDEBAR_OVERLAP_PX = 4;
 
 type AerisLeftPanelSnapshot =
   | { kind: "flight"; flight: FlightState }
@@ -45,6 +43,9 @@ type AerisLeftSidebarProps = {
   displayFlight: FlightState | null;
   onCloseFlight: () => void;
   onToggleFpv: (icao24: string) => void;
+  /** The aircraft the camera is following, if any. */
+  followingIcao24: string | null;
+  onToggleFollow: (icao24: string) => void;
   airportBoard: AirportBoardData;
   onSelectAirportFlight: (icao24: string) => void;
   selectedIcao24: string | null;
@@ -60,6 +61,8 @@ export function AerisLeftSidebar({
   displayFlight,
   onCloseFlight,
   onToggleFpv,
+  followingIcao24,
+  onToggleFollow,
   airportBoard,
   onSelectAirportFlight,
   selectedIcao24,
@@ -100,10 +103,10 @@ export function AerisLeftSidebar({
     const aside = asideRef.current;
     if (!aside) return;
 
+    // The map starts exactly at the sidebar's edge, so its rounded corners
+    // leave the edge as true quarter circles.
     const reportInset = () => {
-      onInsetChange(
-        Math.max(0, aside.offsetWidth - AERIS_LEFT_SIDEBAR_OVERLAP_PX),
-      );
+      onInsetChange(Math.max(0, aside.getBoundingClientRect().width));
     };
 
     reportInset();
@@ -145,7 +148,7 @@ export function AerisLeftSidebar({
           setSnapshotMemory({ observed: null, retained: null });
         }
       }}
-      className="pointer-events-auto fixed inset-y-0 left-0 z-40 hidden w-(--aeris-sidebar-width) flex-col border-r border-border bg-background text-foreground transition-transform duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-full sm:flex"
+      className="pointer-events-auto fixed inset-y-0 left-0 z-40 hidden w-(--aeris-sidebar-width) flex-col bg-background text-foreground after:pointer-events-none after:absolute after:inset-y-(--radius-xl) after:right-0 after:w-px after:bg-border transition-transform duration-(--panel-duration) ease-(--panel-ease) data-[open=false]:-translate-x-full sm:flex"
       style={
         { "--aeris-sidebar-width": AERIS_LEFT_SIDEBAR_WIDTH } as CSSProperties
       }
@@ -163,7 +166,12 @@ export function AerisLeftSidebar({
 
       <div className="min-h-0 flex-1">
         {snapshot?.kind === "flight" ? (
-          <FlightCard flight={snapshot.flight} onToggleFpv={onToggleFpv} />
+          <FlightCard
+            flight={snapshot.flight}
+            onToggleFpv={onToggleFpv}
+            following={followingIcao24 === snapshot.flight.icao24}
+            onToggleFollow={onToggleFollow}
+          />
         ) : snapshot?.kind === "airport" ? (
           <AirportInfoCard
             board={snapshot.board}
