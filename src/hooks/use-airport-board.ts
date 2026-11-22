@@ -117,7 +117,7 @@ function angleDiff(a: number, b: number): number {
 
 // ── Classification logic ───────────────────────────────────────────────
 
-function classifyFlight(
+export function classifyFlight(
   flight: FlightState,
   airport: Airport,
 ): {
@@ -140,10 +140,17 @@ function classifyFlight(
   const heading = flight.trueTrack;
   const vRate = flight.verticalRate;
   const alt = flight.baroAltitude ?? flight.geoAltitude;
+  // An aircraft too high above the field to get down in the distance left,
+  // at no steeper than 1,000 ft every 1.5 nm, is passing over, not arriving.
+  const heightAboveFieldFt =
+    alt === null ? null : alt / 0.3048 - (airport.elevation_ft ?? 0);
+  const canDescendToLand =
+    heightAboveFieldFt === null ||
+    heightAboveFieldFt <= (dist / 1.5) * 1_000 + 2_000;
 
   // If no heading data, use vertical rate only
   if (heading === null || !Number.isFinite(heading)) {
-    if (vRate !== null && vRate < -VRATE_THRESHOLD) {
+    if (vRate !== null && vRate < -VRATE_THRESHOLD && canDescendToLand) {
       return {
         direction: "arrival",
         dist,
@@ -182,13 +189,6 @@ function classifyFlight(
   const isClimbing = vRate !== null && vRate > VRATE_THRESHOLD;
   const isLowAlt = alt !== null && alt < LOW_ALTITUDE_M;
   const isCloseRange = dist < 15; // within 15nm
-  // An aircraft too high above the field to get down in the distance left,
-  // at no steeper than 1,000 ft every 1.5 nm, is passing over, not arriving.
-  const heightAboveFieldFt =
-    alt === null ? null : alt / 0.3048 - (airport.elevation_ft ?? 0);
-  const canDescendToLand =
-    heightAboveFieldFt === null ||
-    heightAboveFieldFt <= (dist / 1.5) * 1_000 + 2_000;
 
   // ── Arrival classification ──
   // Strong: heading toward + descending
@@ -263,7 +263,7 @@ function classifyFlight(
   }
 
   // ── Heading-only classification (no strong vrate signal) ──
-  if (headingToward && dist < 25) {
+  if (headingToward && dist < 25 && canDescendToLand) {
     return {
       direction: "arrival",
       dist,
