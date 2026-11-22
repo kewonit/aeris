@@ -218,11 +218,8 @@ function FlightTrackerInner({
     saveMapStyle(style);
   }, []);
 
-  const { flights, loading, rateLimited, retryIn, source } = useFlights(
-    activeCity,
-    fpvIcao24,
-    fpvSeedCenter,
-  );
+  const { flights, loading, rateLimited, retryIn, source, shownSource } =
+    useFlights(activeCity, fpvIcao24, fpvSeedCenter);
 
   // Both the airspace and weather radar overlays are scoped to ~2×
   // the flight fetch radius so we don't pull tiles for the entire
@@ -964,7 +961,7 @@ function FlightTrackerInner({
                 styleId={mapStyle.id}
                 showAirspace={showAirspace}
                 showWeatherRadar={settings.showWeatherRadar}
-                flightSource={source}
+                flightSource={shownSource}
               />
             </div>
           </div>
