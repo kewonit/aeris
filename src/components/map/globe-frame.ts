@@ -30,6 +30,15 @@ const GLOBE_VIEW = new GlobeView({
   nearZMultiplier: GLOBE_NEAR_Z_MULTIPLIER,
 });
 const FLAT_VIEW = new MapView({ id: DECK_MAP_VIEW_ID });
+/**
+ * First person is always drawn flat, with the same near plane as the
+ * globe: deck's flat default, 0.1, sits close behind the aircraft, about
+ * 0.14 ahead of the camera, and clips the trail running under the camera.
+ */
+const FIRST_PERSON_VIEW = new MapView({
+  id: DECK_MAP_VIEW_ID,
+  nearZMultiplier: GLOBE_NEAR_Z_MULTIPLIER,
+});
 
 /**
  * First person at this zoom or closer is drawn flat, even on the globe.
@@ -62,17 +71,16 @@ function firstPersonDrawsFlat(firstPerson: boolean, zoom: number): boolean {
 
 /**
  * The view deck draws the map's traffic in: a globe on the globe, flat
- * otherwise, and flat in first person close in. Always one of two
- * instances, so handing it to deck every frame never reads as a change of
- * view.
+ * otherwise, and flat with a near plane close to the camera in first
+ * person (on the globe, once close in). Always one of three instances, so
+ * handing it to deck every frame never reads as a change of view.
  */
 export function deckMapView(
   map: ProjectedMap,
   { firstPerson = false, zoom = 0 }: { firstPerson?: boolean; zoom?: number } = {},
 ): GlobeView | MapView {
-  return mapIsGlobe(map) && !firstPersonDrawsFlat(firstPerson, zoom)
-    ? GLOBE_VIEW
-    : FLAT_VIEW;
+  if (!mapIsGlobe(map)) return firstPerson ? FIRST_PERSON_VIEW : FLAT_VIEW;
+  return firstPersonDrawsFlat(firstPerson, zoom) ? FIRST_PERSON_VIEW : GLOBE_VIEW;
 }
 
 /**

@@ -196,12 +196,21 @@ test("deck draws in a globe view on the globe and a flat one otherwise", () => {
   assert.equal(flat.id, DECK_MAP_VIEW_ID);
 });
 
-test("the globe view keeps the first person aircraft in front of its near plane", () => {
+test("first person keeps its aircraft well in front of the near plane", () => {
   // First person at cruise: the map's centre is far ahead on the ground, and
   // the aircraft about a seventh of a viewport height from the camera.
   const FIRST_PERSON_DEPTH = 0.14;
-  const view = deckMapView({ getProjection: () => ({ type: "globe" }) });
-  for (const zoom of [8, 11.5, 13]) {
+  const map = (type: string) => ({ getProjection: () => ({ type }) });
+  // The views first person is actually drawn in, flying in and close in.
+  const cases: [string, number][] = [
+    ["globe", 8],
+    ["globe", 11.5],
+    ["globe", 13],
+    ["mercator", 11.5],
+    ["mercator", 15],
+  ];
+  for (const [type, zoom] of cases) {
+    const view = deckMapView(map(type), { firstPerson: true, zoom });
     const viewport = view.makeViewport({
       width: 800,
       height: 1200,
@@ -209,7 +218,7 @@ test("the globe view keeps the first person aircraft in front of its near plane"
     });
     const m = viewport!.projectionMatrix;
     const near = m[14] / (m[10] - 1);
-    assert.ok(near < FIRST_PERSON_DEPTH / 2, `zoom ${zoom}: near ${near}`);
+    assert.ok(near < FIRST_PERSON_DEPTH / 2, `${type} zoom ${zoom}: near ${near}`);
   }
 });
 
@@ -234,11 +243,18 @@ test("first person close in is drawn flat, even on the globe", () => {
 
   // Cruise first person sits around zoom 11: flat, in the precise view.
   assert.equal(deckDrawsOnSphere(globe, z + 1.2, true), false);
-  assert.equal(deckMapView(globe, { firstPerson: true, zoom: z + 1.2 }), flatView);
+  assert.equal(
+    deckMapView(globe, { firstPerson: true, zoom: z + 1.2 }).constructor.name,
+    "MapView",
+  );
   // Flying in from the whole globe it stays on the sphere until close in.
   assert.equal(deckDrawsOnSphere(globe, z - 0.5, true), true);
   assert.notEqual(deckMapView(globe, { firstPerson: true, zoom: z - 0.5 }), flatView);
   // Out of first person nothing changes.
   assert.equal(deckDrawsOnSphere(globe, z + 1.2), true);
   assert.notEqual(deckMapView(globe, { zoom: z + 1.2 }), flatView);
+  assert.equal(
+    deckMapView({ getProjection: () => ({ type: "mercator" }) }, { zoom: z + 1.2 }),
+    flatView,
+  );
 });
