@@ -557,8 +557,14 @@ export function FlightLayers({
   }, [map]);
 
   const handleClick = useCallback(
-    (info: PickingInfo<FlightState>) => {
-      if (info.object) onClick(info);
+    (info: PickingInfo<FlightState>, event?: { srcEvent?: unknown }) => {
+      if (!info.object) return;
+      // deck picks at mousedown; the map's own click listener picks again
+      // at click time and deselects if it finds nothing there, as when the
+      // aircraft moved on in between. Taking the map's click here stops it.
+      (event?.srcEvent as { preventDefault?: () => void } | undefined)
+        ?.preventDefault?.();
+      onClick(info);
     },
     [onClick],
   );
@@ -576,7 +582,8 @@ export function FlightLayers({
     [],
   );
   const stableClick = useCallback(
-    (info: PickingInfo<FlightState>) => handleClickRef.current(info),
+    (info: PickingInfo<FlightState>, event?: { srcEvent?: unknown }) =>
+      handleClickRef.current(info, event),
     [],
   );
 
