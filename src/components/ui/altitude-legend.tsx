@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 import { motion } from "motion/react";
 import { useSettings } from "@/hooks/use-settings";
+import { legendTicksMeters } from "@/lib/altitude-legend-ticks";
 import { altitudeRamp, altitudeRampPosition } from "@/lib/flight-utils";
 import { formatAltitude } from "@/lib/unit-formatters";
 
-const TICKS = [13000, 6096, 3048, 1524, 610, 152, 0];
 /** Colour samples between two labels, so the bar curves like the ramp. */
 const STOPS_BETWEEN_TICKS = 4;
 /** The bar's height (h-32) and one label's line (text-micro: 10px at 1.4). */
@@ -18,9 +18,9 @@ const LABEL_LINE_PX = 14;
  * label the one the map gives that height. The labels are spread evenly, so
  * the middle of the first and last sits half a line in from the bar's ends.
  */
-function legendGradient(dark: boolean): string {
+function legendGradient(dark: boolean, ticks: number[]): string {
   const colors = altitudeRamp(dark ? "dark" : "light");
-  const rising = [...TICKS].reverse();
+  const rising = [...ticks].reverse();
   const segments = rising.length - 1;
   const fromBottom = (step: number) =>
     (LABEL_LINE_PX / 2 + (step / segments) * (BAR_PX - LABEL_LINE_PX)) /
@@ -41,7 +41,10 @@ function legendGradient(dark: boolean): string {
 
 export function AltitudeLegend({ dark }: { dark: boolean }) {
   const { settings } = useSettings();
-  const gradient = useMemo(() => legendGradient(dark), [dark]);
+  const unitSystem = settings.unitSystem;
+  // Round heights in the unit shown, with each colour the map's for it.
+  const ticks = useMemo(() => legendTicksMeters(unitSystem), [unitSystem]);
+  const gradient = useMemo(() => legendGradient(dark, ticks), [dark, ticks]);
 
   return (
     <motion.div
@@ -50,7 +53,7 @@ export function AltitudeLegend({ dark }: { dark: boolean }) {
       transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.6 }}
       className="flex flex-col gap-2 rounded-lg border p-3 border-border bg-background"
       role="img"
-      aria-label={`Altitude color scale from ${formatAltitude(0, settings.unitSystem)} (green) to ${formatAltitude(13000, settings.unitSystem)} (blue)`}
+      aria-label={`Altitude color scale from ${formatAltitude(ticks[ticks.length - 1], unitSystem)} (green) to ${formatAltitude(ticks[0], unitSystem)} (blue)`}
     >
       <p className="aeris-eyebrow text-subtle">Altitude</p>
       <div className="flex items-center gap-2">
@@ -59,12 +62,12 @@ export function AltitudeLegend({ dark }: { dark: boolean }) {
           style={{ background: gradient }}
         />
         <div className="flex h-32 flex-col justify-between">
-          {TICKS.map((tick) => (
+          {ticks.map((tick) => (
             <span
               key={tick}
               className="text-micro font-medium text-muted-foreground"
             >
-              {formatAltitude(tick, settings.unitSystem)}
+              {formatAltitude(tick, unitSystem)}
             </span>
           ))}
         </div>
