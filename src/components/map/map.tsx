@@ -32,6 +32,17 @@ import { addBuildings3DLayer } from "./buildings-3d-layer";
 setMaxParallelImageRequests(16);
 
 const GLOBE_MAX_PITCH = 80;
+/** The globe's atmosphere, gone by zoom 5 where the map flattens out. */
+const GLOBE_SKY = {
+  "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 0],
+} as maplibregl.SkySpecification;
+
+/** Puts the map on the globe or flat, with the globe's atmosphere. */
+function applyProjection(map: maplibregl.Map, globe: boolean): void {
+  const type = globe ? "globe" : "mercator";
+  if (map.getProjection()?.type !== type) map.setProjection({ type });
+  if (globe && !map.getSky()) map.setSky(GLOBE_SKY);
+}
 
 type MapContextValue = {
   map: maplibregl.Map | null;
@@ -85,6 +96,11 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const appliedStyleRef = useRef<MapStyleSpec | null>(null);
+  const appliedTerrainRef = useRef<TerrainProfile>("none");
+  const globeModeRef = useRef(globeMode);
+  useEffect(() => {
+    globeModeRef.current = globeMode;
+  }, [globeMode]);
 
   useImperativeHandle(ref, () => mapInstance as maplibregl.Map, [mapInstance]);
 
@@ -119,6 +135,14 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     });
     appliedStyleRef.current = mapStyle;
 
+    // Whenever a style finishes loading, the projection and the layers
+    // added here are put back. Attached once, before any style is set, so
+    // no load is missed: a globe saved from last time is on the first frame.
+    map.on("style.load", () => {
+      applyProjection(map, globeModeRef.current);
+      addAerowayLayers(map, isDarkRef.current);
+      addBuildings3DLayer(map, { dark: isDarkRef.current });
+    });
     map.on("load", () => setIsLoaded(true));
     setMapInstance(map);
 
@@ -152,70 +176,38 @@ export const Map = forwardRef<MapRef, MapProps>(function Map(
     };
   }, [mapInstance]);
 
-  // Inject globe projection into every style change when globe mode is on.
-  // In Mercator mode, skip projection injection entirely.
+  // A new style or terrain reloads the style; the globe alone does not.
   useEffect(() => {
     if (!mapInstance || !isLoaded) return;
 
-    // The map was already constructed with this style. Avoid parsing and
-    // loading the same tiles a second time on the common Mercator path.
+    // Terrain is off on the globe, where deck's layers cannot drape on it.
+    const terrain: TerrainProfile = globeMode ? "none" : terrainProfile;
     if (
       appliedStyleRef.current === mapStyle &&
-      terrainProfile === "none" &&
-      !globeMode
+      appliedTerrainRef.current === terrain
     ) {
-      mapInstance.setProjection({ type: "mercator" });
-      addAerowayLayers(mapInstance, isDarkRef.current);
-      addBuildings3DLayer(mapInstance, { dark: isDarkRef.current });
+      applyProjection(mapInstance, globeMode);
       return;
     }
 
-    mapInstance.setStyle(
-      mapStyle as maplibregl.StyleSpecification | string,
-      {
-        transformStyle: (_prev, next) => {
-          const style = next as MutableStyleSpecification;
-
-          if (globeMode) {
-            style.projection = { type: "globe" };
-            if (!style.sky) {
-              style.sky = {
-                "atmosphere-blend": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  0,
-                  1,
-                  5,
-                  0,
-                ],
-              };
-            }
-          }
-
-          if (terrainProfile === "dark" && !globeMode) {
-            applyDarkTerrainStyle(style);
-            style.sky = DARK_TERRAIN_SKY as Record<string, unknown>;
-          }
-
-          return style;
-        },
-      } as maplibregl.StyleSwapOptions & { transformStyle: unknown },
-    );
+    // A full reload rather than a diff, so the style's load event always
+    // fires and puts back the projection and the added layers.
+    mapInstance.setStyle(mapStyle as maplibregl.StyleSpecification | string, {
+      diff: false,
+      transformStyle: (_prev, next) => {
+        const style = next as MutableStyleSpecification;
+        if (globeMode) {
+          style.projection = { type: "globe" };
+          if (!style.sky) style.sky = GLOBE_SKY as Record<string, unknown>;
+        } else if (terrain === "dark") {
+          applyDarkTerrainStyle(style);
+          style.sky = DARK_TERRAIN_SKY as Record<string, unknown>;
+        }
+        return style;
+      },
+    } as maplibregl.StyleSwapOptions & { transformStyle: unknown });
     appliedStyleRef.current = mapStyle;
-
-    // Set projection imperatively so it takes effect immediately.
-    const onStyleLoad = () => {
-      mapInstance.setProjection({ type: globeMode ? "globe" : "mercator" });
-      addAerowayLayers(mapInstance, isDarkRef.current);
-      addBuildings3DLayer(mapInstance, { dark: isDarkRef.current });
-    };
-
-    mapInstance.once("style.load", onStyleLoad);
-
-    return () => {
-      mapInstance.off("style.load", onStyleLoad);
-    };
+    appliedTerrainRef.current = terrain;
   }, [mapInstance, isLoaded, mapStyle, terrainProfile, globeMode]);
 
   const ctx = useMemo(

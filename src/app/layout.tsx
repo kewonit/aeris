@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fragment_Mono, Instrument_Sans } from "next/font/google";
-import { GoogleAnalytics } from "@next/third-parties/google";
+import { DeferredAnalytics } from "@/components/deferred-analytics";
 import { ThemeProvider } from "@wrksz/themes/next";
 import { Toaster } from "sonner";
 import {
@@ -156,8 +156,9 @@ export default function RootLayout({
         {/* Uses @next/third-parties, which patches router events to fire a
             gtag('config', id, { page_path }) on every App Router navigation.
             Without this, client-side URL changes (e.g. /city/bom → /city/lhr)
-            would not register page_views in GA4. */}
-        {GA_ID_VALID && <GoogleAnalytics gaId={GA_ID_VALID} />}
+            would not register page_views in GA4. Mounted after the map has
+            started, so it doesn't slow it. */}
+        {GA_ID_VALID && <DeferredAnalytics gaId={GA_ID_VALID} />}
       </body>
     </html>
   );

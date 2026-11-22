@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "./map";
 
 const SOURCE_ID = "user-location";
@@ -31,6 +31,12 @@ export function UserLocationMarker({
   coordinates: [number, number] | null;
 }) {
   const { map, isLoaded } = useMap();
+  // Layers are rebuilt on every style load, from wherever the user is then;
+  // reading it through a ref keeps that effect from re-running each move.
+  const coordinatesRef = useRef(coordinates);
+  useEffect(() => {
+    coordinatesRef.current = coordinates;
+  }, [coordinates]);
 
   useEffect(() => {
     if (!map || !isLoaded) return;
@@ -40,7 +46,9 @@ export function UserLocationMarker({
       if (!m.getSource(SOURCE_ID)) {
         m.addSource(SOURCE_ID, {
           type: "geojson",
-          data: coordinates ? makeGeoJson(coordinates) : emptyGeoJson,
+          data: coordinatesRef.current
+            ? makeGeoJson(coordinatesRef.current)
+            : emptyGeoJson,
         });
       }
 

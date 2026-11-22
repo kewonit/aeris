@@ -147,12 +147,14 @@ export function SearchContent({
 
   // Async location state
   const [geoResults, setGeoResults] = useState<SearchLocation[]>([]);
-  const [geoLoading, setGeoLoading] = useState(false);
+  // The query the last place search answered for, so a newer one shows as
+  // searching from the moment it is typed rather than once its debounce ends.
+  const [geoSettled, setGeoSettled] = useState("");
   const geoAbortRef = useRef<AbortController | null>(null);
 
   // Async flight state
   const [globalFlights, setGlobalFlights] = useState<FlightState[]>([]);
-  const [globalLoading, setGlobalLoading] = useState(false);
+  const [flightSettled, setFlightSettled] = useState("");
   const flightAbortRef = useRef<AbortController | null>(null);
 
   // Auto-focus with a frame delay for dialog mounting, re-focus on mode switch
@@ -174,14 +176,13 @@ export function SearchContent({
     geoAbortRef.current = controller;
 
     const timer = setTimeout(async () => {
-      setGeoLoading(true);
       try {
         const results = await searchGeocode(q, controller.signal);
         if (!controller.signal.aborted) setGeoResults(results);
       } catch {
         if (!controller.signal.aborted) setGeoResults([]);
       } finally {
-        if (!controller.signal.aborted) setGeoLoading(false);
+        if (!controller.signal.aborted) setGeoSettled(q);
       }
     }, 350);
 
@@ -204,14 +205,13 @@ export function SearchContent({
     flightAbortRef.current = controller;
 
     const timer = setTimeout(async () => {
-      setGlobalLoading(true);
       try {
         const results = await searchFlightsGlobal(q, controller.signal);
         if (!controller.signal.aborted) setGlobalFlights(results);
       } catch {
         if (!controller.signal.aborted) setGlobalFlights([]);
       } finally {
-        if (!controller.signal.aborted) setGlobalLoading(false);
+        if (!controller.signal.aborted) setFlightSettled(q);
       }
     }, 400);
 
@@ -220,6 +220,17 @@ export function SearchContent({
       controller.abort();
     };
   }, [query, mode]);
+
+  // A search runs from the moment its query changes until it answers.
+  const trimmedQuery = query.trim();
+  const geoPending =
+    mode === "locations" &&
+    trimmedQuery.length >= 2 &&
+    geoSettled !== trimmedQuery;
+  const flightPending =
+    mode === "flights" &&
+    trimmedQuery.length >= 2 &&
+    flightSettled !== trimmedQuery;
 
   // ── Local results ──────────────────────────────────────────────────
 
@@ -323,12 +334,13 @@ export function SearchContent({
   const handleModeChange = useCallback((newMode: SearchMode) => {
     setMode(newMode);
     setLookupError(null);
+    // The new mode searches again for the same query.
+    setGeoSettled("");
+    setFlightSettled("");
     if (newMode === "locations") {
       setGlobalFlights([]);
-      setGlobalLoading(false);
     } else {
       setGeoResults([]);
-      setGeoLoading(false);
     }
   }, []);
 
@@ -470,8 +482,10 @@ export function SearchContent({
               if (!trimmed || trimmed.length < 2) {
                 setGeoResults([]);
                 setGlobalFlights([]);
-                setGeoLoading(false);
-                setGlobalLoading(false);
+                // Typed again, the same query searches again, so it is no
+                // longer settled.
+                setGeoSettled("");
+                setFlightSettled("");
               }
             }}
 
@@ -508,30 +522,35 @@ export function SearchContent({
 
       {/* ── Result list ───────────────────────────────────────────── */}
       <Command.List className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none px-3 pb-4">
-        <Command.Empty className="flex flex-col items-center justify-center py-16 gap-5">
-          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-card">
-            <Globe2 className="h-6 w-6 text-subtle" />
-          </div>
-          <div className="text-center space-y-2">
-            <p className="text-body font-medium text-muted-foreground">
-              No results found
-            </p>
-            <p className="text-small text-subtle max-w-[220px] leading-relaxed">
-              {mode === "locations"
-                ? "Try an airport code, city name, or landmark"
-                : "Try a callsign like UAL123 or hex like a1b2c3"}
-            </p>
-          </div>
-        </Command.Empty>
+        {/* Not while a search runs: cmdk would show it until results come. */}
+        {!geoPending && !flightPending && (
+          <Command.Empty className="flex flex-col items-center justify-center py-16 gap-5">
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-card">
+              <Globe2 className="h-6 w-6 text-subtle" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-body font-medium text-muted-foreground">
+                No results found
+              </p>
+              <p className="text-small text-subtle max-w-[220px] leading-relaxed">
+                {mode === "locations"
+                  ? "Try an airport code, city name, or landmark"
+                  : "Try a callsign like UAL123 or hex like a1b2c3"}
+              </p>
+            </div>
+          </Command.Empty>
+        )}
 
         {mode === "locations" ? (
           <>
             {/* ── Loading: Places ─────────────────────────────── */}
-            {geoLoading && (
-              <Command.Group heading="Places">
+            {/* forceMount: the filter would otherwise hide it. */}
+            {geoPending && (
+              <Command.Group heading="Places" forceMount>
                 <Command.Item
                   value="__geo-loading__"
                   disabled
+                  forceMount
                   className="search-item opacity-50"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center">
@@ -679,9 +698,10 @@ export function SearchContent({
         ) : (
           <>
             {/* ── Actions ─────────────────────────────────────── */}
+            {/* Offered while the worldwide search runs too, so Enter
+                looks a callsign up at once. */}
             {compactQuery &&
-              !globalLoading &&
-              globalFlights.length === 0 &&
+              (flightPending || globalFlights.length === 0) &&
               localFlightMatches.length === 0 && (
                 <Command.Group heading="Actions">
                   <Command.Item
@@ -713,11 +733,12 @@ export function SearchContent({
               )}
 
             {/* ── Global flight results ───────────────────────── */}
-            {globalLoading && (
-              <Command.Group heading="Live Flights">
+            {flightPending && (
+              <Command.Group heading="Live Flights" forceMount>
                 <Command.Item
                   value="__flight-loading__"
                   disabled
+                  forceMount
                   className="search-item opacity-50"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center">
@@ -730,15 +751,15 @@ export function SearchContent({
               </Command.Group>
             )}
 
-            {!globalLoading && globalFlights.length > 0 && (
+            {!flightPending && globalFlights.length > 0 && (
               <Command.Group heading="Live Flights">
                 {globalFlights.map((flight) => flightItem(flight, true))}
               </Command.Group>
             )}
 
             {/* ── Nearby local flights ────────────────────────── */}
-            {!globalLoading &&
-              globalFlights.length === 0 &&
+            {/* Local, so shown while the worldwide search runs. */}
+            {(flightPending || globalFlights.length === 0) &&
               localFlightMatches.length > 0 && (
                 <Command.Group heading="Nearby">
                   {localFlightMatches.map((flight) =>

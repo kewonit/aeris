@@ -291,7 +291,7 @@ function FpvInstruments({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
+      className="pointer-events-auto fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))] short:top-[calc(0.5rem+env(safe-area-inset-top))] short:bottom-auto"
     >
       <div
         className="flex w-[min(92vw,460px)] flex-col items-center gap-0 overflow-hidden rounded-lg border border-border bg-background pb-1 shadow-lift md:w-max"
@@ -445,8 +445,11 @@ function FpvInstruments({
         </div>
 
         {/* ── Avionics strip (IAS, Mach, Wind, OAT) ──────────────── */}
+        {/* On a phone held sideways the panel moves to the top, as the
+            aircraft sits just below the middle, and this strip and the
+            autopilot's hide to keep it short. */}
         {hasAvionicsRow && (
-          <div className="flex w-full items-center justify-center gap-3 border-t border-border px-3 py-1 sm:gap-4">
+          <div className="flex w-full items-center justify-center gap-3 border-t border-border px-3 py-1 sm:gap-4 short:hidden">
             {iasDisplay !== null && (
               <span className="flex items-center gap-1 text-micro text-muted-foreground">
                 <span className="text-micro text-subtle">
@@ -524,7 +527,7 @@ function FpvInstruments({
 
         {/* ── Autopilot / selected altitude strip ────────────────── */}
         {hasAutopilotRow && (
-          <div className="flex w-full items-center justify-center gap-2 border-t border-border px-3 py-1">
+          <div className="flex w-full items-center justify-center gap-2 border-t border-border px-3 py-1 short:hidden">
             {navModes !== null &&
               navModes.map((mode) => (
                 <span

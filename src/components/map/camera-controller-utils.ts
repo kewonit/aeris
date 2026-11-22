@@ -1,5 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { normalizeBearing } from "./flight-interpolation";
+import { cameraHeightMeters } from "./altitude-projection";
 
 export const DEFAULT_ZOOM = 9.2;
 export const DEFAULT_PITCH = 49;
@@ -320,6 +321,75 @@ export function centerLngLatForScreenOffset(
   }
 }
 
+/**
+ * The map centre that puts a point drawn `elevationMeters` above (lng, lat)
+ * in the middle of the view once `padding` applies. It is worked out on a
+ * copy of the camera, so one ease can go straight there; easing to the
+ * ground point first and correcting for the height after made the camera
+ * pull one way and then back.
+ */
+export function centerForDrawnPoint(
+  map: maplibregl.Map,
+  lng: number,
+  lat: number,
+  elevationMeters: number,
+  padding: maplibregl.PaddingOptions,
+): [number, number] | null {
+  type TransformLike = {
+    center: maplibregl.LngLat;
+    centerPoint: { x: number; y: number };
+    clone: () => TransformLike;
+    setCenter: (center: maplibregl.LngLat) => void;
+    setPadding: (padding: maplibregl.PaddingOptions) => void;
+    setLocationAtPoint: (
+      lnglat: maplibregl.LngLat,
+      point: maplibregl.Point,
+    ) => void;
+    locationToScreenPoint: (
+      lnglat: maplibregl.LngLat,
+      terrain?: unknown,
+    ) => { x: number; y: number };
+  };
+
+  const transform = (map as unknown as { transform?: TransformLike }).transform;
+  if (!transform || typeof transform.clone !== "function") return null;
+
+  try {
+    const camera = transform.clone();
+    camera.setPadding(padding);
+    const ground = new maplibregl.LngLat(lng, lat);
+    camera.setCenter(ground);
+    // A terrain-like provider that lifts every point to the drawn height, as
+    // projectLngLatElevationPixelDelta does.
+    const raised = {
+      getElevationForLngLat: () => elevationMeters,
+      getElevationForLngLatZoom: () => elevationMeters,
+    };
+    // Moving the camera changes the perspective a little, so settle it in
+    // a few passes.
+    for (let pass = 0; pass < 3; pass += 1) {
+      const drawn = camera.locationToScreenPoint(ground, raised);
+      const centre = camera.centerPoint;
+      const dx = drawn.x - centre.x;
+      const dy = drawn.y - centre.y;
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+      const onGround = camera.locationToScreenPoint(ground);
+      camera.setLocationAtPoint(
+        ground,
+        new maplibregl.Point(onGround.x - dx, onGround.y - dy),
+      );
+    }
+    const center = camera.center;
+    if (!Number.isFinite(center.lng) || !Number.isFinite(center.lat)) {
+      return null;
+    }
+    return [center.lng, center.lat];
+  } catch {
+    return null;
+  }
+}
+
 export function setMapInteractionsEnabled(
   map: maplibregl.Map,
   enabled: boolean,
@@ -340,4 +410,34 @@ export function setMapInteractionsEnabled(
   map.touchZoomRotate.disable();
   map.doubleClickZoom.disable();
   map.keyboard.disable();
+}
+
+/**
+ * The camera stays at least this many times an aircraft's drawn height
+ * above the ground, so a high aircraft is seen from above, not beside.
+ */
+const CAMERA_HEADROOM = 2.5;
+
+/**
+ * The closest zoom, no closer than the city view, at which the camera
+ * stays well above an aircraft drawn `elevationMeters` up, seen at `pitch`.
+ * A phone's short screen puts the camera lower, so it frames from further
+ * out than a desktop does.
+ */
+export function framingZoom(
+  map: maplibregl.Map,
+  latitude: number,
+  elevationMeters: number,
+  pitch: number = map.getPitch(),
+): number {
+  const zoom = map.getZoom();
+  const height = cameraHeightMeters(
+    zoom,
+    latitude,
+    map.getCanvas().clientHeight,
+    pitch,
+  );
+  const needed = elevationMeters * CAMERA_HEADROOM;
+  if (!(height > 0) || needed <= 0) return DEFAULT_ZOOM;
+  return Math.min(DEFAULT_ZOOM, zoom - Math.log2(needed / height));
 }

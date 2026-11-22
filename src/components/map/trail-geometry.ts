@@ -1,5 +1,5 @@
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
-import { altitudeToColor } from "@/lib/flight-utils";
+import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { snapLngToReference } from "@/lib/geo";
 import type { FlightState } from "@/lib/opensky";
 import type { TrailSample, TrailTrack } from "@/lib/trails/types";
@@ -41,8 +41,9 @@ export type TrailBody = {
 };
 
 /**
- * The newest stretch of trail, up to the second-newest sample. The head
- * redraws it every frame, cut short where the aircraft has caught up.
+ * The newest stretch of trail, up to the newest sample, which the aircraft
+ * is flying towards. The head redraws it every frame, cut short behind the
+ * aircraft.
  */
 export type TrailLead = {
   path: TrailVertex[];
@@ -163,6 +164,45 @@ function mirror(anchor: CurvePoint, other: CurvePoint): CurvePoint {
   };
 }
 
+/** The sharpest turn the newest segment is shaped as if continuing. */
+const MAX_CONTINUED_TURN_RAD = Math.PI / 4;
+
+/**
+ * Where the sample after `latest` would be if the aircraft kept turning as
+ * it has from `before` through `anchor` to `latest`, at the same speed.
+ * The newest segment is shaped towards it, so when the real sample comes
+ * the segment barely moves, on a steady turn as on a straight line.
+ */
+function continueTurn(
+  before: CurvePoint | undefined,
+  anchor: CurvePoint,
+  latest: CurvePoint,
+): CurvePoint {
+  if (!before) return mirror(latest, anchor);
+  const cosLat = Math.cos(latest.lat * (Math.PI / 180));
+  const inEast = (anchor.lng - before.lng) * cosLat;
+  const inNorth = anchor.lat - before.lat;
+  const outEast = (latest.lng - anchor.lng) * cosLat;
+  const outNorth = latest.lat - anchor.lat;
+  const turn = Math.max(
+    -MAX_CONTINUED_TURN_RAD,
+    Math.min(
+      MAX_CONTINUED_TURN_RAD,
+      Math.atan2(
+        inEast * outNorth - inNorth * outEast,
+        inEast * outEast + inNorth * outNorth,
+      ),
+    ),
+  );
+  const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+  return {
+    lng: latest.lng + (outEast * cos - outNorth * sin) / cosLat,
+    lat: latest.lat + outEast * sin + outNorth * cos,
+    alt: latest.alt,
+    t: latest.t,
+  };
+}
+
 function turnRadians(a: CurvePoint, b: CurvePoint, c: CurvePoint): number {
   const cosLat = Math.cos(b.lat * (Math.PI / 180));
   const before = Math.atan2(b.lat - a.lat, (b.lng - a.lng) * cosLat);
@@ -229,7 +269,7 @@ function curveThrough(samples: TrailSample[], lastIndex: number): CurvePoint[] {
     const p1 = points[index];
     const p2 = points[index + 1];
     const p0 = points[index - 1] ?? mirror(p1, p2);
-    const p3 = points[index + 2] ?? mirror(p2, p1);
+    const p3 = points[index + 2] ?? continueTurn(points[index - 1], p1, p2);
 
     const turn = Math.max(turnRadians(p0, p1, p2), turnRadians(p1, p2, p3));
     const steps =
@@ -298,16 +338,23 @@ function buildCurves(track: TrailTrack, windowMs: number | null): Curves {
   for (const [index, part] of track.parts.entries()) {
     if (part[part.length - 1].t < tStart) continue;
 
-    // The aircraft is still flying from the second-newest sample to the
-    // newest, so the newest part stops there and the head draws the rest.
+    // The aircraft is drawn flying from the second-newest sample to the
+    // newest. The newest part's body stops before the second-newest, and
+    // the lead runs on to the newest, so the head can leave the trail at
+    // any point behind the aircraft and slide along it as it flies,
+    // rather than jump forward when the next sample arrives.
     const isNewest = index === track.parts.length - 1;
-    const lastIndex = isNewest ? part.length - 2 : part.length - 1;
-    if (lastIndex < 0) continue;
+    const lastIndex = part.length - 1;
+    if (isNewest ? lastIndex < 1 : lastIndex < 0) continue;
 
     let curve = cutBefore(curveThrough(part, lastIndex), tStart);
     if (isNewest && curve.length > 0) {
-      let leadFrom = Math.max(0, lastIndex - 1);
-      while (leadFrom > 0 && part[leadFrom].t > part[lastIndex].t - LEAD_MS) {
+      const secondNewest = lastIndex - 1;
+      let leadFrom = Math.max(0, secondNewest - 1);
+      while (
+        leadFrom > 0 &&
+        part[leadFrom].t > part[secondNewest].t - LEAD_MS
+      ) {
         leadFrom -= 1;
       }
       const split = curve.findIndex((point) => point.t >= part[leadFrom].t);
@@ -413,6 +460,7 @@ export function getTrailGeometry(
   const projectionKey = [
     options.altitudeDisplayMode,
     options.altColors,
+    altitudeThemeKey(),
     options.defaultColor.join(","),
     category,
     dbFlags,

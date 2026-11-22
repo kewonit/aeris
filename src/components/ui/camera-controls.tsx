@@ -257,47 +257,51 @@ export function CameraControls() {
           <Minus className="h-3.5 w-3.5" />
         </ControlButton>
 
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
+        {/* Tilt and turn are left to two fingers on a phone held sideways,
+            where the full column would run off the top of the screen. */}
+        <div className="contents short:hidden">
+          <div
+            className="mx-auto my-0.5 h-px w-6 bg-border"
+          />
 
-        <ControlButton
-          type="pitch"
-          direction={-1}
-          label="Tilt up"
-          hint="Flatter view"
-        >
-          <ChevronsUp className="h-3.5 w-3.5" />
-        </ControlButton>
-        <Divider />
-        <ControlButton
-          type="pitch"
-          direction={1}
-          label="Tilt down"
-          hint="More 3D"
-        >
-          <ChevronsDown className="h-3.5 w-3.5" />
-        </ControlButton>
+          <ControlButton
+            type="pitch"
+            direction={-1}
+            label="Tilt up"
+            hint="Flatter view"
+          >
+            <ChevronsUp className="h-3.5 w-3.5" />
+          </ControlButton>
+          <Divider />
+          <ControlButton
+            type="pitch"
+            direction={1}
+            label="Tilt down"
+            hint="More 3D"
+          >
+            <ChevronsDown className="h-3.5 w-3.5" />
+          </ControlButton>
 
-        <div
-          className="mx-auto my-0.5 h-px w-6 bg-border"
-        />
+          <div
+            className="mx-auto my-0.5 h-px w-6 bg-border"
+          />
 
-        <ControlButton
-          type="bearing"
-          direction={-1}
-          label="Rotate clockwise"
-        >
-          <RotateCw className="h-3.5 w-3.5" />
-        </ControlButton>
-        <Divider />
-        <ControlButton
-          type="bearing"
-          direction={1}
-          label="Rotate counter-clockwise"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </ControlButton>
+          <ControlButton
+            type="bearing"
+            direction={-1}
+            label="Rotate clockwise"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+          </ControlButton>
+          <Divider />
+          <ControlButton
+            type="bearing"
+            direction={1}
+            label="Rotate counter-clockwise"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </ControlButton>
+        </div>
 
         <div
           className="mx-auto my-0.5 h-px w-6 bg-border"

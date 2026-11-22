@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  centerForDrawnPoint,
   DEFAULT_PITCH,
   DEFAULT_ZOOM,
   fpvExitCamera,
@@ -208,4 +209,83 @@ test("the ground streams past on final and crawls at cruise", () => {
     }),
     0,
   );
+});
+
+/**
+ * A camera that projects linearly: 1,000 px a degree, and a point lifted a
+ * metre drawn 0.01 px higher. Its centre point moves right with the left
+ * padding, as MapLibre's does.
+ */
+function linearCamera(center: { lng: number; lat: number }) {
+  const width = 1_512;
+  const height = 800;
+  const pxPerDegree = 1_000;
+  const pxPerMeter = 0.01;
+  type Camera = {
+    center: { lng: number; lat: number };
+    padding: { left?: number };
+    readonly centerPoint: { x: number; y: number };
+    clone: () => Camera;
+    setCenter: (c: { lng: number; lat: number }) => void;
+    setPadding: (p: { left?: number }) => void;
+    locationToScreenPoint: (
+      l: { lng: number; lat: number },
+      terrain?: { getElevationForLngLat: () => number },
+    ) => { x: number; y: number };
+    setLocationAtPoint: (
+      l: { lng: number; lat: number },
+      p: { x: number; y: number },
+    ) => void;
+  };
+  const make = (start: { lng: number; lat: number }, padding: { left?: number }): Camera => ({
+    center: { ...start },
+    padding: { ...padding },
+    get centerPoint() {
+      return { x: (width + (this.padding.left ?? 0)) / 2, y: height / 2 };
+    },
+    clone() {
+      return make(this.center, this.padding);
+    },
+    setCenter(c) {
+      this.center = { lng: c.lng, lat: c.lat };
+    },
+    setPadding(p) {
+      this.padding = { ...p };
+    },
+    locationToScreenPoint(l, terrain) {
+      const lift = terrain ? terrain.getElevationForLngLat() * pxPerMeter : 0;
+      return {
+        x: this.centerPoint.x + (l.lng - this.center.lng) * pxPerDegree,
+        y: this.centerPoint.y - (l.lat - this.center.lat) * pxPerDegree - lift,
+      };
+    },
+    setLocationAtPoint(l, p) {
+      this.center = {
+        lng: l.lng - (p.x - this.centerPoint.x) / pxPerDegree,
+        lat: l.lat + (p.y - this.centerPoint.y) / pxPerDegree,
+      };
+    },
+  });
+  return make(center, {});
+}
+
+test("the camera goes straight to an aircraft as drawn, with the panel's padding", () => {
+  const camera = linearCamera({ lng: -122.5, lat: 37.5 });
+  const map = { transform: camera };
+
+  const center = centerForDrawnPoint(map as never, -122.4, 37.6, 3_000, {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 448,
+  });
+
+  // Drawn 30 px above its ground point, so the centre sits 0.03° north of
+  // it, where the lifted aircraft lands in the middle of the padded view.
+  assert.ok(center);
+  assert.ok(Math.abs(center[0] - -122.4) < 1e-9);
+  assert.ok(Math.abs(center[1] - 37.63) < 1e-9);
+  // Worked out on a copy: the live camera has not moved.
+  assert.deepEqual(camera.center, { lng: -122.5, lat: 37.5 });
+  assert.deepEqual(camera.padding, {});
 });

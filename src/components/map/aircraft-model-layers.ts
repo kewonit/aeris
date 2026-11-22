@@ -21,22 +21,21 @@ import {
 } from "@deck.gl/mesh-layers";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
 import type { FlightState } from "@/lib/opensky";
-import { altitudeToColor } from "@/lib/flight-utils";
+import { altitudeThemeKey, altitudeToColor } from "@/lib/flight-utils";
 import { aircraftColor } from "./aircraft-appearance";
-import { type PickingInfo } from "@deck.gl/core";
+import { COORDINATE_SYSTEM, type PickingInfo } from "@deck.gl/core";
 import {
   type AircraftModelKey,
   ALL_MODEL_KEYS,
   bucketFlightsByModel,
+  type ModelDetail,
   modelNoseTurn,
   modelUrl,
   resolveModelKeyCached,
 } from "./aircraft-model-mapping";
-import {
-  type AircraftScreenSize,
-  recordModelTailShare,
-} from "./aircraft-size";
+import type { AircraftScreenSize } from "./aircraft-size";
 import { aircraftElevationMeters } from "./altitude-projection";
+import { sphereTurn } from "./globe-frame";
 
 // Stable empty array - same reference every frame so deck.gl skips buffer work
 const EMPTY_DATA: FlightState[] = [];
@@ -118,35 +117,40 @@ export function normalizeScene(
 }
 
 /**
- * How far behind its centre a model's tail sits, as a share of its
- * footprint. Every normalised model has its fuselage along X. Aiming just
- * inside the tail keeps the trail's end under the model.
- */
-export function modelTailShareFor(footprint: ModelFootprint): number {
-  return (0.9 * footprint.x) / 2;
-}
-
-/**
  * deck's [pitch, yaw, roll] for a normalised model. deck turns by roll,
  * then pitch, then yaw, each about a fixed axis; with the nose along +X
  * that is heading, then pitch, then bank in the aircraft's own frame.
  * Negative pitch raises the nose and positive bank lowers the right wing.
+ * On the sphere, deck turns every model a further half turn, which the
+ * yaw turns back.
  */
 export function aircraftOrientation(
   track: number,
   pitch: number,
   bank: number,
+  onSphere = false,
 ): [number, number, number] {
-  return [pitch, NORTH_YAW - track, BASE_MODEL_ROLL + bank];
+  return [
+    pitch,
+    NORTH_YAW - track + sphereTurn(onSphere),
+    BASE_MODEL_ROLL + bank,
+  ];
 }
 
 type GetScene = NonNullable<ScenegraphLayerProps<FlightState>["getScene"]>;
 
-const sceneLoaders = new Map<AircraftModelKey, GetScene>();
+const sceneLoaders = new Map<string, GetScene>();
 
-/** deck's default scene choice, normalised, recording where its tail is. */
-function sceneLoaderFor(key: AircraftModelKey): GetScene {
-  let loader = sceneLoaders.get(key);
+/** Models whose detailed version has loaded, so first person can show it. */
+const detailLoaded = new Set<AircraftModelKey>();
+
+/** deck's default scene choice, normalised. */
+function sceneLoaderFor(
+  key: AircraftModelKey,
+  detail: ModelDetail = "map",
+): GetScene {
+  const id = `${key}:${detail}`;
+  let loader = sceneLoaders.get(id);
   if (!loader) {
     loader = (scenegraph) => {
       // While the model is still loading deck passes null, and expects it
@@ -156,15 +160,13 @@ function sceneLoaderFor(key: AircraftModelKey): GetScene {
         typeof scenegraph.scene === "object"
           ? scenegraph.scene
           : scenegraph.scenes[scenegraph.scene || 0];
-      const footprint = scene
-        ? normalizeScene(scene, modelNoseTurn(key))
-        : null;
-      if (footprint) {
-        recordModelTailShare(key, modelTailShareFor(footprint));
+      if (scene) {
+        normalizeScene(scene, modelNoseTurn(key));
+        if (detail === "detail") detailLoaded.add(key);
       }
       return scene;
     };
-    sceneLoaders.set(key, loader);
+    sceneLoaders.set(id, loader);
   }
   return loader;
 }
@@ -182,6 +184,8 @@ export interface AircraftLayerParams {
   dataVersion: number;
   layersVisible: boolean;
   globeFade: number;
+  /** Whether deck draws this frame on the globe as a sphere. */
+  onSphere: boolean;
   /** Each aircraft's drawn size this frame, keyed by icao24. */
   aircraftSizes: Map<string, AircraftScreenSize>;
   altitudeDisplayMode: AltitudeDisplayMode;
@@ -232,7 +236,11 @@ export function buildAircraftModelLayers(
       modelLastUsed.set(key, now);
       return true;
     }
-    return now - (modelLastUsed.get(key) ?? 0) < MODEL_DEACTIVATE_MS;
+    // A model never used has no layer: counting it as last used at time
+    // zero kept every model's layer, and so its download, for the first
+    // fifteen seconds after the page loaded.
+    const lastUsed = modelLastUsed.get(key);
+    return lastUsed !== undefined && now - lastUsed < MODEL_DEACTIVATE_MS;
   }).map((modelKey) =>
     modelLayer(
       `flight-aircraft-${modelKey}`,
@@ -246,25 +254,60 @@ export function buildAircraftModelLayers(
 /**
  * The first person aircraft's own layer, rebuilt every frame so that it
  * moves with the camera, while the rest of the traffic is rebuilt at the
- * overview's rate.
+ * overview's rate. It draws the detailed model, seen a few hundred pixels
+ * across. Until that has loaded, the light model stands in, so the
+ * aircraft never vanishes; the detailed layer loads meanwhile, hidden.
+ *
+ * It is drawn solid, and on the flat map in metres around its own
+ * position. Zoomed out past 12, deck places degrees with 32-bit floats,
+ * and so close to the camera that rounding moved the aircraft half a
+ * pixel or so each frame, a different way each time: it shimmered.
  */
 export function buildFollowedAircraftLayer(
   flight: FlightState,
   params: Omit<AircraftLayerParams, "rawFlights">,
-): ScenegraphLayer<FlightState> {
-  return modelLayer(
-    "flight-aircraft-followed",
-    resolveModelKeyCached(flight),
+): ScenegraphLayer<FlightState>[] {
+  const key = resolveModelKeyCached(flight);
+  const ready = detailLoaded.has(key);
+  const anchor: [number, number] | null =
+    !params.onSphere && flight.longitude != null && flight.latitude != null
+      ? [flight.longitude, flight.latitude]
+      : null;
+  const detailed = modelLayer(
+    "flight-aircraft-followed-detail",
+    key,
     [flight],
     params,
+    { detail: "detail", shown: ready, anchor, opaque: true },
   );
+  if (ready) return [detailed];
+  return [
+    detailed,
+    modelLayer("flight-aircraft-followed", key, [flight], params, {
+      anchor,
+      opaque: true,
+    }),
+  ];
 }
+
+type ModelLayerOptions = {
+  detail?: ModelDetail;
+  shown?: boolean;
+  /**
+   * Draw the aircraft in metres around this longitude and latitude, where
+   * it is, rather than in degrees.
+   */
+  anchor?: [number, number] | null;
+  /** Drawn solid rather than see-through like the traffic. */
+  opaque?: boolean;
+};
 
 function modelLayer(
   id: string,
   modelKey: AircraftModelKey,
   flights: FlightState[],
   params: Omit<AircraftLayerParams, "rawFlights">,
+  { detail = "map", shown = true, anchor = null, opaque = false }: ModelLayerOptions = {},
 ): ScenegraphLayer<FlightState> {
   const {
     interpolatedMap,
@@ -272,6 +315,7 @@ function modelLayer(
     dataVersion,
     layersVisible,
     globeFade,
+    onSphere,
     aircraftSizes,
     altitudeDisplayMode,
     altColors,
@@ -285,16 +329,21 @@ function modelLayer(
 
   return new ScenegraphLayer<FlightState>({
       id,
-      visible: hasData && layersVisible,
+      visible: hasData && layersVisible && shown,
       data: flights,
       opacity: globeFade,
+      ...(anchor && {
+        coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+        coordinateOrigin: [anchor[0], anchor[1], 0],
+      }),
       getPosition: (d) => {
         const src = interpolatedMap.get(d.icao24) ?? d;
-        return [
-          src.longitude ?? 0,
-          src.latitude ?? 0,
-          aircraftElevationMeters(src.baroAltitude, altitudeDisplayMode),
-        ];
+        const elevation = aircraftElevationMeters(
+          src.baroAltitude,
+          altitudeDisplayMode,
+        );
+        if (anchor) return [0, 0, elevation];
+        return [src.longitude ?? 0, src.latitude ?? 0, elevation];
       },
       getOrientation: (d) => {
         const src = interpolatedMap.get(d.icao24) ?? d;
@@ -302,14 +351,16 @@ function modelLayer(
           Number.isFinite(src.trueTrack) ? src.trueTrack! : 0,
           pitchByIcao.get(d.icao24) ?? 0,
           bankByIcao.get(d.icao24) ?? 0,
+          onSphere,
         );
       },
       getColor: (d) => {
         const base = altColors ? altitudeToColor(d.baroAltitude) : defaultColor;
-        return aircraftColor(base, d);
+        const color = aircraftColor(base, d);
+        return opaque ? [color[0], color[1], color[2], 255] : color;
       },
-      scenegraph: modelUrl(modelKey),
-      getScene: sceneLoaderFor(modelKey),
+      scenegraph: modelUrl(modelKey, detail),
+      getScene: sceneLoaderFor(modelKey, detail),
       // The normalised model is one unit wide and one unit is one pixel, so
       // the scale is the drawn width, less any perspective enlargement.
       getScale: (d) => {
@@ -324,9 +375,9 @@ function modelLayer(
       sizeMaxPixels: 1,
       updateTriggers: {
         getPosition: [frameCounter, altitudeDisplayMode],
-        getOrientation: frameCounter,
+        getOrientation: [frameCounter, onSphere],
         getScale: frameCounter,
-        getColor: [dataVersion, altColors],
+        getColor: [dataVersion, altColors, altitudeThemeKey()],
       },
       _lighting: "pbr",
       pickable: hasData,

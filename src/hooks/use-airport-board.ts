@@ -117,7 +117,7 @@ function angleDiff(a: number, b: number): number {
 
 // ── Classification logic ───────────────────────────────────────────────
 
-function classifyFlight(
+export function classifyFlight(
   flight: FlightState,
   airport: Airport,
 ): {
@@ -140,10 +140,22 @@ function classifyFlight(
   const heading = flight.trueTrack;
   const vRate = flight.verticalRate;
   const alt = flight.baroAltitude ?? flight.geoAltitude;
+  // An aircraft too high above the field to get down in the distance left,
+  // at no steeper than 1,000 ft every 1.5 nm, is passing over, not arriving.
+  const heightAboveFieldFt =
+    alt === null ? null : alt / 0.3048 - (airport.elevation_ft ?? 0);
+  const canDescendToLand =
+    heightAboveFieldFt === null ||
+    heightAboveFieldFt <= (dist / 1.5) * 1_000 + 2_000;
+  // Likewise one higher than it could have climbed from the field, at a
+  // steep 1,000 ft every nautical mile, is passing over, not departing.
+  const couldHaveDeparted =
+    heightAboveFieldFt === null ||
+    heightAboveFieldFt <= dist * 1_000 + 2_000;
 
   // If no heading data, use vertical rate only
   if (heading === null || !Number.isFinite(heading)) {
-    if (vRate !== null && vRate < -VRATE_THRESHOLD) {
+    if (vRate !== null && vRate < -VRATE_THRESHOLD && canDescendToLand) {
       return {
         direction: "arrival",
         dist,
@@ -153,7 +165,7 @@ function classifyFlight(
         status: "Descending",
       };
     }
-    if (vRate !== null && vRate > VRATE_THRESHOLD) {
+    if (vRate !== null && vRate > VRATE_THRESHOLD && couldHaveDeparted) {
       return {
         direction: "departure",
         dist,
@@ -187,7 +199,7 @@ function classifyFlight(
   // Strong: heading toward + descending
   // Medium: heading toward + low altitude + close
   // Weak: heading toward + close (regardless of vrate)
-  if (headingToward && isDescending) {
+  if (headingToward && isDescending && canDescendToLand) {
     const status = isCloseRange ? "Final" : dist < 25 ? "Approach" : "Inbound";
     return {
       direction: "arrival",
@@ -198,7 +210,7 @@ function classifyFlight(
       status,
     };
   }
-  if (headingToward && isLowAlt && isCloseRange) {
+  if (headingToward && isLowAlt && isCloseRange && canDescendToLand) {
     return {
       direction: "arrival",
       dist,
@@ -208,7 +220,7 @@ function classifyFlight(
       status: "Approach",
     };
   }
-  if (headingToward && !isClimbing && isCloseRange) {
+  if (headingToward && !isClimbing && isCloseRange && canDescendToLand) {
     return {
       direction: "arrival",
       dist,
@@ -223,7 +235,7 @@ function classifyFlight(
   // Strong: heading away + climbing
   // Medium: heading away + low altitude (just took off)
   // Weak: climbing + close to airport
-  if (!headingToward && isClimbing) {
+  if (!headingToward && isClimbing && couldHaveDeparted) {
     const status = isCloseRange ? "Departure" : "Climbing";
     return {
       direction: "departure",
@@ -234,7 +246,7 @@ function classifyFlight(
       status,
     };
   }
-  if (!headingToward && isLowAlt && isCloseRange) {
+  if (!headingToward && isLowAlt && isCloseRange && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,
@@ -244,7 +256,7 @@ function classifyFlight(
       status: "Departure",
     };
   }
-  if (isClimbing && isCloseRange) {
+  if (isClimbing && isCloseRange && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,
@@ -256,7 +268,7 @@ function classifyFlight(
   }
 
   // ── Heading-only classification (no strong vrate signal) ──
-  if (headingToward && dist < 25) {
+  if (headingToward && dist < 25 && canDescendToLand) {
     return {
       direction: "arrival",
       dist,
@@ -266,7 +278,7 @@ function classifyFlight(
       status: "Inbound",
     };
   }
-  if (!headingToward && dist < 25) {
+  if (!headingToward && dist < 25 && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,

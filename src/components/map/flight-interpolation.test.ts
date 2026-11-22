@@ -234,3 +234,49 @@ test("a report's lead can go uncapped, for a stale report to sit when it was tru
   assert.equal(reportLeadMs(stale, 1_000, delays), MAX_REPORT_LEAD_MS);
   assert.equal(reportLeadMs(stale, 1_000, delays, Infinity), 45_000);
 });
+
+test("in a tight orbit the nose follows the turn, not the eased track", () => {
+  // A helicopter circling at 35 m/s and 8°/s, reported every 5 s. Its
+  // track is eased a little towards each report, and in a turn this tight
+  // the eased track falls behind by more than a right angle for much of
+  // each orbit.
+  const SPEED = 35;
+  const TURN_DEG_PER_S = 8;
+  const POLL_S = 5;
+  const DAMPING = 0.18;
+  const radius = SPEED / ((TURN_DEG_PER_S * Math.PI) / 180);
+  const metersPerLng = 111_320 * Math.cos((50 * Math.PI) / 180);
+  const at = (t: number) => {
+    const angle = (TURN_DEG_PER_S * t * Math.PI) / 180;
+    return {
+      lng: 8 + (radius * Math.sin(angle)) / metersPerLng,
+      lat: 50 + (radius * Math.cos(angle)) / 111_320,
+      track: (((TURN_DEG_PER_S * t + 90) % 360) + 360) % 360,
+    };
+  };
+  const wrap = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
+
+  let eased = at(0).track;
+  let prev = { ...at(0), alt: 300, track: eased, reportedTrack: eased };
+  let worst = 0;
+  let lagging = 0;
+  for (let poll = 1; poll <= 40; poll++) {
+    const now = at(poll * POLL_S);
+    eased = (eased + wrap(now.track - eased) * DAMPING + 360) % 360;
+    const curr = { lng: now.lng, lat: now.lat, alt: 300, track: eased, reportedTrack: now.track };
+    // The way it moves between the two reports, the middle of the turn.
+    const moving = at((poll - 0.5) * POLL_S).track;
+    worst = Math.max(worst, Math.abs(wrap(displayHeading(prev, curr, 0) - moving)));
+    if (Math.abs(wrap(eased - moving)) > 90) lagging++;
+    prev = curr;
+  }
+  assert.ok(lagging >= 5, `the eased track lagged on ${lagging} polls`);
+  assert.ok(worst < 30, `the nose is ${worst.toFixed(0)}° off its path`);
+});
+
+test("a hovering aircraft holds its eased track, not each noisy report", () => {
+  // Hardly moving, with a report 40° off the track it has held.
+  const prev = { lng: 8, lat: 50, alt: 100, track: 90 };
+  const curr = { lng: 8, lat: 50, alt: 100, track: 97, reportedTrack: 130 };
+  assert.ok(Math.abs(displayHeading(prev, curr, 0) - 97) < 0.5);
+});

@@ -11,6 +11,7 @@ import {
 import { aircraftElevationMeters } from "./altitude-projection";
 import { SELECTION_FADE_MS } from "./flight-layer-constants";
 import { smoothStep } from "./flight-math";
+import { ICON_PARAMETERS } from "./globe-frame";
 
 export interface SelectionPulseParams {
   selectionChangeTime: number;
@@ -110,6 +111,7 @@ export function buildSelectionPulseLayers(
         iconAtlas: haloUrl,
         iconMapping: HALO_MAPPING,
         billboard: true,
+        parameters: ICON_PARAMETERS,
         sizeUnits: "pixels",
         sizeScale: 1,
       }),
@@ -136,6 +138,7 @@ export function buildSelectionPulseLayers(
         iconAtlas: ringUrl,
         iconMapping: RING_MAPPING,
         billboard: true,
+        parameters: ICON_PARAMETERS,
         sizeUnits: "pixels",
         sizeScale: 1,
       }),

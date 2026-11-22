@@ -130,7 +130,9 @@ export function StatusBar({
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center">
+      {/* Side by side from tablet width up, but stacked on a phone held
+          sideways too, where the row would run under the map credits. */}
+      <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center short:flex-col-reverse short:items-start">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}

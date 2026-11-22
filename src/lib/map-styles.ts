@@ -178,60 +178,99 @@ export const DEFAULT_STYLE = MAP_STYLES[0];
 
 export type AttributionEntry = {
   label: string;
-  url: string;
+  /** Where the credit links to; a credit without one is plain text. */
+  url?: string;
 };
 
-/** Returns the proper attribution entries for a given map style. */
+// Only what each source's licence or terms require, as of November 2026.
+// MapLibre is BSD licensed, which asks for nothing on the map itself.
+
+/** OSM (ODbL) and CARTO's basemap terms ask for exactly this wording. */
+const OSM: AttributionEntry = {
+  label: "© OpenStreetMap contributors",
+  url: "https://www.openstreetmap.org/copyright",
+};
+const CARTO: AttributionEntry = {
+  label: "© CARTO",
+  url: "https://carto.com/attributions",
+};
+/** Several of the terrain tiles' sources require credit; the link lists them. */
+const TERRAIN: AttributionEntry = {
+  label: "Terrain sources",
+  url: "https://github.com/tilezen/joerd/blob/master/docs/attribution.md",
+};
+/**
+ * The Esri maps are credited "Powered by Esri" and OpenStreetMap, by the
+ * project's choice (November 2026), without the services' own source
+ * lists, which Esri's attribution rules ask for.
+ */
+const POWERED_BY_ESRI: AttributionEntry = {
+  label: "Powered by Esri",
+  url: "https://www.esri.com/",
+};
+
+/**
+ * The live map's flight data, by provider id (see flight-api-client.ts).
+ * adsb.fi asks to be cited with a link, adsb.lol's data is ODbL, and
+ * airplanes.live and OpenSky ask to be named where their data is shown.
+ */
+const FLIGHT_DATA: Record<string, AttributionEntry> = {
+  adsbfi: { label: "adsb.fi", url: "https://adsb.fi/" },
+  adsb: {
+    label: "adsb.lol (ODbL)",
+    url: "https://www.adsb.lol/docs/open-data/api/",
+  },
+  airplanes: { label: "airplanes.live", url: "https://airplanes.live/" },
+  opensky: {
+    label: "The OpenSky Network",
+    url: "https://opensky-network.org/",
+  },
+};
+
+/**
+ * The credits the map must show for what is on it: the basemap, the
+ * provider the aircraft currently come from, and any overlay that is on.
+ */
 export function getAttributions(
   styleId: string,
-  options?: { showAirspace?: boolean },
+  options?: {
+    showAirspace?: boolean;
+    showWeatherRadar?: boolean;
+    /** The live map's current provider id, if any. */
+    flightSource?: string | null;
+  },
 ): AttributionEntry[] {
-  const base: AttributionEntry[] = [];
+  const credits: AttributionEntry[] = [];
 
   switch (styleId) {
     case "dark":
     case "dark-labels":
-    case "dark-terrain":
     case "voyager":
     case "voyager-labels":
-      base.push(
-        {
-          label: "OpenStreetMap",
-          url: "https://www.openstreetmap.org/copyright",
-        },
-        { label: "CARTO", url: "https://carto.com/attributions" },
-      );
-      if (styleId === "dark-terrain") {
-        base.push({
-          label: "AWS/Mapzen Terrain",
-          url: "https://registry.opendata.aws/terrain-tiles/",
-        });
-      }
+      credits.push(OSM, CARTO);
+      break;
+    case "dark-terrain":
+      credits.push(OSM, CARTO, TERRAIN);
       break;
     case "satellite":
-      base.push({ label: "Esri", url: "https://www.esri.com/" });
-      break;
     case "topo":
-      base.push(
-        {
-          label: "OpenStreetMap",
-          url: "https://www.openstreetmap.org/copyright",
-        },
-        { label: "Esri", url: "https://www.esri.com/" },
-      );
+      credits.push(POWERED_BY_ESRI, OSM);
       break;
     default:
-      base.push({
-        label: "OpenStreetMap",
-        url: "https://www.openstreetmap.org/copyright",
-      });
+      credits.push(OSM);
   }
 
-  base.push({ label: "MapLibre", url: "https://maplibre.org/" });
+  const flightData = options?.flightSource
+    ? FLIGHT_DATA[options.flightSource]
+    : undefined;
+  if (flightData) credits.push(flightData);
 
+  if (options?.showWeatherRadar) {
+    credits.push({ label: "RainViewer", url: "https://www.rainviewer.com/" });
+  }
   if (options?.showAirspace) {
-    base.push({ label: "OpenAIP", url: "https://www.openaip.net" });
+    credits.push({ label: "OpenAIP", url: "https://www.openaip.net" });
   }
 
-  return base;
+  return credits;
 }

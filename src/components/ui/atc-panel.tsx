@@ -121,7 +121,7 @@ export function AtcFeedDropdown({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:w-70 sm:max-w-none"
+          className="absolute bottom-full left-0 z-50 mb-2 w-[calc(100vw-2rem)] max-w-70 overflow-hidden rounded-lg border border-border bg-background shadow-lift sm:left-10.5 sm:w-70 sm:max-w-none"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border py-1 pr-1 pl-4">

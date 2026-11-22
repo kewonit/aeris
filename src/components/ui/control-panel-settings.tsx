@@ -43,9 +43,11 @@ const SHORTCUTS = [
   { key: "O", description: "Toggle orbit" },
   { key: "/", description: "Open search" },
   { key: "⌘K", description: "Open search (anywhere)" },
-  { key: "F", description: "First person view" },
+  { key: "F", description: "Follow aircraft" },
+  { key: "V", description: "First person view" },
   { key: "?", description: "Shortcuts help" },
   { key: "A", description: "Toggle ATC panel" },
+  { key: "T", description: "Toggle trails" },
   { key: "Esc", description: "Close / Deselect" },
 ] as const;
 
@@ -677,6 +679,57 @@ export const CHANGELOG: {
   entries: { title: string; description: string }[];
 }[] = [
   {
+    version: "0.9.0",
+    date: "Nov 16, 2026",
+    entries: [
+      {
+        title: "Smooth motion",
+        description:
+          "Aircraft glide from one reported position to the next over the time between reports, so they no longer race, spin or jump when the map loads, the feed changes or you come back to the tab. New aircraft move from the moment they appear, an aircraft never flies or points backwards, and when a report is late it flies on at the same speed instead of stopping.",
+      },
+      {
+        title: "A real globe",
+        description:
+          "With the globe on, aircraft and trails sit on the sphere at every zoom, point along their track and stay drawn when you zoom all the way out. The globe is on from the first frame, and there is no backwards step where the map hands over from the globe to the flat map.",
+      },
+      {
+        title: "Steady trails",
+        description:
+          "Trails and aircraft have smooth edges, and each trail flows into its aircraft's tail in one unbroken curve. The join slides along with the aircraft instead of jumping when a new position arrives, and trails no longer flicker where they meet.",
+      },
+      {
+        title: "Altitude colours for light maps",
+        description:
+          "Altitude colours were rebuilt so every height reads clearly on light maps as well as dark ones, and the altitude key shows exactly the colours the map draws.",
+      },
+      {
+        title: "Your aircraft keeps its trail",
+        description:
+          "With flight trails off, the aircraft you open still shows where it has been. T turns trails on and off.",
+      },
+      {
+        title: "Follow",
+        description:
+          "Follow aircraft, on the card or with F, keeps the aircraft in the middle of the map as it flies. Zooming and turning the map stay yours; drag or tap the map, press F again or close the card to stop. On a phone the card steps aside while you follow and comes back when you stop. First person view moves to V, and F in first person leaves the cockpit to follow the same aircraft.",
+      },
+      {
+        title: "Every airliner its own shape",
+        description:
+          "Airliners are drawn as their own type: an A320, a 737-800, a 787, a 777 or an A380 each has its own model, from Flightradar24's open models, instead of one shape for every narrowbody or widebody. The models are a tenth of their old weight and only the ones in view download, so the map draws and loads faster.",
+      },
+      {
+        title: "First person in detail",
+        description:
+          "In first person view the aircraft you fly is drawn in finer detail, and it holds still in front of the camera instead of flickering.",
+      },
+      {
+        title: "Fixes",
+        description:
+          "The airport board no longer lists aircraft passing high overhead as arrivals. Opening an aircraft moves the camera straight to it. The map's credits name the map and the flight feed in use, and the map meets the sidebar cleanly at its corners. Analytics loads after the map, so flights appear sooner. Aeris now runs on Next.js 16.4.3, deck.gl 9.4 and MapLibre 5.24.",
+      },
+    ],
+  },
+  {
     version: "0.8.9",
     date: "Oct 18, 2026",
     entries: [
@@ -1097,6 +1150,21 @@ export function AboutContent() {
         </div>
 
         <div className="h-px w-full bg-accent" />
+
+        <p className="text-label leading-relaxed text-subtle">
+          OpenSky Network data: Matthias Schäfer, Martin Strohmeier, Vincent
+          Lenders, Ivan Martinovic and Matthias Wilhelm,{" "}
+          <a
+            href="https://doi.org/10.1109/IPSN.2014.6846743"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground underline decoration-foreground/20 underline-offset-2 hover:text-foreground transition-colors"
+          >
+            “Bringing up OpenSky: A large-scale ADS-B sensor network for
+            research”
+          </a>
+          , ACM/IEEE IPSN, April 2014.
+        </p>
 
         <p className="text-label leading-relaxed text-subtle">
           Built by a human, not just LLMs.{" "}

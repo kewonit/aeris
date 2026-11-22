@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { Fragment, useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Info } from "lucide-react";
 import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
@@ -8,13 +8,25 @@ import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
 type MapAttributionProps = {
   styleId: string;
   showAirspace?: boolean;
+  showWeatherRadar?: boolean;
+  /** The provider the live map's aircraft currently come from. */
+  flightSource?: string | null;
 };
 
 const SM_BREAKPOINT = 640;
 
-export function MapAttribution({ styleId, showAirspace }: MapAttributionProps) {
+export function MapAttribution({
+  styleId,
+  showAirspace,
+  showWeatherRadar,
+  flightSource,
+}: MapAttributionProps) {
   const [expanded, setExpanded] = useState(false);
-  const attributions = getAttributions(styleId, { showAirspace });
+  const attributions = getAttributions(styleId, {
+    showAirspace,
+    showWeatherRadar,
+    flightSource,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
@@ -95,7 +107,7 @@ function ExpandedAttribution({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 4 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
+      className="flex max-w-[min(24rem,calc(100vw-2rem))] items-center gap-1.5 rounded-md px-2 py-1 bg-background border border-border"
     >
       <button
         onClick={onCollapse}
@@ -104,57 +116,29 @@ function ExpandedAttribution({
       >
         <Info className="h-2.5 w-2.5" />
       </button>
-      <span
-        className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle"
-      >
-        <span
-          className="font-medium text-subtle"
-        >
-          ©
-        </span>
+      {/* Lines break only between credits, and are balanced, so no credit
+          is left alone on the last line or split across two. */}
+      <span className="min-w-0 text-balance text-micro leading-tight text-subtle">
         {attributions.map((attr, i) => (
-          <span key={attr.label} className="inline-flex items-center">
-            <a
-              href={attr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:underline text-subtle"
-            >
-              {attr.label}
-            </a>
-            {i < attributions.length - 1 && (
-              <span
-                className="ml-1 text-subtle"
-              >
-                ·
-              </span>
-            )}
-          </span>
+          <Fragment key={attr.label}>
+            <span className="whitespace-nowrap">
+              {attr.url ? (
+                <a
+                  href={attr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:underline text-subtle"
+                >
+                  {attr.label}
+                </a>
+              ) : (
+                attr.label
+              )}
+              {i < attributions.length - 1 && " ·"}
+            </span>
+            {i < attributions.length - 1 && " "}
+          </Fragment>
         ))}
-        <span
-          className="ml-0.5 text-subtle"
-        >
-          ·
-        </span>
-        <a
-          href="https://opensky-network.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          OpenSky Network
-        </a>
-        <span className="ml-0.5 text-subtle">
-          ·
-        </span>
-        <a
-          href="https://adsb.fi/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:underline text-subtle"
-        >
-          adsb.fi
-        </a>
       </span>
     </motion.div>
   );

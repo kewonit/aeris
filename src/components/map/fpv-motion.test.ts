@@ -223,3 +223,74 @@ test("a repeated or older report changes nothing", () => {
   );
   assert.deepEqual(motion.stateAt(3_000), before);
 });
+
+test("first person takes over where the map drew the aircraft, then catches up", () => {
+  const motion = createFpvMotion();
+  // The map draws traffic a poll behind: 1 km back along the track.
+  const drawn: FpvState = {
+    lng: -73.8 - 1_000 / (METERS_PER_DEGREE * COS_LAT),
+    lat: 40,
+    alt: 3_000,
+    track: 90,
+  };
+  motion.seed(drawn);
+  motion.observe(flight(), 0);
+  const [east0] = fromStart(motion.stateAt(0));
+  assert.ok(Math.abs(east0 - -1_000) < 1, `starts at ${east0} m`);
+
+  // Later reports leave the hand-over closing at its own pace.
+  let previous = east0;
+  let fastest = 0;
+  for (let t = 100; t <= 25_000; t += 100) {
+    if (t % 5_000 === 0) {
+      motion.observe(
+        flight({ longitude: -73.8 + (200 * t) / 1_000 / (METERS_PER_DEGREE * COS_LAT), provenance: { ...flight().provenance!, observationTime: t } }),
+        t,
+      );
+    }
+    const [east] = fromStart(motion.stateAt(t));
+    fastest = Math.max(fastest, (east - previous) / 0.1);
+    previous = east;
+  }
+  // Never more than about half again its true speed, and caught up by the end.
+  assert.ok(fastest < 200 * 1.5, `peaked at ${fastest} m/s`);
+  assert.ok(Math.abs(previous - 200 * 25) < 5, `ended at ${previous} m`);
+});
+
+test("its motion is the drawn path's: speed, climb and the turn it makes", () => {
+  const motion = createFpvMotion();
+  motion.observe(flight({ trueTrack: 0, verticalRate: 5 }), 0);
+  const straight = motion.motionAt(3_000)!;
+  assert.ok(Math.abs(straight.speed - 200) < 1, `speed ${straight.speed}`);
+  assert.ok(Math.abs(straight.climb - 5) < 0.01, `climb ${straight.climb}`);
+  assert.ok(Math.abs(straight.turnRate) < 1e-6);
+
+  const before = motion.stateAt(5_000)!;
+  // Five seconds on it has turned 7.5° right: 1.5°/s.
+  motion.observe(
+    flight({
+      longitude: before.lng,
+      latitude: before.lat,
+      baroAltitude: before.alt!,
+      trueTrack: 7.5,
+      verticalRate: 5,
+      provenance: { ...flight().provenance, observationTime: 5_000 },
+    }),
+    5_000,
+  );
+
+  // Just after the report it is already moving at its speed, not stopped...
+  assert.ok(Math.abs(motion.motionAt(5_000)!.speed - 200) < 2);
+  // ...and turning right as drawn: the reported 1.5°/s, and faster while
+  // the view catches up with the 7.5° the report says it has turned.
+  const turning = motion.motionAt(7_000)!;
+  assert.ok(turning.turnRate > 1.5 && turning.turnRate < 5, `${turning.turnRate}`);
+  assert.ok(Math.abs(turning.speed - 200) < 2);
+  // Once caught up, the turn eases out.
+  const later = motion.motionAt(14_000)!;
+  assert.ok(later.turnRate > 0 && later.turnRate < turning.turnRate);
+});
+
+test("before any report there is no motion to measure", () => {
+  assert.equal(createFpvMotion().motionAt(0), null);
+});

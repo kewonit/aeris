@@ -45,6 +45,9 @@ export function useFlights(
   const [rateLimited, setRateLimited] = useState(false);
   const [retryIn, setRetryIn] = useState(0);
   const [source, setSource] = useState<string | null>(null);
+  // The provider of the flights on the map, which the map's credit names.
+  // `source` follows every poll, even one whose flights are not kept.
+  const [shownSource, setShownSource] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -214,6 +217,7 @@ export function useFlights(
         }
 
         setFlights(result.flights);
+        setShownSource(result.flights.length > 0 ? (result.source ?? null) : null);
         lastFetchRef.current = Date.now();
 
         // Update FPV center to follow tracked aircraft
@@ -391,5 +395,6 @@ export function useFlights(
     rateLimited: city ? rateLimited : false,
     retryIn: city ? retryIn : 0,
     source: city ? source : null,
+    shownSource: city ? shownSource : null,
   };
 }
