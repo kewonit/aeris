@@ -23,9 +23,15 @@ const RAINVIEWER_MAX_ZOOM = 7;
  * MapLibre resolves tile URLs inside a Web Worker where relative paths
  * can't be parsed into Requests.
  */
-function proxyTileUrl(timestamp: number): string {
+function proxyTileUrl(frame: string): string {
   const base = typeof window !== "undefined" ? window.location.origin : "";
-  return `${base}/api/weather-tiles?ts=${timestamp}&z={z}&x={x}&y={y}`;
+  return `${base}/api/weather-tiles?frame=${frame}&z={z}&x={x}&y={y}`;
+}
+
+/** A frame's id: the last segment of its path, e.g. "eeb611c424e7". */
+export function radarFrameId(frame: RainViewerFrame): string | null {
+  const id = frame.path?.split("/").pop() ?? "";
+  return /^[0-9a-f]{6,32}$/i.test(id) ? id : null;
 }
 
 type RainViewerFrame = { time: number; path: string };
@@ -128,7 +134,7 @@ export function WeatherRadarLayer({
 }: WeatherRadarLayerProps) {
   const { map, isLoaded } = useMap();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const currentTimeRef = useRef<number | null>(null);
+  const currentFrameRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Bounds, opacity, and visible go through refs so the async
@@ -168,16 +174,17 @@ export function WeatherRadarLayer({
         // Bail if aborted while parsing or the caller cancelled.
         if (controller.signal.aborted || cancelled?.current) return;
 
-        const latest = frames[frames.length - 1];
-        const tileUrl = proxyTileUrl(latest.time);
+        const latest = radarFrameId(frames[frames.length - 1]);
+        if (!latest) return;
+        const tileUrl = proxyTileUrl(latest);
 
         // Skip if same frame already loaded AND the source still exists.
         const source = map.getSource(SOURCE_ID);
-        if (source && currentTimeRef.current === latest.time) return;
+        if (source && currentFrameRef.current === latest) return;
 
         if (source && hasSetTiles(source)) {
           source.setTiles([tileUrl]);
-          currentTimeRef.current = latest.time;
+          currentFrameRef.current = latest;
           return;
         }
 
@@ -194,7 +201,7 @@ export function WeatherRadarLayer({
             opacityRef.current,
             boundsRef.current,
           );
-          currentTimeRef.current = latest.time;
+          currentFrameRef.current = latest;
         };
         if (map.isStyleLoaded()) {
           doAdd();
@@ -223,7 +230,7 @@ export function WeatherRadarLayer({
 
     if (!visible) {
       removeRadarFromMap(map);
-      currentTimeRef.current = null;
+      currentFrameRef.current = null;
       return () => {
         cancelled.current = true;
       };
@@ -236,7 +243,7 @@ export function WeatherRadarLayer({
     // RainViewer frame is fetched (or immediately, if cached).
     if (map.getSource(SOURCE_ID)) {
       removeRadarFromMap(map);
-      currentTimeRef.current = null;
+      currentFrameRef.current = null;
     }
 
     void updateRadarTiles(cancelled);
@@ -279,13 +286,13 @@ export function WeatherRadarLayer({
     if (!map || !isLoaded) return;
 
     const onStyleLoad = () => {
-      // Only re-add if we had a valid timestamp and source was removed by style swap
+      // Only re-add if we had a valid frame and source was removed by style swap
       if (
-        currentTimeRef.current &&
+        currentFrameRef.current &&
         !map.getSource(SOURCE_ID) &&
         visibleRef.current
       ) {
-        const tileUrl = proxyTileUrl(currentTimeRef.current);
+        const tileUrl = proxyTileUrl(currentFrameRef.current);
         addSourceAndLayer(
           map,
           tileUrl,
