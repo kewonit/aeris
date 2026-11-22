@@ -18,7 +18,7 @@ const airport = (elevationFt: number): Airport => ({
   elevation_ft: elevationFt,
 });
 
-/** An aircraft `nm` west of the field, flying east towards it. */
+/** An aircraft `nm` west of the field, flying east towards it unless `trueTrack` says otherwise. */
 function inbound(
   nm: number,
   altitudeFt: number,
@@ -59,4 +59,22 @@ test("without a track, only a descent that can reach the field is an arrival", (
   const low = classifyFlight(inbound(6, 3_000, -8, null), airport(8));
   assert.equal(high.direction, "overflight");
   assert.equal(low.direction, "arrival");
+});
+
+test("a level aircraft high over the field and flying away is passing over", () => {
+  const result = classifyFlight(inbound(6, 35_000, 0, 270), airport(8));
+  assert.equal(result.direction, "overflight");
+});
+
+test("a high cruiser climbing a little away from the field is not a departure", () => {
+  const result = classifyFlight(inbound(10, 35_000, 3, 270), airport(8));
+  assert.equal(result.direction, "overflight");
+});
+
+test("a departure climbing steeply away from the field is still a departure", () => {
+  // A business jet 10 nm out at 12,000 ft, climbing 20 m/s.
+  const result = classifyFlight(inbound(10, 12_000, 20, 270), airport(8));
+  assert.equal(result.direction, "departure");
+  // An airliner 8 nm out at 6,000 ft.
+  assert.equal(classifyFlight(inbound(8, 6_000, 10, 270), airport(8)).direction, "departure");
 });

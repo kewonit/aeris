@@ -147,6 +147,11 @@ export function classifyFlight(
   const canDescendToLand =
     heightAboveFieldFt === null ||
     heightAboveFieldFt <= (dist / 1.5) * 1_000 + 2_000;
+  // Likewise one higher than it could have climbed from the field, at a
+  // steep 1,000 ft every nautical mile, is passing over, not departing.
+  const couldHaveDeparted =
+    heightAboveFieldFt === null ||
+    heightAboveFieldFt <= dist * 1_000 + 2_000;
 
   // If no heading data, use vertical rate only
   if (heading === null || !Number.isFinite(heading)) {
@@ -160,7 +165,7 @@ export function classifyFlight(
         status: "Descending",
       };
     }
-    if (vRate !== null && vRate > VRATE_THRESHOLD) {
+    if (vRate !== null && vRate > VRATE_THRESHOLD && couldHaveDeparted) {
       return {
         direction: "departure",
         dist,
@@ -230,7 +235,7 @@ export function classifyFlight(
   // Strong: heading away + climbing
   // Medium: heading away + low altitude (just took off)
   // Weak: climbing + close to airport
-  if (!headingToward && isClimbing) {
+  if (!headingToward && isClimbing && couldHaveDeparted) {
     const status = isCloseRange ? "Departure" : "Climbing";
     return {
       direction: "departure",
@@ -241,7 +246,7 @@ export function classifyFlight(
       status,
     };
   }
-  if (!headingToward && isLowAlt && isCloseRange) {
+  if (!headingToward && isLowAlt && isCloseRange && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,
@@ -251,7 +256,7 @@ export function classifyFlight(
       status: "Departure",
     };
   }
-  if (isClimbing && isCloseRange) {
+  if (isClimbing && isCloseRange && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,
@@ -273,7 +278,7 @@ export function classifyFlight(
       status: "Inbound",
     };
   }
-  if (!headingToward && dist < 25) {
+  if (!headingToward && dist < 25 && couldHaveDeparted) {
     return {
       direction: "departure",
       dist,
