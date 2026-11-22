@@ -98,6 +98,7 @@ import {
   aircraftIconAngle,
   deckDrawsOnSphere,
   ICON_PARAMETERS,
+  overlayViewProps,
 } from "./globe-frame";
 import {
   frameIntervalMs,
@@ -612,10 +613,12 @@ export function FlightLayers({
           stopDeckLoop(overlay);
           requestRenderRef.current();
         },
-        // Drawn over the map in its own canvas. With no views given, deck
-        // takes the map's projection: a globe view on the globe, so traffic
-        // and trails sit on the sphere at every zoom.
+        // Drawn over the map in its own canvas, in a view that follows the
+        // map's projection: a globe view on the globe, so traffic and
+        // trails sit on the sphere at every zoom, with a near plane close
+        // enough to keep the first person aircraft (see deckMapView).
         interleaved: false,
+        ...overlayViewProps(map!),
         pickingRadius: AIRCRAFT_PICK_RADIUS_PX,
         useDevicePixels: 1,
         // Multisampled, so the edges of models, shadows and icons do not
@@ -680,6 +683,18 @@ export function FlightLayers({
       recreatingOverlay = false;
     }
 
+    // The overlay takes its view afresh at every map render, so on a
+    // switch between globe and flat the view changes before the next one.
+    const onProjectionChange = () => {
+      overlayRef.current?.setProps(
+        overlayViewProps(map, {
+          firstPerson: fpvIcao24Ref.current != null,
+          zoom: map.getZoom(),
+        }),
+      );
+    };
+    map.on("projectiontransition", onProjectionChange);
+
     mapCanvas.addEventListener("webglcontextlost", onContextLost);
     mapCanvas.addEventListener("webglcontextrestored", onContextRestored);
     deckCanvas = overlayRef.current?.getCanvas() ?? null;
@@ -689,6 +704,7 @@ export function FlightLayers({
     }
 
     return () => {
+      map.off("projectiontransition", onProjectionChange);
       mapCanvas.removeEventListener("webglcontextlost", onContextLost);
       mapCanvas.removeEventListener("webglcontextrestored", onContextRestored);
       if (deckCanvas && deckCanvas !== mapCanvas) {
@@ -812,7 +828,8 @@ export function FlightLayers({
       if (
         map &&
         drawnOnSphere !== null &&
-        deckDrawsOnSphere(map, map.getZoom()) !== drawnOnSphere
+        deckDrawsOnSphere(map, map.getZoom(), fpvIcao24Ref.current != null) !==
+          drawnOnSphere
       ) {
         if (animFrameRef.current !== 0) {
           cancelAnimationFrame(animFrameRef.current);
@@ -894,7 +911,9 @@ export function FlightLayers({
 
       let currentZoom = map?.getZoom() ?? 10;
       const isGlobe = globeModeRef.current;
-      let onSphere = map ? deckDrawsOnSphere(map, currentZoom) : false;
+      let onSphere = map
+        ? deckDrawsOnSphere(map, currentZoom, fpvId != null)
+        : false;
       drawnOnSphere = onSphere;
 
       let globeFade = 1;
@@ -975,7 +994,13 @@ export function FlightLayers({
         updateGlobeDotsRef.current(isGlobe, currentZoom, now);
 
         if (!layersVisible) {
-          overlay.setProps({ layers: [] });
+          overlay.setProps({
+            layers: [],
+            ...overlayViewProps(map!, {
+              firstPerson: fpvId != null,
+              zoom: currentZoom,
+            }),
+          });
           drawDeckFrame(overlay);
           continueAnimating = false;
           return;
@@ -1094,7 +1119,7 @@ export function FlightLayers({
           }
           if (fpvCameraMoved) {
             currentZoom = map.getZoom();
-            onSphere = deckDrawsOnSphere(map, currentZoom);
+            onSphere = deckDrawsOnSphere(map, currentZoom, true);
             drawnOnSphere = onSphere;
           }
         }
@@ -1492,7 +1517,13 @@ export function FlightLayers({
           );
         }
 
-        overlay.setProps({ layers: frameLayers });
+        overlay.setProps({
+          layers: frameLayers,
+          ...overlayViewProps(map!, {
+            firstPerson: fpvId != null,
+            zoom: currentZoom,
+          }),
+        });
         // deck takes its camera from the map's render, so after a camera
         // move the map renders now, and deck with it, rather than on the
         // map's next frame with deck drawn here against the old camera.

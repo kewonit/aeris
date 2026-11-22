@@ -864,13 +864,16 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const id = (name: string) =>
     params.idSuffix ? `${name}-${params.idSuffix}` : name;
   const origin = params.origin ?? null;
+  // The trigger is set either way: deck only compares the triggers a layer
+  // is given, so dropping it when the origin goes (first person on the
+  // globe zooming out past 12) would keep the paths in offsets from it.
   const placed = origin
     ? {
         coordinateSystem: COORDINATE_SYSTEM.LNGLAT_OFFSETS,
         coordinateOrigin: [origin[0], origin[1], 0] as [number, number, number],
         updateTriggers: { getPath: origin },
       }
-    : {};
+    : { updateTriggers: { getPath: "absolute" } };
   const pathOf = origin
     ? (path: TrailVertex[]) => offsetPath(path, origin)
     : (path: TrailVertex[]) => path;

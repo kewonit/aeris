@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { MapLibreOverlay } from "@deck.gl/maplibre";
+
 import { aircraftOrientation } from "./aircraft-model-layers";
 import {
   aircraftIconAngle,
+  DECK_MAP_VIEW_ID,
   DECK_SPHERE_MAX_ZOOM,
   deckDrawsOnSphere,
+  deckMapView,
+  FIRST_PERSON_FLAT_MIN_ZOOM,
+  overlayViewProps,
 } from "./globe-frame";
 
 type Vec3 = [number, number, number];
@@ -169,4 +175,70 @@ test("deck draws on the sphere only on a globe up to its flat hand-over", () => 
     },
   };
   assert.equal(deckDrawsOnSphere(styleless, 2), false);
+});
+
+test("deck draws in a globe view on the globe and a flat one otherwise", () => {
+  const map = (type: unknown) => ({ getProjection: () => ({ type }) });
+  const styleless = {
+    getProjection: (): { type?: unknown } => {
+      throw new Error("no style");
+    },
+  };
+  const globe = deckMapView(map("globe"));
+  const flat = deckMapView(map("mercator"));
+
+  assert.equal(globe.constructor.name, "GlobeView");
+  assert.equal(flat.constructor.name, "MapView");
+  assert.equal(deckMapView(styleless), flat);
+  // The same instance each time, so deck never sees a change of view.
+  assert.equal(deckMapView(map("globe")), globe);
+  assert.equal(globe.id, DECK_MAP_VIEW_ID);
+  assert.equal(flat.id, DECK_MAP_VIEW_ID);
+});
+
+test("the globe view keeps the first person aircraft in front of its near plane", () => {
+  // First person at cruise: the map's centre is far ahead on the ground, and
+  // the aircraft about a seventh of a viewport height from the camera.
+  const FIRST_PERSON_DEPTH = 0.14;
+  const view = deckMapView({ getProjection: () => ({ type: "globe" }) });
+  for (const zoom of [8, 11.5, 13]) {
+    const viewport = view.makeViewport({
+      width: 800,
+      height: 1200,
+      viewState: { longitude: -122, latitude: 40, zoom, pitch: 68, bearing: 0 },
+    });
+    const m = viewport!.projectionMatrix;
+    const near = m[14] / (m[10] - 1);
+    assert.ok(near < FIRST_PERSON_DEPTH / 2, `zoom ${zoom}: near ${near}`);
+  }
+});
+
+test("the overlay takes our view in place of its own", () => {
+  const stub = { getProjection: () => ({ type: "globe" }) };
+  const view = deckMapView(stub);
+  // _getViews is how the overlay picks deck's views at every map render. A
+  // renamed id would add its own globe view beside ours and draw twice.
+  type WithViews = { _getViews(map: unknown): unknown };
+  const ours = new MapLibreOverlay(
+    overlayViewProps(stub),
+  ) as unknown as WithViews;
+  const theirs = new MapLibreOverlay({}) as unknown as WithViews;
+  assert.equal(ours._getViews(stub), view);
+  assert.equal((theirs._getViews(stub) as { id: string }).id, DECK_MAP_VIEW_ID);
+});
+
+test("first person close in is drawn flat, even on the globe", () => {
+  const globe = { getProjection: () => ({ type: "globe" }) };
+  const flatView = deckMapView({ getProjection: () => ({ type: "mercator" }) });
+  const z = FIRST_PERSON_FLAT_MIN_ZOOM;
+
+  // Cruise first person sits around zoom 11: flat, in the precise view.
+  assert.equal(deckDrawsOnSphere(globe, z + 1.2, true), false);
+  assert.equal(deckMapView(globe, { firstPerson: true, zoom: z + 1.2 }), flatView);
+  // Flying in from the whole globe it stays on the sphere until close in.
+  assert.equal(deckDrawsOnSphere(globe, z - 0.5, true), true);
+  assert.notEqual(deckMapView(globe, { firstPerson: true, zoom: z - 0.5 }), flatView);
+  // Out of first person nothing changes.
+  assert.equal(deckDrawsOnSphere(globe, z + 1.2), true);
+  assert.notEqual(deckMapView(globe, { zoom: z + 1.2 }), flatView);
 });

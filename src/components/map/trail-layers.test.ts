@@ -903,3 +903,18 @@ test("offsets from an origin go the short way across the date line", () => {
     ],
   );
 });
+
+test("a trail that loses its origin is rebuilt in plain degrees", () => {
+  // deck compares only the triggers a layer is given, so the plain layers
+  // must carry one too, or offsets from the old origin would be kept.
+  const origin: [number, number] = [eastbound(9).lng, 37.5];
+  const placed = buildTrailLayers(layerParams({ origin }));
+  const plain = buildTrailLayers(layerParams({ origin: null }));
+  for (const layer of plain) {
+    const id = layer.props.id;
+    const before = placed.find((other) => other.props.id === id)!;
+    const trigger = layer.props.updateTriggers?.getPath;
+    assert.notEqual(trigger, undefined, id);
+    assert.notDeepEqual(trigger, before.props.updateTriggers?.getPath, id);
+  }
+});

@@ -46,8 +46,21 @@ function isDarkTheme(): boolean {
   return document.documentElement.classList.contains("dark");
 }
 
-function fpvSky(): maplibregl.SkySpecification {
-  return isDarkTheme() ? FPV_DARK_SKY : FPV_LIGHT_SKY;
+/**
+ * The first person sky. On the globe its atmosphere is left out: there the
+ * atmosphere lights the whole view, and at first person's tilt it washed
+ * the map out to a bright haze, the aircraft with it. The flat map draws
+ * none.
+ */
+function fpvSky(map: maplibregl.Map): maplibregl.SkySpecification {
+  const sky = isDarkTheme() ? FPV_DARK_SKY : FPV_LIGHT_SKY;
+  let globe = false;
+  try {
+    globe = map.getProjection()?.type === "globe";
+  } catch {
+    // No style yet.
+  }
+  return globe ? { ...sky, "atmosphere-blend": 0 } : sky;
 }
 
 type CameraPose = {
@@ -140,7 +153,7 @@ export function useFpvCamera(
       skyRestoreTimerRef.current = null;
     }
     savedSkyRef.current ??= { sky: map.getSky() };
-    map.setSky(fpvSky());
+    map.setSky(fpvSky(map));
 
     isFpvActiveRef.current = true;
     map.stop();
@@ -154,13 +167,16 @@ export function useFpvCamera(
     // A style change replaces the sky and the runway paint.
     const onStyleLoad = () => {
       savedSkyRef.current = { sky: map.getSky() };
-      map.setSky(fpvSky());
+      map.setSky(fpvSky(map));
       restoreAeroways = highlightAeroways(
         map,
         isDarkTheme() ? "dark" : "light",
       );
     };
     map.on("style.load", onStyleLoad);
+    // The globe going on or off changes which sky first person needs.
+    const onProjectionChange = () => map.setSky(fpvSky(map));
+    map.on("projectiontransition", onProjectionChange);
 
     // Only a move with a browser event behind it is the user's; the ones
     // this loop makes carry none.
@@ -249,6 +265,7 @@ export function useFpvCamera(
       if (frameId !== null) cancelAnimationFrame(frameId);
       if (moveCameraRef.current === step) moveCameraRef.current = null;
       map.off("style.load", onStyleLoad);
+      map.off("projectiontransition", onProjectionChange);
       for (const type of INTERACTION_EVENTS) map.off(type, onInteraction);
       map.stop();
       restoreAeroways();
