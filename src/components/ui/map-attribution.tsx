@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { Fragment, useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Info } from "lucide-react";
 import { getAttributions, type AttributionEntry } from "@/lib/map-styles";
@@ -116,25 +116,28 @@ function ExpandedAttribution({
       >
         <Info className="h-2.5 w-2.5" />
       </button>
-      <span className="flex flex-wrap items-center gap-x-1 text-micro leading-tight text-subtle">
+      {/* Lines break only between credits, and are balanced, so no credit
+          is left alone on the last line or split across two. */}
+      <span className="min-w-0 text-balance text-micro leading-tight text-subtle">
         {attributions.map((attr, i) => (
-          <span key={attr.label} className="inline-flex min-w-0 items-center">
-            {attr.url ? (
-              <a
-                href={attr.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="transition-colors hover:underline text-subtle"
-              >
-                {attr.label}
-              </a>
-            ) : (
-              <span>{attr.label}</span>
-            )}
-            {i < attributions.length - 1 && (
-              <span className="ml-1 text-subtle">·</span>
-            )}
-          </span>
+          <Fragment key={attr.label}>
+            <span className="whitespace-nowrap">
+              {attr.url ? (
+                <a
+                  href={attr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:underline text-subtle"
+                >
+                  {attr.label}
+                </a>
+              ) : (
+                attr.label
+              )}
+              {i < attributions.length - 1 && " ·"}
+            </span>
+            {i < attributions.length - 1 && " "}
+          </Fragment>
         ))}
       </span>
     </motion.div>

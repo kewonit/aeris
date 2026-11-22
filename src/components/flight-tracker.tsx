@@ -953,7 +953,9 @@ function FlightTrackerInner({
             <div className="pointer-events-auto">
               <CameraControls />
             </div>
-            <div className="pointer-events-auto">
+            {/* On a phone the left status pill reaches under the key, so
+                it sits clear above it. */}
+            <div className="pointer-events-auto max-sm:mb-4">
               <AltitudeLegend dark={mapStyle.dark} />
             </div>
             <div className="pointer-events-auto">
