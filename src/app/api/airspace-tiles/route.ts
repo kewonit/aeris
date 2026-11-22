@@ -16,14 +16,14 @@ import {
 // same tile are coalesced so only one upstream fetch happens. A simple
 // queue limits upstream concurrency to 6 and spaces requests by 100 ms.
 //
-// MVT endpoint:
-//   https://{a,b,c}.api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.pbf
+// MVT endpoint (the a/b/c subdomains no longer resolve):
+//   https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.pbf
 //
 // Docs: https://docs.openaip.net/?urls.primaryName=Tiles%20API
 // License: CC BY-NC 4.0 - attribution required.
 // ────────────────────────────────────────────────────────────────────
 
-const SUBDOMAINS = ["a", "b", "c"] as const;
+const TILE_HOST = "https://api.tiles.openaip.net";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const CACHE_MAX_AGE = 86_400;
@@ -100,9 +100,7 @@ async function fetchUpstream(
 ): Promise<CachedTile | null> {
   await acquireSlot();
   try {
-    const tileSum = parseInt(x, 10) + parseInt(y, 10);
-    const subdomain = SUBDOMAINS[tileSum % SUBDOMAINS.length];
-    const url = `https://${subdomain}.api.tiles.openaip.net/api/data/openaip/${z}/${x}/${y}.pbf`;
+    const url = `${TILE_HOST}/api/data/openaip/${z}/${x}/${y}.pbf`;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       lastFetchMs = Date.now();
