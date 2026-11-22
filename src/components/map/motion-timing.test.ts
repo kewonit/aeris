@@ -24,10 +24,12 @@ const LIMITS = { minMs: 1_000, maxMs: 30_000 };
 
 function run(observed: number[]) {
   let intervals: number[] = [];
+  let shortRun: number[] = [];
   const durations: number[] = [];
   for (const ms of observed) {
-    const next = nextMoveDuration(intervals, ms, LIMITS);
+    const next = nextMoveDuration(intervals, ms, LIMITS, shortRun);
     intervals = next.intervals;
+    shortRun = next.shortRun;
     durations.push(next.durationMs);
   }
   return { durations, intervals };
@@ -44,6 +46,16 @@ test("a forced poll that lands early still starts a move a poll long", () => {
 test("a burst of forced polls cannot drag the usual interval down", () => {
   const { durations } = run([5_000, 5_000, 5_000, 900, 800, 1_000, 700]);
   assert.ok(durations.every((ms) => ms === 5_000));
+});
+
+test("after a spell of slow polls, moves shorten again once the feed speeds up", () => {
+  // Five slow answers while providers time out, then the usual 5.3 s.
+  const { durations } = run([13_000, 13_000, 13_000, 13_000, 13_000, ...Array(6).fill(5_300)]);
+  // The first two still count as early; the third makes a whole slow
+  // interval of them, and from then on moves last a poll again.
+  assert.equal(durations[6], 13_000);
+  assert.equal(durations[7], 5_300);
+  assert.ok(durations.slice(7).every((ms) => ms === 5_300));
 });
 
 test("a slower feed lengthens moves, and one slow tick does not", () => {

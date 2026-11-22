@@ -169,22 +169,37 @@ function median(values: number[]): number {
  * send aircraft racing ahead, then gliding back. Forced polls are also
  * kept out of the history, so a burst of them cannot drag the usual
  * interval down. The median shrugs off a single slow tick.
+ *
+ * Early polls that keep coming are the feed speeding up again, as after
+ * a spell of slow answers: once a run of them adds up to a whole usual
+ * interval, they join the history. A burst of forced polls comes within
+ * a second or two and never does. `shortRun` carries that run from one
+ * poll to the next.
  */
 export function nextMoveDuration(
   intervals: number[],
   observedMs: number,
   limits: { minMs: number; maxMs: number },
-): { durationMs: number; intervals: number[] } {
+  shortRun: number[] = [],
+): { durationMs: number; intervals: number[]; shortRun: number[] } {
   const usual = intervals.length ? median(intervals) : null;
-  const forced = usual !== null && observedMs < usual * FORCED_POLL_SHARE;
-  const next = forced
-    ? intervals
-    : [...intervals, observedMs].slice(-MOVE_INTERVAL_HISTORY);
+  const early = usual !== null && observedMs < usual * FORCED_POLL_SHARE;
+  let next = intervals;
+  let run: number[] = [];
+  if (!early) {
+    next = [...intervals, observedMs].slice(-MOVE_INTERVAL_HISTORY);
+  } else {
+    run = [...shortRun, observedMs];
+    if (run.reduce((sum, ms) => sum + ms, 0) >= usual!) {
+      next = [...intervals, ...run].slice(-MOVE_INTERVAL_HISTORY);
+      run = [];
+    }
+  }
   const durationMs = Math.max(
     limits.minMs,
     Math.min(limits.maxMs, median(next)),
   );
-  return { durationMs, intervals: next };
+  return { durationMs, intervals: next, shortRun: run };
 }
 
 // ── Heading ────────────────────────────────────────────────────────────

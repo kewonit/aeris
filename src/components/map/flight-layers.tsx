@@ -180,6 +180,8 @@ export function FlightLayers({
   // Recent poll intervals for median smoothing - prevents event loop
   // stalls from inflating animDuration beyond the true poll cadence.
   const recentIntervalsRef = useRef<number[]>([]);
+  // Early polls not yet taken as the feed speeding up (nextMoveDuration).
+  const shortRunRef = useRef<number[]>([]);
   // How quickly each provider's answers reach us, to time its reports.
   const receiptDelaysRef = useRef<ReceiptDelays>(new Map());
   /** The fastest reported ground speed, which paces the overview's redraws. */
@@ -399,10 +401,12 @@ export function FlightLayers({
     // How long the coming move lasts: the usual interval between polls.
     const timing = fresh
       ? null
-      : nextMoveDuration(recentIntervalsRef.current, elapsed, {
-          minMs: MIN_ANIM_DURATION_MS,
-          maxMs: MAX_ANIM_DURATION_MS,
-        });
+      : nextMoveDuration(
+          recentIntervalsRef.current,
+          elapsed,
+          { minMs: MIN_ANIM_DURATION_MS, maxMs: MAX_ANIM_DURATION_MS },
+          shortRunRef.current,
+        );
     const moveMs = timing?.durationMs ?? animDurationRef.current;
 
     // Where each aircraft is drawn now, which may be a little past its last
@@ -524,7 +528,10 @@ export function FlightLayers({
       });
     }
     currSnapshotsRef.current = next;
-    if (timing) recentIntervalsRef.current = timing.intervals;
+    if (timing) {
+      recentIntervalsRef.current = timing.intervals;
+      shortRunRef.current = timing.shortRun;
+    }
     animDurationRef.current = moveMs;
     dataTimestampRef.current = now;
     // Increment data version so model layers know color/scale need recomputation
