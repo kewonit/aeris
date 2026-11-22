@@ -6,35 +6,37 @@ import { NextRequest, NextResponse } from "next/server";
 // CORS issues (MapLibre GL JS v5 loads raster tiles via fetch() in a
 // web worker, which requires CORS headers that RainViewer doesn't send).
 //
-// Query params:  ts (timestamp), z, x, y
+// Query params:  frame, z, x, y
+// `frame` is the last segment of a radar frame's `path` in
+// weather-maps.json. RainViewer answers 410 for the old timestamp URLs.
 // Upstream URL:
-//   https://tilecache.rainviewer.com/v2/radar/{ts}/256/{z}/{x}/{y}/2/1_1.png
+//   https://tilecache.rainviewer.com/v2/radar/{frame}/256/{z}/{x}/{y}/2/1_1.png
 //
 // Tiles are cached by the browser (10 min max-age).
 // ────────────────────────────────────────────────────────────────────────
 
 const FETCH_TIMEOUT_MS = 8_000;
 const VALID_COORD = /^[0-9]{1,3}$/;
-const VALID_TIMESTAMP = /^[0-9]{8,12}$/;
+const VALID_FRAME = /^[0-9a-f]{6,32}$/i;
 
 const TRANSPARENT_1x1_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQIHWNgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=",
   "base64",
 );
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const ts = searchParams.get("ts");
+  const frame = searchParams.get("frame");
   const z = searchParams.get("z");
   const x = searchParams.get("x");
   const y = searchParams.get("y");
 
-  if (!ts || !z || !x || !y) {
+  if (!frame || !z || !x || !y) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
 
   if (
-    !VALID_TIMESTAMP.test(ts) ||
+    !VALID_FRAME.test(frame) ||
     !VALID_COORD.test(z) ||
     !VALID_COORD.test(x) ||
     !VALID_COORD.test(y)
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid params" }, { status: 400 });
   }
 
-  const url = `https://tilecache.rainviewer.com/v2/radar/${ts}/256/${z}/${x}/${y}/2/1_1.png`;
+  const url = `https://tilecache.rainviewer.com/v2/radar/${frame}/256/${z}/${x}/${y}/2/1_1.png`;
 
   try {
     const controller = new AbortController();
