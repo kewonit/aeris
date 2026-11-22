@@ -174,8 +174,18 @@ export function useFpvCamera(
       );
     };
     map.on("style.load", onStyleLoad);
-    // The globe going on or off changes which sky first person needs.
-    const onProjectionChange = () => map.setSky(fpvSky(map));
+    // The globe going on or off changes which sky first person needs. A
+    // style loading in also switches projection, before its sky exists:
+    // setting one then throws inside MapLibre, and thrown from here it
+    // would stop the style loading. Caught, the style loads on, with this
+    // sky already in its stylesheet, and its style.load (above) sets it too.
+    const onProjectionChange = () => {
+      try {
+        map.setSky(fpvSky(map));
+      } catch {
+        /* The style is still loading in. */
+      }
+    };
     map.on("projectiontransition", onProjectionChange);
 
     // Only a move with a browser event behind it is the user's; the ones
