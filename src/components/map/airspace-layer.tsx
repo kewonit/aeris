@@ -14,6 +14,7 @@ import {
 } from "@/lib/airspace-style";
 import { AirspacePopup } from "./airspace-popup";
 import type { AirspaceLimit } from "@/lib/airspace-format";
+import { whenClickUnhandled } from "@/lib/map-click";
 
 // ── OpenAIP Airspace MVT Overlay ───────────────────────────────────
 //
@@ -312,6 +313,8 @@ export function AirspaceLayer({
       const popup = new maplibregl.Popup({
         closeButton: true,
         closeOnClick: true,
+        // The keyboard stays with the map, so the arrow keys still pan.
+        focusAfterOpen: false,
         maxWidth: "none",
         className: "airspace-popup",
       })
@@ -464,13 +467,17 @@ export function AirspaceLayer({
 
     const canvas = map.getCanvas();
 
+    // Opens only for a click on the airspace itself: an aircraft, an
+    // airport or a globe dot drawn over it takes the click first.
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const features = map.queryRenderedFeatures(e.point, {
         layers: AIRSPACE_INTERACTIVE_LAYER_IDS.filter((id) => map.getLayer(id)),
       });
       if (!features.length) return;
       const top = features[0];
-      openPopup(e.lngLat, top.properties as FeatureProps);
+      whenClickUnhandled(e, () =>
+        openPopup(e.lngLat, top.properties as FeatureProps),
+      );
     };
 
     const onEnter = () => {

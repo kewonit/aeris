@@ -93,6 +93,7 @@ import {
   setAltitudeTheme,
 } from "@/lib/flight-utils";
 import type { AltitudeDisplayMode } from "@/lib/altitude-display-mode";
+import { whenClickUnhandled } from "@/lib/map-click";
 import { useGlobeDots } from "./use-globe-dots";
 import {
   aircraftIconAngle,
@@ -589,9 +590,13 @@ export function FlightLayers({
         y: e.point.y,
         radius: AIRCRAFT_PICK_RADIUS_PX,
       });
-      if (!picked?.object) {
-        onClick(null);
+      if (picked?.object) {
+        // deck selects it; the click is taken, so nothing under it opens.
+        e.preventDefault();
+        return;
       }
+      // An empty spot deselects, unless an airport or a dot took the click.
+      whenClickUnhandled(e, () => onClick(null));
     }
 
     map.on("click", onMapClick);

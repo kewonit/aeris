@@ -164,6 +164,8 @@ export function useGlobeDots(
       if (!icao24) return;
       const flight = flightsRef.current.find((f) => f.icao24 === icao24);
       if (flight) {
+        // Taken, so the map neither deselects it nor opens what's under it.
+        e.preventDefault();
         onClickRef.current({ object: flight } as PickingInfo<FlightState>);
       }
     };
