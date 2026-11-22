@@ -482,6 +482,10 @@ export function SearchContent({
               if (!trimmed || trimmed.length < 2) {
                 setGeoResults([]);
                 setGlobalFlights([]);
+                // Typed again, the same query searches again, so it is no
+                // longer settled.
+                setGeoSettled("");
+                setFlightSettled("");
               }
             }}
 
@@ -694,9 +698,10 @@ export function SearchContent({
         ) : (
           <>
             {/* ── Actions ─────────────────────────────────────── */}
+            {/* Offered while the worldwide search runs too, so Enter
+                looks a callsign up at once. */}
             {compactQuery &&
-              !flightPending &&
-              globalFlights.length === 0 &&
+              (flightPending || globalFlights.length === 0) &&
               localFlightMatches.length === 0 && (
                 <Command.Group heading="Actions">
                   <Command.Item
@@ -753,8 +758,8 @@ export function SearchContent({
             )}
 
             {/* ── Nearby local flights ────────────────────────── */}
-            {!flightPending &&
-              globalFlights.length === 0 &&
+            {/* Local, so shown while the worldwide search runs. */}
+            {(flightPending || globalFlights.length === 0) &&
               localFlightMatches.length > 0 && (
                 <Command.Group heading="Nearby">
                   {localFlightMatches.map((flight) =>
