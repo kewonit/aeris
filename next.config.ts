@@ -20,7 +20,7 @@ const directTraceConnectSrc = Array.from(
 // adsbdb.com and hexdb.io are server-side only for route lookup via /api/routes.
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.googletagmanager.com${isDev ? " 'unsafe-eval'" : ""};
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https: ;
   font-src 'self';
