@@ -519,6 +519,7 @@ export function FlightLayers({
                 : reportedTrack,
             )
           : prev.track,
+        reportedTrack: known ? reportedTrack : prev.reportedTrack,
         trackKnown: known || prevKnown,
       });
     }

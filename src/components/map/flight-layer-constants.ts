@@ -52,7 +52,13 @@ export type Snapshot = {
   lng: number;
   lat: number;
   alt: number;
+  /** The track, eased a little towards each report so it doesn't twitch. */
   track: number;
+  /**
+   * The track as last reported, not eased. In a fast turn the eased track
+   * lags far behind, so this is what a move is checked against.
+   */
+  reportedTrack?: number;
   /**
    * Which way the aircraft pointed when this snapshot began a move, so its
    * nose turns on from there; unset for a fresh or teleported aircraft.

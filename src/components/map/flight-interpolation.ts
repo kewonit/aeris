@@ -211,8 +211,12 @@ export function displayHeading(
   curr: Snapshot,
   elapsedMs: number,
 ): number {
+  // Checked against the track as reported: the eased one lags in a fast
+  // turn, far enough that a move along the turn looked like flying
+  // backwards and the nose was held sideways to it.
   const course = resolveDisplayTrack({
-    reportedTrack: curr.trackKnown === false ? null : curr.track,
+    reportedTrack:
+      curr.trackKnown === false ? null : (curr.reportedTrack ?? curr.track),
     previousPosition: prev,
     currentPosition: curr,
   });
