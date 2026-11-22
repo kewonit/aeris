@@ -918,7 +918,11 @@ export function FlightLayers({
 
       let globeFade = 1;
       let layersVisible = true;
-      if (isGlobe) {
+      // Zoomed out on the globe, traffic hands over to the map's dots.
+      // Not in first person: a first person link can start there, where
+      // the intro's fly-in was stopped, and it is this frame that moves the
+      // first person camera in, so hiding it would leave the camera there.
+      if (isGlobe && fpvId == null) {
         if (currentZoom < GLOBE_FADE_ZOOM_FLOOR) {
           layersVisible = false;
           globeFade = 0;
