@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+/* A screen too short for the map's side controls: a phone held sideways. */
+@custom-variant short (@media (max-height: 500px));
 
 /*
  * Aeris design tokens, after kew.edbn.me: warm neutrals, one accent, one
