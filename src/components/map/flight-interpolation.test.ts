@@ -273,3 +273,10 @@ test("in a tight orbit the nose follows the turn, not the eased track", () => {
   assert.ok(lagging >= 5, `the eased track lagged on ${lagging} polls`);
   assert.ok(worst < 30, `the nose is ${worst.toFixed(0)}° off its path`);
 });
+
+test("a hovering aircraft holds its eased track, not each noisy report", () => {
+  // Hardly moving, with a report 40° off the track it has held.
+  const prev = { lng: 8, lat: 50, alt: 100, track: 90 };
+  const curr = { lng: 8, lat: 50, alt: 100, track: 97, reportedTrack: 130 };
+  assert.ok(Math.abs(displayHeading(prev, curr, 0) - 97) < 0.5);
+});

@@ -866,7 +866,8 @@ export function buildTrailLayers(params: TrailLayerParams) {
   const origin = params.origin ?? null;
   // The trigger is set either way: deck only compares the triggers a layer
   // is given, so dropping it when the origin goes (first person on the
-  // globe zooming out past 12) would keep the paths in offsets from it.
+  // globe zooming out below FIRST_PERSON_FLAT_MIN_ZOOM, where it goes back
+  // on the sphere) would keep the paths in offsets from it.
   const placed = origin
     ? {
         coordinateSystem: COORDINATE_SYSTEM.LNGLAT_OFFSETS,

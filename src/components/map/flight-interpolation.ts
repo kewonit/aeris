@@ -82,12 +82,21 @@ function bearingFromLngLat(
 
 export function resolveDisplayTrack(input: {
   reportedTrack?: number | null;
+  /**
+   * The track the nose holds to when there is no move to follow, standing
+   * still or moving backwards: the eased one, so a noisy report doesn't
+   * swing it. Defaults to the reported track.
+   */
+  steadyTrack?: number | null;
   previousPosition?: { lng: number; lat: number } | null;
   currentPosition?: { lng: number; lat: number } | null;
 }): number {
   const reportedTrack = Number.isFinite(input.reportedTrack)
     ? normalizeBearing(input.reportedTrack!)
     : null;
+  const steadyTrack = Number.isFinite(input.steadyTrack)
+    ? normalizeBearing(input.steadyTrack!)
+    : reportedTrack;
 
   const motionTrack =
     input.previousPosition && input.currentPosition
@@ -95,7 +104,7 @@ export function resolveDisplayTrack(input: {
       : null;
 
   if (motionTrack == null) {
-    return reportedTrack ?? 0;
+    return steadyTrack ?? 0;
   }
 
   if (reportedTrack == null) {
@@ -106,7 +115,7 @@ export function resolveDisplayTrack(input: {
   // aircraft never flies backwards: a move more than a right angle off its
   // reported track is a correction, and the nose keeps to the track.
   if (Math.abs(angleDelta(reportedTrack, motionTrack)) > NOSE_FOLLOWS_MOVE_DEG) {
-    return reportedTrack;
+    return steadyTrack ?? reportedTrack;
   }
 
   return motionTrack;
@@ -229,9 +238,10 @@ export function displayHeading(
   // Checked against the track as reported: the eased one lags in a fast
   // turn, far enough that a move along the turn looked like flying
   // backwards and the nose was held sideways to it.
+  const known = curr.trackKnown !== false;
   const course = resolveDisplayTrack({
-    reportedTrack:
-      curr.trackKnown === false ? null : (curr.reportedTrack ?? curr.track),
+    reportedTrack: known ? (curr.reportedTrack ?? curr.track) : null,
+    steadyTrack: known ? curr.track : null,
     previousPosition: prev,
     currentPosition: curr,
   });

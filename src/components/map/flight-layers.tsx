@@ -434,6 +434,9 @@ export function FlightLayers({
             track: normalizeBearing(
               lerpAngle(oldPrev.track, oldCurr.track, oldAngleT),
             ),
+            // Kept, so a report with no track still checks the next move
+            // against the last one reported (see displayHeading).
+            reportedTrack: oldCurr.reportedTrack,
             trackKnown: oldCurr.trackKnown,
             // Where the nose pointed as this report arrived, to turn on from.
             heading: displayHeading(
@@ -531,6 +534,9 @@ export function FlightLayers({
     if (timing) {
       recentIntervalsRef.current = timing.intervals;
       shortRunRef.current = timing.shortRun;
+    } else {
+      // A fresh start: a run of early polls from before the gap is stale.
+      shortRunRef.current = [];
     }
     animDurationRef.current = moveMs;
     dataTimestampRef.current = now;
@@ -1015,7 +1021,9 @@ export function FlightLayers({
         }
 
         // ── Globe dots ────────────────────────────────────────────────
-        updateGlobeDotsRef.current(isGlobe, currentZoom, now);
+        // Not in first person, which draws the traffic itself even
+        // zoomed out (see the globe fade above): both would show.
+        updateGlobeDotsRef.current(isGlobe && fpvId == null, currentZoom, now);
 
         if (!layersVisible) {
           overlay.setProps({

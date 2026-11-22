@@ -23,12 +23,11 @@ for (const unitSystem of ["aviation", "imperial", "metric"] as const) {
 }
 
 test("the key's labels are the heights it is drawn for", () => {
-  assert.deepEqual(
-    legendTicksMeters("aviation").map((m) => formatAltitude(m, "aviation")),
-    ["40,000 ft", "20,000 ft", "10,000 ft", "5,000 ft", "2,000 ft", "500 ft", "0 ft"],
-  );
-  assert.deepEqual(
-    legendTicksMeters("metric").map((m) => formatAltitude(m, "metric")),
-    ["12,000 m", "6,000 m", "3,000 m", "1,500 m", "600 m", "150 m", "0 m"],
-  );
+  // Digits only: the thousands separator follows the machine's locale.
+  const digits = (unit: "aviation" | "metric") =>
+    legendTicksMeters(unit).map((m) =>
+      Number(formatAltitude(m, unit).replace(/[^\d]/g, "")),
+    );
+  assert.deepEqual(digits("aviation"), [40_000, 20_000, 10_000, 5_000, 2_000, 500, 0]);
+  assert.deepEqual(digits("metric"), [12_000, 6_000, 3_000, 1_500, 600, 150, 0]);
 });
