@@ -316,6 +316,7 @@ export function AirspaceLayer({
         // The keyboard stays with the map, so the arrow keys still pan.
         focusAfterOpen: false,
         maxWidth: "none",
+        offset: 8,
         className: "airspace-popup",
       })
         .setLngLat(lngLat)

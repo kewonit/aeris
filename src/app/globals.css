@@ -297,6 +297,52 @@
   border-top-color: var(--background);
 }
 
+/* MapLibre puts popups in the map below its control corners (z-index 2),
+   and deck's canvas sits in one of those, so traffic drew over them. */
+.maplibregl-popup {
+  z-index: 3;
+}
+
+/* Airspace details on click (map/airspace-layer.tsx): MapLibre's frame is
+   the card itself. Two classes outrank MapLibre's anchor rules. */
+.airspace-popup.maplibregl-popup .maplibregl-popup-content {
+  padding: 12px 36px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: var(--lift);
+}
+
+.airspace-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+.airspace-popup .maplibregl-popup-close-button {
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  color: var(--subtle);
+  font: var(--font-weight-normal) 16px / 1 var(--font-sans);
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+
+.airspace-popup .maplibregl-popup-close-button:hover {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.airspace-popup .maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 1px;
+}
+
 /* The app's name, set as it always has been: a little larger and wider
    than the text around it. */
 .aeris-wordmark {
